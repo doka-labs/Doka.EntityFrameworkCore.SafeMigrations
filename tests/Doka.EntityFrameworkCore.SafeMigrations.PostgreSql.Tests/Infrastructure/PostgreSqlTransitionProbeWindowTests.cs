@@ -8,13 +8,19 @@ public sealed class PostgreSqlTransitionProbeWindowTests
     /// <param name="native">Whether the deterministic connection provides native batching.</param>
     [Theory]
     [InlineData(31, true)]
+    [InlineData(31, false)]
     [InlineData(32, true)]
+    [InlineData(32, false)]
     [InlineData(33, true)]
+    [InlineData(33, false)]
     [InlineData(511, true)]
+    [InlineData(511, false)]
     [InlineData(512, true)]
+    [InlineData(512, false)]
     [InlineData(513, true)]
     [InlineData(513, false)]
     [InlineData(4097, true)]
+    [InlineData(4097, false)]
     public async Task EligibilityWindows_PreserveMaterializedSqlAndExactResults(
         int count,
         bool native
@@ -161,15 +167,19 @@ public sealed class PostgreSqlTransitionProbeWindowTests
 
     /// <summary>A corrupt eligibility window cannot assign a physical proof to the wrong operation.</summary>
     /// <param name="fault">The injected ordinal or result-cardinality fault.</param>
+    /// <param name="native">Whether the deterministic connection uses native transport.</param>
     [Theory]
-    [InlineData("ordinal")]
-    [InlineData("missing")]
-    [InlineData("extra")]
-    public async Task EligibilityWindows_RejectUnownedOrIncompleteRows(string fault)
+    [InlineData("ordinal", true)]
+    [InlineData("ordinal", false)]
+    [InlineData("missing", true)]
+    [InlineData("missing", false)]
+    [InlineData("extra", true)]
+    [InlineData("extra", false)]
+    public async Task EligibilityWindows_RejectUnownedOrIncompleteRows(string fault, bool native)
     {
         // Arrange
         using var context = OfflineContext();
-        await using var connection = new CatalogStatementTestConnection(true, (sql, parameters) =>
+        await using var connection = new CatalogStatementTestConnection(native, (sql, parameters) =>
         {
             var rows = EligibilityRows(sql, parameters);
             if (fault == "ordinal")
@@ -195,19 +205,22 @@ public sealed class PostgreSqlTransitionProbeWindowTests
 
         // Assert
         Assert.Equal(1, connection.ReadersDisposed);
-        Assert.Equal(1, connection.BatchesDisposed);
+        Assert.Equal(native ? 1 : 0, connection.BatchesDisposed);
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 
     /// <summary>Cancellation within a window rejects the entire phase rather than returning partial evidence.</summary>
-    [Fact]
-    public async Task EligibilityWindows_CancellationDisposesTransportWithoutPartialEvidence()
+    /// <param name="native">Whether the deterministic connection uses native transport.</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task EligibilityWindows_CancellationDisposesTransportWithoutPartialEvidence(bool native)
     {
         // Arrange
         using var context = OfflineContext();
         using var cancellation = new CancellationTokenSource();
         var reads = 0;
-        await using var connection = new CatalogStatementTestConnection(true, EligibilityRows)
+        await using var connection = new CatalogStatementTestConnection(native, EligibilityRows)
         {
             BeforeRead = () =>
             {
@@ -225,8 +238,56 @@ public sealed class PostgreSqlTransitionProbeWindowTests
 
         // Assert
         Assert.Equal(1, connection.ReadersDisposed);
-        Assert.Equal(1, connection.BatchesDisposed);
+        Assert.Equal(native ? 1 : 0, connection.BatchesDisposed);
         Assert.Equal(ConnectionState.Open, connection.State);
+    }
+
+    /// <summary>Empty invocations and repeated operation identities never retain earlier eligibility facts.</summary>
+    /// <param name="native">Whether the deterministic connection uses native transport.</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task EligibilityWindows_ResetEvidenceAcrossRepeatedAndEmptyInvocations(bool native)
+    {
+        // Arrange
+        using var context = OfflineContext();
+        var analyzer = Analyzer(context);
+        var operations = Operations(33);
+        var eligible = false;
+        await using var connection = new CatalogStatementTestConnection(native, (sql, parameters) =>
+        {
+            var rows = EligibilityRows(sql, parameters);
+            foreach (DataRow row in rows.Rows)
+            {
+                row[1] = eligible;
+            }
+
+            return rows;
+        });
+
+        // Act
+        var first = await ResolveAsync(analyzer, connection, operations,
+            new SafeMigrationObservedState?[operations.Length], CancellationToken.None);
+        var beforeEmpty = connection.Submissions.Count;
+        var empty = await ResolveAsync(analyzer, connection, [], [], CancellationToken.None);
+        var afterEmpty = connection.Submissions.Count;
+        eligible = true;
+        var repeated = await ResolveAsync(analyzer, connection, operations,
+            new SafeMigrationObservedState?[operations.Length], CancellationToken.None);
+
+        // Assert
+        Assert.Empty(empty);
+        Assert.Equal(beforeEmpty, afterEmpty);
+        Assert.Equal(beforeEmpty * 2, connection.Submissions.Count);
+        Assert.Equal(operations.Length, first.Length);
+        Assert.Equal(operations.Length, repeated.Length);
+        for (var ordinal = 0; ordinal < operations.Length; ordinal++)
+        {
+            Assert.False(Fact(first.GetValue(ordinal), "IsTransitionEligible"));
+            Assert.True(Fact(repeated.GetValue(ordinal), "IsTransitionEligible"));
+            Assert.False(Fact(repeated.GetValue(ordinal), "IsRequired"));
+            Assert.False(Fact(repeated.GetValue(ordinal), "IsBlocked"));
+        }
     }
 
     private static SafeMigrationDbContext OfflineContext() => new(

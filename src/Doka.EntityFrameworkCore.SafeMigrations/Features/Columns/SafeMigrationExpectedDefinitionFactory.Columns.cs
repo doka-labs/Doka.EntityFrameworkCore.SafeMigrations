@@ -28,6 +28,14 @@ internal static partial class SafeMigrationExpectedDefinitionFactory
     {
         ArgumentNullException.ThrowIfNull(operation);
 
+        var computed = operation.ComputedColumnSql;
+        var expression = computed is not null
+            && SafeMigrationSqlExpressionParser.TryParseCapturedSource(computed, out var parsed) ? parsed : null;
+
+        // WHY: EF persists generated expressions as SQL text. Capture the
+        // bounded grammar once for dependency roles, but retain the original
+        // string reference: rendering a parsed integer as a typed CLR literal
+        // can change native arithmetic. Unknown syntax remains opaque.
         return new ExpectedColumnDefinition(
             name,
             operation.ClrType,
@@ -42,10 +50,12 @@ internal static partial class SafeMigrationExpectedDefinitionFactory
             operation.Collation is null ? null : new SafeMigrationCollationIdentifier(operation.Collation),
             operation.Comment,
             CaptureDefault(operation),
-            operation.ComputedColumnSql,
-            operation.IsStored)
+            expression is null ? computed : null,
+            operation.IsStored,
+            expression)
         {
             ProviderAnnotations = SafeMigrationProviderAnnotation.Capture(operation),
+            CapturedComputedSql = expression is null ? null : computed,
         };
     }
 

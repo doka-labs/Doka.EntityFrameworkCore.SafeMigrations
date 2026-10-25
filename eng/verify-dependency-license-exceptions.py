@@ -8,7 +8,7 @@ from urllib.parse import unquote
 
 
 APPROVED_VERSIONS = {
-    "microsoft.data.sqlclient.sni.runtime": "6.0.2",
+    "microsoft.data.sqlclient.sni.runtime": "6.0.3",
     "microsoft.identity.client.nativeinterop": "0.20.6",
 }
 

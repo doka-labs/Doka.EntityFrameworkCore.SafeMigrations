@@ -69,7 +69,8 @@ internal sealed class PostgreSqlSafeMigrationAnalysisConstraintCatalog
             // earlier tables, and opaque operations cannot carry index/drop
             // obligations across an unobserved change of physical owners.
             SafeMigrationExpectedIndexTransitions.Validate(pending, Normalize);
-            var catalog = SafeMigrationExpectedTableConstraints.FromOperations(pending, Normalize);
+            var catalog = SafeMigrationExpectedTableConstraints.FromOperations(pending, Normalize,
+                StringComparer.Ordinal, '"', foldUnquotedCapturedSqlIdentifiers: true);
 
             entries.Add(new Entry(start, safeOrdinal, catalog));
             pending.Clear();

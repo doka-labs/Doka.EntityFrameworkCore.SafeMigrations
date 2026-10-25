@@ -90,8 +90,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             ? "index_too_many_key_parts"
             : definition.Keys.Any(
                     static key => key.Expression is not null || key.StructuredExpression is not null)
-                || definition.Method is not null
-                && !StringComparer.OrdinalIgnoreCase.Equals(definition.Method, "BTREE")
+                || (definition.Method is not null
+                && !StringComparer.OrdinalIgnoreCase.Equals(definition.Method, "BTREE"))
                     ? "index_key_length_unverifiable"
                     : "index_prefix_required_for_key_limit";
 
@@ -111,6 +111,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + "ELSE 'missing' END",
             satisfied) with
         {
+            IndexNameExistsExpression = indexExists,
             DiagnosticEvidenceExpression = BuildIndexDiagnosticEvidence(definition),
             MatchedObjectNameExpression = ResolveMatchingObjectName(
                 matching,
@@ -188,6 +189,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             $"COUNT(*) = {definition.Keys.Count.ToString(CultureInfo.InvariantCulture)}",
         };
 
+        // WHY: Match declared key members to their one-based native catalog positions.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < definition.Keys.Count; ordinal++)
         {
             var key = definition.Keys[ordinal];
@@ -315,6 +319,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 $"SUM(CASE WHEN s.INDEX_TYPE = {Literal(definition.Method)} THEN 1 ELSE 0 END) = {keyCount}");
         }
 
+        // WHY: Match declared key members to their one-based native catalog positions.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < definition.Keys.Count; ordinal++)
         {
             var key = definition.Keys[ordinal];
@@ -422,8 +429,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     {
         if (definition.Keys.Count > MySqlProjectedIndexPhysicalShape.MaximumKeyParts
             || definition.Keys.Any(static key => key.Expression is not null || key.StructuredExpression is not null)
-            || definition.Method is not null
-            && !StringComparer.OrdinalIgnoreCase.Equals(definition.Method, "BTREE"))
+            || (definition.Method is not null
+                && !StringComparer.OrdinalIgnoreCase.Equals(definition.Method, "BTREE")))
         {
             // Catalog matching remains available for existing provider-supported
             // indexes. Creation is rejected because SafeMigrations cannot prove

@@ -2,8 +2,12 @@
 
 ## Support contract
 
-Prepared stable 10.5.0 adds actionable diagnostics with canonical report schema
-4, selected view schema 3 and contextual owned runtime errors. Older schema
+Version 10.6.0 adds public CASE expressions, certified generated-column
+and CHECK support, lossless signed-integer upgrades, ordered projection/DROP
+corrections and stack-safe traversal. Measured allocation reductions do not
+change migration safety or make hardware-dependent timing a qualification gate.
+It retains the 10.5.0 diagnostics with canonical report schema 4, selected
+view schema 3 and contextual owned runtime errors. Older schema
 files remain packaged; update validators and rebuild references to the compiled
 `CurrentSchemaVersion` constant.
 Those diagnostics do not change migration decisions or the target framework.
@@ -13,16 +17,77 @@ see [diagnostic compatibility](diagnostics.md#runtime-provider-differences).
 Native qualification still requires the complete blocking matrix; ARM SQL Server
 skips and offline SQL-shape tests are not substitutes for its x64 cells.
 
-All publishable projects target `net10.0`. The repository pins SDK 10.0.401
+## Upgrade to 10.6.0
+
+Keep every installed SafeMigrations package on the same 10.6.0 version; install
+only the provider adapters the application needs. Account for the dependency
+floors below and review newly scaffolded implicit index-length changes without
+rewriting historical migrations.
+
+MySQL/MariaDB and PostgreSQL now qualify explicit lossless signed-integer
+widening under `RepairIfSafe` when exact source, ancillary facets and native
+storage/dependency requirements are proven. Accepted index removals and safe
+sibling transitions preserve independently certified column facts, including
+interrupted upgrade prefixes and replay; removed key/index or row proofs are
+not restored. SQLite retains exact physical `INTEGER` matches without admitting
+a store-type conversion. Runtime guards remain mandatory; unsupported
+dependencies and unproven conversions do not become safe through this upgrade.
+See the [MySQL/MariaDB](mysql-mariadb-ddl-behavior.md#lossless-signed-integer-alterations)
+and [PostgreSQL](postgresql-behavior.md#lossless-signed-integer-alterations) boundaries.
+
+The 10.6.0 generated-expression support conditionally changes approved
+contract fingerprints: successfully parsed EF computed-column and CHECK SQL
+now includes original source spelling and numeric-token provenance. Review
+affected migration artifacts, regenerate stored
+`SafeMigrationContractFingerprint` values and reapprove them before use.
+Do not bypass mismatch checks or rewrite historical migrations. Ordinary
+SQL-default parsing, opaque/unparsed SQL, explicit uncaptured definitions and
+provider-owned operation fingerprint encoding are unchanged, as is the
+relational model-fingerprint format. Parsed CHECK equality also retains exact
+authored spelling; whitespace/parenthesis-only differences can be `Different`
+without being `Unsupported`. Computed-column source was already exact and
+does not gain automatic repair. See [expression compatibility](api-reference.md#sql-expressions-and-policy).
+
+If an application stores no contract-fingerprint approval, this change does
+not require inventing one or regenerating migration source. Existing approval
+artifacts must be reviewed against the immutable migration with the selected
+library version; do not reuse an older fingerprint as though it proved the new
+contract. Valid native expressions can still be `Unsupported` when deterministic
+binding, source independence or a native capability cannot be proved. A policy
+change does not bypass that boundary. Review the intended dependency-removal
+order, native permissions and affected provider guidance before execution.
+
+Report schema 4 and view schema 3 are inherited from 10.5.0, not advanced again.
+The complete hosted/native matrix and package/readback gates remain mandatory;
+see the [publication runbook](operations/release-publication.md) for release
+status and evidence requirements.
+
+Repository release-line automation retains the same five packages, signed-tag
+publisher and .NET 10 identity. Only main/10 is active; maintenance/10.x remains
+inactive. This is not .NET 11 support or an application migration requirement;
+see [release lines](operations/release-lines.md).
+
+### Dependencies and package identity
+
+All publishable projects target `net10.0`. The repository pins SDK 10.0.402
 with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 
 | Package | Runtime dependency contract |
 | --- | --- |
-| Core | `Microsoft.EntityFrameworkCore.Relational` `[10.0.12,10.1.0)` |
-| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.5.0,10.6.0)` |
+| Core | `Microsoft.EntityFrameworkCore.Relational` `[10.0.13,10.1.0)` |
+| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.6.2,10.7.0)` |
 | PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
-| SQLite | EF Core SQLite Core `[10.0.12,10.1.0)`; application-owned native bundle |
-| SQL Server (available since 10.4.6) | `Microsoft.EntityFrameworkCore.SqlServer` `[10.0.12,10.1.0)`; `System.Security.Cryptography.Pkcs` minimum `9.0.21` |
+| SQLite | EF Core SQLite Core `[10.0.13,10.1.0)`; application-owned native bundle |
+| SQL Server (available since 10.4.6) | `Microsoft.EntityFrameworkCore.SqlServer` `[10.0.13,10.1.0)`; `System.Security.Cryptography.Pkcs` minimum `9.0.21` |
+
+The EF Core and dependency-injection abstraction minimums are 10.0.13. These
+are published package dependency floors, not CI-only updates; consumers on an
+older 10.0 patch must update their resolved stack. EF Core SQL Server 10.0.13
+also raises its transitive SqlClient minimum to 6.1.7, which resolves SNI
+6.0.3. Its exact development/testing license exception is documented in
+[secure development](security/secure-development.md#sql-server-dependency-license-exceptions).
+The target framework and independently bounded Npgsql range remain unchanged.
+The separately reviewed Doka minor-line update is described below.
 
 The SQL Server provider centrally pins its existing transitive PKCS dependency
 to the patched 9.0.21 minimum. NuGet promotes that minimum into the published
@@ -31,25 +96,50 @@ lockfile. The other four packages do not acquire that dependency. This fixes
 the package versions identified by Microsoft's published
 [PKCS decode advisory](https://github.com/dotnet/announcements/issues/454) and
 [signature-check advisory](https://github.com/dotnet/announcements/issues/468),
-verified on 2026-10-14, without changing EF Core or SqlClient versions.
+verified on 2026-10-14. The later EF Core 10.0.13 / SqlClient 6.1.7 upgrade
+retains this patched 9.x minimum rather than introducing a separate PKCS
+major-version upgrade.
 The consumer owns runtime/SDK servicing and redeployment; a NuGet dependency
 update does not update an installed or self-contained .NET runtime.
 The minimum is not an exact version lock or a claim that every higher major
 version is patched. Consumers selecting PKCS 10.x must use 10.0.13 or later
 for these advisories; NuGet audit remains enabled for the actual resolved graph.
 
-The MySQL/MariaDB package requires Doka 10.5.0 or a compatible later 10.5 patch
+The current MySQL/MariaDB package requires Doka 10.6.2 or a compatible later 10.6 patch
 release and rejects the next minor line. This boundary avoids an exact
 transitive pin without claiming compatibility across an unqualified behavioral
 SPI revision. CI does not build Doka and never uses a cross-repository
 ProjectReference. The MySQL/MariaDB package lockfile resolves the public
-Doka 10.5.0 package. Its verified signed release tag identifies source commit
-`27a8d3cce3ce2bc64f6efd1e9034b1cd66eb1ff0`. The complete package, engine,
+Doka 10.6.2 package. Its verified signed release tag identifies source commit
+`6e2618140d821bd6befdf46181fcb82dca323c4f`. The complete package, engine,
 tooling, coverage, and performance matrix remains the SafeMigrations release
 gate; a local Doka ProjectReference or locally packed candidate is not release
 evidence.
 
-This upgrade enables explicit `MySqlGuidFormat.Uuid` on MariaDB, not an
+Doka 10.6.1 introduced preservation of explicit GUID SQL defaults in its model and
+migration metadata; an implicit client GUID strategy no longer overrides them.
+The current 10.6.2 minimum additionally resolves SQL, computed and literal
+defaults through actual property mappings, including GUID properties that
+exist only in secondary Entity Splitting tables and shared secondary columns.
+It retains the public migration SPI, dependency ranges and GUID storage defaults;
+these metadata fixes do not require a schema migration.
+Explicit application generation choices and historical snapshot annotations
+remain authoritative. Review new scaffolded differences without rewriting
+deployed history; see the [GUID SQL-default upgrade boundary](efcore-provider-upgrade-risk.md#guid-sql-defaults).
+
+SafeMigrations 10.6.0 raises its Doka dependency floor to the 10.6 line.
+Doka now budgets implicit indexed string/binary
+lengths across every physical key part, overlapping indexes and compatible
+principal-derived FK lengths. Review newly scaffolded column-length changes;
+existing migrations and explicit application facets are not rewritten. Its
+packed-DECIMAL correction agrees with SafeMigrations' existing projected and
+native-catalog width formulas. EF and connector ranges remain unchanged;
+Doka's System.IO.Hashing minimum advances from 10.0.12 to 10.0.13. See the
+[versioned index contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/d1e40a7b211c10b354e5aa6df80d9fea710d8f58/docs/provider-configuration.md#index-key-byte-fidelity).
+The full release matrix remains required; prior 10.5 qualification is not
+automatically evidence for 10.6.
+
+The earlier Doka 10.5 upgrade enabled explicit `MySqlGuidFormat.Uuid` on MariaDB, not an
 automatic conversion of existing GUID columns. Doka requires MariaDB 10.7 or
 later for this type; SafeMigrations qualification still uses the declared
 engine matrix, not every server above that capability threshold. MySQL rejects
@@ -73,13 +163,13 @@ The SQL Server project supplies the fifth lockfile. Releases 10.4.2 through
 10.4.5 contain four package artifacts; their inventory remains unchanged.
 
 The five-package set began with stable 10.4.6, including the optional SQL Server
-provider. Prepared stable 10.5.0 retains that inventory and the SQL Server PKCS
-minimum of 9.0.21. The Core API baseline gains the diagnostic surface described
-above, and the MySQL/MariaDB Doka range changes to the qualified 10.5 line.
-Other production dependency ranges remain unchanged. Publication still requires
-the blocking workflow, including all three
-native x86-64 SQL Server cells, and exact public readback
-of all five package IDs. Source preparation alone does not establish availability.
+provider. Version 10.6.0 retains that inventory and the SQL Server PKCS
+minimum of 9.0.21. The Core API baseline promotes the additive CASE surface;
+the existing diagnostic surface was introduced in 10.5.0. The current Doka
+dependency contract is the 10.6 line above. Qualification requires the blocking
+workflow, including all three native x86-64 SQL Server cells. The
+[publication runbook](operations/release-publication.md) owns the five-package
+readback procedure and release evidence.
 
 The 10.4.11 changes qualify sparse live/projected constraints and indexes from
 actual native metadata, accepted physical lifetimes and current row proofs.
@@ -104,7 +194,7 @@ acquisition. Earlier provider repair and trigger-freshness contracts remain.
 These are bounded path-specific changes, not a general engine-latency or
 peak-memory guarantee. SQLite retains its model-owned rebuild contract.
 Engineering dependencies inherit the reviewed Testcontainers 4.16.0 and pinned
-Action updates on `main`. For 10.5.0 only the MySQL/MariaDB package lockfile
+Action updates on `main`. For the historical 10.5.0 release only the MySQL/MariaDB package lockfile
 changes to resolve Doka 10.5.0; the other four package lockfiles are unchanged.
 No engine, tooling, package or coverage gate is removed. Performance measurements
 remain informational; invalid evidence and functional failures remain blocking.
@@ -115,12 +205,17 @@ for catalog-copy ownership and fallback.
 
 ## Engine matrix
 
-Every GitHub-hosted Linux job is pinned to `ubuntu-24.04`. This also fixes the
-benchmark jobs to that runner label instead of inheriting the moving
-`ubuntu-latest` label. Ubuntu 26.04 requires a dedicated upgrade with the
-complete qualification workflow and reviewed performance evidence before the
-repository switches as one unit. The repository intentionally does not
-maintain a permanent second Ubuntu matrix.
+Every repository-defined GitHub-hosted Linux job is pinned to the explicit x64 `ubuntu-26.04`
+label, including qualification, benchmarks, publication, dependency review,
+maintenance and Scorecard. GitHub lists this image as generally available;
+the moving `ubuntu-latest` label is not used. The complete hosted qualification
+workflow must establish this candidate's actual engine, tooling, package and
+SBOM evidence on the new image; changing a YAML label or running local ARM
+tests does not establish that result. Existing SDK selection through
+`global.json`, engine image digests, timeouts and performance budgets remain
+unchanged. The repository maintains no permanent second Ubuntu matrix.
+GitHub-managed default-setup CodeQL and automatic dependency-submission runs
+are separate platform workflows; these repository labels do not configure them.
 
 The reusable workflow `.github/workflows/quality-gates.yml` is invoked by CI,
 release candidates, and stable releases. It declares these exact qualification
@@ -128,21 +223,45 @@ images:
 
 | Engine | Image |
 | --- | --- |
-| MySQL 8.4 | `mysql:8.4.11@sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fb` |
-| MySQL 9.7 | `mysql:9.7.2@sha256:257388edf9c84dbc04c763625446d5f3fa6ed60d1b0873bc552c614ba0a7ab4e` |
-| MariaDB 10.11 | `mariadb:10.11.18@sha256:de61fed4a40d3842f3ee09944ba52792156cfd9adf489b2cc670fc6ded28df8d` |
-| MariaDB 11.4 | `mariadb:11.4.12@sha256:a794d9eb009e20de605858a11f32f63b4075cbd197c650436f0e3b457e4caed7` |
-| MariaDB 11.8 | `mariadb:11.8.8@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4` |
-| MariaDB 12.3 | `mariadb:12.3.2@sha256:759869cb6f003234a95c6384cdee245b4bce7de26913fe607a8110362c0c007d` |
-| PostgreSQL 14 | `postgres:14.24@sha256:2fdfb9b432d4a73bd3eea3d989752c1e669b68d502347e0bfd2cc6d709f3d6b4` |
-| PostgreSQL 15 | `postgres:15.19@sha256:5f72c7b5bd616308ccfd2e74d6be16fb06364e5eecbb815fe9dc6ab9761d2111` |
-| PostgreSQL 16 | `postgres:16.15@sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5` |
-| PostgreSQL 17 | `postgres:17.11@sha256:e38411452a464af89e5adadb8d223bf53b898d47d6ef918b2d58c08707350449` |
-| PostgreSQL 18 | `postgres:18.6@sha256:06cad38a5d9f5d24b4d83d86def30795d5e4b757fedbf5281172b576dedcd941` |
+| MySQL 8.4 | `mysql:8.4.13@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69` |
+| MySQL 9.7 | `mysql:9.7.4@sha256:8fb11c38b3551e22d50adbb688f027f8ff4ea2d2445aa277c1cc97b4af85ec54` |
+| MariaDB 10.11 | `mariadb:10.11.19@sha256:0d0945c57f75b3a3b9ebe71aedaaad005fa5305054e8fca3d2e42a8c92b43b5e` |
+| MariaDB 11.4 | `mariadb:11.4.13@sha256:250e1609e93c0e6aecf64bfbab2d84d5e89d2481540fe77447ff6c855c3b1873` |
+| MariaDB 11.8 | `mariadb:11.8.9@sha256:f16d7a344413e519dff518f27bdb221388f84b0d274c97c4fb5f2cb0dc1b34fa` |
+| MariaDB 12.3 | `mariadb:12.3.3@sha256:99c125f103f5d081ebbc9ffe064e63daf7f688ac33a5f7f29af2d7260a96debf` |
+| PostgreSQL 14 | `postgres:14.24@sha256:8ab94f61668dc73bbab4dc13273ff2fc37e635536af62aef5306a49a9682a446` |
+| PostgreSQL 15 | `postgres:15.19@sha256:baa22e6286bf832cb147b8bb5aa9d8bc999846d69c21d11bf63f58fbeed1fa48` |
+| PostgreSQL 16 | `postgres:16.15@sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97` |
+| PostgreSQL 17 | `postgres:17.11@sha256:b8faeff7712663c2773a190181e1246e37e364b887611c04658c28b44e2408fe` |
+| PostgreSQL 18 | `postgres:18.6@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6` |
 | SQLite | 3.46.1 or later; application-owned native bundle |
-| SQL Server 2019 | `mcr.microsoft.com/mssql/server:2019-latest@sha256:ef0b8db33970ecd01bed49c3a84a1d083c435a9891718df619298b67b352e74a` |
-| SQL Server 2022 | `mcr.microsoft.com/mssql/server:2022-latest@sha256:4402d880dd4c34bfa7d8705e56a86cd6c88da80a1f6bbbe741f999e76264a090` |
-| SQL Server 2025 | `mcr.microsoft.com/mssql/server:2025-latest@sha256:2b5b581621126574f3d1f75e78d3eebe8d05aedb59ad0cfdf9aa42cb0634d726` |
+| SQL Server 2019 | `mcr.microsoft.com/mssql/server:2019-latest@sha256:07d7dedecdbfcf6776035dc5eefb5bfd9aa1804b2f6b99f7dedb397d8a599069` |
+| SQL Server 2022 | `mcr.microsoft.com/mssql/server:2022-latest@sha256:cf8f0ab2ebe61feec2eed2629061a07d247f791c2a8ddda74a4ac9f06a291718` |
+| SQL Server 2025 | `mcr.microsoft.com/mssql/server:2025-latest@sha256:245f6b1c8903edae52cb20fa31419cefcde1a49938bb8c3447099011fc871ca3` |
+
+The image patches and manifest digests above were refreshed against the official
+[MySQL](https://hub.docker.com/_/mysql),
+[MariaDB](https://hub.docker.com/_/mariadb),
+[PostgreSQL](https://hub.docker.com/_/postgres) and
+[Microsoft Container Registry](https://mcr.microsoft.com/v2/mssql/server/tags/list)
+registries on 2026-10-25. PostgreSQL keeps the same server patch versions with
+rebuilt image manifests. These declarations identify the configured matrix, not
+completed qualification of every image; the required hosted matrix must pass.
+
+A primary-source inventory on that date verified every current direct NuGet
+dependency, SDK/tool and Action against its official stable releases. Updates
+are [FsCheck.Xunit 3.6.0](https://www.nuget.org/packages/FsCheck.Xunit/3.6.0) and
+[CodeQL Action 4.39.1](https://github.com/github/codeql-action/releases/tag/v4.39.1),
+pinned to commit `9b3254085494b55a0f7c4c2b3d2d52cc712ce370`. SDK 10.0.402,
+dotnet-ef 10.0.13, SBOM Tool 4.1.5 and Ryuk 0.14.0 remain
+unchanged. The patched PKCS 9.0.21 minimum remains on its existing 9.x line;
+this review does not impose a new transitive dependency major on consumers.
+
+Local MySQL/MariaDB integration tests, design-time fallback contexts and the
+shared CI coverage/tooling defaults use MariaDB 12.3.3. Explicit engine,
+version and image inputs remain supported; every other declared server line
+still has its independent matrix cell. This repository default does not change
+the provider version selected by a consuming application.
 
 MySQL/MariaDB support follows Doka's canonical feature profiles. PostgreSQL
 support spans major versions 14 through 18; every supported major is an
@@ -154,9 +273,9 @@ databases from the centrally declared dependency graph. A new endpoint or
 removed upstream version requires a reviewed support-contract change and fresh
 evidence.
 
-At the 2026-08-27 source review, PostgreSQL 14 through 18 are the upstream
-supported majors and the pinned versions above are their current minor
-releases. PostgreSQL 14 reaches upstream end of life on 2026-11-12. Release
+The 2026-08-27 source review established the declared PostgreSQL 14 through 18
+support matrix; the current patch/digest refresh is dated above. PostgreSQL 14
+reaches upstream end of life on 2026-11-12. Release
 qualification performed after that boundary must re-evaluate the declared
 matrix instead of inheriting this dated support conclusion.
 
@@ -194,18 +313,17 @@ to be revisited.
 Dependabot proposes dependency and lockfile updates through ordinary pull
 requests. Every accepted update therefore runs the same complete CI workflow as
 product code, including all provider cells, package consumers, coverage,
-performance, and SBOM validation. GitHub Automatic Dependency Submission
-publishes resolved base and head snapshots to the Dependency Graph. The
-independent, read-only Dependency Review workflow compares those snapshots,
-rejects newly introduced high-or-critical vulnerabilities and licenses outside
-the approved SPDX set, and runs the official bounded retry. Because action
-v5.0.0 proceeds after that timeout even when GitHub still reports a snapshot
-warning, a final comparison header check requires the warning to be present and
-empty. The public REST reference did not specify this header on 2026-08-28; its
-verified contract comes from the immutable action source, and absence fails
-closed. There is no second repository-owned polling state machine or
-dynamically restored dependency profile whose results can diverge from the
-central declarations tested by CI.
+performance, and SBOM validation. Dependency Review compares explicitly submitted
+base/head snapshots bound to the current pull-request commit. Contributor code
+runs only in separate read-only, cache-denied PR jobs; the trusted receiver
+validates their exact source-run/attempt and immutable data artifacts before
+submitting snapshots and publishing the required check. Neither its automatic
+nor manual entry executes contributor restore hooks. Forks
+and Dependabot use the same validation path. Missing, stale, or incomplete
+evidence fails closed; automatic GitHub submissions are not the authority for
+this check. The canonical [secure-development guide](security/secure-development.md)
+defines the trust boundaries, bootstrap path, license/vulnerability policy,
+bounded retry, and required comparison-header validation.
 
 ## Behavioral evidence
 
@@ -256,6 +374,9 @@ coverage. The provider-specific suites collectively cover:
   invalid-value enforcement, and independent user-check drift;
 - bounded EF-generated SQL defaults such as `CURRENT_TIMESTAMP(6)`, plus
   fail-closed retention of unbounded default SQL;
+- bounded generated-column and CHECK expressions, including ordered searched
+  `CASE` and overflow-guarded signed-integer branches; see the provider-specific
+  type, storage and non-NULL proofs in [generated columns](migration-authoring.md#generated-columns);
 - provider-specific index capabilities, generated MySQL/MariaDB prefix
   roundtrips, physical InnoDB key-limit boundaries, and unsupported branches;
 - ordered ordinary and safe index drop/create replacement, including preserved
@@ -350,18 +471,45 @@ tests verify command order, timeout propagation, and cancellation. Coverage
 jobs exclude the large-scale test because every supported engine matrix cell
 already executes it against a live server.
 
-Every engine matrix cell also runs:
+The MySQL, MariaDB and PostgreSQL tooling gates execute freshly scaffolded
+Strict and LegacyConvergence contracts through real `dotnet ef database update`,
+Migration Bundles and native SQL clients. Normal scripts execute once;
+idempotent scripts, including the no-transactions variant, execute twice.
+The existing small mixed-operation fixture and derived ownership script also
+execute. Generation or a nonempty artifact alone is not execution evidence.
 
-- `dotnet ef database update` twice;
-- normal migration script;
-- idempotent script;
-- idempotent no-transaction script;
-- Migration Bundle twice against a separate database;
-- exact Core history verification.
+Each transport uses a fresh owned database lifetime and independently verifies
+physical schema, exact history, model-managed data, generated CASE results,
+the computed-column index and CHECK enforcement. MySQL's authored default
+schema is a database qualifier: fresh lifetimes retain that database identity
+instead of rewriting SQL. PostgreSQL uses `psql -X` with `ON_ERROR_STOP=1`;
+MySQL/MariaDB use explicit UTF-8 batch input without `--force`. Clients retain
+the script's own transaction boundaries.
 
-SQLite runs the corresponding database update and Migration Bundle paths twice.
-Safe-operation SQL scripts are a qualified negative boundary because SQLite has
-no procedural language for the required catalog-dependent decisions.
+All generated migration source is compiled before bundle publication. Bundle
+commands use `--no-build`: an earlier RID publish can change copied lockfiles,
+which cannot validate a later automatic non-RID restore in CI. Initial locked
+restore/build gates and original source-lock hashes remain enforced. Local
+tooling parity checks must also exercise the CI restore policy, for example
+with `GITHUB_ACTIONS=true` scoped to the harness command.
+
+SQL Server qualifies Strict/LegacyConvergence CLI, bundle, normal-script and
+idempotent-script targets with exact native schema/history and generated-value
+readback. ODBC callers explicitly enable quoted identifiers and use finite
+login/query budgets; these caller settings do not relax product guards.
+
+SQLite runs both database-update and bundle paths twice. Its readback checks
+both initial and transition history identities, final column/index shape,
+generated behavior, CHECK enforcement and integrity independently. Safe-operation
+SQL scripts remain a qualified negative boundary: normal/idempotent attempts
+must fail for the intended provider reason without partial output, not merely
+with an arbitrary CLI error. Existing xUnit tests cover incomplete and
+compensating database fixtures against the actual consumer verifier.
+
+Tooling cleanup attempts all owned resources. Cleanup-only failures reject the
+gate; cleanup cannot replace an earlier execution failure. Shell counterprobes
+and the existing SQL Server process tests verify these orchestration contracts;
+they do not replace the required native engine matrix.
 
 ## Qualified capability boundaries
 
@@ -411,6 +559,10 @@ cases stop before target DDL instead of being compared or applied heuristically:
   provider-generated check is excluded from strict child-object ownership.
 - EF-generated SQL defaults receive typed equivalence only when the bounded
   parser proves their structure. Arbitrary SQL strings remain unsupported.
+- The same structural boundary applies to EF computed-column and CHECK
+  metadata. A parsed expression alone does not establish native type binding,
+  required-result semantics or index eligibility; each provider must prove
+  those independently. SQL Server native qualification requires the x64 matrix.
 - Existing PostgreSQL indexes must be valid, ready, live, and independently
   owned. Partitioned parent indexes are supported; attached child indexes and
   constraint-owned backing indexes reject independent ensure, drop, or rename
@@ -476,6 +628,10 @@ caller-owned evidence still receives defensive snapshots. These checks do not
 measure disk flush latency, establish an end-to-end migration latency claim,
 or replace live migration, recovery and native SQL Server qualification.
 
+For source-labelled raw samples and exact output/transport counterprobes, use the
+provider projects' [maintenance attribution mode](../CONTRIBUTING.md#maintenance-attribution).
+These prepared client measurements do not establish native engine performance.
+
 The SQL Server set declares eleven generation, analyzer-plan, model-managed
 data, repair, and canonical-model cases. Its initial duration values are the
 exact medians from the five-sample macOS ARM64 developer capture at
@@ -489,8 +645,8 @@ the block minimum gives very small cases more than 25% headroom.
 This capture is explicitly measurement-only and is not GitHub-hosted x64
 qualification. The quality workflow can retain a separate x64 capture in
 `sqlserver-baseline.json`; its ordinary benchmark report is also retained.
-Until the complete pinned x64 workflow passes, SQL Server qualification
-remains unestablished. SQL Server live workloads append timestamped stage markers
+SQL Server qualification requires the complete pinned x64 workflow.
+SQL Server live workloads append timestamped stage markers
 under `artifacts/performance/live/sqlserver-*-progress.log` before potentially
 long-running phases. The existing always-upload artifact preserves these markers
 even when a job does not produce its final TRX. They contain fixed workload/stage
@@ -540,8 +696,11 @@ are not deterministic; their three-times-baseline comparisons are regression
 evidence, not throughput claims. Budget evaluation remains unchanged in the
 reports rather than redefining an overrun as a passed measurement.
 Changes to a baseline or ceiling require captured before/after evidence on the
-same pinned `ubuntu-24.04` runner label and a review of asymptotic behavior; a
+same pinned `ubuntu-26.04` runner label and a review of asymptotic behavior; a
 budget must not be raised merely to make CI green.
+Earlier host measurements keep their actual OS and architecture attribution;
+do not relabel an Ubuntu 24.04 result as a 26.04 baseline or compare the hosts
+as though they were the same environment.
 
 The generation and analyzer-plan capture does not open a server connection,
 so it can also run locally on ARM64 for diagnostic evidence. That output
@@ -558,7 +717,7 @@ runner identity first. The ordinary invocation without `--capture-baseline`
 remains fail-closed while any declared budget is absent.
 
 These initial budgets retain their macOS ARM64 developer-measurement
-provenance. They do not establish a measured `ubuntu-24.04` x64 baseline or a
+provenance. They do not establish a measured `ubuntu-26.04` x64 baseline or a
 same-hardware hosted comparison; those remain separate performance evidence.
 
 For capture on the pinned x64 Linux runner, dispatch the existing CI workflow
@@ -650,15 +809,20 @@ and release-asset verification.
 ## Primary references
 
 - [GitHub-hosted runner Ubuntu 26.04 migration announcement](https://github.com/actions/runner-images/issues/14748),
-  retrieved 2026-09-21.
+  retrieved 2026-09-21 and rechecked 2026-10-25.
+- [GitHub-hosted runner labels and x64 resources](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
+  and [Ubuntu 26.04 image software](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2604-Readme.md),
+  retrieved 2026-10-25. The image's preinstalled SDK is not the repository's
+  SDK selection; `setup-dotnet` continues to install the exact `global.json` version.
 - [.NET 10 release metadata](https://dotnetcli.blob.core.windows.net/dotnet/release-metadata/10.0/releases.json),
-  retrieved 2026-08-27.
-- [EF Core Relational 10.0.12 package](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Relational/10.0.12),
-  [Dependency Injection Abstractions 10.0.12 package](https://www.nuget.org/packages/Microsoft.Extensions.DependencyInjection.Abstractions/10.0.12),
+  retrieved 2026-10-20; SDK 10.0.402 carries runtime 10.0.13.
+- [EF Core Relational 10.0.13 package](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Relational/10.0.13),
+  [Dependency Injection Abstractions 10.0.13 package](https://www.nuget.org/packages/Microsoft.Extensions.DependencyInjection.Abstractions/10.0.13),
   [Npgsql EF Core 10.0.3 package](https://www.nuget.org/packages/Npgsql.EntityFrameworkCore.PostgreSQL/10.0.3),
-  [EF Core SQLite Core 10.0.12 package](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Sqlite.Core/10.0.12),
+  [EF Core SQLite Core 10.0.13 package](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Sqlite.Core/10.0.13),
+  [EF Core SQL Server 10.0.13 package](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.SqlServer/10.0.13),
   and [EF Core custom SQLite versions](https://learn.microsoft.com/en-us/dotnet/standard/data/sqlite/custom-versions),
-  retrieved 2026-09-21.
+  retrieved 2026-10-20.
 - [Doka 10.2.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.2.0),
   [release notes](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/CHANGELOG.md),
   [provider configuration](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/v10.2.0/docs/provider-configuration.md),
@@ -680,6 +844,21 @@ and release-asset verification.
   [package catalog provenance](https://api.nuget.org/v3/catalog0/data/2026.10.14.23.33.52/doka.entityframeworkcore.mysql.10.5.0.json),
   and [GUID migration contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/27a8d3cce3ce2bc64f6efd1e9034b1cd66eb1ff0/docs/operations/migrations.md#guid-representation-changes),
   retrieved 2026-10-15.
+- [Doka 10.6.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.6.0),
+  [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.6.0),
+  [package catalog provenance](https://api.nuget.org/v3/catalog0/data/2026.10.20.06.45.24/doka.entityframeworkcore.mysql.10.6.0.json),
+  and [physical index-budget contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/d1e40a7b211c10b354e5aa6df80d9fea710d8f58/docs/provider-configuration.md#index-key-byte-fidelity),
+  retrieved 2026-10-20.
+- [Doka 10.6.1 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.6.1),
+  [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.6.1),
+  [package catalog provenance](https://api.nuget.org/v3/catalog0/data/2026.10.22.06.05.55/doka.entityframeworkcore.mysql.10.6.1.json),
+  and [GUID SQL-default contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/53c8fbd7ae8987b5c376250fe4d6296d729669cf/docs/operations/migrations.md#guid-sql-defaults),
+  retrieved 2026-10-22.
+- [Doka 10.6.2 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.6.2),
+  [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.6.2),
+  [package catalog provenance](https://api.nuget.org/v3/catalog0/data/2026.10.25.00.38.58/doka.entityframeworkcore.mysql.10.6.2.json),
+  and [GUID SQL-default contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/6e2618140d821bd6befdf46181fcb82dca323c4f/docs/operations/migrations.md#guid-sql-defaults),
+  retrieved 2026-10-25.
 - [MySQL 8.4 InnoDB limits](https://dev.mysql.com/doc/refman/8.4/en/innodb-limits.html),
   [MySQL 8.4 CREATE INDEX](https://dev.mysql.com/doc/refman/8.4/en/create-index.html),
   [MySQL 8.4 invisible indexes](https://dev.mysql.com/doc/refman/8.4/en/invisible-indexes.html),

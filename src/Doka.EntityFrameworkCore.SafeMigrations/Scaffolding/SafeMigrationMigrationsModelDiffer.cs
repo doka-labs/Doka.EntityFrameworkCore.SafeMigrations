@@ -10,6 +10,9 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
     private readonly bool _excludeModelManagedDataForExcludedTables;
     private readonly bool _isScaffoldingEnabled;
 
+    /// <summary>Initializes the provider differ decorator with immutable scaffolding ownership settings.</summary>
+    /// <param name="providerDiffer">The active provider's relational model differ.</param>
+    /// <param name="configuration">The source-ownership and design-time marker settings.</param>
     public SafeMigrationMigrationsModelDiffer(
         IMigrationsModelDiffer providerDiffer,
         SafeMigrationScaffoldingConfiguration configuration
@@ -23,6 +26,7 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
         _isScaffoldingEnabled = configuration.IsEnabled;
     }
 
+    /// <inheritdoc />
     public bool HasDifferences(
         IRelationalModel? source,
         IRelationalModel? target
@@ -30,6 +34,7 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
         ? _providerDiffer.HasDifferences(source, target)
         : GetOwnedDifferences(source, target).Count > 0;
 
+    /// <inheritdoc />
     public IReadOnlyList<MigrationOperation> GetDifferences(
         IRelationalModel? source,
         IRelationalModel? target
@@ -62,6 +67,9 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
         // the fallback path where the SafeMigrations generator was never loaded.
         var guarded = new MigrationOperation[operations.Count + 1];
         guarded[0] = new SafeMigrationDesignTimeServicesRequiredOperation();
+        // WHY: Reconstruct the operation list at the exact insertion ordinal of the design-time guard.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             guarded[ordinal + 1] = operations[ordinal];
@@ -216,6 +224,9 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
         string context
     )
     {
+        // WHY: Validate each column against the type declared at the same authored ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < columns.Length; ordinal++)
         {
             var modelType = table.Columns.SingleOrDefault(candidate =>
@@ -260,6 +271,9 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
         }
 
         var result = new string[columns.Length];
+        // WHY: Fill unresolved type entries without changing their association with authored columns.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < columns.Length; ordinal++)
         {
             var column = columns[ordinal];

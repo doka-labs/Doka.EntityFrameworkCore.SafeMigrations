@@ -1,5 +1,9 @@
-if (args.Length == 2
-    && args[0] == "--column-attribution")
+if (args is ["--maintenance-attribution", "--output", var maintenanceOutput])
+{
+    return PostgreSqlMaintenanceAttribution.Run(maintenanceOutput);
+}
+
+if (args is ["--column-attribution", _])
 {
     return PostgreSqlColumnAttributionWorkload.Run(args[1]);
 }

@@ -41,6 +41,9 @@ internal static class SafeMigrationSemanticCandidateFactory
     {
         var expected = IndexExpectedOperations(operations, defaultSchema, projectUniqueIndexesAsUniqueConstraints);
 
+        // WHY: Keep candidate correlation tied to the original unexpected-object ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < unexpectedObjects.Count; index++)
         {
             var unexpected = unexpectedObjects[index];
@@ -327,11 +330,18 @@ internal static class SafeMigrationSemanticCandidateFactory
         string name
     ) => definition.Expression is null
         ? new ExpectedCheckConstraintDefinition(name, definition.Table, definition.Sql!, definition.Schema)
-        : ExpectedCheckConstraintDefinition.FromExpression(
-            name,
-            definition.Table,
-            definition.Expression,
-            definition.Schema);
+        : definition.CapturedSql is not null
+            ? ExpectedCheckConstraintDefinition.FromCapturedExpression(
+                name,
+                definition.Table,
+                definition.Expression,
+                definition.CapturedSql,
+                definition.Schema)
+            : ExpectedCheckConstraintDefinition.FromExpression(
+                name,
+                definition.Table,
+                definition.Expression,
+                definition.Schema);
 
     private static SafeMigrationOperation CreateOperation(
         SafeMigrationIntent intent

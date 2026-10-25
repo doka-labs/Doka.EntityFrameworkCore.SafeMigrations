@@ -172,6 +172,39 @@ null literals, parentheses, unary arithmetic and `NOT`, arithmetic and
 comparison operators, `AND`/`OR`, `IS NULL`, `BETWEEN`, `IN`, function calls,
 `CAST`, `COLLATE`, and current date/time values.
 
+Searched `CASE WHEN <condition> THEN <result> ... [ELSE <result>] END`
+preserves branch order and conditional evaluation. A missing `ELSE` means SQL
+`NULL`; it is not replaced with a default. SQL Server's two-argument
+`CONVERT(<store-type>, <expression>)` is captured as a typed cast, not as a
+function with a column-name argument. That captured syntax retains SQL Server
+provenance: other providers reject it with `structured_convert_dialect` rather
+than confusing it with their differently ordered native CONVERT syntax.
+Public `SafeMigrationSql.Cast` remains the portable typed construction API.
+Style arguments and simple
+`CASE <operand> WHEN ...` remain outside the grammar. Parsing is bounded to
+16,384 UTF-16 code units, 1,024 tokens, 64 nesting levels and 256 items per
+list or searched-CASE clause sequence.
+
+The generated `AddCheckConstraintIfNotExists` call reparses its complete SQL
+into the same immutable tree when the migration executes. Inline table checks
+and independently captured EF check operations use that translation too.
+Validation during scaffolding therefore survives the source-code roundtrip;
+an expression outside the grammar does not acquire structured status merely
+because it came from EF.
+
+Successful capture retains the validated original SQL alongside the tree.
+Native DDL uses that exact source instead of reconstructing provider SQL from
+CLR literal types. For example, SQL Server can type a bare large integer
+token differently from an explicitly cast `bigint`, changing division and
+comparison results. The source spelling, numeric-token provenance and parsed
+structure therefore remain part of equivalence and contract fingerprints.
+The tree supplies dependency and capability proofs; retaining source is not a
+trust bypass. Unsupported dialect quoting, function/type roles or native
+catalog representations still reject. A supported identifier rename changes
+only proven identifier-role tokens, not literal content or arithmetic typing.
+Captured unary `+` is not silently erased: its native operator role cannot
+inherit the operand's proof merely because the ordinary parser can simplify it.
+
 The `storeType` supplied to `SafeMigrationSql.Literal` or
 `SafeMigrationSql.Cast` is a provider store type, not raw SQL. The
 MySQL/MariaDB renderer maps column aliases into their common CAST grammar:
@@ -202,13 +235,6 @@ SQL, and follows PostgreSQL's official
 [type-cast syntax](https://www.postgresql.org/docs/current/sql-expressions.html#SQL-SYNTAX-TYPE-CASTS).
 The precision boundaries follow the official
 [floating-point type definition](https://www.postgresql.org/docs/current/datatype-numeric.html#DATATYPE-FLOAT).
-
-MariaDB's generated-column grammar does not expose a `NOT NULL` facet and its
-catalog reports generated columns as nullable. A non-nullable computed
-definition is therefore `Unsupported` with `generated_column_nullability`
-before any target DDL. MySQL supports and verifies that facet. Keep a shared
-MySQL/MariaDB generated-column contract nullable unless separate definitions
-are intentional.
 
 Comments, parameters, multiple statements, subqueries, opaque provider
 operators, provider-dependent backslash escapes, malformed input, excessive
@@ -247,6 +273,85 @@ The same bounded parser captures SQL defaults exposed by EF through
 semantically with the live catalog. SQL outside the grammar remains opaque and
 fails closed with `opaque_sql_expression`; SafeMigrations never executes an
 unknown expression merely to infer equivalence.
+
+## Generated columns
+
+EF `ComputedColumnSql`, including the value captured by a `*FromModel`
+callback, is translated through the same bounded grammar as SQL defaults and
+CHECKs. Successful translation stores an immutable `ComputedExpression` and
+retains validated native source for DDL and exact identity;
+unrecognized SQL remains opaque and rejects with `opaque_sql_expression`.
+Parsing proves structure, not engine eligibility, determinism, result type or
+non-nullability. Providers retain their independent gates for those facets.
+
+The design rationale and explicitly selected alternatives are recorded in
+[D-017](decisions/D-017-generated-expression-and-dependency-contracts.md).
+
+Hand-authored definitions can use `computedExpression` directly. For example,
+the following searched CASE keeps the maximum signed integer out of the
+increment branch:
+
+```csharp
+var left = SafeMigrationSql.Identifier("left_bound");
+var next = SafeMigrationSql.Case(
+    [new SafeMigrationSqlCaseWhenClause(
+        SafeMigrationSql.Binary(
+            left,
+            SafeMigrationSqlBinaryOperator.Equal,
+            SafeMigrationSql.Literal(long.MaxValue)),
+        left)],
+    SafeMigrationSql.Binary(
+        left,
+        SafeMigrationSqlBinaryOperator.Add,
+        SafeMigrationSql.Literal(1)));
+```
+
+Do not replace a conditional overflow guard with an `AND` predicate and assume
+SQL evaluation order will protect arithmetic. Neither parsing nor catalog
+comparison evaluates the expression over application rows to establish its
+identity. Generation does not add helper CHECKs, inject replacement values or
+silently change virtual columns to stored columns.
+
+| Provider | Generated-column contract |
+| --- | --- |
+| MySQL | Compare the declared type, generated expression, nullability and virtual/stored form independently. |
+| MariaDB | Keep native nullable metadata; required integral results need an independent bounded non-null proof. |
+| PostgreSQL | Require explicit stored generation, bound operand types and exact native expression identity. |
+| SQLite | Emit declared facets on safe CREATE, direct ADD and owned rebuild; direct STORED ADD remains unsupported. |
+| SQL Server | Verify native inferred type/nullability/storage separately from required-result and index proofs. |
+
+Provider details: [MySQL/MariaDB](mysql-mariadb-ddl-behavior.md#generated-columns),
+[PostgreSQL](postgresql-behavior.md#generated-columns),
+[SQLite](sqlite-behavior.md#generated-columns),
+and [SQL Server](sqlserver-behavior.md#computed-columns).
+
+The MariaDB and SQL Server proofs do not reinterpret every nullable generated
+catalog entry as required. They must prove the exact supported expression and
+its currently bound operands; unknown or null-producing forms stay rejected.
+Changing an operand's type, nullability or generation can invalidate an earlier
+proof during ordered preflight. A later index or constraint retains its own
+physical, data and expression prerequisites. A successful create is not blanket
+authorization for every index or a later ordinary-to-generated alteration.
+
+Source-column removal must leave no generated dependent behind. Remove or
+replace a dependent generated definition explicitly before dropping its source.
+SafeMigrations never inserts `CASCADE` or silently removes another column.
+`generated_column_drop_dependency` identifies an established surviving
+dependency; `generated_column_drop_unproven` means the current surviving set
+cannot be certified, not that a particular offending dependent was found.
+Dropping the generated column itself does not count its own expression as a
+surviving dependency. Missing-source replay remains a no-op.
+
+A complete accepted generated-member set is separate from a complete physical
+row-layout or empty-table proof. Known removals update that set; opaque effects
+and unverified owner lifetimes cannot establish nondependency. MySQL/MariaDB
+also recheck the complete native surviving generated set before accepting an
+authored candidate. The terminal EF model is not evidence that the database
+already has that shape. MariaDB can separately prove the physical source name
+absent from all surviving native expressions, without accepting unknown model
+facets or certifying an empty generated set. Possible textual occurrences still
+need complete dependency evidence. These checks do not promise an atomic barrier against
+arbitrary concurrent schema changes or make a whole migration transactional.
 
 ## Model-managed data from `HasData`
 
@@ -580,6 +685,14 @@ already published migration to bypass a rejected proof.
 For a MySQL/MariaDB type-changing default backfill, the literal replacement must
 also fit both the old and target domains under strict conversion. PostgreSQL
 does not backfill existing null rows through this repair path.
+
+For supported MySQL/MariaDB and PostgreSQL signed-integer widenings, use explicit
+old/target definitions with `RepairIfSafe` and unchanged non-type facets. Remove
+blocking native dependencies before the alteration and declare reviewed
+replacement indexes/CHECKs afterward. Already absent removals do not certify a
+changed source: each resumed alteration needs its own native source proof.
+See the [MySQL/MariaDB](mysql-mariadb-ddl-behavior.md#lossless-signed-integer-alterations)
+and [PostgreSQL](postgresql-behavior.md#lossless-signed-integer-alterations) limits.
 
 For SQL Server integer widenings, use explicit old/target definitions and
 `RepairIfSafe`; preserve identity and default semantics. Drop blocking keys,

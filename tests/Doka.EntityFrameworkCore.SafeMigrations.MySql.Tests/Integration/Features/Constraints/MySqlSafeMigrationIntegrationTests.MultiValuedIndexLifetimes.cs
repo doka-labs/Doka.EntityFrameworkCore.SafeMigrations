@@ -753,10 +753,16 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
     }
 
     /// <summary>
-    /// Dropping a column remains a complete-table structure boundary, not a new implicit recovery contract.
+    /// A dropped and re-added column requires actual-origin index validation, never a fabricated ready key graph.
     /// </summary>
-    [Fact]
-    public async Task SparseForeignKeyRetirementDoesNotBypassDroppedColumnStructureBoundary()
+    /// <param name="conflictingIndex">Whether another session introduces a wrong-shape index before its guard.</param>
+    /// <param name="script">Whether execution uses emitted script rather than EF runtime commands.</param>
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task SparseForeignKeyRetirementRetainsDroppedColumnRuntimeGuard(bool conflictingIndex, bool script)
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -764,7 +770,8 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NULL, "
             + "INDEX `ix_parent` (`parent_id`), CONSTRAINT `fk_native` FOREIGN KEY (`parent_id`) "
-            + "REFERENCES `live_parent` (`id`)) ENGINE=InnoDB;");
+            + "REFERENCES `live_parent` (`id`)) ENGINE=InnoDB; "
+            + "INSERT INTO `live_parent` VALUES (7); INSERT INTO `live_child` VALUES (1,7);");
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -781,10 +788,58 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
         var preflight = await runner.AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("native-dropped-column-boundary"), CancellationToken.None);
 
+        preflight.ThrowIfBlocked();
+        await ExecuteRetiredColumnStreamAsync(context, connectionString,
+            builder.Operations.Take(3).ToArray(), script);
+        if (conflictingIndex)
+        {
+            await ExecuteSqlAsync(connectionString, "CREATE INDEX `ix_parent` ON `live_child` (`id`);");
+        }
+
+        var failure = await Record.ExceptionAsync(() => ExecuteRetiredColumnStreamAsync(context, connectionString,
+            builder.Operations.Skip(3).ToArray(), script));
+        var indexColumns = await ScalarStringAsync(connectionString,
+            "SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) FROM INFORMATION_SCHEMA.STATISTICS "
+            + "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='live_child' AND INDEX_NAME='ix_parent';");
+        var foreignKeys = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA=DATABASE() "
+            + "AND TABLE_NAME='live_child' AND CONSTRAINT_NAME='fk_native' AND CONSTRAINT_TYPE='FOREIGN KEY';");
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `live_child` WHERE `id`=1;");
+
         // Assert
-        Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
-        Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, preflight.Assessments[3].Action);
-        Assert.Equal("projected_structure_state_unknown", preflight.Assessments[3].AnalysisCode);
+        Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
+        Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[3].Action);
+        Assert.Equal(1, preflight.Assessments[3].DeferredOrigin?.OperationOrdinal);
+        Assert.Equal(1, rows);
+        Assert.Equal(conflictingIndex ? "id" : "parent_id", indexColumns);
+        Assert.Equal(conflictingIndex ? 0 : 1, foreignKeys);
+        if (conflictingIndex)
+        {
+            var native = script ? Assert.IsType<MySqlException>(failure) : AssertOwnedGuardFailure(failure);
+
+            Assert.Equal(1062, native.Number);
+            Assert.Contains("doka_sm_different", native.Message, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Null(failure);
+        }
+    }
+
+    /// <summary>Executes the same independently guarded sparse stream through either emission path.</summary>
+    private static Task ExecuteRetiredColumnStreamAsync(DbContext context, string connectionString,
+        IReadOnlyList<MigrationOperation> operations, bool script)
+    {
+        if (!script)
+        {
+            return ExecuteOperationsAsync(context, operations, CancellationToken.None);
+        }
+
+        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(operations, context.Model,
+            MigrationsSqlGenerationOptions.Script);
+
+        return ExecuteMigrationScriptAsync(connectionString,
+            string.Join(Environment.NewLine, commands.Select(static command => command.CommandText)));
     }
 
     /// <summary>Composite inventory requires every ordered FK part, not a coincidental first-column prefix.</summary>
@@ -923,6 +978,8 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
     public async Task ForeignKeySparseLiveLifetimeUsesVerifiedCaseInsensitiveOwnerIdentity()
     {
         // Arrange
+        // WHY: The finally owns asynchronous teardown; await using would invoke it a second time.
+        // ReSharper disable once UseAwaitUsing
         using var dedicated = new MySqlEngineContainerFixture(lowerCaseTableNames: 1);
         await dedicated.InitializeAsync();
         try

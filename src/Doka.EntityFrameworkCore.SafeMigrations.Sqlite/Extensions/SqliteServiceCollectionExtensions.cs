@@ -46,7 +46,18 @@ public static class SqliteServiceCollectionExtensions
             canonicalContextType,
             baselineGeneratorType);
 
-        services.TryAddScoped(baselineGeneratorType);
+        if (baselineGeneratorType == typeof(SqliteMigrationsSqlGenerator))
+        {
+            // WHY: Specialize only the official default. Explicit consumer
+            // generators retain their registration and the runtime postcondition
+            // remains authoritative if they do not preserve a safe definition.
+            services.TryAddScoped<SqliteMigrationsSqlGenerator, SqliteSafeMigrationsBaselineSqlGenerator>();
+        }
+        else
+        {
+            services.TryAddScoped(baselineGeneratorType);
+        }
+
         services.TryAddScoped(
             typeof(ISqliteSafeMigrationsBaselineGenerator),
             typeof(SqliteSafeMigrationsBaselineGenerator<>).MakeGenericType(baselineGeneratorType));

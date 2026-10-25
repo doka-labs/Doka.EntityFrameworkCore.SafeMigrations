@@ -26,6 +26,9 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator
         }
 
         builder.Append(" (");
+        // WHY: Preserve key ordering and place commas only between key definitions.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < definition.Keys.Count; index++)
         {
             if (index > 0)

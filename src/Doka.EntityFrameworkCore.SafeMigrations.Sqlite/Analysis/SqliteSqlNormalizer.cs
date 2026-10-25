@@ -11,19 +11,58 @@ internal static class SqliteSqlNormalizer
         ? left is null && right is null
         : StringComparer.Ordinal.Equals(Normalize(left), Normalize(right));
 
+    /// <summary>Compares bounded expressions while retaining native numeric and string source tokens.</summary>
+    /// <param name="left">The live expression source.</param>
+    /// <param name="right">The validated expected expression source.</param>
+    /// <returns>Whether only identifier delimiters, trivia, or redundant parentheses differ.</returns>
+    public static bool EquivalentCapturedSource(string? left, string? right)
+    {
+        if (left is null || right is null)
+        {
+            return left is null && right is null;
+        }
+
+        var normalizedLeft = Normalize(left);
+        var normalizedRight = Normalize(right);
+        if (StringComparer.Ordinal.Equals(normalizedLeft, normalizedRight))
+        {
+            return true;
+        }
+
+        // WHY: The shared bounded parser treats Unicode whitespace as trivia,
+        // but SQLite permits it in unquoted physical identifiers. Only exact
+        // native normalization can certify those sources without changing Core.
+        if (SqliteSqlIdentifierScanner.HasNonNativeWhitespace(normalizedLeft)
+            || SqliteSqlIdentifierScanner.HasNonNativeWhitespace(normalizedRight))
+        {
+            return false;
+        }
+
+        // WHY: SQLite treats -9223372036854775808 as INTEGER but the same
+        // token with .0 as REAL. Rendering a CLR decimal would erase that
+        // distinction; captured parsing keeps numeric lexemes and literal bytes.
+        return SafeMigrationSqlExpressionParser.TryParseCapturedSource(normalizedLeft, out var parsedLeft)
+            && SafeMigrationSqlExpressionParser.TryParseCapturedSource(normalizedRight, out var parsedRight)
+            && SafeMigrationSqlExpressionContract.Equivalent(parsedLeft, parsedRight);
+    }
+
     /// <summary>Produces the canonical comparison form of a SQLite expression.</summary>
     public static string Normalize(
         string value
     )
     {
-        var span = value.AsSpan().Trim();
+        var span = value.AsSpan().Trim(SqliteSqlIdentifierScanner.WhitespaceCharacters);
         while (HasSingleOuterParentheses(span))
         {
-            span = span[1..^1].Trim();
+            span = span[1..^1].Trim(SqliteSqlIdentifierScanner.WhitespaceCharacters);
         }
 
         var builder = new StringBuilder(span.Length);
         var pendingSpace = false;
+
+        // WHY: Track SQL offsets so quote escapes and token boundaries remain intact.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < span.Length; index++)
         {
             var character = span[index];
@@ -43,7 +82,7 @@ internal static class SqliteSqlNormalizer
                     continue;
             }
 
-            if (char.IsWhiteSpace(character))
+            if (SqliteSqlIdentifierScanner.IsWhitespace(character))
             {
                 pendingSpace = builder.Length > 0;
                 continue;
@@ -81,6 +120,10 @@ internal static class SqliteSqlNormalizer
     )
     {
         builder.Append(quote);
+
+        // WHY: Consume escaped delimiters together while retaining the quoted token's exact source offsets.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = start + 1; index < value.Length; index++)
         {
             var character = value[index];
@@ -111,6 +154,10 @@ internal static class SqliteSqlNormalizer
     )
     {
         builder.Append('[');
+
+        // WHY: Consume escaped delimiters together while retaining the quoted token's exact source offsets.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = start + 1; index < value.Length; index++)
         {
             var character = value[index];
@@ -137,6 +184,10 @@ internal static class SqliteSqlNormalizer
 
         var depth = 0;
         var closingQuote = '\0';
+
+        // WHY: Track quote escapes and parenthesis depth at exact UTF-16 offsets before slicing SQL.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < value.Length; index++)
         {
             var character = value[index];

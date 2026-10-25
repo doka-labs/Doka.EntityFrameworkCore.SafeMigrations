@@ -43,6 +43,24 @@ public abstract class SafeMigrationScaffoldingDbContext : DbContext
         // HasDefaultSchema(current database) migration shape end to end.
         modelBuilder.HasDefaultSchema(new MySqlConnectionStringBuilder(_connectionString).Database);
 
+        // WHY: The CLI gate must compile and execute the same generated-column
+        // and CHECK metadata bridge in strict and legacy scaffolding modes.
+        modelBuilder.Entity("ScaffoldingGeneratedNode", entity =>
+        {
+            entity.ToTable("scaffolding_generated_nodes", table =>
+                table.HasCheckConstraint("ck_scaffolding_generated_bounds", "`RightBound` > `LeftBound`"));
+            entity.Property<int>("Id").ValueGeneratedNever();
+            entity.HasKey("Id");
+            entity.Property<long>("LeftBound");
+            entity.Property<long>("RightBound");
+            // WHY: The unquoted ID role also exercises MariaDB's native
+            // keyword certificate through the actual CLI, script and bundle.
+            entity.Property<bool>("HasDescendants").HasComputedColumnSql(
+                "Id >= 0 AND `RightBound` > CASE WHEN `LeftBound` = 9223372036854775807 "
+                + "THEN `LeftBound` ELSE `LeftBound` + 1 END", stored: false);
+            entity.HasIndex("HasDescendants", "LeftBound", "RightBound");
+        });
+
         modelBuilder.Entity<SafeMigrationScaffoldingUser>(entity =>
         {
             entity.ToTable("scaffolding_users");

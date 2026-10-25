@@ -66,6 +66,15 @@ public static partial class SafeMigrationContractFingerprint
 
         writer.Add(definition.ComputedColumnSql);
         SafeMigrationSqlExpressionContract.Write(writer, definition.ComputedExpression);
+        if (definition.CapturedComputedSql is not null)
+        {
+            // WHY: Source spelling can change native numeric domains even
+            // when the parsed CLR literals agree. Existing uncaptured hashes
+            // retain their byte stream instead of gaining a null field.
+            writer.Add("captured_computed_sql:v1");
+            writer.Add(definition.CapturedComputedSql);
+        }
+
         writer.Add(definition.IsStored);
 
         writer.Add(definition.ProviderAnnotations.Count);

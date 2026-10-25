@@ -26,12 +26,35 @@ esac
 container_name=""
 
 cleanup() {
+  local original_status=$?
+  local cleanup_status=0
+  local status=0
+  trap - EXIT
+
   if [[ "${container_name}" == safe-migrations-tooling-* ]]; then
-    docker rm -f "${container_name}" >/dev/null 2>&1 || true
+    docker rm -f "${container_name}" >/dev/null || status=$?
+    if [[ "${status}" != "0" ]]; then
+      echo "Owned tooling container cleanup failed (${status})." >&2
+      cleanup_status="${status}"
+    fi
   fi
+
   if [[ "${work_dir}" == "$temporary_root"/safemigrations-tooling.* ]]; then
-    rm -rf -- "${work_dir}"
+    status=0
+    rm -rf -- "${work_dir}" || status=$?
+    if [[ "${status}" != "0" ]]; then
+      echo "Owned tooling directory cleanup failed (${status})." >&2
+      cleanup_status="${status}"
+    fi
   fi
+
+  # WHY: Cleanup must attempt both owned resources, reveal its own failures and
+  # retain the original migration/client error when the primary action failed.
+  if [[ "${original_status}" != "0" ]]; then
+    exit "${original_status}"
+  fi
+
+  exit "${cleanup_status}"
 }
 trap cleanup EXIT
 
@@ -63,13 +86,313 @@ wait_for_mysql() {
   local admin_client="$1"
   for _ in {1..90}; do
     if docker exec "${container_name}" "${admin_client}" ping \
-      -h127.0.0.1 -uroot -prootpw --silent >/dev/null 2>&1; then
+      --connect-timeout=2 -h127.0.0.1 -uroot -prootpw --silent >/dev/null 2>&1; then
       return
     fi
     sleep 1
   done
   echo "The ${engine} container did not become ready." >&2
   exit 1
+}
+
+run_query() {
+  local database="$1"
+  local query="$2"
+
+  if [[ "${engine}" == "postgres" ]]; then
+    docker exec -e PGPASSWORD=postgrespw -e PGCONNECT_TIMEOUT=10 "${container_name}" \
+      psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 5432 -U postgres -d "${database}" -Atc "${query}"
+  else
+    docker exec "${container_name}" "${client}" --connect-timeout=10 --default-character-set=utf8mb4 \
+      -h127.0.0.1 -uroot -prootpw -N -B "${database}" -e "${query}"
+  fi
+}
+
+run_script() {
+  local database="$1"
+  local script="$2"
+  if [[ ! -s "${script}" ]]; then
+    echo "Expected native SQL artifact is missing or empty: ${script}" >&2
+    exit 1
+  fi
+
+  # WHY: Native scripts retain EF's own transaction boundaries. psql otherwise
+  # continues after SQL errors; MySQL/MariaDB must never receive --force here.
+  if [[ "${engine}" == "postgres" ]]; then
+    docker exec -i -e PGPASSWORD=postgrespw -e PGCONNECT_TIMEOUT=10 "${container_name}" \
+      psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 5432 -U postgres -d "${database}" \
+      <"${script}"
+  else
+    docker exec -i "${container_name}" "${client}" --connect-timeout=10 --default-character-set=utf8mb4 \
+      -h127.0.0.1 -uroot -prootpw --batch "${database}" <"${script}"
+  fi
+}
+
+reset_owned_database() {
+  local database="$1"
+  case "${database}" in
+    tooling_generated_strict|tooling_generated_legacy|tooling_ownership|tooling_script\
+      |tooling_script_idempotent|tooling_script_no_transactions) ;;
+    *)
+      echo "Refusing to reset an unowned tooling database: ${database}" >&2
+      exit 2
+      ;;
+  esac
+
+  # WHY: MySQL's scaffolded default schema is the authored database identity.
+  # Fresh lifetimes of that exact database qualify each transport independently
+  # without silently rewriting captured migration/schema qualifiers.
+  if [[ "${engine}" == "postgres" ]]; then
+    docker exec -e PGPASSWORD=postgrespw -e PGCONNECT_TIMEOUT=10 "${container_name}" \
+      dropdb -h 127.0.0.1 -p 5432 -U postgres --if-exists "${database}"
+    docker exec -e PGPASSWORD=postgrespw -e PGCONNECT_TIMEOUT=10 "${container_name}" \
+      createdb -h 127.0.0.1 -p 5432 -U postgres "${database}"
+  else
+    run_query bootstrap "DROP DATABASE IF EXISTS \`${database}\`; CREATE DATABASE \`${database}\`;"
+  fi
+}
+
+assert_query() {
+  local database="$1"
+  local expected="$2"
+  local query="$3"
+  local actual
+  actual="$(run_query "${database}" "${query}")"
+  if [[ "${actual}" != "${expected}" ]]; then
+    echo "Tooling readback failed for ${engine}/${database}: ${query}; expected ${expected}, got ${actual}." >&2
+    exit 1
+  fi
+}
+
+read_generated_index_name() {
+  local migration="$1"
+  local index_name
+  # WHY: EF truncates convention names to the provider's identifier limit.
+  # The generated fixture, not an unconstrained name repeated here, owns identity.
+  index_name="$(sed -n 's/^[[:space:]]*name: "\(IX_scaffolding_generated_nodes_[^"]*\)".*/\1/p' "${migration}")"
+  if [[ ! "${index_name}" =~ ^IX_scaffolding_generated_nodes_[A-Za-z0-9_~]+$ ]]; then
+    echo "Expected exactly one generated-node index identity in ${migration}." >&2
+    exit 1
+  fi
+
+  printf '%s\n' "${index_name}"
+}
+
+assert_generated_state() {
+  local database="$1"
+  local migration_id="$2"
+  local generated_index="$3"
+  local invalid_output
+
+  if [[ "${engine}" == "postgres" ]]; then
+    assert_query "${database}" 1 "/* tooling:generated-history */ SELECT CASE WHEN COUNT(*) = 1
+      AND MIN(\"MigrationId\") = '${migration_id}' THEN 1 ELSE 0 END FROM \"__EFMigrationsHistory\";"
+    assert_query "${database}" '1:7:administrator@example.test' "/* tooling:generated-seed */
+      SELECT string_agg(\"Id\"::text || ':' || \"TenantId\"::text || ':' || \"Email\", ',' ORDER BY \"Id\")
+      FROM scaffolding_users;"
+    assert_query "${database}" 1 "/* tooling:generated-metadata */ SELECT COUNT(*) FROM pg_attribute a
+      WHERE a.attrelid = 'scaffolding_generated_nodes'::regclass AND a.attname = 'HasDescendants'
+        AND a.atttypid = 'boolean'::regtype AND a.attgenerated = 's'
+        AND pg_get_expr((SELECT adbin FROM pg_attrdef WHERE adrelid = a.attrelid AND adnum = a.attnum),
+          a.attrelid) LIKE '%CASE%';"
+    assert_query "${database}" 1 "/* tooling:generated-index */ SELECT COUNT(*) FROM pg_index i
+      JOIN pg_class c ON c.oid = i.indexrelid WHERE i.indrelid = 'scaffolding_generated_nodes'::regclass
+        AND c.relname = '${generated_index}' AND i.indisvalid AND i.indisready AND NOT i.indisunique
+        AND i.indnatts = 3 AND (SELECT string_agg(a.attname, ',' ORDER BY k.ordinality)
+          FROM unnest(i.indkey) WITH ORDINALITY k(attnum, ordinality)
+          JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum)
+          = 'HasDescendants,LeftBound,RightBound';"
+    assert_query "${database}" 1 "/* tooling:generated-check */ SELECT COUNT(*) FROM pg_constraint
+      WHERE conrelid = 'scaffolding_generated_nodes'::regclass AND conname = 'ck_scaffolding_generated_bounds'
+        AND contype = 'c' AND convalidated;"
+    assert_query "${database}" 1 "/* tooling:generated-hierarchy */ SELECT CASE WHEN
+      (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public'
+        AND table_name = 'scaffolding_work_items' AND column_name = 'Discriminator' AND data_type = 'integer') = 1
+      AND (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public'
+        AND table_name = 'scaffolding_attributed_work_items' AND column_name = 'AttributedDiscriminator'
+        AND data_type = 'character varying') = 1 THEN 1 ELSE 0 END;"
+    assert_query "${database}" 1 "/* tooling:generated-foreign-keys */ SELECT CASE WHEN COUNT(*) = 2
+      THEN 1 ELSE 0 END FROM pg_constraint WHERE contype = 'f'
+        AND conrelid IN ('scaffolding_cycle_left'::regclass, 'scaffolding_cycle_right'::regclass);"
+    run_query "${database}" 'INSERT INTO scaffolding_generated_nodes ("Id", "LeftBound", "RightBound")
+      VALUES (100, 1, 2), (101, 1, 4), (102, 9223372036854775806, 9223372036854775807);' >/dev/null
+    assert_query "${database}" '100:0,101:1,102:0' "/* tooling:generated-values */ SELECT
+      string_agg(\"Id\"::text || ':' || \"HasDescendants\"::integer::text, ',' ORDER BY \"Id\")
+      FROM scaffolding_generated_nodes;"
+    if invalid_output="$(run_query "${database}" '/* tooling:invalid-generated-row */
+      INSERT INTO scaffolding_generated_nodes ("Id", "LeftBound", "RightBound") VALUES (103, 5, 5);' 2>&1)"; then
+      echo "The native CHECK accepted an invalid generated row for ${engine}/${database}." >&2
+      exit 1
+    fi
+
+    assert_query "${database}" 0 '/* tooling:invalid-generated-row-absent */
+      SELECT COUNT(*) FROM scaffolding_generated_nodes WHERE "Id" = 103;'
+    run_query "${database}" 'DELETE FROM scaffolding_generated_nodes WHERE "Id" IN (100, 101, 102);' >/dev/null
+  else
+    assert_query "${database}" 1 "/* tooling:generated-history */ SELECT IF(COUNT(*) = 1
+      AND MIN(\`MigrationId\`) = '${migration_id}', 1, 0) FROM \`__EFMigrationsHistory\`;"
+    assert_query "${database}" '1:7:administrator@example.test' "/* tooling:generated-seed */
+      SELECT GROUP_CONCAT(CONCAT(\`Id\`, ':', \`TenantId\`, ':', \`Email\`) ORDER BY \`Id\` SEPARATOR ',')
+      FROM \`scaffolding_users\`;"
+    assert_query "${database}" 1 "/* tooling:generated-metadata */ SELECT COUNT(*) FROM information_schema.columns
+      WHERE table_schema = DATABASE() AND table_name = 'scaffolding_generated_nodes'
+        AND column_name = 'HasDescendants' AND data_type = 'tinyint'
+        AND LOWER(extra) LIKE '%virtual generated%' AND LOWER(generation_expression) LIKE '%case%';"
+    assert_query "${database}" 1 "/* tooling:generated-index */ SELECT COUNT(*) FROM (
+      SELECT index_name FROM information_schema.statistics WHERE table_schema = DATABASE()
+        AND table_name = 'scaffolding_generated_nodes' AND index_name = '${generated_index}'
+      GROUP BY index_name HAVING COUNT(*) = 3 AND MIN(non_unique) = 1
+        AND GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') = 'HasDescendants,LeftBound,RightBound'
+        AND SUM(sub_part IS NOT NULL) = 0) exact_index;"
+    assert_query "${database}" 1 "/* tooling:generated-check */ SELECT COUNT(*) FROM information_schema.table_constraints
+      WHERE constraint_schema = DATABASE() AND table_name = 'scaffolding_generated_nodes'
+        AND constraint_name = 'ck_scaffolding_generated_bounds' AND constraint_type = 'CHECK';"
+    assert_query "${database}" 1 "/* tooling:generated-hierarchy */ SELECT IF(
+      (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE()
+        AND table_name = 'scaffolding_work_items' AND column_name = 'Discriminator' AND data_type = 'int') = 1
+      AND (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE()
+        AND table_name = 'scaffolding_attributed_work_items' AND column_name = 'AttributedDiscriminator'
+        AND data_type = 'varchar') = 1, 1, 0);"
+    assert_query "${database}" 1 "/* tooling:generated-foreign-keys */ SELECT IF(COUNT(*) = 2, 1, 0)
+      FROM information_schema.referential_constraints WHERE constraint_schema = DATABASE()
+        AND table_name IN ('scaffolding_cycle_left', 'scaffolding_cycle_right');"
+    run_query "${database}" "INSERT INTO scaffolding_generated_nodes (\`Id\`, \`LeftBound\`, \`RightBound\`)
+      VALUES (100, 1, 2), (101, 1, 4), (102, 9223372036854775806, 9223372036854775807);" >/dev/null
+    assert_query "${database}" '100:0,101:1,102:0' "/* tooling:generated-values */ SELECT
+      GROUP_CONCAT(CONCAT(\`Id\`, ':', \`HasDescendants\`) ORDER BY \`Id\` SEPARATOR ',')
+      FROM scaffolding_generated_nodes;"
+    if invalid_output="$(run_query "${database}" "/* tooling:invalid-generated-row */
+      INSERT INTO scaffolding_generated_nodes (\`Id\`, \`LeftBound\`, \`RightBound\`) VALUES (103, 5, 5);" 2>&1)"; then
+      echo "The native CHECK accepted an invalid generated row for ${engine}/${database}." >&2
+      exit 1
+    fi
+
+    assert_query "${database}" 0 "/* tooling:invalid-generated-row-absent */
+      SELECT COUNT(*) FROM scaffolding_generated_nodes WHERE \`Id\` = 103;"
+    run_query "${database}" "DELETE FROM scaffolding_generated_nodes WHERE \`Id\` IN (100, 101, 102);" >/dev/null
+  fi
+
+  # WHY: Any unrelated SQL/connection failure is not evidence that the CHECK
+  # rejected the intended invalid row. Require its actual constraint identity.
+  if [[ "${invalid_output}" != *ck_scaffolding_generated_bounds* ]]; then
+    echo "The native CHECK counterprobe failed for an unrelated reason: ${invalid_output}" >&2
+    exit 1
+  fi
+}
+
+assert_fixed_state() {
+  local database="$1"
+  local migration_id="$2"
+
+  if [[ "${engine}" == "postgres" ]]; then
+    assert_query "${database}" 1 "/* tooling:fixed-history */ SELECT CASE WHEN COUNT(*) = 1
+      AND MIN(\"MigrationId\") = '${migration_id}' THEN 1 ELSE 0 END
+      FROM \"__ApplicationDbContextMigrationsHistory\";"
+    assert_query "${database}" 1 "/* tooling:fixed-metadata */ SELECT CASE WHEN
+      (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public'
+        AND table_name = 'pipeline_probe' AND column_name = 'Id' AND data_type = 'integer'
+        AND is_nullable = 'NO') = 1 AND
+      (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'public'
+        AND table_name = 'pipeline_state' AND column_name = 'payload' AND data_type = 'character varying'
+        AND character_maximum_length = 80 AND is_nullable = 'NO') = 1 THEN 1 ELSE 0 END;"
+    run_query "${database}" 'INSERT INTO pipeline_probe ("Id") VALUES (1);
+      INSERT INTO pipeline_state ("Id", payload) VALUES (1, '\''tooling'\'');' >/dev/null
+    assert_query "${database}" '1:tooling' '/* tooling:fixed-values */
+      SELECT s."Id"::text || '\'':'\'' || s.payload FROM pipeline_state s
+      JOIN pipeline_probe p ON p."Id" = s."Id";'
+    run_query "${database}" 'DELETE FROM pipeline_state; DELETE FROM pipeline_probe;' >/dev/null
+  else
+    assert_query "${database}" 1 "/* tooling:fixed-history */ SELECT IF(COUNT(*) = 1
+      AND MIN(\`MigrationId\`) = '${migration_id}', 1, 0) FROM \`__ApplicationDbContextMigrationsHistory\`;"
+    assert_query "${database}" 1 "/* tooling:fixed-metadata */ SELECT IF(
+      (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE()
+        AND table_name = 'pipeline_probe' AND column_name = 'Id' AND data_type = 'int' AND is_nullable = 'NO') = 1
+      AND (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE()
+        AND table_name = 'pipeline_state' AND column_name = 'payload' AND data_type = 'varchar'
+        AND character_maximum_length = 80 AND is_nullable = 'NO') = 1, 1, 0);"
+    run_query "${database}" "INSERT INTO pipeline_probe (\`Id\`) VALUES (1);
+      INSERT INTO pipeline_state (\`Id\`, payload) VALUES (1, 'tooling');" >/dev/null
+    assert_query "${database}" '1:tooling' "/* tooling:fixed-values */
+      SELECT CONCAT(s.\`Id\`, ':', s.payload) FROM pipeline_state s JOIN pipeline_probe p ON p.\`Id\` = s.\`Id\`;"
+    run_query "${database}" 'DELETE FROM pipeline_state; DELETE FROM pipeline_probe;' >/dev/null
+  fi
+}
+
+assert_ownership_state() {
+  if [[ "${engine}" == "postgres" ]]; then
+    assert_query tooling_ownership '1:owner,3:auditor' 'SELECT
+      string_agg("Id"::text || '\'':'\'' || "Name", '\'','\'' ORDER BY "Id") FROM ownership_core_roles;'
+    assert_query tooling_ownership '10:1:premium,12:3:audit' 'SELECT
+      string_agg("Id"::text || '\'':'\'' || "CoreRoleId"::text || '\'':'\'' || "Name", '\'','\'' ORDER BY "Id")
+      FROM ownership_custom_profiles;'
+    assert_query tooling_ownership 2 'SELECT COUNT(*) FROM "__SafeMigrationsCoreHistory";'
+    assert_query tooling_ownership 2 'SELECT COUNT(*) FROM "__SafeMigrationsCustomHistory";'
+  else
+    assert_query tooling_ownership '1:owner,3:auditor' "SELECT
+      GROUP_CONCAT(CONCAT(\`Id\`, ':', \`Name\`) ORDER BY \`Id\` SEPARATOR ',') FROM ownership_core_roles;"
+    assert_query tooling_ownership '10:1:premium,12:3:audit' "SELECT
+      GROUP_CONCAT(CONCAT(\`Id\`, ':', \`CoreRoleId\`, ':', \`Name\`) ORDER BY \`Id\` SEPARATOR ',')
+      FROM ownership_custom_profiles;"
+    assert_query tooling_ownership 2 "SELECT COUNT(*) FROM \`__SafeMigrationsCoreHistory\`;"
+    assert_query tooling_ownership 2 "SELECT COUNT(*) FROM \`__SafeMigrationsCustomHistory\`;"
+  fi
+}
+
+qualify_generated_context() {
+  local mode="$1"
+  local context="$2"
+  local connection="$3"
+  local migration="$4"
+  local database="tooling_generated_${mode}"
+  local migration_id
+  local generated_index
+  local script
+  local variant
+  migration_id="$(basename "${migration}" .cs)"
+  generated_index="$(read_generated_index_name "${migration}")"
+  export SAFE_MIGRATIONS_CONNECTION_STRING="${connection}"
+  reset_owned_database "${database}"
+  dotnet ef database update --project "${project}" --context "${context}" --configuration Release --no-build
+  assert_generated_state "${database}" "${migration_id}" "${generated_index}"
+  dotnet ef database update --project "${project}" --context "${context}" --configuration Release --no-build
+  assert_generated_state "${database}" "${migration_id}" "${generated_index}"
+
+  for variant in normal idempotent no-transactions; do
+    # WHY: A nonempty argument vector also works under macOS Bash 3.2's nounset
+    # semantics, where expanding an empty optional-argument array is an error.
+    local script_command=(ef migrations script --project "${project}" --context "${context}"
+      --configuration Release --no-build --output "${artifacts_dir}/generated-${mode}-${variant}.sql")
+    if [[ "${variant}" != normal ]]; then
+      script_command+=(--idempotent)
+    fi
+
+    if [[ "${variant}" == no-transactions ]]; then
+      script_command+=(--no-transactions)
+    fi
+
+    dotnet "${script_command[@]}"
+  done
+
+  # WHY: All migrations are already compiled. A preceding bundle RID publish
+  # changes copied locks; an implicit non-RID build would fail CI's locked restore.
+  dotnet ef migrations bundle --project "${project}" --context "${context}" --configuration Release --no-build \
+    --output "${artifacts_dir}/generated-${mode}-efbundle" --force --verbose
+  reset_owned_database "${database}"
+  "${artifacts_dir}/generated-${mode}-efbundle" --connection "${connection}"
+  assert_generated_state "${database}" "${migration_id}" "${generated_index}"
+  "${artifacts_dir}/generated-${mode}-efbundle" --connection "${connection}"
+  assert_generated_state "${database}" "${migration_id}" "${generated_index}"
+
+  for variant in normal idempotent no-transactions; do
+    script="${artifacts_dir}/generated-${mode}-${variant}.sql"
+    reset_owned_database "${database}"
+    run_script "${database}" "${script}"
+    assert_generated_state "${database}" "${migration_id}" "${generated_index}"
+    if [[ "${variant}" != normal ]]; then
+      run_script "${database}" "${script}"
+      assert_generated_state "${database}" "${migration_id}" "${generated_index}"
+    fi
+  done
 }
 
 if [[ "${engine}" == "postgres" ]]; then
@@ -450,6 +773,17 @@ else
 fi
 
 for migration in "${strict_migration}" "${legacy_migration}"; do
+  for generated_contract in \
+    'scaffolding_generated_nodes' \
+    'HasDescendants' \
+    'CASE WHEN' \
+    'ck_scaffolding_generated_bounds'; do
+    if ! grep -Fq "${generated_contract}" "${migration}"; then
+      echo "Scaffolding output is missing its generated expression contract: ${generated_contract}" >&2
+      exit 1
+    fi
+  done
+
   for hierarchy_contract in \
     'scaffolding_work_items' \
     'Discriminator' \
@@ -704,6 +1038,17 @@ for core_sql_mutation in "${core_sql_mutations[@]}"; do
   fi
 done
 
+# WHY: Generating an ownership-safe file does not prove native script execution.
+# Recreate only this harness-owned database, establish its external Core lineage
+# through EF, then apply the custom SQL and observe both independent histories.
+reset_owned_database tooling_ownership
+export SAFE_MIGRATIONS_OWNERSHIP_STATE="target"
+dotnet ef database update --project "${ownership_core_project}" --startup-project "${project}" \
+  --context CoreOwnershipDbContext --configuration Release --no-build
+run_script tooling_ownership "${artifacts_dir}/ownership-custom.sql"
+assert_ownership_state
+unset SAFE_MIGRATIONS_OWNERSHIP_STATE
+
 export SAFE_MIGRATIONS_GENERATED_STRICT_CONNECTION_STRING="${generated_strict_connection}"
 export SAFE_MIGRATIONS_GENERATED_LEGACY_CONNECTION_STRING="${generated_legacy_connection}"
 dotnet test "${project}" \
@@ -711,6 +1056,13 @@ dotnet test "${project}" \
   --filter FullyQualifiedName~GeneratedInitialMigrationPreflightTests
 unset SAFE_MIGRATIONS_GENERATED_STRICT_CONNECTION_STRING
 unset SAFE_MIGRATIONS_GENERATED_LEGACY_CONNECTION_STRING
+
+# Keep the direct preflight fixture above as separate evidence. These transports
+# must load real compiled migrations, write history and replay their own output.
+qualify_generated_context strict StrictSafeMigrationScaffoldingDbContext \
+  "${generated_strict_connection}" "${strict_migration}"
+qualify_generated_context legacy LegacySafeMigrationScaffoldingDbContext \
+  "${generated_legacy_connection}" "${legacy_migration}"
 
 read_transition_state() {
   local database="$1"
@@ -839,11 +1191,9 @@ dotnet ef migrations script --project "${project}" --context SafeMigrationDbCont
   --output "${artifacts_dir}/migration-idempotent-no-transactions.sql"
 dotnet ef migrations bundle \
   --project "${project}" --context SafeMigrationDbContext \
-  --configuration Release --output "${artifacts_dir}/efbundle" --force --verbose
+  --configuration Release --no-build --output "${artifacts_dir}/efbundle" --force --verbose
 "${artifacts_dir}/efbundle" --connection "${bundle_connection}"
 "${artifacts_dir}/efbundle" --connection "${bundle_connection}"
-
-history_table="__ApplicationDbContextMigrationsHistory"
 
 # WHY: The engine's own migration fixture declares this identifier. Reading it here
 # instead of repeating the literal keeps a fixture rename from verifying a history
@@ -855,27 +1205,26 @@ if [[ -z "${migration_id}" ]]; then
   exit 1
 fi
 
-postgres_history_query="SELECT COUNT(*) FROM \"${history_table}\" WHERE \"MigrationId\" = '${migration_id}';"
-mysql_history_query="SELECT COUNT(*) FROM \`${history_table}\` WHERE \`MigrationId\` = '${migration_id}';"
+assert_fixed_state tooling_cli "${migration_id}"
+assert_fixed_state tooling_bundle "${migration_id}"
+for variant in normal idempotent no-transactions; do
+  case "${variant}" in
+    normal) database=tooling_script; script="${artifacts_dir}/migration.sql" ;;
+    idempotent) database=tooling_script_idempotent; script="${artifacts_dir}/migration-idempotent.sql" ;;
+    no-transactions)
+      database=tooling_script_no_transactions
+      script="${artifacts_dir}/migration-idempotent-no-transactions.sql"
+      ;;
+  esac
 
-if [[ "${engine}" == "postgres" ]]; then
-  cli_count="$(docker exec -e PGPASSWORD=postgrespw "${container_name}" \
-    psql -h 127.0.0.1 -p 5432 -U postgres -d tooling_cli -Atc \
-    "${postgres_history_query}")"
-  bundle_count="$(docker exec -e PGPASSWORD=postgrespw "${container_name}" \
-    psql -h 127.0.0.1 -p 5432 -U postgres -d tooling_bundle -Atc \
-    "${postgres_history_query}")"
-else
-  cli_count="$(docker exec "${container_name}" "${client}" -h127.0.0.1 -uroot -prootpw -N -B tooling_cli \
-    -e "${mysql_history_query}")"
-  bundle_count="$(docker exec "${container_name}" "${client}" -h127.0.0.1 -uroot -prootpw -N -B tooling_bundle \
-    -e "${mysql_history_query}")"
-fi
-
-if [[ "${cli_count}" != "1" || "${bundle_count}" != "1" ]]; then
-  echo "EF tooling history verification failed for ${engine}." >&2
-  exit 1
-fi
+  reset_owned_database "${database}"
+  run_script "${database}" "${script}"
+  assert_fixed_state "${database}" "${migration_id}"
+  if [[ "${variant}" != normal ]]; then
+    run_script "${database}" "${script}"
+    assert_fixed_state "${database}" "${migration_id}"
+  fi
+done
 
 for artifact in \
   "${artifacts_dir}/ownership-custom.sql" \

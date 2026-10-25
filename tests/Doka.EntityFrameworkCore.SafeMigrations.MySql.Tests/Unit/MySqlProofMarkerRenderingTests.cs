@@ -1,7 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Verifies one closed, quote-aware proof contract across every runtime-plan rendering path.</summary>
-public sealed class MySqlProofMarkerRenderingTests
+public sealed partial class MySqlProofMarkerRenderingTests
 {
     private const string BinaryMarker = "__DOKA_SM_BINARY_DEFAULT_0__";
 
@@ -20,6 +20,7 @@ public sealed class MySqlProofMarkerRenderingTests
             "prepared-repair", "prepared-repair-resolved", "prepared-transition", "prepared-data-required",
             "prepared-data-blocked", "prepared-mutation", "prepared-nullable", "prepared-null-repair",
             "prepared-null-blocked",
+            "captured-syntax", "index-identity", "drop-completeness",
         ];
 
         (string? Binding, string Expected)[] bindings =
@@ -56,6 +57,8 @@ public sealed class MySqlProofMarkerRenderingTests
             "prepared-required-resume" => "((" + expected + ")) = 'staged'",
             "prepared-data-blocked" => "EXISTS(SELECT 1 FROM `proof_items` WHERE " + expected
                 + " IS NOT NULL AND CHAR_LENGTH(" + expected + ") > 8 LIMIT 1)",
+            "index-identity" => "CASE WHEN (" + expected + ") THEN 'matching' WHEN (" + expected
+                + ") THEN 'different' ELSE 'missing' END",
             _ => expected,
         };
 
@@ -429,6 +432,9 @@ public sealed class MySqlProofMarkerRenderingTests
             ModelManagedDependencyCountsExpression = expression,
             ExecutionPostcondition = expression,
             MutationSql = expression,
+            CapturedSourceSyntaxExpression = expression,
+            IndexNameExistsExpression = expression,
+            DropLeavesNoGeneratedColumnsExpression = expression,
             BinaryDefaultProofs = [new MySqlSafeMigrationBinaryDefaultProof(
                 BinaryMarker, "fresh_catalog", "SELECT TRUE", binding)],
             RequiredColumnAddPlan = new MySqlSafeMigrationRequiredColumnAddPlan("owned", expression, false),
@@ -476,6 +482,9 @@ public sealed class MySqlProofMarkerRenderingTests
         "prepared-nullable" => plan.RenderPreparedNullabilityColumnExpression([]),
         "prepared-null-repair" => plan.RenderPreparedNullabilityRepairInvariantExpression([]),
         "prepared-null-blocked" => plan.RenderPreparedNullabilityDataProbeBlockedExpression([]),
+        "captured-syntax" => plan.RenderCapturedSourceSyntaxExpression(UnexpectedValue),
+        "index-identity" => plan.RenderProjectedIndexIdentityExpression(UnexpectedValue),
+        "drop-completeness" => plan.RenderDropLeavesNoGeneratedColumnsExpression(UnexpectedValue),
         _ => throw new ArgumentOutOfRangeException(nameof(consumer), consumer, "Unknown runtime-plan consumer."),
     };
 

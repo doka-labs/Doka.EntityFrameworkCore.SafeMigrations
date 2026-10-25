@@ -7,16 +7,20 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <summary>Identifies intrinsic required additions whose writes can be protected by an owned CHECK.</summary>
     /// <param name="definition">The immutable authored target.</param>
     /// <returns>Whether the two-stage no-default protocol can preserve this target exactly.</returns>
-    internal static bool CanUseRequiredColumnAddProtocol(ExpectedColumnDefinition definition)
+    internal static bool CanUseRequiredColumnAddProtocol(
+        ExpectedColumnDefinition definition
+    )
     {
         ArgumentNullException.ThrowIfNull(definition);
 
-        return !definition.IsNullable
-            && definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.None
+        return definition is { IsNullable: false, DefaultValue.Kind: SafeMigrationDefaultValueKind.None }
             && SafeMigrationColumnRepairHelper.HasRepairableIntrinsicShape(definition)
             && (definition.StoreType is null
-                || !definition.StoreType.AsSpan().TrimStart().StartsWith(
-                    "timestamp", StringComparison.OrdinalIgnoreCase))
+                || !definition
+                    .StoreType
+                    .AsSpan()
+                    .TrimStart()
+                    .StartsWith("timestamp", StringComparison.OrdinalIgnoreCase))
             && !HasStandardOnlyEnumSetNativeCommentScope(definition)
             && MySqlSafeMigrationColumnMetadata.TryCreate(definition, out var metadata)
             && metadata.ValueGenerationStrategy is null
@@ -27,7 +31,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <summary>Identifies unsafe missing additions that must not fall back to implicit native values.</summary>
     /// <param name="definition">The immutable authored target.</param>
     /// <returns>Whether only the missing state must reject an unsupported add protocol.</returns>
-    internal static bool RequiresUnsupportedMissingRequiredAdd(ExpectedColumnDefinition definition)
+    internal static bool RequiresUnsupportedMissingRequiredAdd(
+        ExpectedColumnDefinition definition
+    )
     {
         ArgumentNullException.ThrowIfNull(definition);
 
@@ -41,26 +47,30 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <summary>Identifies required SQL-default additions needing strict native conversion qualification.</summary>
     /// <param name="definition">The immutable target and authored SQL-default expression.</param>
     /// <returns>Whether missing-column addition needs engine and session evidence.</returns>
-    internal static bool RequiresRequiredSqlDefaultAddQualification(ExpectedColumnDefinition definition)
+    internal static bool RequiresRequiredSqlDefaultAddQualification(
+        ExpectedColumnDefinition definition
+    )
     {
         ArgumentNullException.ThrowIfNull(definition);
 
-        return !definition.IsNullable && definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.Sql;
+        return definition is { IsNullable: false, DefaultValue.Kind: SafeMigrationDefaultValueKind.Sql };
     }
 
     /// <summary>Identifies required-add paths whose missing qualification needs native owner identity.</summary>
     /// <param name="definition">The immutable target requiring an owned stage or missing-only add refusal.</param>
     /// <returns>Whether catalog shadows must not supply presence or terminal matching for the addition.</returns>
-    private static bool RequiresNativeRequiredColumnAddOwnerQualification(ExpectedColumnDefinition definition) =>
-        CanUseRequiredColumnAddProtocol(definition)
+    private static bool RequiresNativeRequiredColumnAddOwnerQualification(
+        ExpectedColumnDefinition definition
+    ) => CanUseRequiredColumnAddProtocol(definition)
         || RequiresUnsupportedMissingRequiredAdd(definition)
         || RequiresRequiredSqlDefaultAddQualification(definition);
 
     /// <summary>Identifies required TIMESTAMP repairs requiring explicit session semantics.</summary>
     /// <param name="definition">The immutable target whose MODIFY must not create temporal data or defaults.</param>
     /// <returns>Whether repair requires explicit_defaults_for_timestamp to remain enabled.</returns>
-    private static bool RequiresExplicitTimestampDefaults(ExpectedColumnDefinition definition) =>
-        RequiresExplicitTimestampDefaults(definition, definition.StoreType);
+    private static bool RequiresExplicitTimestampDefaults(
+        ExpectedColumnDefinition definition
+    ) => RequiresExplicitTimestampDefaults(definition, definition.StoreType);
 
     /// <summary>Shares required TIMESTAMP session qualification with resolved projected type contracts.</summary>
     /// <param name="definition">The immutable target whose nullability requires qualification.</param>
@@ -75,14 +85,19 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         return !definition.IsNullable
             && resolvedStoreType is { } storeType
-            && storeType.AsSpan().TrimStart().StartsWith("timestamp", StringComparison.OrdinalIgnoreCase);
+            && storeType
+                .AsSpan()
+                .TrimStart()
+                .StartsWith("timestamp", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Creates a versioned owner-and-target-bound guard identity within MySQL's name limit.</summary>
     /// <param name="intent">The raw owner, schema and immutable target contract.</param>
     /// <returns>The fixed prefix followed by 48 canonical fingerprint characters.</returns>
     /// <remarks>Qualified and unqualified owner contracts intentionally do not share recovery identities.</remarks>
-    internal static string GetRequiredColumnAddGuardName(EnsureColumnIntent intent)
+    internal static string GetRequiredColumnAddGuardName(
+        EnsureColumnIntent intent
+    )
     {
         ArgumentNullException.ThrowIfNull(intent);
 
@@ -96,18 +111,21 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <param name="name">The catalog constraint name to prefilter.</param>
     /// <returns>Whether the name has the exact versioned prefix and 48 lowercase hexadecimal characters.</returns>
     /// <remarks>An exact authored fingerprint and fresh live ownership proof remain mandatory.</remarks>
-    internal static bool IsRequiredColumnAddGuardNameCandidate(string name)
+    internal static bool IsRequiredColumnAddGuardNameCandidate(
+        string name
+    )
     {
         ArgumentNullException.ThrowIfNull(name);
 
-        if (name.Length != 64 || !name.StartsWith(RequiredColumnAddGuardPrefix, StringComparison.Ordinal))
+        if (name.Length != 64
+            || !name.StartsWith(RequiredColumnAddGuardPrefix, StringComparison.Ordinal))
         {
             return false;
         }
 
         foreach (var character in name.AsSpan(RequiredColumnAddGuardPrefix.Length))
         {
-            if (character is not (>= '0' and <= '9' or >= 'a' and <= 'f'))
+            if (character is not ((>= '0' and <= '9') or >= 'a' and <= 'f'))
             {
                 return false;
             }
@@ -137,12 +155,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return RequiresUnsupportedMissingRequiredAdd(intent.Definition)
                 ? plan with
                 {
-                    StateExpression = $"CASE WHEN NOT {columnExists} THEN 'unsupported' "
-                        + $"ELSE ({plan.StateExpression}) END",
+                    StateExpression =
+                    $"CASE WHEN NOT {columnExists} THEN 'unsupported' " + $"ELSE ({plan.StateExpression}) END",
                     StateEvaluationGuardExpression = columnExists,
                     StateEvaluationGuardFailureExpression = "'unsupported'",
                     ClassificationCodeExpression = $"CASE WHEN NOT {columnExists} "
-                        + "THEN 'column_atomic_add_unavailable' ELSE NULL END",
+                    + "THEN 'column_atomic_add_unavailable' ELSE NULL END",
                 }
                 : plan;
         }
@@ -153,28 +171,39 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var guardScope = "tc.CONSTRAINT_SCHEMA = DATABASE() "
             + $"AND tc.CONSTRAINT_NAME = {Literal(guardName)} "
             + (isMariaDb ? $"AND tc.TABLE_NAME = {Literal(intent.Table)} " : string.Empty);
-        var guardExists = "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc "
-            + $"WHERE {guardScope})";
-        var oneGuard = "(SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc "
-            + $"WHERE {guardScope}) = 1";
+
+        var guardExists = "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc " + $"WHERE {guardScope})";
+        var oneGuard = "(SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc " + $"WHERE {guardScope}) = 1";
         var terminalMatching = $"({plan.Postcondition}) AND NOT ({guardExists})";
         var escapedDoubleQuotes = false;
         var backslashEscapes = intent.Definition.StoreType is { } storeType
             && BuildEnumSetCatalogDisplay(storeType, backslashEscapes: true, out escapedDoubleQuotes) is not null
             && BuildEnumSetCatalogDisplay(storeType, backslashEscapes: false, out _) is null;
+
         var environment = supportsCheck
-            ? BuildRequiredColumnAddEnvironment(intent.Table, isMariaDb, backslashEscapes, escapedDoubleQuotes,
+            ? BuildRequiredColumnAddEnvironment(
+                intent.Table,
+                isMariaDb,
+                backslashEscapes,
+                escapedDoubleQuotes,
                 RequiresNativeEnumNoBackslashEscapes(intent.Definition))
             : "FALSE";
 
         var nullableTarget = CreateRequiredColumnAddNullableTarget(intent.Definition);
-        var check = new ExpectedCheckConstraintDefinition(guardName, intent.Table,
-            _sqlGenerationHelper.DelimitIdentifier(intent.Definition.Name) + " IS NOT NULL", intent.Schema);
+        var check = new ExpectedCheckConstraintDefinition(
+            guardName,
+            intent.Table,
+            _sqlGenerationHelper.DelimitIdentifier(intent.Definition.Name) + " IS NOT NULL",
+            intent.Schema);
+
         var exactExpressionCandidates = new[] { check.Sql!, $"({check.Sql})" }
-            .Concat(MySqlExpressionCanonicalizer.BuildCatalogDisplayCandidates(
-                check.Sql!, includeMySqlEncodedDisplay: !isMariaDb))
+            .Concat(
+                MySqlExpressionCanonicalizer.BuildCatalogDisplayCandidates(
+                    check.Sql!,
+                    includeMySqlEncodedDisplay: !isMariaDb))
             .Distinct(StringComparer.Ordinal)
             .Select(Literal);
+
         // WHY: Owner case follows the server's native table-name mode. CHECK
         // names and expressions must not inherit catalog collation folding.
         var exactCheckIdentity = $"CAST(tc.CONSTRAINT_NAME AS BINARY) = CAST({Literal(guardName)} AS BINARY) "
@@ -184,11 +213,13 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + "AND CAST(cc.CONSTRAINT_NAME AS BINARY) = CAST(tc.CONSTRAINT_NAME AS BINARY) "
             + (isMariaDb ? "AND CAST(cc.TABLE_NAME AS BINARY) = CAST(tc.TABLE_NAME AS BINARY) " : string.Empty)
             + $"AND CAST(cc.CHECK_CLAUSE AS BINARY) IN ({string.Join(", ", exactExpressionCandidates)})";
+
         var ownership = supportsCheck
             ? $"({oneGuard}) AND ({BuildColumnMatches(intent.Table, nullableTarget, isMariaDb,
                 requireRepairSafeExtra: true, requireExactIdentity: true)}) "
-                + $"AND ({CheckConstraintMatches(check, isMariaDb, exactCheckIdentity)})"
+            + $"AND ({CheckConstraintMatches(check, isMariaDb, exactCheckIdentity)})"
             : "FALSE";
+
         var noSetNullDependency = BuildNoOutgoingSetNullForeignKey(intent.Table, intent.Definition.Name);
         var ordinaryInvariant = plan.NullabilityDataProbe?.RepairInvariantExpression ?? "FALSE";
         var status = MySqlSafeMigrationRuntimePlan.RequiredColumnAddStatusPlaceholder;
@@ -219,7 +250,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         return plan with
         {
-            RequiredColumnAddPlan = new MySqlSafeMigrationRequiredColumnAddPlan(guardName, statusExpression, isMariaDb)
+            RequiredColumnAddPlan =
+            new MySqlSafeMigrationRequiredColumnAddPlan(guardName, statusExpression, isMariaDb)
             {
                 BackslashEscapes = backslashEscapes,
                 SupportsCheck = supportsCheck,
@@ -227,19 +259,20 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             Postcondition = terminalMatching,
             ExecutionPostcondition = terminalMatching,
             PrerequisiteExpression = tableExists,
-            StateExpression = $"CASE WHEN NOT {tableExists} THEN 'prerequisite_missing' "
-                + $"WHEN ({status}) = 'complete' THEN 'matching' "
-                + $"WHEN ({status}) = 'conflict' THEN CASE WHEN ({columnExists}) "
-                + "THEN 'different' ELSE 'unsupported' END "
-                + $"WHEN ({status}) IN ('unavailable', 'set_null') THEN 'unsupported' "
-                + $"WHEN ({resume}) THEN CASE WHEN {MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder} "
-                + $"THEN 'data_blocked' ELSE 'missing' END ELSE ({plan.StateExpression}) END",
+            StateExpression =
+            $"CASE WHEN NOT {tableExists} THEN 'prerequisite_missing' "
+            + $"WHEN ({status}) = 'complete' THEN 'matching' "
+            + $"WHEN ({status}) = 'conflict' THEN CASE WHEN ({columnExists}) "
+            + "THEN 'different' ELSE 'unsupported' END "
+            + $"WHEN ({status}) IN ('unavailable', 'set_null') THEN 'unsupported' "
+            + $"WHEN ({resume}) THEN CASE WHEN {MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder} "
+            + $"THEN 'data_blocked' ELSE 'missing' END ELSE ({plan.StateExpression}) END",
             RepairPrecondition = $"({status}) = 'ordinary' AND ({plan.RepairPrecondition})",
             ClassificationCodeExpression = $"CASE WHEN ({status}) = 'complete' THEN NULL "
-                + $"WHEN ({status}) = 'conflict' THEN 'column_atomic_add_guard_conflict' "
-                + $"WHEN ({status}) = 'unavailable' THEN 'column_atomic_add_unavailable' "
-                + $"WHEN ({status}) = 'set_null' THEN 'column_set_null_dependency' "
-                + $"WHEN ({resume}) THEN 'column_atomic_add_resume' ELSE ({oldCode}) END",
+            + $"WHEN ({status}) = 'conflict' THEN 'column_atomic_add_guard_conflict' "
+            + $"WHEN ({status}) = 'unavailable' THEN 'column_atomic_add_unavailable' "
+            + $"WHEN ({status}) = 'set_null' THEN 'column_set_null_dependency' "
+            + $"WHEN ({resume}) THEN 'column_atomic_add_resume' ELSE ({oldCode}) END",
             NullabilityDataProbe = nullProbe,
             MayRequireNullabilityDataProof = true,
             StateEvaluationGuardExpression = columnExists,
@@ -247,11 +280,11 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             // Qualification must live here as well or an empty table could
             // bypass engine, session and ownership checks entirely.
             StateEvaluationGuardFailureExpression = $"CASE WHEN ({status}) <> 'fresh' THEN 'unsupported' "
-                + $"WHEN {missingRows} THEN 'data_blocked' ELSE 'missing' END",
+            + $"WHEN {missingRows} THEN 'data_blocked' ELSE 'missing' END",
         };
     }
 
-    /// <summary>Requires enforced transactional CHECK protection and strict final nullability conversion.</summary>
+    /// <summary>Requires to be enforced transactional CHECK protection and strict final nullability conversion.</summary>
     /// <param name="table">The exact local table identity.</param>
     /// <param name="isMariaDb">Whether the CHECK session switch must also be qualified.</param>
     /// <param name="backslashEscapes">Whether only standard native literal decoding can represent the target.</param>
@@ -264,8 +297,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         bool backslashEscapes,
         bool doubleQuotes,
         bool requiresNoBackslashEscapes
-    ) =>
-        "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES atomic_table "
+    ) => "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES atomic_table "
         + $"WHERE atomic_table.TABLE_SCHEMA = DATABASE() AND atomic_table.TABLE_NAME = {Literal(table)} "
         + $"AND {BuildRequiredColumnAddOwnerMatches("atomic_table.TABLE_SCHEMA", "DATABASE()")} "
         + $"AND {BuildRequiredColumnAddOwnerMatches("atomic_table.TABLE_NAME", Literal(table))} "
@@ -279,8 +311,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <summary>Proves the requested protocol table exists without borrowing a case-distinct catalog shadow.</summary>
     /// <param name="table">The raw authored owner bound to the protocol name.</param>
     /// <returns>A native-mode-qualified base-table presence predicate.</returns>
-    private string BuildRequiredColumnAddBaseTableExists(string table) =>
-        "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES t "
+    private string BuildRequiredColumnAddBaseTableExists(
+        string table
+    ) => "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES t "
         + $"WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = {Literal(table)} "
         + $"AND {BuildRequiredColumnAddOwnerMatches("t.TABLE_SCHEMA", "DATABASE()")} "
         + $"AND {BuildRequiredColumnAddOwnerMatches("t.TABLE_NAME", Literal(table))} "
@@ -291,20 +324,26 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <param name="column">The case-insensitive native column member name.</param>
     /// <param name="invariant">An optional trusted catalog-only facet predicate.</param>
     /// <returns>A native-owner-qualified column presence or facet predicate.</returns>
-    private string BuildRequiredColumnAddColumnExists(string table, string column, string? invariant = null) =>
-        "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c "
+    private string BuildRequiredColumnAddColumnExists(
+        string table,
+        string column,
+        string? invariant = null
+    ) => "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c "
         + $"WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(table)} "
         + $"AND c.COLUMN_NAME = {Literal(column)} "
         + $"AND {BuildRequiredColumnAddOwnerMatches("c.TABLE_SCHEMA", "DATABASE()")} "
         + $"AND {BuildRequiredColumnAddOwnerMatches("c.TABLE_NAME", Literal(table))}"
-        + (invariant is not null ? $" AND ({invariant})" : string.Empty) + ")";
+        + (invariant is not null ? $" AND ({invariant})" : string.Empty)
+        + ")";
 
     /// <summary>Qualifies a protocol owner using the server's native table and schema case rules.</summary>
     /// <param name="catalogExpression">The trusted SQL expression for the catalog table or schema identity.</param>
     /// <param name="expectedExpression">The rendered owner literal, bound parameter or database expression.</param>
     /// <returns>An exact mode-zero predicate or binary-folded mode-one/two predicate.</returns>
-    internal static string BuildRequiredColumnAddOwnerMatches(string catalogExpression, string expectedExpression) =>
-        "(CASE WHEN @@lower_case_table_names = 0 THEN "
+    internal static string BuildRequiredColumnAddOwnerMatches(
+        string catalogExpression,
+        string expectedExpression
+    ) => "(CASE WHEN @@lower_case_table_names = 0 THEN "
         + $"CAST({catalogExpression} AS BINARY) = CAST({expectedExpression} AS BINARY) "
         + "WHEN @@lower_case_table_names IN (1, 2) THEN "
         + $"CAST(LOWER({catalogExpression}) AS BINARY) = CAST(LOWER({expectedExpression}) AS BINARY) ELSE FALSE END)";
@@ -340,6 +379,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             computedExpression: definition.ComputedExpression)
         {
             ProviderAnnotations = definition.ProviderAnnotations,
+            CapturedComputedSql = definition.CapturedComputedSql,
         };
     }
 }

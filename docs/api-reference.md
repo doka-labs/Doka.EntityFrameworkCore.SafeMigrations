@@ -61,9 +61,6 @@ provider-specific registration and generator composition. Core adds
 remain compatible. Reports accept `sqlserver` as an engine-family value
 without changing canonical schema v3, filtered-view schema v2, or histories.
 Consumers with exhaustive engine-family handling must recognize the new value.
-A successful release run and exact-version public package readback remain the
-authority for a published API; shipped baseline files record its prepared
-contract, not proof of publication.
 
 The 10.4.9 patch preserves the complete 10.4.6 public API and dependency
 ranges. SQL Server admits proven built-in integer widening and simple integer
@@ -98,23 +95,35 @@ target-model definitions; ordered projection still owns accepted physical
 lifetimes and independent current row proofs. Related owner-case, supporting-
 index, PRIMARY-removal column-source, native CHECK/index-input and SQLite
 key/capacity fixes do not require migration regeneration or API-baseline promotion.
-The SQL Server PKCS minimum is 9.0.21. Qualification and publication
-remain separate from these prepared contracts.
+The SQL Server PKCS minimum is 9.0.21.
 
-Prepared stable 10.5.0 adds operation identity, diagnostic explanation,
+Stable 10.5.0 introduced operation identity, diagnostic explanation,
 `SafeMigrationDiagnosticMessages`, `SafeMigrationReportText` and
 `SafeMigrationExecutionException`; existing public signatures remain available.
-The Core shipped baseline includes this prepared surface. Canonical report
-schema advances to 4 and selected-view schema to 3; update validators and rebuild
+The Core shipped baseline includes this surface. That release introduced
+canonical report schema 4 and selected-view schema 3; update validators and rebuild
 references to the compiled `CurrentSchemaVersion` constant. MySQL/MariaDB callers
 must handle positively correlated owned assertions through the new managed
 exception, whose inner exception preserves the exact native cause. Other native
-failures and cancellation retain their contracts. Doka moves to
+failures and cancellation retain their contracts. Its Doka range was
 `[10.5.0,10.6.0)`; native UUID is opt-in and persisted-default reclassification
 can require an explicitly eligible repair. See [diagnostics](diagnostics.md),
 [support and qualification](support-and-qualification.md) and the
-[10.5.0 changelog](../CHANGELOG.md#1050---2026-10-15). Migration source,
-policy selection, fingerprint formats and history do not change.
+[10.5.0 changelog](../CHANGELOG.md#1050---2026-10-15). That release preserved
+migration source, policy selection, fingerprint formats and history.
+
+Version 10.6.0 promotes the additive `SafeMigrationSql.Case`,
+`SafeMigrationSqlCaseExpression` and `SafeMigrationSqlCaseWhenClause` API to the
+Core shipped baseline and adds certified generated-column/CHECK contracts.
+Report schemas and diagnostic transport remain unchanged from 10.5.0.
+Successfully parsed EF computed/CHECK definitions can change approved contract
+fingerprints; see the [upgrade notes](support-and-qualification.md#upgrade-to-1060).
+Historical migration source is not regenerated or rewritten.
+
+The current MySQL/MariaDB adapter requires Doka `[10.6.2,10.7.0)`; EF Core and
+dependency-injection minimums are 10.0.13. Review implicit indexed-length model
+changes and renewed approval requirements in
+[support and qualification](support-and-qualification.md).
 
 ## Packages and registration
 
@@ -474,7 +483,18 @@ target. Narrowing requires a current row proof, and a matching target requires
 no repair scan. Alter never creates a missing source column. A successful
 preflight does not replace execution-time guards or permit truncation.
 
-SQL Server additionally admits the documented lossless built-in integer
+MySQL/MariaDB and PostgreSQL also admit documented lossless built-in signed-
+integer widening with unchanged non-type facets. The provider must prove the
+exact live old definition, native dependency and storage rules; an authored old
+definition alone does not grant that authority. A qualified ordinary index
+removal can preserve intrinsic column evidence, but never complete index/key
+evidence. Safe sibling transitions can retain that bounded lifetime, including
+an interrupted prefix whose index removals are already no-ops. Opaque SQL,
+unqualified structural effects, changed source values and callback boundaries
+cannot revive it. See [MySQL/MariaDB](mysql-mariadb-ddl-behavior.md#lossless-signed-integer-alterations)
+and [PostgreSQL](postgresql-behavior.md#lossless-signed-integer-alterations).
+
+SQL Server admits its separately documented lossless built-in integer
 widenings for explicit alterations with exact old-definition, storage, and
 dependency proofs. This is not a general numeric conversion or automatic
 constraint replacement. Its populated-table integer CHECK validation and
@@ -534,9 +554,59 @@ wildcard that disables comparison.
 
 `SafeMigrationSql` constructs a closed expression tree with `Identifier`,
 `Literal`, `Unary`, `Binary`, `IsNull`, `IsNotNull`, `Between`, `In`,
-`Function`, `Cast`, `Collate`, and `Current`. Operators and current values are
+`Function`, `Cast`, `Case`, `Collate`, and `Current`. Operators and current values are
 enums. The provider validates supported semantics and renders each token in
 its own context. Do not concatenate user data into SQL or type grammar.
+
+`SafeMigrationSql.Case(whenClauses, elseResult)` constructs a searched CASE
+from an ordered, non-empty sequence of `SafeMigrationSqlCaseWhenClause`
+objects. Each clause has a condition and result. `SafeMigrationSqlCaseExpression`
+snapshots that sequence and exposes read-only `WhenClauses` and `ElseResult`.
+An omitted ELSE retains SQL's implicit NULL result; order and conditional
+evaluation are not rewritten. Expression comparison, identifier renaming,
+dependency inspection, diagnostics and contract fingerprints include every
+condition, result and optional ELSE.
+
+Public structured trees are inspected, compared, fingerprinted, renamed and
+rendered with explicit traversal state rather than a managed call frame for
+each node. This does not introduce a new expression-depth admission limit or
+relax existing parser limits, native CASE limits or provider-specific proof
+eligibility. Traversal preserves ordered operands, repeated subtree occurrences
+and short-circuit decisions; it does not bound the size of the resulting SQL.
+
+EF-captured SQL defaults, computed expressions and generated CHECK helpers use
+the bounded parser described in
+[migration authoring](migration-authoring.md#generated-check-constraints).
+The two-argument SQL Server `CONVERT` syntax supplies an explicit cast type;
+its first argument is never classified as a column dependency. Its native
+dialect provenance is retained; other providers reject that captured form with
+`structured_convert_dialect`. Public `SafeMigrationSql.Cast` stays portable.
+Captured EF computed/CHECK SQL also retains its validated original spelling
+for DDL, equality and fingerprints, including native numeric-token typing.
+The internal source evidence is not a new public raw-SQL escape hatch.
+
+This capture changes `SafeMigrationContractFingerprint.Create(...)` for
+successfully parsed EF computed-column and CHECK definitions. If an artifact
+stores an approved contract fingerprint, review the affected migration
+artifact, regenerate that fingerprint and obtain a new approval before use.
+Do not reuse an earlier approval, suppress fingerprint mismatch checks or
+rewrite historical migration source. Ordinary SQL-default parsing,
+opaque/unparsed SQL, explicit uncaptured definitions and provider-owned
+operation fingerprint encoding remain unchanged; this does not change the
+relational `ModelFingerprint` format.
+
+Captured CHECK definitions compare authored SQL ordinally in addition to
+their parsed structure. Whitespace or redundant parentheses can consequently
+make two authored definitions `Different` even when their trees agree; this
+is distinct from an `Unsupported` native capability. Computed-column source
+was already exact and remains so: a changed source is not automatically
+repairable. Review the intended contract rather than normalizing it or
+changing policy to bypass that refusal. Provider-certified native catalog
+quote/deparse equivalence is a separate, bounded comparison and does not
+establish general authored-source equivalence.
+
+Unsupported grammar stays opaque or rejects scaffolding according to the owning
+API; this does not turn arbitrary `Opaque` input into a trusted expression.
 
 For MySQL/MariaDB, `Literal(value, storeType)` and `Cast(value, storeType)`
 accept provider store types only when they map exactly to the CAST grammar
@@ -550,8 +620,12 @@ stable. Unknown or appended type grammar receives the same fail-closed
 classification. The SQL-standard PostgreSQL aliases `float` and `float(p)` are
 bounded to precision 1 through 53 and normalized to `real` or
 `double precision`, including array forms.
-MariaDB rejects a non-nullable computed definition before DDL with
-`generated_column_nullability`; MySQL can preserve that physical facet.
+Generated-column result type, physical nullability, storage and indexability
+remain independent provider contracts. A logically required MariaDB or SQL
+Server computed result needs the provider's separate bounded non-null proof
+when native metadata cannot express that required result directly. An unknown
+or null-producing expression is not accepted by ignoring the catalog nullable
+bit. See [generated columns](migration-authoring.md#generated-columns).
 
 `Opaque` and `ProviderFragment` retain explicit SQL provenance, but neither
 proves catalog equivalence. They can produce an unsupported classification;
@@ -580,6 +654,12 @@ returns `Task<SafeMigrationRunReport>`:
 | `AnalyzePendingMigrationsAsync` | Pending sequence resolved through EF history and configured migration assembly | Preflight report |
 | `AnalyzeAsync` | Explicit ordered `IReadOnlyList<MigrationOperation>` | Preflight report over the whole operation stream |
 | `VerifyAsync` | Explicit ordered operations whose effective final postconditions must hold | Postflight report; the final safe writer for a physical resource supersedes its earlier writers |
+
+For a provider-certified column rename with verified source lineage, postflight
+can compare an earlier strict-table definition in its reviewed final shape.
+This retains unrelated facets and dependency checks; arbitrary additions,
+alterations and unproved owner changes cannot simply remove that complete
+table check. See the [postflight contract](runbooks/deployment-and-recovery.md#postflight).
 
 `SafeMigrationRunOptions` requires a nonempty pseudonymous `instanceId` and
 optionally takes `targetMigrationId` and `expectedModelFingerprint`. The
@@ -673,7 +753,13 @@ never participate in that reduction. The same ordered operations can therefore
 describe drop/recreate or successive-definition execution and final
 verification. A rename still proves only source absence, so complete
 destination verification requires an explicit destination ensure or a
-separately reviewed final-state contract. Freeze the chosen contract before
+separately reviewed final-state contract. A verified column-rename lineage can
+transform an earlier known strict-table declaration for a fresh complete-table
+catalog comparison. This retains every unrelated facet; it does not mark the
+whole table superseded. Unknown ownership, opaque operations and incompatible
+owner mutations cannot authorize the transformation. The report retains the
+original operation ordinal and authored contract fingerprint. Freeze the chosen
+contract before
 execution and bind its fingerprint to the same artifact, target migration, and
 model. Require equal preflight/postflight contract fingerprints only when the
 lists are identical. See [postflight](runbooks/deployment-and-recovery.md#postflight).

@@ -72,11 +72,48 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         ISafeMigrationProjectedColumnSource columns
     )
     {
+        if (QualifyCapturedColumnDropConstraint(operation, liveAnalysis, columns) is { } knownConstraint)
+        {
+            return QualifyProjectedDdlFreshness(operation, knownConstraint);
+        }
+
+        if (QualifyCapturedComputedDropIndex(operation, liveAnalysis, columns) is { } knownIndex)
+        {
+            return QualifyProjectedDdlFreshness(operation, knownIndex);
+        }
+
+        if (QualifyProjectedComputedSourceDrop(operation, liveAnalysis, columns) is { } drop)
+        {
+            return QualifyProjectedDdlFreshness(operation, drop);
+        }
+
+        if (QualifyProjectedCheckSourceRename(operation) is { } checkRename)
+        {
+            return QualifyProjectedDdlFreshness(operation, checkRename);
+        }
+
+        if (QualifyProjectedComputedSourceRename(operation, columns) is { } rename)
+        {
+            return QualifyProjectedDdlFreshness(operation, rename);
+        }
+
+        if (QualifyProjectedComputedIndex(operation, liveAnalysis, columns) is { } index)
+        {
+            return QualifyProjectedDdlFreshness(operation, index);
+        }
+
         // WHY: Neutral projection has matching and removed-owner shortcuts.
         // Trigger-created objects are absent from that immutable snapshot, so
         // freshness must be checked before any such shortcut can certify it.
-        return _ddlRowFreshnessInvalidated
-            ? QualifyProjectedDdlFreshness(operation, liveAnalysis) : null;
+        var computed = liveAnalysis.ObservedState is SafeMigrationObservedState.Missing
+            or SafeMigrationObservedState.Matching
+                ? QualifyProjectedComputedColumn(operation, liveAnalysis, columns) : liveAnalysis;
+        if (!ReferenceEquals(computed, liveAnalysis))
+        {
+            return QualifyProjectedDdlFreshness(operation, computed);
+        }
+
+        return _ddlRowFreshnessInvalidated ? QualifyProjectedDdlFreshness(operation, liveAnalysis) : null;
     }
 
     private void ObserveProviderDdlRowEffects(

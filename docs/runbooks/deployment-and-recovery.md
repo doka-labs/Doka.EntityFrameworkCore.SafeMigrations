@@ -163,6 +163,14 @@ supports reviewed drop/recreate and successive-definition streams without
 requiring their transient states to exist after the migration. Ordinary
 provider operations never supersede a safe postcondition.
 
+For a provider-certified column rename with known source lineage, verification
+can transform an earlier strict-table declaration and compare that complete
+final table against the catalog. Unrelated columns, defaults, keys, CHECKs,
+comments and provider facets remain checked; the table is not simply skipped.
+Opaque or ownership-unproven boundaries and incompatible owner mutations
+discard this transformation. Reports retain original operation ordinals and
+the authored contract fingerprint rather than replacing the reviewed input.
+
 The execution operations can therefore be reused when their ordered final
 writers form the reviewed final-state contract. A rename remains different: its
 built-in postcondition proves source absence, not destination equivalence. For

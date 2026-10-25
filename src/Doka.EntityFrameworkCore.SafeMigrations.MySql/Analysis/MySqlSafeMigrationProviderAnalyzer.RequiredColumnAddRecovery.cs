@@ -44,7 +44,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
         var expectedTableConstraints = SafeMigrationExpectedTableConstraints.FromOperations(
             candidateOperations, schema => MySqlTableIdentity.NormalizeDatabase(schema, _currentDatabase),
-            TableIdentifierComparer);
+            TableIdentifierComparer, '`', false, StringComparer.OrdinalIgnoreCase);
 
         var backfillConstraints = MySqlBackfillConstraintCatalog.Create(candidateOperations, _currentDatabase,
             TableIdentifierComparer);
@@ -64,12 +64,14 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 expectedUniqueIndexes, expectedTableConstraints, backfillConstraints);
 
             List<(MySqlSafeMigrationRuntimePlan Plan, int FindingIndex)>? probes = null;
+            // WHY: Keep recovery probes and findings tied to their original ordinal slots.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var index = 0; index < plans.Length; index++)
             {
                 var candidate = candidates[offset + index];
                 var plan = plans[index];
-                if (!plan.IsStaticallyUnsupported
-                    && plan.RequiredColumnAddPlan is { } add
+                if (plan is { IsStaticallyUnsupported: false, RequiredColumnAddPlan: { } add }
                     && add.IsMariaDb == isMariaDb
                     && StringComparer.Ordinal.Equals(add.GuardName, findings[candidate.FindingIndex].Name))
                 {
@@ -124,6 +126,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         }
 
         var result = new List<SafeMigrationUnexpectedObject>(findings.Count - recovered.Count);
+        // WHY: Keep recovery probes and findings tied to their original ordinal slots.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < findings.Count; index++)
         {
             if (!recovered.Contains(index))
@@ -154,6 +159,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
         Dictionary<(string? Schema, string Table, string Name), int>? checks = null;
         HashSet<(string? Schema, string Table)>? owners = null;
+        // WHY: Keep recovery probes and findings tied to their original ordinal slots.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < findings.Count; index++)
         {
             var finding = findings[index];

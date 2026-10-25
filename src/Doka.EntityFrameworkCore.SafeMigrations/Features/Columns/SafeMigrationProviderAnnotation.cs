@@ -108,6 +108,9 @@ internal sealed class SafeMigrationProviderAnnotation
             ?? throw new NotSupportedException($"The {context} array has no element type.");
 
         var snapshot = Array.CreateInstance(elementType, source.Length);
+        // WHY: Clone each array entry into the same index of the owned annotation snapshot.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < source.Length; index++)
         {
             snapshot.SetValue(Snapshot(source.GetValue(index), context), index);

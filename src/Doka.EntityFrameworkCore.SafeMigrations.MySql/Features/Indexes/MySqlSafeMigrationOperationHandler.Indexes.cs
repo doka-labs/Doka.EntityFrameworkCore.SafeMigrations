@@ -28,6 +28,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
             .Append(_sqlGenerationHelper.DelimitIdentifier(definition.Table, definition.Schema))
             .Append(" (");
 
+        // WHY: Render ordered index keys and place separators only between their declared positions.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < definition.Keys.Count; index++)
         {
             if (index > 0)

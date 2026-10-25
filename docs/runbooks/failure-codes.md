@@ -71,6 +71,97 @@ This includes uncertified variadic binding/postcondition forms and ordinary
 calls beyond the native reported argument limit; it does not label them as
 violating application rows.
 
+Generated-column capability refusals are not data-violation reports:
+
+- `generated_column_dependency_missing` and
+  `generated_column_dependency_qualification` mean that a generated expression's
+  source column is absent or cannot be bound to its supported owner. Inspect the
+  ordered source metadata; parsing an identifier does not establish its lifetime.
+- `structured_convert_dialect` rejects a parsed CONVERT form belonging to another
+  SQL dialect. Argument order and native type interpretation are not interchangeable.
+- `captured_expression_dialect_unverified` rejects authored identifier quoting
+  whose native interpretation has not been certified. Use native quoting or the
+  structured API; apparent identifier delimiters inside strings are not identifiers.
+- `computed_column_operand_identity_unproven` rejects distinct SQL Server input
+  identities that the private tempdb compiler scope cannot distinguish. Compatible
+  alias spellings remain supported; conflicting identifier collations are not
+  permission to merge genuinely different columns.
+- `generated_column_nullability` means a required MariaDB generated result lacks
+  the bounded semantic non-null proof. Inspect every result branch and the
+  actual ordinary operand types/nullability; nullable catalog metadata is not a
+  reason to disable comparison.
+- `generated_column_identity_dependency` rejects a MySQL generated reference
+  to an `AUTO_INCREMENT` source. It is not a NULL-data report.
+- `generated_column_rename_dependency` rejects a MySQL source rename whose
+  generated dependents need a different explicit DDL transition.
+  `generated_column_rename_unproven` means the complete current dependency set
+  is unproved, not that a particular offending dependent has been found.
+- `generated_column_drop_dependency` identifies a surviving generated reference
+  to a column requested for removal. Explicitly remove or replace the dependent
+  definition first; SafeMigrations does not cascade it away.
+  `generated_column_drop_unproven` means that the surviving generated set cannot
+  be certified. Inspect current native definitions and ordered lifetimes; do
+  not infer a particular dependency or offending application row from this code.
+  MariaDB's native source-name absence proof and SQLite's native identifier
+  scanner can establish independence outside the full expression grammar;
+  ambiguous occurrences still need stronger dependency evidence.
+  PostgreSQL also uses it when required dependency visibility, explicit table
+  locking, a fresh runtime snapshot or a supported non-hierarchical owner cannot
+  be established. See the [PostgreSQL DROP contract](../postgresql-behavior.md#generated-columns);
+  SafeMigrations never grants rights or changes isolation to make the guard pass.
+- `projected_check_source_dependency` and its `_unproven` variant retain SQL
+  Server's native source-rename/removal boundary for accepted CHECK dependencies.
+  Inspect the constraint lifetime, not application rows.
+- `column_drop_dependency` and `generated_column_drop_other_dependency` retain
+  an independent SQL Server dependency or protected table restriction. They do
+  not identify a particular index, constraint or application row. Source
+  presence is not dependency absence; only exact accepted native-qualified
+  removals can discharge their own blockers.
+  `projected_generated_column_drop_dependency` identifies a still-accepted
+  generated source dependency. `projected_column_drop_safe` records the
+  separate positive proof after exact prerequisite removal, not a guard bypass.
+- `table_rebuild_foreign_key_violation` identifies a native SQLite integrity
+  failure in retained rebuild relationships. An unchanged source confirmation
+  does not repair it. Earlier row effects instead require fresh ordered runtime
+  validation under `projected_data_state_unknown`; unknown current rows must
+  not be diagnosed as a proven retained violation.
+- `captured_expression_literal_catalog_unverifiable` rejects a captured
+  literal whose native catalog identity cannot be retained exactly. A lossy
+  display is not proof that two expressions are equal.
+- `generated_expression_assignment` rejects an unsupported generated-result
+  literal assignment. Use a supported target and literal form rather than
+  bypassing the native binding check.
+- `generated_case_operand_type` means a PostgreSQL generated CASE has a known
+  incompatible or unsupported operand/result binding.
+  `projected_generated_case_binding_unproven` retains an unresolved ordered
+  binding instead of borrowing a proposed target-model type.
+- `projected_generated_case_target_occupied` means an accepted earlier operation
+  already occupies the requested PostgreSQL CHECK target name when ordered
+  CASE binding is requalified. This is `Different` without a repair certificate,
+  not an operand-type or row-data violation. Inspect the accepted constraint
+  lifetime and author an explicit reviewed transition; SafeMigrations does not
+  overwrite the occupying constraint. `ThrowIfDifferent` and `RepairIfSafe`
+  reject this state; `ExistenceOnly` retains its deliberately weaker no-op policy.
+- `generated_column_nondeterministic_expression` means that the generated
+  expression lacks the supported deterministic contract on MySQL/MariaDB.
+  Native acceptance of some MariaDB virtual expressions does not certify their
+  persisted or indexed forms. Use a supported deterministic expression rather
+  than substituting a clock value or bypassing the capability check.
+- `computed_expression_unproven` and
+  `computed_column_nullability_unproven` reject unsupported SQL Server computed
+  semantics or an unproved required result.
+  `computed_column_native_type_unproven` means native compilation did not prove
+  the requested result metadata. Inspect the expression, supported physical
+  operand metadata and temporary-object permissions rather than increasing the
+  command timeout or forcing persistence.
+- `virtual_generated_column` on PostgreSQL and `stored_generated_column_add`
+  on SQLite identify explicit provider storage-form boundaries; they do not
+  invite a silent change of storage mode.
+
+See the provider-specific
+[generated-column contracts](../migration-authoring.md#generated-columns).
+Successful parsing alone does not waive any of these gates.
+
 `index_input_operator_class` rejects a PostgreSQL physical index-key input
 whose native type/operator-class or requested access-method flags are
 incompatible. For example, an ordinary default Btree key on `json` is not
@@ -217,6 +308,7 @@ data/prerequisite result uses its planner rejection code.
 | `projected_constraint_name_occupied` | SQL Server found the requested constraint's schema-scoped object name occupied by a live object or an earlier accepted table/PK/UNIQUE/CHECK/FK. Standalone-FK prerequisite promotion cannot erase this `Different` conflict; `ThrowIfDifferent` and `RepairIfSafe` produce `RejectDifferent`, while `ExistenceOnly` retains its deliberate no-op semantics. Inspect the occupant before authoring a reviewed free identity or explicit valid removal. |
 | `projected_constraint_identity_unknown` | An accepted physical removal invalidated unbound semantic table-member evidence in that owner/constraint family. The underlying projected state is `PrerequisiteMissing`; with its actual drop origin the assessment requires fresh runtime validation instead of reusing stale Matching/Different evidence. Unrelated families and real physical bindings retain their proofs. Inspect the originating drop and require exact live identity; an authored alias, anonymous member or ambiguous witness is not a physical name. |
 | `column_integer_widening_safe` | SQL Server proved the exact source, integer domain, declared-row storage and surviving dependency contract. Only an explicit repair policy authorizes the alteration. |
+| `integer_widening_unproven` | PostgreSQL cannot prove the integer alteration's required catalog visibility, explicit lock authority or fresh runtime snapshot. Repairs require a qualified exact-owner lock and READ COMMITTED reclassification; a matching target remains a no-op without that repair lock. No privileges or transaction isolation are changed automatically. |
 | `projected_column_transition_unproven` | The accepted old definition is known, but physical capacity, dependency safety, or current row evidence does not establish the requested conversion. Inspect the ordered source and provider limits; an empty-table proof alone does not establish physical feasibility. |
 | `projected_data_state_unknown` | Earlier data operations or backfill-capable alterations invalidated a projected or live pre-batch row-safety proof. Provider-generated updates can fire triggers on other tables. The public blocked assessment uses `prerequisite_missing`; do not execute the dependent operation without a separately provable post-DML state. |
 | `projected_ddl_trigger_data_unknown` | SQL Server observed an enabled database or server DDL trigger. Accepted executable DDL invalidated later row certificates; the assessment uses `ValidateAtRuntime` with the DDL `DeferredOrigin`, not a claimed observed state or postcondition. The runtime guard checks fresh rows immediately before its operation. |
@@ -230,8 +322,11 @@ data/prerequisite result uses its planner rejection code.
 | `projected_ddl_visibility_data_unknown` | SQL Server cannot prove DDL-trigger absence with the effective database VIEW DEFINITION and server VIEW ANY DEFINITION visibility. After accepted executable DDL, later row-dependent evidence is deferred with its DDL origin. This does not assert that a trigger exists, grant rights, or waive independent blockers. |
 | `projected_provider_postcondition_unknown` | A preceding provider-specific deferred structural operation has no accepted physical postcondition. Later supported safe operations remain `ValidateAtRuntime`, with the first deferred structural operation as `DeferredOrigin`; no table, column, or candidate key is invented. Independent live `Unsupported` results, including permission and capability refusals, and invariant identifier mismatches remain blocking. Only a provider-certified mutable native-resolution mismatch after its established identity-changing origin can defer separately. Deferred model-managed writes alone do not establish this structural boundary. |
 | `projected_schema_identity_state_unknown` | An executed PostgreSQL schema change or captured trigger-risk effect may have altered the effective unqualified owner. Later supported unqualified operations retain that operation's origin and require fresh runtime identity/classification; an initial native-resolution mismatch can be mutable after this boundary, but an invariant unsupported contract cannot. Explicit qualifiers and independent support refusals remain authoritative. |
-| `projected_structure_state_unknown` | Projected structure is unknown after an opaque or unresolved mutation. After raw SQL, a later safe assessment instead uses `runtime_validation_required` with the SQL origin; other unresolved transitions remain blocked. |
-| `runtime_validation_required` | Earlier raw SQL, unconfined writes, discarded seed-row evidence, or SQL Server DDL row uncertainty prevent a read-only classification. The guarded runtime analysis must decide against the actual ordered catalog, rows, and dependencies. |
+| `projected_structure_state_unknown` | Projected structure is unknown after an opaque or unresolved mutation. After raw SQL, a later safe assessment instead uses `runtime_validation_required` with the SQL origin; uncertified unresolved transitions remain blocked. |
+| `projected_key_after_column_drop_unproven` | A certified independent column removal retained its owner and surviving member facts, not the resulting key/index namespace. The opted-in provider must qualify exact rows and physical shape or require actual-origin runtime validation; this marker is not permission to create a key. |
+| `primary_key_replacement_data_blocked` | The requested replacement PRIMARY has NULL or duplicate key values even though the old, differently shaped PRIMARY exists. Correct the data before executing the destructive removal prefix; old-key uniqueness is not replacement-key evidence. |
+| `projected_key_values_require_runtime` | New key values or a DROP-transformed index identity cannot be determined from the original read-only snapshot. The assessment requires runtime validation and names the real preceding operation in `DeferredOrigin`; it is not a successful data or namespace proof. |
+| `runtime_validation_required` | Earlier raw SQL, unconfined writes, discarded seed-row evidence, provider DDL row uncertainty, or new key values/DROP-transformed index identities prevent a read-only classification. The guarded runtime analysis must decide against the actual ordered catalog, rows, and dependencies. |
 | `projected_dependency_handoff` | Historical pre-10.4.8 count-only delete handoff; superseded by fresh runtime validation because intervening triggers can invalidate original dependency counts. |
 | `projected_model_managed_data_state_unknown` | Earlier unconfined writes or discarded row evidence prevent read-only seed classification. Inspect `DeferredOrigin`; the existing runtime guard checks actual rows and dependencies in order. |
 | `projected_model_managed_dependency_unmodeled` | An accepted incoming FK is absent from the delete's source-frozen dependency shapes. Preflight rejects the delete before its runtime guard would reject that unmodeled dependency. |

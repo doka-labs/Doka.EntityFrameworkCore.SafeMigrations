@@ -2,12 +2,15 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed partial class SafeMigrationModelManagedDataTests
 {
+    /// <summary>Snapshots caller-owned model-data values without changing the default safety policy.</summary>
     [Fact]
-    public void DefinitionsSnapshotMutableInputsAndRejectNullOrDuplicateKeys()
+    public void DefinitionsSnapshotMutableInputs()
     {
+        // Arrange
         var values = new object?[,] { { 1, "administrator" } };
         var builder = new MigrationBuilder("test");
 
+        // Act
         builder.EnsureModelManagedDataFromModel(
             "roles",
             ["id"],
@@ -17,35 +20,56 @@ public sealed partial class SafeMigrationModelManagedDataTests
             values);
         values[0, 1] = "mutated";
 
-        var intent = Assert.IsType<EnsureModelManagedDataIntent>(
-            Assert.Single(builder.Operations.Cast<SafeMigrationOperation>()).Intent);
+        // Assert
+        var operation = Assert.IsType<SafeMigrationOperation>(Assert.Single(builder.Operations));
+        var intent = Assert.IsType<EnsureModelManagedDataIntent>(operation.Intent);
 
         Assert.Equal("administrator", intent.Values.GetValue(0, 1));
-        Assert.Equal(SafeMigrationPolicy.ThrowIfDifferent,
-            Assert.Single(builder.Operations.Cast<SafeMigrationOperation>()).Policy);
-        Assert.Throws<ArgumentException>(() => builder.EnsureModelManagedDataFromModel(
-            "roles",
-            ["id"],
-            ["int"],
-            ["id"],
-            ["int"],
-            new object?[,] { { null } }));
-        Assert.Throws<ArgumentException>(() => builder.EnsureModelManagedDataFromModel(
-            "roles",
-            ["id"],
-            ["int"],
-            ["id"],
-            ["int"],
-            new object?[,] { { 1 }, { 1 } }));
+        Assert.Equal(SafeMigrationPolicy.ThrowIfDifferent, operation.Policy);
     }
 
-    [Fact]
-    public void CandidateKeysRejectDuplicateNonNullTargetsButPermitMultipleNulls()
+    /// <summary>Rejects independent null and duplicate key inputs before publishing an operation.</summary>
+    /// <param name="keyCase">The serializable invalid-key case identifier.</param>
+    [Theory]
+    [InlineData("null")]
+    [InlineData("duplicate")]
+    public void DefinitionsRejectInvalidKeys(
+        string keyCase
+    )
     {
+        // Arrange
+        var builder = new MigrationBuilder("test");
+        var values = keyCase switch
+        {
+            "null" => new object?[,] { { null } },
+            "duplicate" => new object?[,] { { 1 }, { 1 } },
+            _ => throw new ArgumentOutOfRangeException(nameof(keyCase), keyCase, "Unknown invalid-key case."),
+        };
+
+        // Act
+        var exception = Record.Exception(() => builder.EnsureModelManagedDataFromModel(
+            "roles",
+            ["id"],
+            ["int"],
+            ["id"],
+            ["int"],
+            values));
+
+        // Assert
+        Assert.IsType<ArgumentException>(exception);
+        Assert.Empty(builder.Operations);
+    }
+
+    /// <summary>Rejects duplicate non-null candidate-key values independently of primary-key uniqueness.</summary>
+    [Fact]
+    public void CandidateKeysRejectDuplicateNonNullTargets()
+    {
+        // Arrange
         var uniqueKeys = new[] { new ExpectedModelManagedDataUniqueKeyDefinition(["code"]), };
         var builder = new MigrationBuilder("test");
 
-        Assert.Throws<ArgumentException>(() => builder.EnsureModelManagedDataFromModel(
+        // Act
+        var exception = Record.Exception(() => builder.EnsureModelManagedDataFromModel(
             "roles",
             ["id"],
             ["int"],
@@ -54,6 +78,20 @@ public sealed partial class SafeMigrationModelManagedDataTests
             new object?[,] { { 1, "same" }, { 2, "same" } },
             uniqueKeys: uniqueKeys));
 
+        // Assert
+        Assert.IsType<ArgumentException>(exception);
+        Assert.Empty(builder.Operations);
+    }
+
+    /// <summary>Permits multiple absent candidate-key values when the primary keys remain distinct.</summary>
+    [Fact]
+    public void CandidateKeysPermitMultipleNulls()
+    {
+        // Arrange
+        var uniqueKeys = new[] { new ExpectedModelManagedDataUniqueKeyDefinition(["code"]), };
+        var builder = new MigrationBuilder("test");
+
+        // Act
         builder.EnsureModelManagedDataFromModel(
             "roles",
             ["id"],
@@ -63,71 +101,63 @@ public sealed partial class SafeMigrationModelManagedDataTests
             new object?[,] { { 1, null }, { 2, null } },
             uniqueKeys: uniqueKeys);
 
+        // Assert
         Assert.Single(builder.Operations);
     }
 
+    /// <summary>Freezes an INSERT and its inverse DELETE into an ensure-data source contract.</summary>
     [Fact]
-    public void PairerSourceFreezesInsertUpdateAndDeleteTransitions()
+    public void PairerSourceFreezesInsertTransition()
     {
-        var insert = new InsertDataOperation
-        {
-            Table = "roles",
-            Columns = ["id", "name"],
-            ColumnTypes = ["int", "varchar(64)"],
-            Values = new object?[,] { { 1, "administrator" } },
-        };
+        // Arrange
+        var insert = CreateRoleInsert();
+        var inverseDelete = CreateRoleDelete();
 
-        var inverseDelete = new DeleteDataOperation
-        {
-            Table = "roles",
-            KeyColumns = ["id"],
-            KeyColumnTypes = ["int"],
-            KeyValues = new object?[,] { { 1 } },
-        };
+        // Act
+        var result = SafeMigrationModelManagedDataPairer.Pair([insert], [inverseDelete]);
 
-        var insertResult = SafeMigrationModelManagedDataPairer.Pair([insert], [inverseDelete]);
+        // Assert
+        var ensure = Assert.IsType<EnsureModelManagedDataScaffoldingOperation>(Assert.Single(result));
+        var intent = Assert.IsType<EnsureModelManagedDataIntent>(ensure.Intent);
 
-        var ensure = Assert.IsType<EnsureModelManagedDataScaffoldingOperation>(Assert.Single(insertResult));
-        var ensureIntent = Assert.IsType<EnsureModelManagedDataIntent>(ensure.Intent);
+        Assert.Equal("administrator", intent.Values.GetValue(0, 1));
+    }
 
-        Assert.Equal("administrator", ensureIntent.Values.GetValue(0, 1));
+    /// <summary>Freezes UPDATE target and inverse source rows without interchanging their values.</summary>
+    [Fact]
+    public void PairerSourceFreezesUpdateTransition()
+    {
+        // Arrange
+        var update = CreateRoleUpdate("owner");
+        var inverseUpdate = CreateRoleUpdate("administrator");
 
-        var update = new UpdateDataOperation
-        {
-            Table = "roles",
-            KeyColumns = ["id"],
-            KeyColumnTypes = ["int"],
-            KeyValues = new object?[,] { { 1 } },
-            Columns = ["name"],
-            ColumnTypes = ["varchar(64)"],
-            Values = new object?[,] { { "owner" } },
-        };
+        // Act
+        var result = SafeMigrationModelManagedDataPairer.Pair([update], [inverseUpdate]);
 
-        var inverseUpdate = new UpdateDataOperation
-        {
-            Table = "roles",
-            KeyColumns = ["id"],
-            KeyColumnTypes = ["int"],
-            KeyValues = new object?[,] { { 1 } },
-            Columns = ["name"],
-            ColumnTypes = ["varchar(64)"],
-            Values = new object?[,] { { "administrator" } },
-        };
+        // Assert
+        var transition = Assert.IsType<UpdateModelManagedDataScaffoldingOperation>(Assert.Single(result));
+        var intent = Assert.IsType<UpdateModelManagedDataIntent>(transition.Intent);
 
-        var updateResult = SafeMigrationModelManagedDataPairer.Pair([update], [inverseUpdate]);
+        Assert.Equal("administrator", intent.OldValues.GetValue(0, 0));
+        Assert.Equal("owner", intent.NewValues.GetValue(0, 0));
+    }
 
-        var transition = Assert.IsType<UpdateModelManagedDataScaffoldingOperation>(Assert.Single(updateResult));
-        var updateIntent = Assert.IsType<UpdateModelManagedDataIntent>(transition.Intent);
+    /// <summary>Freezes DELETE source rows from the exact inverse INSERT evidence.</summary>
+    [Fact]
+    public void PairerSourceFreezesDeleteTransition()
+    {
+        // Arrange
+        var deletion = CreateRoleDelete();
+        var inverseInsert = CreateRoleInsert();
 
-        Assert.Equal("administrator", updateIntent.OldValues.GetValue(0, 0));
-        Assert.Equal("owner", updateIntent.NewValues.GetValue(0, 0));
+        // Act
+        var result = SafeMigrationModelManagedDataPairer.Pair([deletion], [inverseInsert]);
 
-        var deleteResult = SafeMigrationModelManagedDataPairer.Pair([inverseDelete], [insert]);
+        // Assert
+        var operation = Assert.IsType<DeleteModelManagedDataScaffoldingOperation>(Assert.Single(result));
+        var intent = Assert.IsType<DeleteModelManagedDataIntent>(operation.Intent);
 
-        var deletion = Assert.IsType<DeleteModelManagedDataScaffoldingOperation>(Assert.Single(deleteResult));
-        var deleteIntent = Assert.IsType<DeleteModelManagedDataIntent>(deletion.Intent);
-
-        Assert.Equal("administrator", deleteIntent.OldValues.GetValue(0, 1));
+        Assert.Equal("administrator", intent.OldValues.GetValue(0, 1));
     }
 
     [Fact]
@@ -347,9 +377,17 @@ public sealed partial class SafeMigrationModelManagedDataTests
         Assert.Contains("column drop", exception.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void PairerRejectsMissingAmbiguousAndAnnotatedInverseEvidence()
+    /// <summary>Rejects each independently insufficient inverse-evidence contract.</summary>
+    /// <param name="evidenceCase">The serializable inverse-evidence case identifier.</param>
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("ambiguous")]
+    [InlineData("annotated")]
+    public void PairerRejectsInvalidInverseEvidence(
+        string evidenceCase
+    )
     {
+        // Arrange
         var insert = new InsertDataOperation
         {
             Table = "roles",
@@ -358,21 +396,25 @@ public sealed partial class SafeMigrationModelManagedDataTests
             Values = new object?[,] { { 1 } },
         };
 
-        var inverse = new DeleteDataOperation
+        var inverse = CreateRoleDelete();
+        MigrationOperation[] inverses = evidenceCase switch
         {
-            Table = "roles",
-            KeyColumns = ["id"],
-            KeyColumnTypes = ["int"],
-            KeyValues = new object?[,] { { 1 } },
+            "missing" => [],
+            "ambiguous" => [inverse, inverse],
+            "annotated" => [inverse],
+            _ => throw new ArgumentOutOfRangeException(nameof(evidenceCase), evidenceCase, "Unknown evidence case."),
         };
 
-        Assert.Throws<InvalidOperationException>(() => SafeMigrationModelManagedDataPairer.Pair([insert], []));
-        Assert.Throws<InvalidOperationException>(() =>
-            SafeMigrationModelManagedDataPairer.Pair([insert], [inverse, inverse]));
+        if (evidenceCase == "annotated")
+        {
+            insert.AddAnnotation("consumer:annotation", true);
+        }
 
-        insert.AddAnnotation("consumer:annotation", true);
+        // Act
+        var exception = Record.Exception(() => SafeMigrationModelManagedDataPairer.Pair([insert], inverses));
 
-        Assert.Throws<InvalidOperationException>(() => SafeMigrationModelManagedDataPairer.Pair([insert], [inverse]));
+        // Assert
+        Assert.IsType<InvalidOperationException>(exception);
     }
 
     [Fact]
@@ -612,16 +654,18 @@ public sealed partial class SafeMigrationModelManagedDataTests
         Assert.True(projected.IsModelManagedProjectionUnknown);
     }
 
+    /// <summary>Decodes all compact row states and nonnegative dependency counts without losing order.</summary>
     [Fact]
-    public void CompactEvidenceParserRejectsMalformedOrInconsistentProviderResults()
+    public void CompactEvidenceParserDecodesProviderResults()
     {
-        var evidence = SafeMigrationModelManagedDataEvidence.Parse(
-            "0123",
-            4,
-            "0,17",
-            2,
-            "test");
+        // Arrange
+        const string states = "0123";
+        const string dependencies = "0,17";
 
+        // Act
+        var evidence = SafeMigrationModelManagedDataEvidence.Parse(states, 4, dependencies, 2, "test");
+
+        // Assert
         Assert.Equal(
             [
                 SafeMigrationModelManagedRowState.Missing,
@@ -631,29 +675,40 @@ public sealed partial class SafeMigrationModelManagedDataTests
             ],
             evidence.RowStates);
         Assert.Equal([0, 17], evidence.DependencyCounts);
-        Assert.Throws<InvalidOperationException>(() => SafeMigrationModelManagedDataEvidence.Parse(
-            "01",
-            1,
-            "",
-            0,
-            "test"));
-        Assert.Throws<InvalidOperationException>(() => SafeMigrationModelManagedDataEvidence.Parse(
-            "4",
-            1,
-            "",
-            0,
-            "test"));
-        Assert.Throws<InvalidOperationException>(() => SafeMigrationModelManagedDataEvidence.Parse(
-            "1",
-            1,
-            "-1",
-            1,
-            "test"));
     }
 
+    /// <summary>Rejects independent count, row-state and dependency encoding failures.</summary>
+    /// <param name="states">The encoded row states.</param>
+    /// <param name="rowCount">The expected number of row states.</param>
+    /// <param name="dependencies">The encoded dependency counts.</param>
+    /// <param name="dependencyCount">The expected number of dependency counts.</param>
+    [Theory]
+    [InlineData("01", 1, "", 0)]
+    [InlineData("4", 1, "", 0)]
+    [InlineData("1", 1, "-1", 1)]
+    public void CompactEvidenceParserRejectsMalformedProviderResults(
+        string states,
+        int rowCount,
+        string dependencies,
+        int dependencyCount
+    )
+    {
+        // Arrange
+        const string provider = "test";
+
+        // Act
+        var exception = Record.Exception(() => SafeMigrationModelManagedDataEvidence.Parse(
+            states, rowCount, dependencies, dependencyCount, provider));
+
+        // Assert
+        Assert.IsType<InvalidOperationException>(exception);
+    }
+
+    /// <summary>Rejects the same typed key across batches even when key columns are reordered.</summary>
     [Fact]
     public void ContractValidatorRejectsDuplicateTypedKeysAcrossBatchesAndColumnOrder()
     {
+        // Arrange
         var first = Operation(
             new EnsureModelManagedDataIntent(
                 "roles",
@@ -677,10 +732,32 @@ public sealed partial class SafeMigrationModelManagedDataTests
                 schema: "identity",
                 foreignKeys: null));
 
-        Assert.Throws<InvalidOperationException>(() =>
+        // Act
+        var exception = Record.Exception(() =>
             SafeMigrationModelManagedDataContractValidator.Validate([first, duplicate]));
 
-        SafeMigrationModelManagedDataContractValidator.Validate(
+        // Assert
+        Assert.IsType<InvalidOperationException>(exception);
+    }
+
+    /// <summary>Accepts independent typed keys across separate model-data batches.</summary>
+    [Fact]
+    public void ContractValidatorAcceptsDistinctTypedKeysAcrossBatches()
+    {
+        // Arrange
+        var first = Operation(
+            new EnsureModelManagedDataIntent(
+                "roles",
+                ["tenant_id", "id"],
+                ["int", "int"],
+                ["tenant_id", "id", "name"],
+                ["int", "int", "varchar(64)"],
+                new object?[,] { { 7, 1, "administrator" } },
+                schema: "identity",
+                uniqueKeys: null));
+
+        // Act
+        var exception = Record.Exception(() => SafeMigrationModelManagedDataContractValidator.Validate(
             [
                 first,
                 Operation(
@@ -693,8 +770,43 @@ public sealed partial class SafeMigrationModelManagedDataTests
                         new object?[,] { { 7, 2, "member" } },
                         schema: "identity",
                         uniqueKeys: null)),
-            ]);
+            ]));
+
+        // Assert
+        Assert.Null(exception);
     }
+
+    /// <summary>Creates the exact INSERT fixture shared by the independent pairing transitions.</summary>
+    private static InsertDataOperation CreateRoleInsert() => new()
+    {
+        Table = "roles",
+        Columns = ["id", "name"],
+        ColumnTypes = ["int", "varchar(64)"],
+        Values = new object?[,] { { 1, "administrator" } },
+    };
+
+    /// <summary>Creates the exact DELETE fixture shared by the independent pairing transitions.</summary>
+    private static DeleteDataOperation CreateRoleDelete() => new()
+    {
+        Table = "roles",
+        KeyColumns = ["id"],
+        KeyColumnTypes = ["int"],
+        KeyValues = new object?[,] { { 1 } },
+    };
+
+    /// <summary>Creates one side of the exact UPDATE transition with its selected scalar value.</summary>
+    private static UpdateDataOperation CreateRoleUpdate(
+        string value
+    ) => new()
+    {
+        Table = "roles",
+        KeyColumns = ["id"],
+        KeyColumnTypes = ["int"],
+        KeyValues = new object?[,] { { 1 } },
+        Columns = ["name"],
+        ColumnTypes = ["varchar(64)"],
+        Values = new object?[,] { { value } },
+    };
 
     private static SafeMigrationOperation Operation(
         SafeMigrationIntent intent

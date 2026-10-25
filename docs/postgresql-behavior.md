@@ -1,6 +1,11 @@
 # PostgreSQL behavior
 
-Prepared stable 10.5.0 runtime diagnostics put essential owner/reason context
+Version 10.6.0 adds certified generated/CHECK contracts and native
+generated-source DROP guards. Review the
+[upgrade notes](support-and-qualification.md#upgrade-to-1060) for conditional
+contract-fingerprint changes, dependency floors and conservative boundaries.
+
+Runtime diagnostics introduced in 10.5.0 put essential owner/reason context
 into native guard messages without enabling error-detail disclosure or changing SQLSTATE.
 See [diagnostics](diagnostics.md#runtime-provider-differences) for bounded text,
 privacy and report-schema compatibility.
@@ -20,9 +25,10 @@ Source-frozen managed deletes fence dependent writers and reclassify under the
 owned lock, requiring physically present enforced FK counterparts. Earlier
 column-contract and trigger-freshness fixes remain: supported unproven states
 need fresh runtime validation, while independent refusals remain blocking.
-Provider APIs, dependency ranges, migration source, policy selection and history
-are unchanged. Core diagnostic APIs and report schemas advance in 10.5.0 as
-described above. Prior bounded plan-lifetime and matching
+Those earlier corrections preserved provider APIs, dependency ranges, migration
+source, policy selection and history. Report schemas and diagnostic transport
+remain as introduced in 10.5.0; the separate 10.6.0 upgrade above does not claim
+unchanged computed/CHECK contract fingerprints. Prior bounded plan-lifetime and matching
 fast paths remain; native timing comparisons are informational.
 
 ## Operational summary
@@ -190,6 +196,107 @@ source/target table-ownership contract as the MySQL/MariaDB adapter. It does not
 remove inherited entities from the runtime model or reinterpret existing
 migration source. See [model-managed-data ownership](model-managed-data-ownership.md).
 
+## Generated columns
+
+The adapter requires explicit stored generation in the qualified engine matrix:
+configure `HasComputedColumnSql(expression, stored: true)` or the equivalent
+expected definition. Npgsql 10 treats an omitted storage flag as virtual, not
+as a stored default. Virtual generation remains
+`Unsupported / virtual_generated_column`, including
+on a newer server that offers additional native capabilities. No storage form
+is silently substituted. EF-captured computed SQL and CHECKs retain the bounded
+typed expression tree, including searched CASE; unsupported grammar stays
+opaque. See [authoring](migration-authoring.md#generated-columns).
+
+Source-column DROP rejects surviving generated dependencies before native DDL.
+The native dependency identities differ by version: PostgreSQL 14 records
+direct AUTO column edges, whereas 15 through 18 use generation-expression
+ownership/source edges. The guard covers both forms. This matters because
+PostgreSQL 14 can otherwise remove a generated dependent automatically even
+without `CASCADE`. Explicit dependent-first removal and unrelated or absent
+sources retain their own classifications; no dependent column is silently
+removed. Accepted-prefix projection must retain current dependency lifetimes,
+not reuse an initial catalog absence after an earlier ADD.
+See the versioned [14 source](https://github.com/postgres/postgres/blob/REL_14_24/src/backend/catalog/heap.c#L2282-L2312)
+and [18 source](https://github.com/postgres/postgres/blob/REL_18_6/src/backend/catalog/pg_attrdef.c#L104-L121).
+
+An actual source DROP acquires `ACCESS EXCLUSIVE` on its exact owner and repeats
+the complete classifier after the lock. The transaction retains the lock until
+commit or rollback. Read Committed, including PostgreSQL's equivalent Read
+Uncommitted mode, supplies the required fresh snapshot. Repeatable Read and
+Serializable can retain an older catalog snapshot despite a later lock, so a
+present-source DROP under those levels is unsupported. A genuine absent-source
+no-op performs no destructive DDL and does not acquire this lock.
+
+Explicit LOCK authority is independent of ALTER ownership: PostgreSQL 14
+requires table-level UPDATE, DELETE or TRUNCATE; newer servers additionally
+accept MAINTAIN where available. Missing lock authority, unreadable dependency
+metadata or an inherited/partition hierarchy is
+`generated_column_drop_unproven`, not a proven dependent or row-data conflict.
+The guard does not change privileges, transaction isolation or recursive ALTER
+semantics. Review the maintenance window and lock waits. See the versioned
+[14 LOCK](https://www.postgresql.org/docs/14/sql-lock.html),
+[18 LOCK](https://www.postgresql.org/docs/18/sql-lock.html) and
+[transaction isolation](https://www.postgresql.org/docs/18/transaction-iso.html)
+contracts (primary sources; retrieved 2026-10-20).
+
+For newly supported generated CASE expressions, the adapter binds operands
+against supported built-in Boolean, integer, numeric, text and UUID type
+families. A standalone addition uses actual native source type OIDs rather
+than borrowing the target model's proposed source types. Known incompatible
+operands reject with `generated_case_operand_type`; unresolved ordered source
+evidence remains `projected_generated_case_binding_unproven`. Accepted earlier
+source changes must be requalified before they can supply a binding proof.
+Unknown functions, domains and unresolved conversion semantics do not become
+supported merely because their SQL parses.
+
+Operand binding also retains native source collation consistency. Known
+accepted-prefix replacements must requalify both type and collation; a present
+column alone is not a binding certificate. Captured unquoted names use the
+supported ASCII PostgreSQL folding contract, while quoted Unicode identifiers
+keep their exact identity. Unsupported bare Unicode spelling and uncertified
+quoted function/type roles remain opaque or unsupported instead of being
+reinterpreted. SQL Server's captured type-first CONVERT syntax is
+`structured_convert_dialect`, not a PostgreSQL cast.
+
+Captured source also needs native lexical and binding certificates before it
+can enter expression-bearing SQL. `captured_sql_identifier` rejects an unquoted
+reference root that the native grammar treats as a reserved role. An
+unqualified CAST alias must resolve to the supported built-in type, not a
+visible application domain; an unproved target is `captured_sql_type_binding`.
+Function signatures and visible application overloads remain independently
+qualified as `captured_sql_function_binding`. Likewise, arithmetic, comparison,
+unary and comparison-derived IN/BETWEEN/NULLIF roles cannot borrow a built-in
+proof when an application operator changes native resolution:
+`captured_sql_operator_binding` retains that refusal.
+These metadata certificates neither call application functions nor evaluate
+the authored expression over application rows. The adapter does not silently
+qualify the original SQL to a different built-in implementation. Generated
+expressions additionally require the supported immutable built-in function
+binding; a parsed clock or arbitrary function name is not such evidence.
+An unresolved certificate is not proof that all native uses of that SQL are
+invalid, and CASE projection cannot override the independent binding refusal.
+The metadata proof itself uses qualified built-in operators: an application
+operator must not run while the adapter checks whether source binding is safe.
+
+Supported UUID result literals need their bounded native assignment proof.
+An invalid or unsupported spelling remains `generated_expression_assignment`;
+the adapter does not call arbitrary native input functions to discover whether
+a target assignment happens to work.
+
+Expression comparison preserves finite PostgreSQL deparse forms for the typed
+tree, including CASE layout, implicit ELSE NULL and native numeric casts.
+It does not globally strip whitespace, casts, parentheses or literal content.
+Validated captured source remains the DDL input; parser numeric provenance is
+not permission to replace a native literal with a differently typed CLR cast.
+The structural prerequisite checks do not evaluate expressions over application
+rows or call user functions to discover equivalence. Ordinary generated-column
+type, nullability, storage, dependency and index-capability checks remain
+independent. PostgreSQL 17's native generated-column restrictions are documented
+in [Generated Columns](https://www.postgresql.org/docs/17/ddl-generated-columns.html)
+and Npgsql's [10.0 storage change](https://www.npgsql.org/efcore/release-notes/10.0.html)
+(primary sources; retrieved 2026-10-20).
+
 ## Canonical null-test index filters
 
 PostgreSQL index definitions captured from EF retain their authored raw
@@ -291,6 +398,48 @@ TABLE`; operators must review table size and the maintenance window. PostgreSQL
 has no SafeMigrations equivalent of the MySQL/MariaDB `BIT(1) -> TINYINT(1)`
 Boolean repair.
 
+### Lossless signed-integer alterations
+
+Explicit `RepairIfSafe` alterations additionally admit the built-in
+`smallint -> integer -> bigint` widening lattice, including `smallint -> bigint`.
+The CLR/store declarations, native source type identity and complete old column
+contract must agree. Nullability and ancillary facets remain unchanged; defaults,
+identity/generated values, domains, user casts and numeric narrowing are not
+part of this integer-specific path. Source/target matching and native dependency
+checks remain required even after a successful earlier preflight.
+
+A qualified ordinary index removal preserves only intrinsic column/value
+evidence, never the complete index/key namespace. Later independent widenings
+consume their own exact source proofs. An interrupted prefix whose indexes are
+already absent can establish sibling provenance only from the first independently
+qualified non-data repair on an otherwise untouched owner. Changed owners,
+opaque SQL, unqualified mutations and relevant callback effects expire this
+authority; a later index removal cannot restore it.
+
+Integer range inclusion requires no application-row range scan, but native
+`ALTER TABLE` can rewrite storage and acquire blocking locks. Dependency, type
+and catalog-visibility boundaries remain fail-closed. An actual integer repair
+locks only its exact owner in ACCESS EXCLUSIVE mode and repeats the complete
+source/identity/dependency classifier before DDL. The transaction retains that
+lock through execution. READ COMMITTED and explicit native lock authority are
+required; unsupported catalog, permission or snapshot conditions report
+`integer_widening_unproven` without changing rights or isolation. An already
+matching target needs neither this repair lock nor repair-only catalog rights.
+It still needs the catalogs required to establish target equality, including
+`pg_constraint` for the complete required-column contract.
+
+Column-dependent CHECKs, generated values, views, routines, trigger predicates,
+row-security policies and publication filters do not borrow the widening proof.
+For owner-level CHECKs, only native canonical Boolean constants and direct
+whole-row `IS NULL` / `IS NOT NULL` tests are qualified. More complex owner-level
+predicates remain unproven: native ALTER can succeed while a width-sensitive
+CHECK becomes false for a retained row. No application-row probe executes such
+predicates. Independent readers, other-column checks and independently safe
+whole-row index rebuilds are not blanket-rejected.
+See the
+[PostgreSQL integer domains](https://www.postgresql.org/docs/18/datatype-numeric.html)
+and [ALTER TABLE](https://www.postgresql.org/docs/18/sql-altertable.html) contracts.
+
 ## Analysis consistency
 
 ### DDL event-trigger freshness
@@ -390,9 +539,23 @@ not client roundtrips or the necessary scans for a genuine narrowing.
 
 Guard rendering appends action cases, state-guard branches and canonical
 baseline commands directly into the final operation-owned buffer. Original
-command text still determines a collision-free dollar tag. This removes
-intermediate SQL copies without changing decision order, terminators,
-indentation, locking or the independent execution postcondition.
+command text determines a collision-free dollar tag for ordinary execution.
+Multiline quoted provider SQL retains its original interior bytes; adding
+indentation there could otherwise change defaults, comments or identifiers.
+Decision order, terminators, locking and the independent postcondition remain
+unchanged.
+
+For idempotent scripts, EF's outer history block indents every physical command
+line, including lines inside string literals. SafeMigrations therefore encodes
+the same anonymous body as one single-line PostgreSQL `E` literal. Quotes,
+backslashes, line endings and dollar delimiters decode to their original
+characters without a new execution wrapper or relaxed expression comparison.
+Normal and no-transactions script paths retain their authored transaction
+boundaries. This does not change session settings or repair an already altered
+default/comment value; existing differences still require a reviewed transition.
+See [EF's script writer](https://github.com/dotnet/efcore/blob/v10.0.13/src/EFCore.Relational/Migrations/Internal/Migrator.cs#L608-L615)
+and [PostgreSQL escape literals](https://www.postgresql.org/docs/18/sql-syntax-lexical.html#SQL-SYNTAX-STRINGS-ESCAPE)
+(primary sources; retrieved 2026-10-25).
 
 When no transaction is supplied, analysis creates a read-only
 `RepeatableRead` transaction and holds a transaction-scoped advisory analysis

@@ -17,13 +17,15 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return "provider_column_annotation";
         }
 
-        if (definition.Comment is not null
-            || definition.ComputedColumnSql is not null
-            || definition.ComputedExpression is not null)
+        if (definition.Comment is not null)
         {
-            // WHY: computed columns and extended-property comments need
-            // separately verified SQL Server object contracts.
+            // WHY: Extended-property comments need a separately verified object contract.
             return "column_unproven_facet";
+        }
+
+        if (SqlServerComputedColumnContract.IsComputed(definition))
+        {
+            return isIdentity ? "computed_column_storage_unproven" : GetUnsupportedComputedColumnFeature(definition);
         }
 
         var mapping = FindColumnTypeMapping(definition);
@@ -43,7 +45,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         if (isIdentity && (definition.IsNullable || definition.IsRowVersion
             || definition.DefaultValue.Kind != SafeMigrationDefaultValueKind.None
             || type.Name is not ("tinyint" or "smallint" or "int" or "bigint" or "decimal" or "numeric")
-            || type.Name is "decimal" or "numeric" && type.Scale != 0
+            || (type.Name is "decimal" or "numeric" && type.Scale != 0)
             || !IdentityValueFitsType(seed, type) || increment == 0 || !IdentityValueFitsType(increment, type)))
         {
             return "identity_definition_unproven";
@@ -54,6 +56,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
     private SqlServerSafeMigrationRuntimePlan BuildEnsureColumn(EnsureColumnIntent intent)
     {
+        if (SqlServerComputedColumnContract.IsComputed(intent.Definition))
+        {
+            return BuildEnsureComputedColumn(intent);
+        }
+
         var table = TableExists(intent.Table, intent.Schema);
         var exists = ColumnExists(intent.Table, intent.Schema, intent.Definition.Name);
         var matching = ColumnMatches(intent.Table, intent.Schema, intent.Definition);
@@ -127,12 +134,48 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         };
     }
 
-    private SqlServerSafeMigrationRuntimePlan BuildDropColumn(DropColumnIntent intent)
+    private SqlServerSafeMigrationRuntimePlan BuildDropColumn(DropColumnIntent intent,
+        IReadOnlyList<string>? projectedIndexDropCandidates = null,
+        IReadOnlyList<SafeMigrationOperation>? projectedConstraintDropCandidates = null)
     {
         var table = TableExists(intent.Table, intent.Schema);
         var occupied = ObjectExists(intent.Table, intent.Schema);
         var column = ColumnExists(intent.Table, intent.Schema, intent.Name);
-        var dependent = ColumnHasDependencies(intent.Table, intent.Schema, intent.Name);
+        var dependent = ColumnHasDependencies(intent.Table, intent.Schema, intent.Name,
+            allowAutomaticStatistics: true, allowUnrelatedBoundExpressions: true);
+        var id = TableId(intent.Table, intent.Schema);
+        var columnId = $"(SELECT c.column_id FROM sys.columns c WHERE c.object_id={id} "
+            + $"AND c.name={Literal(intent.Name)})";
+
+        var computedDependency = "EXISTS(SELECT 1 FROM sys.sql_expression_dependencies d "
+            + "JOIN sys.computed_columns generated ON generated.object_id=d.referencing_id "
+            + "AND generated.column_id=d.referencing_minor_id "
+            + $"WHERE d.referencing_class=1 AND d.referenced_id={id} AND d.referenced_minor_id={columnId})";
+        var independentDependency = ColumnHasDependencies(intent.Table, intent.Schema, intent.Name,
+            allowAutomaticStatistics: true, excludeComputedDependencies: true,
+            allowUnrelatedBoundExpressions: true);
+        var emptyGeneratedSet = $"NOT EXISTS(SELECT 1 FROM sys.computed_columns generated "
+            + $"WHERE generated.object_id={id} AND generated.column_id<>{columnId})";
+        var otherDependencyCode = "N'generated_column_drop_other_dependency'";
+        var genericDependencyCode = "N'column_drop_dependency'";
+        if (projectedIndexDropCandidates is { Count: > 0, }
+            || projectedConstraintDropCandidates is { Count: > 0, })
+        {
+            var remainingDependency = ColumnHasDependencies(intent.Table, intent.Schema, intent.Name,
+                allowAutomaticStatistics: true, excludeComputedDependencies: true,
+                excludedIndexes: projectedIndexDropCandidates,
+                allowUnrelatedBoundExpressions: true,
+                excludedConstraints: projectedConstraintDropCandidates);
+
+            // WHY: Authored removals do not make the native state applicable.
+            // This conditional certificate is consumed only when their exact
+            // physical identities later have accepted current tombstones.
+            otherDependencyCode = $"CASE WHEN NOT ({remainingDependency}) "
+                + "THEN N'generated_column_drop_named_index_dependency' "
+                + "ELSE N'generated_column_drop_other_dependency' END";
+            genericDependencyCode = $"CASE WHEN NOT ({remainingDependency}) "
+                + "THEN N'column_drop_candidate_dependency' ELSE N'column_drop_dependency' END";
+        }
 
         return Plan(
             $"CASE WHEN NOT {occupied} THEN N'missing' WHEN NOT {table} THEN N'different' "
@@ -141,6 +184,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             Bit($"NOT {column}")) with
         {
             RequiresExpressionDependencyRead = true,
+            // WHY: An index, CHECK, default or other generic blocker must not
+            // be mislabeled as a specifically proven generated dependency.
+            ClassificationCodeExpression = $"CASE WHEN {table} AND {column} AND {computedDependency} "
+                + $"THEN CASE WHEN {independentDependency} THEN {otherDependencyCode} "
+                + "ELSE N'generated_column_drop_dependency' END "
+                + $"WHEN {table} AND {column} AND ({dependent}) THEN {genericDependencyCode} "
+                + $"WHEN {table} AND {column} AND NOT ({dependent}) AND {emptyGeneratedSet} "
+                + $"THEN N'{EmptyGeneratedDropSetCode}' ELSE NULL END",
         };
     }
 
@@ -316,10 +367,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var scaleClause = type.Scale is { } scale
             ? $" AND c.scale = {scale.ToString(CultureInfo.InvariantCulture)}" : string.Empty;
 
+        var computed = SqlServerComputedColumnContract.IsComputed(definition);
         var collationClause = string.Empty;
         if (type.IsCharacter)
         {
-            var collation = definition.Collation is null
+            var collation = computed ? ComputedVariable(definition, "collation") : definition.Collation is null
                 ? "CONVERT(sysname, DATABASEPROPERTYEX(DB_NAME(), 'Collation'))"
                 : Literal(definition.Collation.Name);
 
@@ -330,12 +382,21 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // matching. Render it once without a list, joined copy, and another
         // intermediate copy of every invariant physical facet.
 
+        var nullability = computed ? ComputedVariable(definition, "nullable") : definition.IsNullable ? "1" : "0";
+        var computedClause = computed
+            ? "c.is_computed = 1 AND EXISTS (SELECT 1 FROM sys.computed_columns computed "
+                + "WHERE computed.object_id=c.object_id AND computed.column_id=c.column_id "
+                + $"AND computed.is_persisted = {(definition.IsStored == true ? "1" : "0")} "
+                + "AND computed.definition COLLATE Latin1_General_100_BIN2 = "
+                + ComputedVariable(definition, "definition") + " COLLATE Latin1_General_100_BIN2)"
+            : "c.is_computed = 0";
+
         return $"""
             EXISTS (SELECT 1 FROM sys.columns c JOIN sys.types ty ON ty.user_type_id = c.user_type_id
             WHERE c.object_id = {TableId(table, schema)} AND c.name = {Literal(definition.Name)}
             AND ty.name = {Literal(type.Name)} AND ty.is_user_defined = 0 AND ty.is_assembly_type = 0
-            AND c.is_nullable = {(definition.IsNullable ? "1" : "0")} AND c.is_identity = {(isIdentity ? "1" : "0")}
-            AND c.is_computed = 0 AND c.is_sparse = 0 AND c.is_column_set = 0 AND c.is_rowguidcol = 0
+            AND c.is_nullable = {nullability} AND c.is_identity = {(isIdentity ? "1" : "0")}
+            AND {computedClause} AND c.is_sparse = 0 AND c.is_column_set = 0 AND c.is_rowguidcol = 0
             AND c.is_filestream = 0 AND c.is_hidden = 0 AND c.generated_always_type = 0
             AND c.rule_object_id = 0 AND c.encryption_type IS NULL
             AND {DefaultMatches(table, schema, definition)}{identityClause}
@@ -411,6 +472,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         if (type.Name is "decimal" or "numeric" && type.Precision is < 19)
         {
             var limit = 1L;
+
+            // WHY: Build the exact identity precision bound without floating-point powers.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var digit = 0; digit < type.Precision; digit++)
             {
                 limit *= 10;
@@ -489,20 +554,33 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             DefaultExpression(definition));
 
         var variable = "@doka_default_" + fingerprint;
+        // WHY: Preserve parameter registration order while binding only values
+        // whose lossless renderer needs an expression, forbidden in EXEC args.
+        var tableId = TableId(table, schema);
+        var columnName = Literal(definition.Name);
+        var contractValue = Literal(fingerprint);
+        var schemaName = EffectiveSchema(schema);
+        var schemaArgument = SqlServerSqlStringLiteral.ProcedureArgument(
+            schemaName, Literal(schemaName), SqlServerSqlStringLiteral.RequiresExpression(schemaName.AsSpan())
+                ? variable + "_schema" : string.Empty, out var schemaDeclaration);
+        var tableArgument = SqlServerSqlStringLiteral.ProcedureArgument(
+            table, Literal(table), SqlServerSqlStringLiteral.RequiresExpression(table.AsSpan())
+                ? variable + "_table" : string.Empty, out var tableDeclaration);
 
         return $"DECLARE {variable} sysname = (SELECT dc.name FROM sys.default_constraints dc "
             + "JOIN sys.columns c ON c.object_id = dc.parent_object_id "
             + "AND c.column_id = dc.parent_column_id "
-            + $"WHERE dc.parent_object_id = {TableId(table, schema)} "
-            + $"AND c.name = {Literal(definition.Name)}); "
+            + $"WHERE dc.parent_object_id = {tableId} "
+            + $"AND c.name = {columnName}); "
             + $"IF {variable} IS NULL THROW 51004, N'SafeMigrations default contract was not created', 1; "
+            + schemaDeclaration + tableDeclaration
             + "EXEC sys.sp_addextendedproperty "
             + "@name = N'Doka:SafeMigrations:Contract', "
-            + $"@value = {Literal(fingerprint)}, "
+            + $"@value = {contractValue}, "
             + "@level0type = N'SCHEMA', "
-            + $"@level0name = {Literal(EffectiveSchema(schema))}, "
+            + $"@level0name = {schemaArgument}, "
             + "@level1type = N'TABLE', "
-            + $"@level1name = {Literal(table)}, "
+            + $"@level1name = {tableArgument}, "
             + "@level2type = N'CONSTRAINT', "
             + $"@level2name = {variable}";
     }
@@ -521,21 +599,63 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             _ => throw new InvalidOperationException("No default expression exists."),
         };
 
+    /// <summary>
+    /// Names exact native constraint kinds and owners without treating authored removals as accepted.
+    /// </summary>
+    private string ConstraintDropCandidatePredicate(string alias, IReadOnlyList<SafeMigrationOperation> candidates,
+        bool keysOnly = false, bool checksOnly = false, bool foreignKeysOnly = false)
+    {
+        List<string>? matches = null;
+        foreach (var candidate in candidates)
+        {
+            if (foreignKeysOnly && candidate.Intent is DropTableIntent table)
+            {
+                (matches ??= []).Add($"({alias}.parent_object_id={TableId(table.Table, table.Schema)})");
+
+                continue;
+            }
+
+            var identity = candidate.Intent switch
+            {
+                DropPrimaryKeyIntent key when keysOnly => (key.Table, key.Schema, key.Name, Kind: "PK"),
+                DropUniqueConstraintIntent key when keysOnly => (key.Table, key.Schema, key.Name, Kind: "UQ"),
+                DropCheckConstraintIntent check when checksOnly => (check.Table, check.Schema, check.Name, Kind: "C"),
+                DropForeignKeyIntent key when foreignKeysOnly => (key.Table, key.Schema, key.Name, Kind: "F"),
+                _ => default,
+            };
+
+            if (identity.Table is null || identity.Name is null || identity.Kind is null)
+            {
+                continue;
+            }
+
+            (matches ??= []).Add($"({alias}.parent_object_id={TableId(identity.Table, identity.Schema)} "
+                + $"AND {alias}.name={Literal(identity.Name)} AND {alias}.type={Literal(identity.Kind)})");
+        }
+
+        return matches is null ? "1 = 0" : string.Join(" OR ", matches);
+    }
+
     private string ColumnHasDependencies(
         string table,
         string? schema,
         string column,
         bool allowAutomaticStatistics = false,
-        bool allowInlineDefault = false
+        bool allowInlineDefault = false,
+        bool excludeComputedDependencies = false,
+        IReadOnlyList<string>? excludedIndexes = null,
+        IReadOnlyList<SafeMigrationOperation>? excludedConstraints = null,
+        bool allowUnrelatedBoundExpressions = false
     )
     {
         var id = TableId(table, schema);
         var columnId = $"(SELECT c.column_id FROM sys.columns c WHERE c.object_id = {id} "
             + $"AND c.name = {Literal(column)})";
 
-        // WHY: ALTER COLUMN removes optimizer-created statistics itself. Its
-        // guarded row probe can create them during compilation; only authored
-        // statistics must prevent a repair that preserves caller-owned objects.
+        // WHY: SQL Server always treats optimizer-created statistics as
+        // auto-drop, including before the user-statistics AUTO_DROP option.
+        // Our own CHECK row proof can create them during compilation; their
+        // presence must not block otherwise valid DROP or ALTER operations.
         var statistics = allowAutomaticStatistics
             ? "JOIN sys.stats s ON s.object_id = sc.object_id AND s.stats_id = sc.stats_id "
                 + "AND s.auto_created = 0 "
@@ -544,22 +664,106 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var defaultDependency = allowInlineDefault ? string.Empty
             : $"OR EXISTS (SELECT 1 FROM sys.default_constraints dc WHERE dc.parent_object_id = {id} "
                 + $"AND dc.parent_column_id = {columnId}) ";
+        var expressionScope = excludeComputedDependencies
+            ? " AND NOT EXISTS(SELECT 1 FROM sys.computed_columns generated "
+                + "WHERE d.referencing_class=1 AND generated.object_id=d.referencing_id "
+                + "AND generated.column_id=d.referencing_minor_id)"
+            : string.Empty;
+        var objectReference = "d.referenced_minor_id = 0";
+        if (allowUnrelatedBoundExpressions)
+        {
+            // WHY: A fully bound schema-bound expression records both an
+            // object row and its actual column rows. The object row is not
+            // an all-column wildcard. Missing/unbound membership remains a
+            // veto; only positive same-expression column evidence qualifies it.
+            objectReference += " AND NOT (d.is_schema_bound_reference=1 "
+                + "AND d.is_caller_dependent=0 AND d.is_ambiguous=0 "
+                + "AND EXISTS(SELECT 1 FROM sys.sql_expression_dependencies bound_member "
+                + "WHERE bound_member.referencing_id=d.referencing_id "
+                + "AND bound_member.referencing_minor_id=d.referencing_minor_id "
+                + "AND bound_member.referencing_class=d.referencing_class "
+                + "AND bound_member.referenced_id=d.referenced_id "
+                + "AND bound_member.referenced_class=d.referenced_class "
+                + "AND bound_member.referenced_minor_id>0 AND bound_member.is_schema_bound_reference=1 "
+                + "AND bound_member.is_caller_dependent=0 AND bound_member.is_ambiguous=0))";
+        }
+
+        var indexScope = string.Empty;
+        var statisticsScope = string.Empty;
+        if (excludedIndexes is { Count: > 0, })
+        {
+            var names = string.Join(",", excludedIndexes.Select(Literal));
+            indexScope = " AND NOT EXISTS(SELECT 1 FROM sys.indexes candidate "
+                + "WHERE candidate.object_id=ic.object_id AND candidate.index_id=ic.index_id "
+                + $"AND candidate.name IN({names}))";
+            statisticsScope = " AND NOT EXISTS(SELECT 1 FROM sys.indexes candidate "
+                + "WHERE candidate.object_id=sc.object_id AND candidate.index_id=sc.stats_id "
+                + $"AND candidate.name IN({names}))";
+            // Filter predicates have a separate INDEX-class dependency row;
+            // its owner id alone is not a constraint or computed-column id.
+            expressionScope += " AND NOT (d.referencing_class=7 AND EXISTS(SELECT 1 FROM sys.indexes candidate "
+                + "WHERE candidate.object_id=d.referencing_id AND candidate.index_id=d.referencing_minor_id "
+                + $"AND candidate.name IN({names})))";
+        }
+
+        var foreignKeyScope = string.Empty;
+        var checkScope = string.Empty;
+        if (excludedConstraints is { Count: > 0, })
+        {
+            var keyRemoval = ConstraintDropCandidatePredicate("removed_key", excludedConstraints, keysOnly: true);
+            if (keyRemoval != "1 = 0")
+            {
+                indexScope += " AND NOT EXISTS(SELECT 1 FROM sys.key_constraints removed_key "
+                    + "WHERE removed_key.parent_object_id=ic.object_id "
+                    + $"AND removed_key.unique_index_id=ic.index_id AND ({keyRemoval}))";
+                statisticsScope += " AND NOT EXISTS(SELECT 1 FROM sys.key_constraints removed_key "
+                    + "WHERE removed_key.parent_object_id=sc.object_id "
+                    + $"AND removed_key.unique_index_id=sc.stats_id AND ({keyRemoval}))";
+            }
+
+            var checkRemoval = ConstraintDropCandidatePredicate("removed_check", excludedConstraints, checksOnly: true);
+            if (checkRemoval != "1 = 0")
+            {
+                expressionScope += " AND NOT EXISTS(SELECT 1 FROM sys.check_constraints removed_check "
+                    + $"WHERE removed_check.object_id=d.referencing_id AND ({checkRemoval}))";
+                checkScope = " AND NOT EXISTS(SELECT 1 FROM sys.check_constraints removed_check "
+                    + $"WHERE removed_check.object_id=cc.object_id AND ({checkRemoval}))";
+            }
+
+            var foreignKeyRemoval = ConstraintDropCandidatePredicate("removed_fk", excludedConstraints,
+                foreignKeysOnly: true);
+            if (foreignKeyRemoval != "1 = 0")
+            {
+                foreignKeyScope = " AND NOT EXISTS(SELECT 1 FROM sys.foreign_keys removed_fk "
+                    + $"WHERE removed_fk.object_id=fkc.constraint_object_id AND ({foreignKeyRemoval}))";
+            }
+        }
+
+        var tableCheckScope = allowUnrelatedBoundExpressions
+            ? " AND NOT EXISTS(SELECT 1 FROM sys.sql_expression_dependencies bound_check "
+                + "WHERE bound_check.referencing_class=1 AND bound_check.referencing_id=cc.object_id "
+                + $"AND bound_check.referenced_id={id} AND bound_check.referenced_minor_id>0 "
+                + "AND bound_check.is_schema_bound_reference=1 AND bound_check.is_caller_dependent=0 "
+                + "AND bound_check.is_ambiguous=0)"
+            : string.Empty;
 
         return $"EXISTS (SELECT 1 FROM sys.tables t WHERE t.object_id = {id} "
             + "AND (t.temporal_type <> 0 OR t.is_filetable = 1)) "
             + defaultDependency
             + $"OR EXISTS (SELECT 1 FROM sys.index_columns ic WHERE ic.object_id = {id} "
-            + $"AND ic.column_id = {columnId}) "
+            + $"AND ic.column_id = {columnId}{indexScope}) "
             + $"OR EXISTS (SELECT 1 FROM sys.stats_columns sc {statistics}WHERE sc.object_id = {id} "
-            + $"AND sc.column_id = {columnId}) "
+            + $"AND sc.column_id = {columnId}{statisticsScope}) "
             + $"OR EXISTS (SELECT 1 FROM sys.foreign_key_columns fkc WHERE "
-            + $"(fkc.parent_object_id = {id} AND fkc.parent_column_id = {columnId}) "
-            + $"OR (fkc.referenced_object_id = {id} AND fkc.referenced_column_id = {columnId})) "
+            + $"((fkc.parent_object_id = {id} AND fkc.parent_column_id = {columnId}) "
+            + $"OR (fkc.referenced_object_id = {id} AND fkc.referenced_column_id = {columnId})){foreignKeyScope}) "
             + $"OR EXISTS (SELECT 1 FROM sys.sql_expression_dependencies d WHERE d.referenced_id = {id} "
-            + $"AND (d.referenced_minor_id = 0 OR d.referenced_minor_id = {columnId})) "
+            + $"AND (({objectReference}) OR d.referenced_minor_id = {columnId}){expressionScope}) "
             + $"OR EXISTS (SELECT 1 FROM sys.check_constraints cc WHERE cc.parent_object_id = {id} "
-            + $"AND (cc.parent_column_id = 0 OR cc.parent_column_id = {columnId})) "
-            + $"OR EXISTS (SELECT 1 FROM sys.columns computed WHERE computed.object_id = {id} "
-            + "AND computed.is_computed = 1)";
+            // WHY: The protected dependency catalog already proves actual computed
+            // references. A blanket computed-column veto would also prevent dropping
+            // the generated column itself or a completely unrelated ordinary member.
+            + $"AND ((cc.parent_column_id = 0{tableCheckScope}) "
+            + $"OR cc.parent_column_id = {columnId}){checkScope})";
     }
 }

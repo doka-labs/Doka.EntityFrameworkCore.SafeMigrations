@@ -74,6 +74,9 @@ internal sealed record SqlServerSafeMigrationRuntimePlan(
     /// <summary>Gets whether rows or validated authored facets require delayed SQL Server name binding.</summary>
     public bool RequiresDelayedBinding { get; init; }
 
+    /// <summary>Gets whether certified table absence removes all complex definition classifier work.</summary>
+    internal bool IsSimpleAbsentTableClassifier { get; init; }
+
     /// <summary>Gets whether classification reads the separately protected expression-dependency catalog.</summary>
     public bool RequiresExpressionDependencyRead { get; init; }
 
@@ -82,6 +85,9 @@ internal sealed record SqlServerSafeMigrationRuntimePlan(
 
     /// <summary>Gets statement-local catalog setup executed in the same scope as state evaluation.</summary>
     public string? CatalogPreambleSql { get; init; }
+
+    /// <summary>Gets invocation-local setup regenerated after DDL before its independent postcondition.</summary>
+    public string? PostconditionPreambleSql { get; init; }
 
     /// <summary>Gets SQL that stamps a freshly applied provider contract before postflight.</summary>
     public string? PostApplySql { get; init; }

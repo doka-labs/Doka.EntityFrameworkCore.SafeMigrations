@@ -31,6 +31,25 @@ internal abstract class ModelManagedDataIntent : SafeMigrationIntent
         ValidateDistinctKeys();
     }
 
+    /// <summary>Rebinds identifier metadata while sharing an already validated immutable row snapshot.</summary>
+    protected ModelManagedDataIntent(
+        ModelManagedDataIntent source,
+        IReadOnlyList<string> keyColumns,
+        IReadOnlyList<string> columns
+    ) : base(source.Kind)
+    {
+        // WHY: A certified injective member rename changes no cell, row order,
+        // store type or key uniqueness. Revalidating and cloning these immutable
+        // matrices would repeat quadratic key validation and duplicate row data.
+        Table = source.Table;
+        Schema = source.Schema;
+        KeyColumns = keyColumns;
+        KeyColumnTypes = source.KeyColumnTypes;
+        Columns = columns;
+        ColumnTypes = source.ColumnTypes;
+        KeyValues = source.KeyValues;
+    }
+
     public string Table { get; }
 
     public string? Schema { get; }
@@ -123,6 +142,9 @@ internal abstract class ModelManagedDataIntent : SafeMigrationIntent
         foreach (var uniqueKey in uniqueKeys)
         {
             var ordinals = uniqueKey.Columns.Select(column => ColumnOrdinal(columns, column)).ToArray();
+            // WHY: Compare each authored unique target only with later rows, not itself or earlier pairs.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var leftRow = 0; leftRow < values.RowCount; leftRow++)
             {
                 if (ordinals.Any(ordinal => values.GetUnsafeValue(leftRow, ordinal) is null))
@@ -130,6 +152,9 @@ internal abstract class ModelManagedDataIntent : SafeMigrationIntent
                     continue;
                 }
 
+                // WHY: Start after the current row so each pair of unique targets is checked exactly once.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var rightRow = leftRow + 1; rightRow < values.RowCount; rightRow++)
                 {
                     if (ordinals.All(ordinal => SafeMigrationModelManagedValue.AreEqual(
@@ -150,6 +175,9 @@ internal abstract class ModelManagedDataIntent : SafeMigrationIntent
         string column
     )
     {
+        // WHY: Return the authored column ordinal needed to interpret the associated value matrix.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < columns.Count; ordinal++)
         {
             if (StringComparer.Ordinal.Equals(columns[ordinal], column))
@@ -192,9 +220,15 @@ internal abstract class ModelManagedDataIntent : SafeMigrationIntent
 
     private void ValidateSharedColumnTypes()
     {
+        // WHY: Resolve each ordered key member into the separate authored value-column layout.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var keyOrdinal = 0; keyOrdinal < KeyColumns.Count; keyOrdinal++)
         {
             var columnOrdinal = -1;
+            // WHY: Retain the matching value-column ordinal for the subsequent type comparison.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var candidateOrdinal = 0; candidateOrdinal < Columns.Count; candidateOrdinal++)
             {
                 if (StringComparer.Ordinal.Equals(Columns[candidateOrdinal], KeyColumns[keyOrdinal]))
@@ -218,8 +252,14 @@ internal abstract class ModelManagedDataIntent : SafeMigrationIntent
 
     private void ValidateNonNullKeys()
     {
+        // WHY: Validate every key matrix row without losing its row and column coordinates.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var row = 0; row < KeyValues.RowCount; row++)
         {
+            // WHY: Inspect the exact key matrix cell at the current row and column coordinates.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var column = 0; column < KeyValues.ColumnCount; column++)
             {
                 if (KeyValues.GetUnsafeValue(row, column) is null)
@@ -234,11 +274,20 @@ internal abstract class ModelManagedDataIntent : SafeMigrationIntent
 
     private void ValidateDistinctKeys()
     {
+        // WHY: Compare each key row only with later rows so duplicate pairs are checked once.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var leftRow = 0; leftRow < KeyValues.RowCount; leftRow++)
         {
+            // WHY: Start after the current key row to avoid self-comparison and repeated row pairs.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var rightRow = leftRow + 1; rightRow < KeyValues.RowCount; rightRow++)
             {
                 var equal = true;
+                // WHY: Compare corresponding key cells while retaining both source row ordinals.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var column = 0; column < KeyValues.ColumnCount; column++)
                 {
                     if (SafeMigrationModelManagedValue.AreEqual(
@@ -265,6 +314,18 @@ internal abstract class ModelManagedDataIntent : SafeMigrationIntent
 
 internal sealed class EnsureModelManagedDataIntent : ModelManagedDataIntent
 {
+    /// <summary>Creates an internal metadata-only final-catalog probe after a certified member rename.</summary>
+    internal EnsureModelManagedDataIntent(
+        EnsureModelManagedDataIntent source,
+        IReadOnlyList<string> keyColumns,
+        IReadOnlyList<string> columns,
+        IReadOnlyList<ExpectedModelManagedDataUniqueKeyDefinition> uniqueKeys
+    ) : base(source, keyColumns, columns)
+    {
+        Values = source.Values;
+        UniqueKeys = uniqueKeys;
+    }
+
     public EnsureModelManagedDataIntent(
         string table,
         string[] keyColumns,
@@ -317,8 +378,14 @@ internal sealed class EnsureModelManagedDataIntent : ModelManagedDataIntent
         }
 
         var result = new object?[values.GetLength(0), keyColumns.Length];
+        // WHY: Retain the source row coordinate while projecting only the requested key columns.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var row = 0; row < values.GetLength(0); row++)
         {
+            // WHY: Map each destination key column through its independently resolved source ordinal.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var column = 0; column < ordinals.Length; column++)
             {
                 result[row, column] = values[row, ordinals[column]];
@@ -331,6 +398,19 @@ internal sealed class EnsureModelManagedDataIntent : ModelManagedDataIntent
 
 internal sealed class UpdateModelManagedDataIntent : ModelManagedDataIntent
 {
+    /// <summary>Creates an internal metadata-only final-catalog probe after a certified member rename.</summary>
+    internal UpdateModelManagedDataIntent(
+        UpdateModelManagedDataIntent source,
+        IReadOnlyList<string> keyColumns,
+        IReadOnlyList<string> columns,
+        IReadOnlyList<ExpectedModelManagedDataUniqueKeyDefinition> uniqueKeys
+    ) : base(source, keyColumns, columns)
+    {
+        OldValues = source.OldValues;
+        NewValues = source.NewValues;
+        UniqueKeys = uniqueKeys;
+    }
+
     public UpdateModelManagedDataIntent(
         string table,
         string[] keyColumns,
@@ -384,6 +464,18 @@ internal sealed class UpdateModelManagedDataIntent : ModelManagedDataIntent
 
 internal sealed class DeleteModelManagedDataIntent : ModelManagedDataIntent
 {
+    /// <summary>Creates an internal metadata-only final-catalog probe after a certified member rename.</summary>
+    internal DeleteModelManagedDataIntent(
+        DeleteModelManagedDataIntent source,
+        IReadOnlyList<string> keyColumns,
+        IReadOnlyList<string> columns,
+        IReadOnlyList<ExpectedModelManagedDataForeignKeyDefinition> foreignKeys
+    ) : base(source, keyColumns, columns)
+    {
+        OldValues = source.OldValues;
+        ForeignKeys = foreignKeys;
+    }
+
     public DeleteModelManagedDataIntent(
         string table,
         string[] keyColumns,
@@ -444,8 +536,14 @@ internal sealed class ModelManagedDataMatrix
         ColumnCount = values.GetLength(1);
         _values = new object?[checked(RowCount * ColumnCount)];
 
+        // WHY: Clone rows into the owned row-major buffer without exposing caller-owned cell storage.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var row = 0; row < RowCount; row++)
         {
+            // WHY: Use row and column coordinates to select the exact row-major destination cell.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var column = 0; column < ColumnCount; column++)
             {
                 _values[(row * ColumnCount) + column] = SafeMigrationModelManagedValue.Clone(values[row, column]);

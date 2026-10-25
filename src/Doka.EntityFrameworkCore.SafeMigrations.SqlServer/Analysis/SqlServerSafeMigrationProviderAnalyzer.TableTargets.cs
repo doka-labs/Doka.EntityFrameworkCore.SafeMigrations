@@ -33,12 +33,16 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         using var activity = SafeMigrationTelemetry.StartAnalysisStage("catalog-batch", ordinals.Length);
         await using var batch = new SafeMigrationCatalogBatch(connection, commandTimeout, transaction);
         var command = batch.CreateCommand();
+
         // WHY: SqlClient's native SqlBatchCommand does not implement CreateParameter.
         // Borrow the sequential command or use one non-executing provider factory per probe;
         // parameters belong to the catalog command, never to the factory's collection.
-        using var parameterFactory = command.SequentialCommand is null ? connection.CreateCommand() : null;
+        await using var parameterFactory = command.SequentialCommand is null ? connection.CreateCommand() : null;
         var parameterHost = command.SequentialCommand ?? parameterFactory!;
         var values = new string[ordinals.Length];
+        // WHY: Keep target parameters, VALUES slots and requested ordinals aligned.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < ordinals.Length; index++)
         {
             var definition = ((EnsureTableIntent)operations[start + ordinals[index]].Intent).Definition;

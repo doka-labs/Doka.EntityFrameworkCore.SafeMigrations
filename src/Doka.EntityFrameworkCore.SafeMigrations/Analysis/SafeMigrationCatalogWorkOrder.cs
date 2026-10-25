@@ -26,6 +26,9 @@ internal static class SafeMigrationCatalogWorkOrder
         // second managed allocation when most entries are already resolved.
         Span<int> selected = stackalloc int[count];
         var selectedCount = 0;
+        // WHY: Capture original operation ordinals without constructing a filtered operation copy.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < count; ordinal++)
         {
             cancellationToken.ThrowIfCancellationRequested();

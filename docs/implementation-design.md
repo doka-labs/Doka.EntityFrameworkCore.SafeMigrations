@@ -180,7 +180,8 @@ null-distinctness, and MySQL prefix lengths. Constraints retain ordered columns,
 principal identity, referential actions, and check SQL.
 
 SQL-bearing facets use a typed expression tree whose identifier, literal,
-operator, cast, collation, function, and current-value roles are explicit.
+operator, cast, searched-CASE branch, collation, function, and current-value
+roles are explicit.
 Providers render these nodes and compare only catalog representations whose
 structural equivalence they can prove. Legacy raw SQL is opaque and returns a
 stable `Unsupported` reason; it never authorizes `Matching`. Core renames only
@@ -330,11 +331,36 @@ whichever bound is reached first. No accepted scaffolding run falls back to raw
 data operations.
 
 When the immutable expected definition is captured from an EF column
-operation, SafeMigrations parses SQL defaults through its bounded expression
-grammar. A proven expression such as `CURRENT_TIMESTAMP(6)` receives typed
-catalog equivalence; a fragment outside that grammar remains opaque and fails
-closed. This preserves the reviewed EF operation while avoiding a blanket
-allowlist of provider SQL strings.
+operation, SafeMigrations parses SQL defaults and computed SQL through its
+bounded expression grammar. A representable expression such as
+`CURRENT_TIMESTAMP(6)` or a searched CASE retains its typed structure; a
+fragment outside that grammar remains opaque and fails closed. Generated
+CHECK helpers, inline table checks and normalized ordinary EF CHECK operations
+preserve the same parsed structure through the migration-source roundtrip.
+This preserves the reviewed EF operation while avoiding a blanket allowlist of
+provider SQL strings. Parsing is not a provider-capability or non-null proof.
+
+The immutable searched-CASE node snapshots ordered WHEN/THEN pairs and an
+optional ELSE. Every expression walker includes conditions and results for
+equivalence, fingerprints, renames, dependency capture and diagnostics. SQL
+Server's two-argument CONVERT is parsed into the existing cast node with a
+separate validated store-type role and native-dialect provenance; style
+arguments do not enter that grammar. Other providers reject that captured
+CONVERT form instead of applying their different native argument ordering.
+Captured computed and CHECK definitions keep their validated original SQL and
+numeric-token provenance alongside the tree. Native DDL preserves that source
+so CLR literal coercion cannot silently change native expression semantics.
+Equality and fingerprints include this source evidence; supported renames
+rewrite only proven column-role tokens. Provider-native source/dialect and
+catalog-identity gates run before the tree can supply a certificate. This does
+not authorize arbitrary raw SQL or unknown function/type roles.
+Providers select finite native catalog representations rather than globally
+removing parentheses, whitespace, casts or literal distinctions. MariaDB and
+SQL Server retain physical nullable metadata while separately proving a
+required generated result from supported expressions and current source facts.
+Unknown or nullable-producing expressions cannot obtain that proof, and source
+changes invalidate its projected eligibility. No application-row scan supplies
+the semantic proof and no auxiliary CHECK or forced persistence is introduced.
 
 The generated table call also freezes either `ThrowIfDifferent` or
 `RepairIfSafe`. Repair-capable `EnsureColumnIntent` analysis separates mutable
@@ -930,6 +956,15 @@ read-only queries, with preambles confined to their own dynamic invocation;
 they do not depend on another classifier's execution. Grouping prevents a
 binding-mode change from fragmenting every statement. Each result retains its
 original ordinal and captured plan; projection still runs in migration order.
+Complex direct `UNION ALL` statement text also has a 64 KiB grouping budget,
+independent of the eight-statement transport and 4 MiB aggregate/source limits. A classifier
+larger than this soft bound remains eligible alone; cheap direct classifiers
+still share a statement up to the existing 32-operation limit. A group containing
+only certified simple missing-table classifiers keeps that 32-operation limit
+without the soft text split; a complex member restores the full-group budget.
+Delayed scopes are not split by this direct-only bound. Whole-table matchers omit
+identity or default catalog joins only when no expected column needs that metadata, retaining
+the native identity/default-object absence checks for every ordinary column.
 Delayed classifiers bind that ordinal as an explicit `int` parameter to a
 complete isolated `sp_executesql` classifier. Rejection and successful branches
 return one nine-column result set directly instead of inserting into a shared

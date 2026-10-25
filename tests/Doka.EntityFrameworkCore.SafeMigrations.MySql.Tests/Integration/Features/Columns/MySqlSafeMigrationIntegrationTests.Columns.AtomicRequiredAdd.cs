@@ -417,10 +417,55 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
         Assert.Equal("column_atomic_add_resume", report.Assessments[0].AnalysisCode);
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[1].Action);
-        Assert.True(report.Assessments[2].Action is SafeMigrationAction.RejectDataBlocked
-            or SafeMigrationAction.RejectPrerequisiteMissing);
+        Assert.Equal(SafeMigrationAction.RejectDataBlocked, report.Assessments[2].Action);
+        Assert.Equal("primary_key_replacement_data_blocked", report.Assessments[2].AnalysisCode);
+        Assert.Null(report.Assessments[2].DeferredOrigin);
         Assert.Equal(new AtomicRequiredAddState(1, 1, 1, 2), state);
         Assert.Equal(1, originalKeys);
+    }
+
+    /// <summary>Owned staging retains actual unique values without claiming an empty table.</summary>
+    [Fact]
+    public async Task AtomicRequiredAddResumeRetainsExistingUniquePrimaryKeyValues()
+    {
+        // Arrange
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
+        var operation = AtomicRequiredAddOperation();
+        await ExecuteSqlAsync(connectionString, AtomicRequiredAddStagedTableSql(operation,
+            AtomicRequiredAddGuardName(operation), "`required_value` IS NOT NULL")
+            + " INSERT INTO `atomic_required_items` (`key`, `required_value`) VALUES "
+            + "(1, '00000000-0000-0000-0000-000000000001'), (2, '00000000-0000-0000-0000-000000000002');");
+
+        await using var context = CreateContext(connectionString);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.Operations.Add(operation);
+        builder.DropPrimaryKeyIfExists("pk_atomic_required_items_key", "atomic_required_items");
+        builder.AddPrimaryKeyIfNotExists("pk_atomic_required_items_value", "atomic_required_items", ["required_value"]);
+        var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act
+        var report = await runner.AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("atomic-required-add-unique-key"), CancellationToken.None);
+
+        report.ThrowIfBlocked();
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+        var targetKeys = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE CONSTRAINT_SCHEMA = DATABASE() "
+            + "AND TABLE_NAME = 'atomic_required_items' AND CONSTRAINT_NAME = 'PRIMARY' "
+            + "AND COLUMN_NAME = 'required_value';");
+        var distinctValues = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(DISTINCT `required_value`) FROM `atomic_required_items`;");
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
+        Assert.Equal("column_atomic_add_resume", report.Assessments[0].AnalysisCode);
+        Assert.Equal(SafeMigrationAction.Apply, report.Assessments[2].Action);
+        Assert.Null(report.Assessments[2].DeferredOrigin);
+        Assert.Equal(new AtomicRequiredAddState(1, 0, 0, 2), state);
+        Assert.Equal(1, targetKeys);
+        Assert.Equal(2, distinctValues);
     }
 }
 

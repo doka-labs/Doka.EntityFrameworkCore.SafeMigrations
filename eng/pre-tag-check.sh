@@ -13,12 +13,14 @@ cd "$repo_root"
 echo "Checking pre-tag readiness..."
 
 current_branch="$(git branch --show-current)"
-if [[ "$current_branch" != main ]]; then
+# WHY: A read-only readiness check must not create bytecode before checking cleanliness.
+if [[ -z "$current_branch" ]] || ! python3 -B -m eng.release.lines inspect \
+    --source-ref "refs/heads/$current_branch" --purpose qualification >/dev/null; then
     branch_display="${current_branch:-detached HEAD}"
-    echo "  [FAIL] Branch: expected main, found $branch_display." >&2
+    echo "  [FAIL] Branch: expected an eligible exact release line, found $branch_display." >&2
     exit 1
 fi
-echo "  [PASS] Branch: main"
+echo "  [PASS] Branch: $current_branch"
 
 # Porcelain output is stable for scripts and omits optional branch headers.
 if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
@@ -27,18 +29,18 @@ if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
 fi
 echo "  [PASS] Working tree: clean"
 
-if ! git fetch --quiet origin main --tags; then
-    echo "  [FAIL] Remote state: could not fetch origin/main and tags." >&2
+if ! git fetch --quiet origin "$current_branch" --tags; then
+    echo "  [FAIL] Remote state: could not fetch origin/$current_branch and tags." >&2
     exit 1
 fi
 
 release_commit="$(git rev-parse HEAD)"
-origin_commit="$(git rev-parse origin/main)"
+origin_commit="$(git rev-parse "origin/$current_branch")"
 if [[ "$release_commit" != "$origin_commit" ]]; then
-    echo "  [FAIL] Source commit: HEAD $release_commit does not match origin/main $origin_commit." >&2
+    echo "  [FAIL] Source commit: HEAD $release_commit does not match origin/$current_branch $origin_commit." >&2
     exit 1
 fi
-echo "  [PASS] Source commit: $release_commit matches origin/main"
+echo "  [PASS] Source commit: $release_commit matches origin/$current_branch"
 
 if git tag --points-at "$release_commit" \
     | grep -Eq '^v[0-9]+[.][0-9]+[.][0-9]+([-.][0-9A-Za-z.-]+)?$'; then

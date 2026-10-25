@@ -89,6 +89,8 @@ internal static class SqliteSafeMigrationOperationClassifier
     {
         SafeMigrationOperation safe => TableName(safe.Intent),
         ColumnOperation column => column.Table,
+        DropColumnOperation column => column.Table,
+        RenameColumnOperation column => column.Table,
         CreateTableOperation table => table.Name,
         DropTableOperation table => table.Name,
         RenameTableOperation table => table.Name,

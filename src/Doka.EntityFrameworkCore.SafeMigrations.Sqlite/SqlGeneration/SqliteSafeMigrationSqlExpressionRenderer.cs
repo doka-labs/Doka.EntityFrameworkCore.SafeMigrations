@@ -1,6 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 
-/// <summary>Renders bounded structured expressions through SQLite type mappings.</summary>
+/// <summary>Renders structured expressions through SQLite type mappings without recursive traversal.</summary>
 internal sealed class SqliteSafeMigrationSqlExpressionRenderer
 {
     internal const string ProviderId = "microsoft_sqlite";
@@ -45,42 +45,93 @@ internal sealed class SqliteSafeMigrationSqlExpressionRenderer
     {
         ArgumentNullException.ThrowIfNull(expression);
 
-        return expression switch
+        var pending = default(SafeMigrationWorkStack<ExpressionFrame>);
+
+        try
         {
-            SafeMigrationSqlIdentifierExpression => null,
-            SafeMigrationSqlLiteralExpression value => LiteralUnsupportedFeature(value),
-            SafeMigrationSqlUnaryExpression value => GetUnsupportedFeature(value.Operand),
-            SafeMigrationSqlBinaryExpression value =>
-                GetUnsupportedFeature(value.Left) ?? GetUnsupportedFeature(value.Right),
-            SafeMigrationSqlNullTestExpression value => GetUnsupportedFeature(value.Operand),
-            SafeMigrationSqlBetweenExpression value => GetUnsupportedFeature(value.Operand)
-                ?? GetUnsupportedFeature(value.Lower) ?? GetUnsupportedFeature(value.Upper),
-            SafeMigrationSqlInExpression value => GetUnsupportedFeature(value.Operand)
-                ?? value
-                    .Values
-                    .Select(GetUnsupportedFeature)
-                    .FirstOrDefault(static result => result is not null),
-            SafeMigrationSqlFunctionExpression value => value
-                .Arguments
-                .Select(GetUnsupportedFeature)
-                .FirstOrDefault(static result => result is not null),
-            SafeMigrationSqlCastExpression value =>
-                IsStoreType(value.StoreType) ? GetUnsupportedFeature(value.Operand) : "structured_cast_type",
-            SafeMigrationSqlCollateExpression { Schema: not null } => "schema_qualified_expression_collation",
-            SafeMigrationSqlCollateExpression value => GetUnsupportedFeature(value.Operand),
-            SafeMigrationSqlCurrentValueExpression { Precision: not null } => "current_value_precision",
-            SafeMigrationSqlCurrentValueExpression => null,
-            SafeMigrationSqlProviderFragmentExpression value =>
-                StringComparer.Ordinal.Equals(value.ProviderId, ProviderId) ? null : "provider_fragment_mismatch",
-            SafeMigrationSqlOpaqueExpression => null,
-            _ => throw new UnreachableException(),
-        };
+            while (true)
+            {
+                var feature = LocalUnsupportedFeature(expression);
+                if (feature is not null)
+                {
+                    return feature;
+                }
+
+                var child = GetChild(expression, 0);
+                if (child is not null)
+                {
+                    // WHY: Retain only the sibling cursor; wide lists must not rent one frame per item.
+                    if (GetChild(expression, 1) is not null)
+                    {
+                        pending.Push(new(expression, 1));
+                    }
+
+                    expression = child;
+                    continue;
+                }
+
+                if (!pending.TryPop(out var frame))
+                {
+                    return null;
+                }
+
+                expression = GetChild(frame.Expression, frame.Position)!;
+                frame.Position++;
+                if (GetChild(frame.Expression, frame.Position) is not null)
+                {
+                    pending.Push(frame);
+                }
+            }
+        }
+        finally
+        {
+            pending.Dispose();
+        }
     }
 
+    /// <summary>Renders one child at a time, preserving the original left-to-right mapping order.</summary>
     private void Append(
         StringBuilder builder,
         SafeMigrationSqlExpression expression
     )
+    {
+        var pending = default(SafeMigrationWorkStack<ExpressionFrame>);
+        var frame = new ExpressionFrame(expression, 0);
+
+        try
+        {
+            while (true)
+            {
+                if (frame.Position == 0)
+                {
+                    AppendPrefix(builder, frame.Expression);
+                }
+
+                var child = GetChild(frame.Expression, frame.Position);
+                if (child is not null)
+                {
+                    AppendChildSeparator(builder, frame.Expression, frame.Position);
+                    frame.Position++;
+                    pending.Push(frame);
+                    frame = new(child, 0);
+                    continue;
+                }
+
+                AppendSuffix(builder, frame.Expression);
+                if (!pending.TryPop(out frame))
+                {
+                    return;
+                }
+            }
+        }
+        finally
+        {
+            pending.Dispose();
+        }
+    }
+
+    /// <summary>Writes node prefixes and validates node-local boundaries before visiting any operands.</summary>
+    private void AppendPrefix(StringBuilder builder, SafeMigrationSqlExpression expression)
     {
         switch (expression)
         {
@@ -88,53 +139,43 @@ internal sealed class SqliteSafeMigrationSqlExpressionRenderer
                 builder.AppendJoin('.', value.Parts.Select(_sqlGenerationHelper.DelimitIdentifier));
                 break;
             case SafeMigrationSqlLiteralExpression value:
-                AppendLiteral(builder, value);
+                if (!value.NumericSourceToken.IsEmpty)
+                {
+                    builder.Append(value.NumericSourceToken.Span);
+                }
+                else
+                {
+                    AppendLiteral(builder, value);
+                }
+
                 break;
             case SafeMigrationSqlUnaryExpression value:
                 builder.Append(value.Operator == SafeMigrationSqlUnaryOperator.Not ? "(NOT " : "(-");
-                Append(builder, value.Operand);
-                builder.Append(')');
                 break;
-            case SafeMigrationSqlBinaryExpression value:
+            case SafeMigrationSqlBinaryExpression or SafeMigrationSqlNullTestExpression
+                or SafeMigrationSqlBetweenExpression or SafeMigrationSqlInExpression:
                 builder.Append('(');
-                Append(builder, value.Left);
-                builder
-                    .Append(' ')
-                    .Append(BinaryOperator(value.Operator))
-                    .Append(' ');
-                Append(builder, value.Right);
-                builder.Append(')');
-                break;
-            case SafeMigrationSqlNullTestExpression value:
-                builder.Append('(');
-                Append(builder, value.Operand);
-                builder.Append(value.Negated ? " IS NOT NULL)" : " IS NULL)");
-                break;
-            case SafeMigrationSqlBetweenExpression value:
-                builder.Append('(');
-                Append(builder, value.Operand);
-                builder.Append(value.Negated ? " NOT BETWEEN " : " BETWEEN ");
-                Append(builder, value.Lower);
-                builder.Append(" AND ");
-                Append(builder, value.Upper);
-                builder.Append(')');
-                break;
-            case SafeMigrationSqlInExpression value:
-                builder.Append('(');
-                Append(builder, value.Operand);
-                builder.Append(value.Negated ? " NOT IN (" : " IN (");
-                AppendList(builder, value.Values);
-                builder.Append("))");
                 break;
             case SafeMigrationSqlFunctionExpression value:
                 builder
                     .Append(value.Name)
                     .Append('(');
-                AppendList(builder, value.Arguments);
-                builder.Append(')');
                 break;
             case SafeMigrationSqlCastExpression value:
-                AppendCast(builder, value.Operand, value.StoreType);
+                if (value.UsesSqlServerConvert)
+                {
+                    throw new NotSupportedException("Type-first CONVERT syntax requires SQL Server.");
+                }
+
+                if (!IsStoreType(value.StoreType))
+                {
+                    throw new NotSupportedException($"SQLite store type '{value.StoreType}' is not safe to render.");
+                }
+
+                builder.Append("CAST(");
+                break;
+            case SafeMigrationSqlCaseExpression:
+                builder.Append("CASE");
                 break;
             case SafeMigrationSqlCollateExpression value:
                 if (value.Schema is not null)
@@ -143,11 +184,6 @@ internal sealed class SqliteSafeMigrationSqlExpressionRenderer
                 }
 
                 builder.Append('(');
-                Append(builder, value.Operand);
-                builder
-                    .Append(" COLLATE ")
-                    .Append(_sqlGenerationHelper.DelimitIdentifier(value.Name))
-                    .Append(')');
                 break;
             case SafeMigrationSqlCurrentValueExpression value:
                 if (value.Precision is not null)
@@ -179,6 +215,118 @@ internal sealed class SqliteSafeMigrationSqlExpressionRenderer
             default:
                 throw new UnreachableException();
         }
+    }
+
+    /// <summary>Writes separators exactly when their preceding operand has completed.</summary>
+    private static void AppendChildSeparator(
+        StringBuilder builder,
+        SafeMigrationSqlExpression expression,
+        int position
+    )
+    {
+        switch (expression)
+        {
+            case SafeMigrationSqlBinaryExpression value when position == 1:
+                builder.Append(' ').Append(BinaryOperator(value.Operator)).Append(' ');
+                break;
+            case SafeMigrationSqlBetweenExpression value when position == 1:
+                builder.Append(value.Negated ? " NOT BETWEEN " : " BETWEEN ");
+                break;
+            case SafeMigrationSqlBetweenExpression when position == 2:
+                builder.Append(" AND ");
+                break;
+            case SafeMigrationSqlInExpression value when position == 1:
+                builder.Append(value.Negated ? " NOT IN (" : " IN (");
+                break;
+            case SafeMigrationSqlInExpression when position > 1:
+            case SafeMigrationSqlFunctionExpression when position > 0:
+                builder.Append(", ");
+                break;
+            case SafeMigrationSqlCaseExpression value:
+                builder.Append(position / 2 == value.WhenClauses.Count
+                    ? " ELSE "
+                    : position % 2 == 0 ? " WHEN " : " THEN ");
+                break;
+        }
+    }
+
+    /// <summary>Writes suffixes after every child without changing parenthesization or identifier quoting.</summary>
+    private void AppendSuffix(StringBuilder builder, SafeMigrationSqlExpression expression)
+    {
+        switch (expression)
+        {
+            case SafeMigrationSqlUnaryExpression or SafeMigrationSqlBinaryExpression
+                or SafeMigrationSqlBetweenExpression or SafeMigrationSqlFunctionExpression:
+                builder.Append(')');
+                break;
+            case SafeMigrationSqlNullTestExpression value:
+                builder.Append(value.Negated ? " IS NOT NULL)" : " IS NULL)");
+                break;
+            case SafeMigrationSqlInExpression:
+                builder.Append("))");
+                break;
+            case SafeMigrationSqlCastExpression value:
+                builder.Append(" AS ").Append(value.StoreType).Append(')');
+                break;
+            case SafeMigrationSqlCaseExpression:
+                builder.Append(" END");
+                break;
+            case SafeMigrationSqlCollateExpression value:
+                builder.Append(" COLLATE ").Append(_sqlGenerationHelper.DelimitIdentifier(value.Name)).Append(')');
+                break;
+        }
+    }
+
+    /// <summary>Enumerates one immutable child by ordinal without allocating or flattening sibling lists.</summary>
+    private static SafeMigrationSqlExpression? GetChild(SafeMigrationSqlExpression expression, int position) =>
+        expression switch
+        {
+            SafeMigrationSqlUnaryExpression value when position == 0 => value.Operand,
+            SafeMigrationSqlBinaryExpression value when position == 0 => value.Left,
+            SafeMigrationSqlBinaryExpression value when position == 1 => value.Right,
+            SafeMigrationSqlNullTestExpression value when position == 0 => value.Operand,
+            SafeMigrationSqlBetweenExpression value when position == 0 => value.Operand,
+            SafeMigrationSqlBetweenExpression value when position == 1 => value.Lower,
+            SafeMigrationSqlBetweenExpression value when position == 2 => value.Upper,
+            SafeMigrationSqlInExpression value when position == 0 => value.Operand,
+            SafeMigrationSqlInExpression value when position <= value.Values.Count => value.Values[position - 1],
+            SafeMigrationSqlFunctionExpression value when position < value.Arguments.Count => value.Arguments[position],
+            SafeMigrationSqlCastExpression value when position == 0 => value.Operand,
+            SafeMigrationSqlCollateExpression value when position == 0 => value.Operand,
+            SafeMigrationSqlCaseExpression value when position / 2 < value.WhenClauses.Count => position % 2 == 0
+                ? value.WhenClauses[position / 2].Condition
+                : value.WhenClauses[position / 2].Result,
+            SafeMigrationSqlCaseExpression value when position % 2 == 0
+                && position / 2 == value.WhenClauses.Count => value.ElseResult,
+            _ => null,
+        };
+
+    /// <summary>Checks only the current node so validation retains its original first-failure behavior.</summary>
+    private string? LocalUnsupportedFeature(SafeMigrationSqlExpression expression) => expression switch
+    {
+        SafeMigrationSqlLiteralExpression value => LiteralUnsupportedFeature(value),
+        SafeMigrationSqlCastExpression { UsesSqlServerConvert: true } => "structured_convert_dialect",
+        SafeMigrationSqlCastExpression value when !IsStoreType(value.StoreType) => "structured_cast_type",
+        SafeMigrationSqlCollateExpression { Schema: not null } => "schema_qualified_expression_collation",
+        SafeMigrationSqlCurrentValueExpression { Precision: not null } => "current_value_precision",
+        SafeMigrationSqlProviderFragmentExpression value =>
+            StringComparer.Ordinal.Equals(value.ProviderId, ProviderId) ? null : "provider_fragment_mismatch",
+        SafeMigrationSqlIdentifierExpression or SafeMigrationSqlUnaryExpression or SafeMigrationSqlBinaryExpression
+            or SafeMigrationSqlNullTestExpression or SafeMigrationSqlBetweenExpression or SafeMigrationSqlInExpression
+            or SafeMigrationSqlFunctionExpression or SafeMigrationSqlCastExpression or SafeMigrationSqlCollateExpression
+            or SafeMigrationSqlCaseExpression or SafeMigrationSqlCurrentValueExpression
+            or SafeMigrationSqlOpaqueExpression => null,
+        _ => throw new UnreachableException(),
+    };
+
+    /// <summary>Retains the next child so traversal storage grows with depth rather than list width.</summary>
+    private struct ExpressionFrame(SafeMigrationSqlExpression expression, int position)
+    {
+        /// <summary>Gets the node whose ordered children are being visited.</summary>
+        public SafeMigrationSqlExpression Expression { get; } = expression;
+
+        /// <summary>Gets or sets the next child ordinal.</summary>
+        public int Position { get; set; } = position;
     }
 
     private void AppendLiteral(
@@ -217,25 +365,6 @@ internal sealed class SqliteSafeMigrationSqlExpressionRenderer
             .Append(')');
     }
 
-    private void AppendCast(
-        StringBuilder builder,
-        SafeMigrationSqlExpression operand,
-        string storeType
-    )
-    {
-        if (!IsStoreType(storeType))
-        {
-            throw new NotSupportedException($"SQLite store type '{storeType}' is not safe to render.");
-        }
-
-        builder.Append("CAST(");
-        Append(builder, operand);
-        builder
-            .Append(" AS ")
-            .Append(storeType)
-            .Append(')');
-    }
-
     private string? LiteralUnsupportedFeature(
         SafeMigrationSqlLiteralExpression expression
     ) => expression.StoreType is not null && !IsStoreType(expression.StoreType)
@@ -245,22 +374,6 @@ internal sealed class SqliteSafeMigrationSqlExpressionRenderer
         && _typeMappingSource.FindMapping(expression.Value.GetType()) is null
             ? "structured_literal_mapping"
             : null;
-
-    private void AppendList(
-        StringBuilder builder,
-        IReadOnlyList<SafeMigrationSqlExpression> values
-    )
-    {
-        for (var index = 0; index < values.Count; index++)
-        {
-            if (index > 0)
-            {
-                builder.Append(", ");
-            }
-
-            Append(builder, values[index]);
-        }
-    }
 
     private static bool IsStoreType(
         string storeType

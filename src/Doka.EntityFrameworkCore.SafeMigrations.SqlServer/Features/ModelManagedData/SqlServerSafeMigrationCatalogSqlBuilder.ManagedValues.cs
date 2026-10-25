@@ -16,8 +16,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return true;
         }
 
-        if (value is float single && !float.IsFinite(single)
-            || value is double number && !double.IsFinite(number))
+        if ((value is float single && !float.IsFinite(single))
+            || (value is double number && !double.IsFinite(number)))
         {
             return false;
         }
@@ -54,12 +54,15 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     NumberStyles.None, CultureInfo.InvariantCulture, out var precision))
             {
                 var quantum = 1L;
+                // WHY: Scale by the exact remaining temporal precision digit count.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var ordinal = precision; ordinal < 7; ordinal++)
                 {
                     quantum *= 10;
                 }
 
-                var limit = DateTime.MaxValue.Ticks - quantum / 2;
+                var limit = DateTime.MaxValue.Ticks - (quantum / 2);
 
                 return instant.Ticks <= limit
                     && (value is not DateTimeOffset dateTimeOffset || dateTimeOffset.UtcTicks <= limit);
@@ -121,6 +124,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         }
 
         var bound = 1m;
+        // WHY: Build the exact decimal integral-digit bound without floating-point powers.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < integralDigits; ordinal++)
         {
             bound *= 10;
@@ -152,9 +158,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return "1 = 0";
         }
 
-        if (value is string { Length: > 4_000 } && IsCharacterManagedStoreType(storeType)
-            || value is byte[] { Length: > 8_000 }
-                && storeType.Trim().Equals("varbinary(max)", StringComparison.OrdinalIgnoreCase))
+        if ((value is string { Length: > 4_000 } && IsCharacterManagedStoreType(storeType))
+            || (value is byte[] { Length: > 8_000 }
+                && storeType.Trim().Equals("varbinary(max)", StringComparison.OrdinalIgnoreCase)))
         {
             // WHY: TRY_CAST limits large character inputs. Same-family LOB
             // casts cannot overflow; separate size/code-page predicates retain
@@ -200,6 +206,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         }
 
         var literal = UnicodeManagedLiteral(text, externalParameter: true);
+
         // WHY: Applying COLLATE after conversion cannot repair code-page loss.
         // The input must already carry the destination encoding contract.
         var input = "(" + literal + " COLLATE " + (collation ?? "DATABASE_DEFAULT") + ")";

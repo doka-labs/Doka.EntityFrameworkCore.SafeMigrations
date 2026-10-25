@@ -78,6 +78,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     {
         HashSet<LiveColumnIdentity>? relevant = null;
         var hasIndex = false;
+        // WHY: Select index inputs using each operation's matching analysis ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -104,8 +107,12 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         }
 
         var prior = new Dictionary<LiveColumnIdentity, HashSet<long>>();
+        HashSet<LiveColumnIdentity>? priorCases = null;
         var requested = new HashSet<IndexInputRequest>();
         var requests = new List<IndexInputRequest>();
+        // WHY: Advance authored column state in operation order before index capture.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -128,6 +135,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             else if (intent is EnsureColumnIntent column)
             {
                 Record(column.Table, column.Schema, column.Definition);
+                if (PostgreSqlSafeMigrationCatalogSqlBuilder.RequiresGeneratedCaseInputCapture(column))
+                {
+                    (priorCases ??= []).Add(LiveColumnKey(column.Table, column.Schema, column.Definition.Name));
+                }
             }
             else if (intent is AlterColumnIntent altered)
             {
@@ -152,6 +163,16 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             }
 
             Add(IndexInputIdentity(0, index.Definition, null, null));
+            if (!index.Definition.Unique && index.Definition.Keys.Any(key =>
+                PostgreSqlSafeMigrationCatalogSqlBuilder.IndexPhysicalMember(key) is { } member
+                && priorCases?.Contains(LiveColumnKey(index.Definition.Table,
+                    index.Definition.Schema, member.Name)) == true))
+            {
+                // WHY: Member absence cannot prove availability in PostgreSQL's
+                // shared schema relation namespace. Capture that separate fact
+                // in the existing bounded metadata batch, not another roundtrip.
+                Add(GeneratedIndexAbsenceIdentity(index.Definition));
+            }
             foreach (var key in index.Definition.Keys)
             {
                 if (PostgreSqlSafeMigrationCatalogSqlBuilder.IndexPhysicalMember(key) is not { } member
@@ -256,6 +277,14 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     : parameters.AddString(request.OperatorClassSchema), request.RequiredFlags);
 
             var proof = PostgreSqlIndexInputEligibilitySql.Render(input);
+            if (request.AbsentRelationName is not null)
+            {
+                proof = "NOT EXISTS (SELECT 1 FROM pg_catalog.pg_class rel JOIN pg_catalog.pg_namespace ns "
+                    + "ON ns.oid = rel.relnamespace WHERE ns.nspname = "
+                    + (request.OwnerSchema is null ? "pg_catalog.current_schema()"
+                        : parameters.AddString(request.OwnerSchema))
+                    + " AND rel.relname = " + parameters.AddString(request.AbsentRelationName) + ")";
+            }
             if (request.MemberSchema is not null)
             {
                 var owner = request.OwnerSchema is null
@@ -311,6 +340,14 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             member?.PartCount == 3 ? definition.Schema : null,
             member?.PartCount == 3 ? member.Value.Schema : null);
     }
+
+    /// <summary>Keys a native schema-relation-name absence proof inside the existing input protocol.</summary>
+    private IndexInputRequest GeneratedIndexAbsenceIdentity(ExpectedIndexDefinition definition)
+        => IndexInputIdentity(0, definition, null, null) with
+        {
+            OwnerSchema = PostgreSqlSafeMigrationSchemaIdentity.Normalize(definition.Schema, _currentSchema),
+            AbsentRelationName = definition.Name,
+        };
 
     /// <summary>Rejects another table's syntactic qualifier without inferring a same-named local member.</summary>
     private static bool IndexMemberTableMatches(ExpectedIndexDefinition definition,
@@ -416,6 +453,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         }
 
         HashSet<LiveColumnIdentity>? relevant = null;
+        // WHY: Keep provider proposals bound to their requested operation ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var requestedOrdinal = 0; requestedOrdinal < operations.Count; requestedOrdinal++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -532,5 +572,5 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     /// </summary>
     private readonly record struct IndexInputRequest(long TypeOid, string Method, string? OperatorClassName,
         string? OperatorClassSchema, PostgreSqlIndexRequiredFlags RequiredFlags,
-        string? OwnerSchema, string? MemberSchema);
+        string? OwnerSchema, string? MemberSchema, string? AbsentRelationName = null);
 }

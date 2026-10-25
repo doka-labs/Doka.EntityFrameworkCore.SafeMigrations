@@ -7,6 +7,91 @@ internal static class MySqlExpressionCanonicalizer
         bool IsTopLevelBooleanOperator = false
     );
 
+    /// <summary>Retains literal roles before MySQL converts quotes into catalog-only escaped delimiters.</summary>
+    internal static IReadOnlyList<MySqlExpressionCatalogCandidate> BuildComparisonCandidates(
+        string expression,
+        bool includeMySqlEncodedDisplay
+    )
+    {
+        var displays = BuildCatalogDisplayCandidates(expression, includeMySqlEncodedDisplay: false);
+        var candidates = new List<MySqlExpressionCatalogCandidate>(displays.Count * 2);
+        foreach (var display in displays)
+        {
+            candidates.Add(CreateComparisonCandidate(display));
+            candidates.Add(
+                CreateComparisonCandidate(
+                    display,
+                    mySqlEncoded: includeMySqlEncodedDisplay,
+                    mariaDbEscaped: !includeMySqlEncodedDisplay));
+        }
+
+        return candidates;
+    }
+
+    /// <summary>Converts one expected SQL display without reparsing the resulting encoded catalog text.</summary>
+    internal static MySqlExpressionCatalogCandidate CreateComparisonCandidate(
+        string expression,
+        bool mySqlEncoded = false,
+        bool mariaDbEscaped = false
+    )
+    {
+        var builder = new StringBuilder(expression.Length);
+        List<MySqlExpressionCatalogLiteral>? literals = null;
+        var bytes = 0;
+        // WHY: Advance exact UTF-16 offsets across quoted tokens so escapes cannot expose a false SQL boundary.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var index = 0; index < expression.Length;)
+        {
+            var start = index;
+            var quote = expression[index];
+            if (quote is not ('\'' or '"' or '`'))
+            {
+                do
+                {
+                    index++;
+                } while (index < expression.Length
+                         && expression[index] is not ('\'' or '"' or '`'));
+
+                var part = expression.AsSpan(start, index - start);
+                builder.Append(part);
+                bytes += Encoding.UTF8.GetByteCount(part);
+                continue;
+            }
+
+            index = FindQuotedEnd(expression, index, quote);
+            var token = expression[start..index];
+            var rendered = mySqlEncoded
+                ? quote == '`' ? RenderMySqlCatalogIdentifier(token) : RenderMySqlCatalogString(token, quote)
+                : mariaDbEscaped && quote != '`'
+                    ? RenderMariaDbCatalogString(token, quote)
+                    : token;
+
+            var length = Encoding.UTF8.GetByteCount(rendered);
+            if (quote != '`')
+            {
+                (literals ??= []).Add(new MySqlExpressionCatalogLiteral(bytes + 1, length, rendered));
+            }
+
+            builder.Append(rendered);
+            bytes += length;
+        }
+
+        return new MySqlExpressionCatalogCandidate(
+            builder.ToString(),
+            literals is null ? Array.Empty<MySqlExpressionCatalogLiteral>() : literals.ToArray());
+    }
+
+    /// <summary>Serializes a proven quoted value in MariaDB's native apostrophe-escape display form.</summary>
+    private static string RenderMariaDbCatalogString(
+        string token,
+        char quote
+    ) => "'"
+        + token[1..^1]
+            .Replace(new string(quote, 2), quote.ToString(), StringComparison.Ordinal)
+            .Replace("'", "\\'", StringComparison.Ordinal)
+        + "'";
+
     public static IReadOnlyList<string> BuildCatalogDisplayCandidates(
         string quotedExpression,
         bool includeMySqlEncodedDisplay
@@ -78,7 +163,9 @@ internal static class MySqlExpressionCanonicalizer
                 term.Clear();
             }
 
-            var finalTerm = term.ToString().Trim();
+            var finalTerm = term
+                .ToString()
+                .Trim();
             unwrapped
                 .Append(' ')
                 .Append(RemoveBalancedOuterParentheses(finalTerm));
@@ -101,9 +188,13 @@ internal static class MySqlExpressionCanonicalizer
     {
         var tokens = new List<CatalogToken>();
         var depth = 0;
+        var caseDepth = 0;
 
         // Boolean terms are regrouped only at depth zero; nested predicates
         // must retain their original parenthesis structure.
+        // WHY: Advance exact UTF-16 offsets across quoted tokens so escapes cannot expose a false SQL boundary.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < expression.Length;)
         {
             var current = expression[index];
@@ -168,7 +259,21 @@ internal static class MySqlExpressionCanonicalizer
                 var word = expression[start..index]
                     .ToLowerInvariant();
 
-                tokens.Add(new CatalogToken(word, depth == 0 && word is "and" or "or"));
+                if (word == "case")
+                {
+                    caseDepth++;
+                }
+                else if (word == "end"
+                         && caseDepth > 0)
+                {
+                    caseDepth--;
+                }
+
+                // WHY: AND/OR inside searched CASE conditions do not split
+                // the enclosing expression, even without parentheses in the
+                // native MariaDB display. Quoted CASE/END tokens never enter
+                // this branch and therefore cannot change parser depth.
+                tokens.Add(new CatalogToken(word, depth == 0 && caseDepth == 0 && word is "and" or "or"));
                 continue;
             }
 
@@ -179,7 +284,8 @@ internal static class MySqlExpressionCanonicalizer
         return tokens;
     }
 
-    private static int FindQuotedEnd(
+    /// <summary>Shares quote boundaries with native comparisons without reinterpreting token contents.</summary>
+    internal static int FindQuotedEnd(
         string expression,
         int index,
         char quote
@@ -224,7 +330,7 @@ internal static class MySqlExpressionCanonicalizer
         // MySQL catalog candidate; the canonical token remains authoritative,
         // and MariaDB does not opt into this candidate path.
         var escaped = token[1..^1]
-            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\\", @"\\", StringComparison.Ordinal)
             .Replace("'", "\\'", StringComparison.Ordinal);
 
         return $"`{Encoding.Latin1.GetString(Encoding.UTF8.GetBytes(escaped))}`";
@@ -240,7 +346,10 @@ internal static class MySqlExpressionCanonicalizer
         var inner = token[1..^1]
             .Replace(new string(quote, 2), quote.ToString(), StringComparison.Ordinal)
             .Replace("\\", "\\\\", StringComparison.Ordinal)
-            .Replace("'", "\\'", StringComparison.Ordinal);
+            // WHY: MySQL's catalog display escapes the literal's own quote
+            // before escaping its surrounding serialized string. A value
+            // apostrophe therefore has three backslashes, not the delimiter's one.
+            .Replace("'", @"\\\'", StringComparison.Ordinal);
 
         var rendered = Encoding.Latin1.GetString(Encoding.UTF8.GetBytes(inner));
 
@@ -251,13 +360,11 @@ internal static class MySqlExpressionCanonicalizer
         string expression
     )
     {
-        while (expression.Length >= 2
-               && expression[0] == '('
+        while (expression is ['(', _, ..]
                && expression[^1] == ')'
                && OuterParenthesesEncloseExpression(expression))
         {
-            expression = expression[1..^1]
-                .Trim();
+            expression = expression[1..^1].Trim();
         }
 
         return expression;
@@ -269,6 +376,9 @@ internal static class MySqlExpressionCanonicalizer
     {
         var depth = 0;
         var quote = '\0';
+        // WHY: Track quote escapes and parenthesis depth at exact UTF-16 offsets before slicing SQL.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < expression.Length; index++)
         {
             var current = expression[index];

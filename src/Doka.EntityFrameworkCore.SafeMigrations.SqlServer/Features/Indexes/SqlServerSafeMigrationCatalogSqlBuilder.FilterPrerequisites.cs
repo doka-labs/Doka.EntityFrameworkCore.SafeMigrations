@@ -24,6 +24,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // literal's source encoding without rewriting the baseline predicate.
         var strings = new Queue<string>();
         var parsingCopy = sql.ToCharArray();
+        // WHY: Track quote lookahead and UTF-16 offsets in the mutable parsing copy.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var position = 0; position < sql.Length; position++)
         {
             if (sql[position] == '`')
@@ -88,18 +91,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return null;
         }
 
-        return PreserveLiteralType(parsed);
-
-        SafeMigrationSqlExpression PreserveLiteralType(SafeMigrationSqlExpression expression) => expression switch
-        {
-            SafeMigrationSqlLiteralExpression { Value: string } literal
-                => new SafeMigrationSqlLiteralExpression(literal.Value, strings.Dequeue()),
-            SafeMigrationSqlBinaryExpression binary => new SafeMigrationSqlBinaryExpression(
-                PreserveLiteralType(binary.Left), binary.Operator, PreserveLiteralType(binary.Right)),
-            SafeMigrationSqlInExpression predicate => new SafeMigrationSqlInExpression(
-                predicate.Operand, predicate.Values.Select(PreserveLiteralType), predicate.Negated),
-            _ => expression,
-        };
+        return RewriteFilter(parsed, new LiteralTypeFilterRewriter(strings));
     }
 
     private static IEnumerable<string> IndexFilterColumns(
@@ -157,6 +149,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         foreach (var type in new[] { "datetime2", "datetimeoffset", "time" })
         {
+            // WHY: Cover every native temporal scale in its finite supported domain.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var scale = 0; scale <= 7; scale++)
             {
                 Add(type, type + "(" + scale.ToString(CultureInfo.InvariantCulture) + ")",
@@ -198,6 +193,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         if (TryGetFilterDecimalValue(literal.Value, out var numeric))
         {
+            // WHY: Cover each native numeric scale before finding its minimum safe precision.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var scale = 0; scale <= 38; scale++)
             {
                 var precision = Math.Max(1, scale);

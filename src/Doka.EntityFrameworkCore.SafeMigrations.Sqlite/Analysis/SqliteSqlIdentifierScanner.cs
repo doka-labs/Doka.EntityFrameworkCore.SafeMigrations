@@ -5,6 +5,46 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 /// </summary>
 internal static class SqliteSqlIdentifierScanner
 {
+    /// <summary>Contains SQLite's five SQL whitespace characters, excluding high-byte identifier characters.</summary>
+    internal const string WhitespaceCharacters = " \t\n\f\r";
+
+    /// <summary>Determines whether a character is native SQL whitespace rather than part of an identifier.</summary>
+    internal static bool IsWhitespace(char value) => value is ' ' or '\t' or '\n' or '\f' or '\r';
+
+    /// <summary>
+    /// Detects unquoted native identifier characters a generic Unicode-whitespace parser would erase.
+    /// </summary>
+    /// <param name="sql">The complete native SQLite expression source.</param>
+    /// <returns>Whether bounded generic parsing cannot certify the original native identifier boundaries.</returns>
+    internal static bool HasNonNativeWhitespace(string sql)
+    {
+        var position = 0;
+        while (position < sql.Length)
+        {
+            SkipTrivia(sql, ref position);
+            if (position >= sql.Length)
+            {
+                break;
+            }
+
+            var character = sql[position];
+            if (character is '\'' or '"' or '`' or '[')
+            {
+                SkipQuoted(sql, ref position, character, character == '[' ? ']' : character);
+                continue;
+            }
+
+            if (character >= '\u0080' && char.IsWhiteSpace(character))
+            {
+                return true;
+            }
+
+            position++;
+        }
+
+        return false;
+    }
+
     /// <summary>Determines whether SQL contains an unquoted keyword token.</summary>
     /// <param name="sql">The SQLite SQL text to inspect.</param>
     /// <param name="keyword">The keyword to find.</param>
@@ -229,10 +269,17 @@ internal static class SqliteSqlIdentifierScanner
                 break;
             }
 
-            if (TryReadIdentifier(sql, ref position, out var candidate)
-                && SqliteIdentifierComparer.Instance.Equals(candidate, identifier))
+            if (TryReadIdentifier(sql, ref position, out var candidate))
             {
-                return true;
+                if (SqliteIdentifierComparer.Instance.Equals(candidate, identifier))
+                {
+                    return true;
+                }
+
+                // WHY: The token reader already advanced to the next byte.
+                // Skipping that byte can discard a comment or identifier quote
+                // and hide a real dependency in otherwise valid native SQL.
+                continue;
             }
 
             if (position < sql.Length
@@ -400,7 +447,12 @@ internal static class SqliteSqlIdentifierScanner
         // tokens may legally be separated by comments.
         while (position < sql.Length)
         {
-            if (char.IsWhiteSpace(sql[position]))
+            // WHY: SQLite classifies every high-byte character as alphabetic.
+            // Unicode whitespace such as NBSP may therefore be a real operand.
+            // WHY: SQLite also emits a standalone BOM as TK_SPACE. It is
+            // trivia only at token boundaries; embedded BOM bytes remain part
+            // of an identifier and must not enter general trimming policies.
+            if (IsWhitespace(sql[position]) || sql[position] == '\uFEFF')
             {
                 position++;
                 continue;
@@ -412,7 +464,7 @@ internal static class SqliteSqlIdentifierScanner
             {
                 position += 2;
                 while (position < sql.Length
-                       && sql[position] is not '\r' and not '\n')
+                       && sql[position] != '\n')
                 {
                     position++;
                 }

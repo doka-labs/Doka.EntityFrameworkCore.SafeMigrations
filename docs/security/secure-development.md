@@ -41,9 +41,75 @@ The five committed package-project lockfiles define the exact graph used to
 compile and qualify package artifacts. Engineering projects resolve the central
 declarations during CI. Dependabot proposes declaration and package-lockfile
 updates through ordinary pull requests, where the complete quality workflow
-tests every resolved graph. GitHub Automatic Dependency Submission supplies
-resolved base and head snapshots to the hosted
-Dependency Graph. The separate Dependency Review workflow compares the
+tests every resolved graph. Dependency Review separates PR-owned resolution
+from trusted data validation and publication:
+
+- The unprivileged PR workflow resolves the exact base/head revisions in separate
+  read-only jobs using each revision's SDK, then emits its completion signal.
+  Fork and Dependabot PRs use the same path. Native `cache-mode: none` denies
+  cache reads/writes independently of the read-only repository token; MSBuild
+  hooks never execute in the privileged receiver or manual dispatch context.
+- The default-branch `workflow_run` receiver validates the source run, attempt,
+  workflow, repository, current PR, completed source producer jobs and the two
+  unique, nonexpired artifact identities. The five committed product locks remain
+  enforced; engineering graphs resolve the central declarations. Artifacts from
+  contributor execution are untrusted data, never executable receiver code.
+
+The receiver obtains immutable IDs from the authenticated source-run inventory,
+not contributor-provided job outputs. Submission jobs download by exact run and
+artifact ID, never by a mutable name another job could replace. Fresh trusted
+code revalidates bounded, data-only metadata before the
+SHA-pinned official action runs; no restore or contributor code runs with write
+access. Received data stays outside the trusted checkout and the Action's cwd.
+Its explicit `MSBuildBinaryLog` filter reads the sanitized PackageReference
+assets; binlogs, `.env`, NuGet configuration, targets, props and executables are
+not accepted as artifact inputs. Source manifests must match Git blob identities
+from the exact revision tree, and committed lock inventories/hashes must match
+assets. Projects without committed locks do not gain an invented lock guarantee.
+Both revisions use the same detector/correlator and explicit commit/ref inputs;
+original absolute restore paths preserve unchanged manifest identities. The
+receiver publishes the required `dependency-review` check on the validated PR
+head, not on its own default-branch SHA. Failed, cancelled, stale, ambiguous or
+incomplete capture/submission cannot produce a successful review.
+
+Failed-job retries retain each successful producer's original attempt-bound
+artifact; a later failed or skipped producer cannot borrow an earlier success.
+The current source run/attempt and PR identities are still rechecked, and an
+invalid new producer/artifact set must leave an explicit failed PR-head check.
+
+The receiver rechecks head, base and run attempt before publishing success.
+The repository's strict up-to-date required-check policy covers later changes
+to `main`; keep that policy enabled or use an equivalent merge-queue contract.
+This workflow does not change repository settings. GitHub only activates the
+automatic `workflow_run` receiver once it is on `main`. For its first deployment,
+a maintainer can dispatch the existing CI workflow from the reviewed,
+same-repository PR head branch:
+
+```bash
+gh workflow run ci.yml --ref <reviewed-pr-branch> -f dependency-review-pr=<pr-number>
+```
+
+This calls the same data-only receiver, not a reduced review or replacement status.
+It consumes the already completed matching PR run's exact artifacts and never
+repeats contributor restore hooks under manual-dispatch cache authority. Its
+helper requires the selected branch, executing commit and workflow commit to
+match the current open PR head. The original dispatch input and authoritative
+source/receiver run identities must agree; stale or mismatched runs cannot
+publish success. The normal full qualification still runs with read-only
+permissions. Only merge after the actual `dependency-review`, all other required
+checks and reviews pass for the current commit; never disable a required check,
+create a substitute success or grant contributor restore jobs write access.
+A changed PR head requires a new dispatch from its newly reviewed commit.
+This manual entry deliberately rejects fork heads; after deployment to `main`,
+ordinary PR, Dependabot and fork runs use the automatic path and require no
+manual snapshot repair.
+GitHub's own first-time fork approval policy remains in force; this handoff does
+not bypass it.
+
+GitHub's independent automatic submission may still run, but is not the
+authority for whether a particular base/head pair has matching snapshots.
+Explicit submissions have precedence per manifest; the hosted warning header
+must still be empty before success is claimed. The comparison job reviews the
 pull-request delta with the official action, rejects new high-or-critical
 vulnerabilities and dependencies outside the approved SPDX license set or the
 two exact [package exceptions](#sql-server-dependency-license-exceptions), and
@@ -60,6 +126,16 @@ affected production, development, action, and container dependencies against
 primary advisories. Triage relevant alerts to resolution with release impact,
 never by treating a successful restore or empty delta as proof that no
 vulnerability exists.
+
+The approved SPDX set includes `PostgreSQL`, used by the existing Npgsql packages.
+It does not approve unknown licenses. Doka declares MIT; missing hosted license
+metadata remains visible under the pinned review action's existing behavior,
+without a Doka-specific package waiver, downloader or second license verifier.
+The official submission action currently downloads the latest Microsoft
+Component Detection executable; its action SHA alone does not pin that tool.
+Record the actual detector version with hosted evidence. Local fixture tests
+and source configuration do not prove GitHub accepted the snapshots or that a
+fork completed the hosted handoff; the hosted comparison gate remains mandatory.
 
 An EF Design or Tools update also crosses the source-generation trust boundary.
 Re-run strict and legacy scaffolding for every provider, compile the generated
@@ -78,8 +154,16 @@ Only the following versions have a repository-specific license exception:
 
 | NuGet package | Approved version | Reviewed vendor terms |
 | --- | --- | --- |
-| Microsoft.Data.SqlClient.SNI.runtime | 6.0.2 | [Package license](https://www.nuget.org/packages/Microsoft.Data.SqlClient.SNI.runtime/6.0.2/License) |
+| Microsoft.Data.SqlClient.SNI.runtime | 6.0.3 | [Package license](https://www.nuget.org/packages/Microsoft.Data.SqlClient.SNI.runtime/6.0.3/License) |
 | Microsoft.Identity.Client.NativeInterop | 0.20.6 | [Package license](https://www.nuget.org/packages/Microsoft.Identity.Client.NativeInterop/0.20.6/License) |
+
+The 2026-10-20 EF Core 10.0.13 update resolves SqlClient 6.1.7 and SNI 6.0.3.
+The SNI 6.0.3 package's `LICENSE.txt` is byte-identical to the previously
+reviewed 6.0.2 file; both have SHA-256
+`9335e8bad875dd7be4eebd55d2335eb6433d1cea61aadb3817af7807bef8932a`.
+Only the exact SNI version changes; the exception's use and package-shape
+boundaries below remain unchanged. The earlier version is not retained as a
+second allowed version.
 
 These transitive dependencies belong to the EF Core SQL Server / SqlClient
 stack, not Core or the other providers. Their vendor terms allow the
@@ -113,6 +197,24 @@ Primary implementation evidence, retrieved 2026-10-01:
 - [Pinned action's version-independent PURL matcher](https://github.com/actions/dependency-review-action/blob/a1d282b36b6f3519aa1f3fc636f609c47dddb294/src/purl.ts).
 - [GitHub dependency comparison response](https://docs.github.com/en/rest/dependency-graph/dependency-review#get-a-diff-of-the-dependencies-between-commits).
 - [GitHub CLI pagination and slurp contract](https://cli.github.com/manual/gh_api).
+
+Snapshot and handoff sources, verified 2026-10-21:
+
+- [GitHub dependency submission identity and API](https://docs.github.com/en/rest/dependency-graph/dependency-submission).
+- [Dependency graph source precedence](https://docs.github.com/en/code-security/concepts/supply-chain-security/dependency-graph-data).
+- [Pinned official submission action](https://github.com/actions/component-detection-dependency-submission-action/tree/98beaea5a1227f3db476e4c9ca959a0cacd7ac4f).
+- [GitHub workflow_run event and default-branch requirement](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_run).
+- [Manual workflow execution and branch selection](https://cli.github.com/manual/gh_workflow_run).
+- [Reusable workflow caller context and permissions](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations).
+- [Executing commit, ref and workflow-commit variables](https://docs.github.com/en/actions/reference/workflows-and-actions/variables).
+- [GitHub Actions secure-use guidance](https://docs.github.com/en/actions/reference/security/secure-use).
+- [Pinned review action's license resolution](https://github.com/actions/dependency-review-action/blob/a1d282b36b6f3519aa1f3fc636f609c47dddb294/src/licenses.ts).
+
+Cache authority and source-artifact isolation, verified 2026-10-25:
+
+- [Native job cache access and scoped-token enforcement](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idcache-mode).
+- [Cache access for low-trust triggers and explicit denial](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#controlling-cache-access-with-cache-mode).
+- [Artifact identities, expiry and workflow-run metadata](https://docs.github.com/en/rest/actions/artifacts).
 
 ## Dynamic and coverage evidence
 

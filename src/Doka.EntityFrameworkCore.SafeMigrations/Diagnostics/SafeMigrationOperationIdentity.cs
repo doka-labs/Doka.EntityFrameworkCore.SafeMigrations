@@ -179,6 +179,9 @@ public sealed class SafeMigrationOperationIdentity
     )
     {
         var names = new string[columns.Count];
+        // WHY: Copy table-member names into matching ordinals of the owned identifier snapshot.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < names.Length; index++)
         {
             names[index] = columns[index].Name;
@@ -192,6 +195,8 @@ public sealed class SafeMigrationOperationIdentity
     )
     {
         var count = 0;
+        // WHY: Indexed copying saved enumerators but showed inconsistent whole-method CPU results.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var key in keys)
         {
             count += key.Column is null ? 0 : 1;
@@ -204,6 +209,8 @@ public sealed class SafeMigrationOperationIdentity
 
         var names = new string[count];
         var index = 0;
+        // WHY: Keep the same measured snapshot traversal while filling only captured column names.
+        // ReSharper disable once LoopCanBeConvertedToQuery
         foreach (var key in keys)
         {
             if (key.Column is { } column)

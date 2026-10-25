@@ -41,6 +41,23 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
     /// <summary>Gets the parent table fenced before the complete source-frozen delete classifier is rerun.</summary>
     public string? ModelManagedDeleteLockTable { get; init; }
 
+    /// <summary>Gets the native exact-owner lock command expression used before reclassifying a source DROP.</summary>
+    public string? GeneratedDropLockSqlExpression { get; init; }
+
+    /// <summary>Gets runtime-only snapshot and lock eligibility, distinct from read-only analysis isolation.</summary>
+    public string? GeneratedDropRuntimeGuardExpression { get; init; }
+
+    /// <summary>Gets the exact owner fence acquired before repeating a catalog-only column transition proof.</summary>
+    public string? ColumnTransitionLockSqlExpression { get; init; }
+
+    /// <summary>Gets operation-local lock and fresh-snapshot eligibility without changing caller isolation.</summary>
+    public string? ColumnTransitionRuntimeGuardExpression { get; init; }
+
+    /// <summary>
+    /// Gets equality-catalog admission checked before an integer transition's matching-target fallback.
+    /// </summary>
+    public string? ColumnTransitionTargetCatalogGuardExpression { get; init; }
+
     /// <summary>
     /// Gets the immediate postcondition for an applied operation when it
     /// differs from the terminal migration contract.
@@ -52,6 +69,9 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
 
     /// <summary>Gets the state expression used when the evaluation guard fails.</summary>
     public string? StateEvaluationGuardFailureExpression { get; init; }
+
+    /// <summary>Gets the bounded capability reason emitted by the preliminary catalog-only guard.</summary>
+    public string? StateEvaluationGuardFailureCodeExpression { get; init; }
 
     /// <summary>Gets an optional stable classification-code expression.</summary>
     public string? ClassificationCodeExpression { get; init; }
@@ -540,6 +560,9 @@ internal sealed record PostgreSqlSafeMigrationRuntimePlan(
         int start
     )
     {
+        // WHY: Track UTF-16 offsets while skipping quoted tokens and escaped delimiters.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = start; index < source.Length; index++)
         {
             if (source[index] is '\'' or '"')

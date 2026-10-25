@@ -1,18 +1,19 @@
 # Documentation
 
-This is the task-oriented entry point for SafeMigrations documentation. This
-source prepares stable 10.5.0 for all five packages. Start with the task table
+This is the task-oriented entry point for SafeMigrations 10.6.0 documentation
+covering all five packages. Start with the task table
 below; release changes and consumer upgrade notes belong in the
 [changelog](../CHANGELOG.md). The [diagnostics guide](diagnostics.md) explains
 readable errors, affected owners, text summaries and report-schema compatibility;
 [support and qualification](support-and-qualification.md) owns dependency and
-native UUID boundaries. Existing ordered proofs, concurrency guards and verified
+native UUID and lossless signed-integer upgrade boundaries, including the
+[10.6.0 upgrade](support-and-qualification.md#upgrade-to-1060).
+Existing ordered proofs, concurrency guards and verified
 schema/session recovery remain. Deferred preflight states require runtime
 validation; unproved lossy conversions and independent permission refusals
 remain blocked. Timing comparisons are informational; functional and evidence
 failures remain blocking.
-Package availability and OpenSSF status are established by their linked
-external registries, not by source documentation alone.
+OpenSSF status is established by its linked external registry.
 
 ## Use and deploy
 
@@ -20,6 +21,7 @@ external registries, not by source documentation alone.
 | --- | --- |
 | Install, register a provider, and scaffold strict or legacy-convergence migrations | [Project README](../README.md) and [runnable sample](../samples/Doka.EntityFrameworkCore.SafeMigrations.Sample/README.md) |
 | Compare generated strict, generated legacy-convergence, model-managed data, and hand-authored migration source | [Migration authoring paths](migration-authoring.md) |
+| Author computed values | [Generated columns](migration-authoring.md#generated-columns) |
 | Separate migration lineages | [Model-managed-data ownership](model-managed-data-ownership.md) |
 | Find public inputs, outputs, and failure boundaries | [API reference](api-reference.md) |
 | Check engines, dependency ranges, qualified boundaries, and evidence | [Support and qualification](support-and-qualification.md) |
@@ -60,6 +62,8 @@ external registries, not by source documentation alone.
   qualification, protected wait, signed tag, approval, readback, and recovery.
 - [Release process](release-process.md): package/version identity, qualification
   scope, integrity requirements, and acceptance contract.
+- [Release lines](operations/release-lines.md): explicit line policy, own-source
+  qualification, exact-artifact recovery and branch-native maintenance.
 - [Repository settings](runbooks/repository-settings.md): operator-owned
   post-publication controls and read-only confirmation commands.
 - [OpenSSF Best Practices evidence](openssf-best-practices.md):

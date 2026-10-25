@@ -16,21 +16,35 @@ SafeMigrations publishes these package IDs at one version:
 - `Doka.EntityFrameworkCore.SafeMigrations.SqlServer`.
 
 Stable 10.4.6 introduced this five-package inventory; releases 10.4.2 through
-10.4.5 retain their historical four-package set. Prepared stable 10.5.0 keeps
-the shared .NET/EF Core 10 identity, adds diagnostics and optional native UUID,
-and corrects persisted defaults. The [changelog](../CHANGELOG.md#1050---2026-10-15)
-records the diagnostic API/schema/exception and Doka dependency compatibility
-changes. Existing migration source, policies, fingerprint formats, history,
-concurrency and recovery guards remain. Timing comparisons stay informational;
+10.4.5 retain their historical four-package set. Version 10.6.0 keeps
+the shared .NET/EF Core 10 identity and adds CASE/generated-expression support
+with lossless signed-integer upgrades, ordered projection/DROP and traversal
+corrections, measured allocation reductions and authorized release lines. The
+[changelog](../CHANGELOG.md#1060---2026-10-25) and
+[upgrade notes](support-and-qualification.md#upgrade-to-1060) record the
+conditional computed/CHECK contract-fingerprint changes, renewed approval
+requirements, exact expression comparison and dependency floors. Historical
+migration source, policy selection, report schemas, relational model-fingerprint
+format and history remain unchanged. Do not carry an obsolete contract approval
+forward or rewrite historical migrations. Timing comparisons stay informational;
 functional and evidence failures still block. Selecting another provider does
 not introduce SQL Server runtime dependencies.
 
 The workflow accepts a canonical lowercase NuGet version without a leading
 `v`. The version must belong to the source `VersionPrefix`, have exactly one
 dated changelog entry, be absent from all five NuGet package IDs, and be
-dispatched from the exact current `main` SHA before any release tag exists.
+dispatched from the exact current protected source-line SHA before any release
+tag exists. [D-018](decisions/D-018-release-lines-and-monotonic-publication.md)
+defines exact registered release lines. Only main/10 is active; maintenance/10.x
+is inactive. This capability does not activate another framework or adopt .NET 11.
 
 ## Reversible qualification
+
+Each admitted line uses its own reviewed SDK, EF graph, source and workflow.
+Preflight freezes its exact ref/SHA/run, original producing attempt and toolchain
+against independently observed protected-main authority. Prepared lines and the
+qualification-only input run the complete reversible checks but skip the
+environment-bearing publisher job, rather than reaching it with disabled writes.
 
 CI and release call the same reusable quality workflow. It enforces:
 
@@ -73,12 +87,20 @@ permissions. Environment protection keeps it waiting while all reversible
 work is reviewed. After the operator pushes the signed annotated tag and
 approves the same run, publication verifies:
 
-- the candidate remains on protected `main` history;
+- the candidate remains on its exact protected release-line history;
 - the tag peels to the qualified SHA and its SSH signature matches the
   repository's allowed-signers policy;
 - package hashes and contents still match qualification; and
 - the short-lived NuGet credential is issued for the exact repository,
   workflow, and `nuget` environment.
+
+After approval and inside the shared non-cancelling publication queue, admission
+reads current protected-main policy independently of the candidate checkout.
+It verifies source, environment, frozen line identity, exact original artifact
+metadata and candidate bytes. Permission is checked again before draft creation,
+NuGet credentials and final publication. A previously qualified line cannot
+publish after deactivation or reassignment. Reviewer, self-review, administrator
+and Trusted Publishing settings are retained, not redesigned by line tooling.
 
 Primary and symbol packages are pushed separately with duplicate tolerance for
 same-run recovery. Completion requires downloading each public primary package,
@@ -89,7 +111,7 @@ Before draft creation or credential exchange, publication validates the
 portable bundle's Sigstore envelope, SLSA v1 predicate, unique subject names,
 and exact subject SHA-256 digests. It then verifies every selected subject with
 `gh attestation verify --bundle`, pinned to the repository, release workflow,
-workflow commit, protected-main source ref and commit, and hosted-runner
+workflow commit, exact qualified source ref and commit, and hosted-runner
 boundary. An API-hosted attestation without the downloaded bundle cannot satisfy
 this gate.
 
@@ -114,7 +136,10 @@ signed-content readback remains the acceptance gate.
 After signed NuGet content has been read back, the workflow publishes the
 verified draft. It then waits for the published immutable state and GitHub's
 automatically generated Release and asset attestations with a bounded retry
-window. Prereleases are not marked latest; stable releases are. The signed tag
+window. Prereleases are never Latest. Stable promotion compares canonical
+SemVer inside the shared publisher; an older major or out-of-order patch cannot
+displace a higher stable release. An immutable historical retry verifies its
+release without requiring continued Latest status. The signed tag
 is the commit identity; `targetCommitish` is not treated as one after the tag
 already exists.
 
@@ -136,6 +161,14 @@ for the platform-generated Release attestation is retryable only through the
 same failed job; it never authorizes ignoring verification. Tags and published
 versions are never moved, replaced, or reused.
 
+Frozen line and admission receipts are separate immutable same-run workflow
+artifacts; the public thirteen-asset inventory and twelve provenance subjects do
+not change. A publish-only retry restores original admission and revalidates the
+actual original artifact IDs/digests and local bytes against current authority.
+Missing/expired/changed evidence after publication may have begun cannot be
+replaced with a fresh admission. Re-running all jobs may rebuild artifacts and
+is not an exact-byte recovery. Complete a release before changing its line.
+
 ## Evidence boundary
 
 Actions logs, retained qualification and portable-provenance artifacts, GitHub
@@ -146,3 +179,9 @@ missing, duplicate, extra, digest-conflicting, retry, and timeout paths through
 executable positive and negative tests. The repository does not maintain a
 second event-sourced release database. Hosted configuration and an actual
 successful release remain necessary evidence.
+
+Registered lines receive their own full CI and exact-base Dependency Review
+before activation. Active lines receive branch-native scheduled qualification,
+transitive vulnerability audits and reviewed dependency-update targets. See
+[Release lines](operations/release-lines.md) for activation, scheduling and the
+explicit hosted-evidence boundary.

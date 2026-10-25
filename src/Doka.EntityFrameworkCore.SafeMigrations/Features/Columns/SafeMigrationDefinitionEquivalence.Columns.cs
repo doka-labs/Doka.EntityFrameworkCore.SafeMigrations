@@ -44,6 +44,28 @@ internal static partial class SafeMigrationDefinitionEquivalence
         ExpectedColumnDefinition left,
         ExpectedColumnDefinition right,
         StringComparer? nameComparer = null
+    ) => ColumnIntrinsicFields(left, right, nameComparer, compareCapturedSource: true);
+
+    /// <summary>Accepts certified column-token quoting differences, never arbitrary captured-SQL equivalence.</summary>
+    internal static bool ColumnWithNativeColumnQuoteEquivalence(
+        ExpectedColumnDefinition left,
+        ExpectedColumnDefinition right,
+        StringComparer? nameComparer,
+        char delimiter,
+        bool foldUnquotedIdentifiers = false
+    ) => left.CapturedComputedSql is not null
+        && right.CapturedComputedSql is not null
+        && left.IsNullable == right.IsNullable
+        && ColumnIntrinsicFields(left, right, nameComparer, compareCapturedSource: false)
+        && ProviderAnnotations(left.ProviderAnnotations, right.ProviderAnnotations)
+        && SafeMigrationSqlExpressionParser.SourcesDifferOnlyByNativeColumnQuotes(
+            left.CapturedComputedSql, right.CapturedComputedSql, delimiter, foldUnquotedIdentifiers);
+
+    private static bool ColumnIntrinsicFields(
+        ExpectedColumnDefinition left,
+        ExpectedColumnDefinition right,
+        StringComparer? nameComparer,
+        bool compareCapturedSource
     ) => (nameComparer ?? StringComparer.Ordinal).Equals(left.Name, right.Name)
         && left.ClrType == right.ClrType
         && StringComparer.Ordinal.Equals(left.StoreType, right.StoreType)
@@ -57,6 +79,8 @@ internal static partial class SafeMigrationDefinitionEquivalence
         && StringComparer.Ordinal.Equals(left.Comment, right.Comment)
         && DefaultValue(left.DefaultValue, right.DefaultValue)
         && StringComparer.Ordinal.Equals(left.ComputedColumnSql, right.ComputedColumnSql)
+        && (!compareCapturedSource
+            || StringComparer.Ordinal.Equals(left.CapturedComputedSql, right.CapturedComputedSql))
         && SafeMigrationSqlExpressionContract.Equivalent(left.ComputedExpression, right.ComputedExpression)
         && left.IsStored == right.IsStored;
 
@@ -88,6 +112,9 @@ internal static partial class SafeMigrationDefinitionEquivalence
             return false;
         }
 
+        // WHY: Compare annotation names and fingerprints at corresponding snapshot ordinals.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < left.Count; index++)
         {
             if (!StringComparer.Ordinal.Equals(left[index].Name, right[index].Name)

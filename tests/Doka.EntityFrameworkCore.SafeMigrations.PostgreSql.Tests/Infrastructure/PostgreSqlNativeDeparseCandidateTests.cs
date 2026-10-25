@@ -110,8 +110,8 @@ public sealed class PostgreSqlNativeDeparseCandidateTests
         var executable = renderer.Render(expression);
 
         // Assert
-        Assert.Contains("a.attrelid = co.conrelid", candidate, StringComparison.Ordinal);
-        Assert.Contains("a.attname = 'member''name'", candidate, StringComparison.Ordinal);
+        Assert.Contains("a.attrelid OPERATOR(pg_catalog.=) co.conrelid", candidate, StringComparison.Ordinal);
+        Assert.Contains("a.attname OPERATOR(pg_catalog.=) 'member''name'", candidate, StringComparison.Ordinal);
         Assert.Contains("WHEN 23 THEN '1'", candidate, StringComparison.Ordinal);
         Assert.Contains("WHEN 21 THEN '''1''::smallint'", candidate, StringComparison.Ordinal);
         Assert.Contains("WHEN 20 THEN '''1''::bigint'", candidate, StringComparison.Ordinal);

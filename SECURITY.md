@@ -93,22 +93,17 @@ changes.
 ## Supported Versions
 
 This policy covers every SafeMigrations package and provider project in this
-source tree. Stable 10.4.x remains the supported published line until verified
-10.5.0 publication and package readback. This source prepares 10.5.0 for the five
-packages introduced through 10.4.6; a dated changelog entry is not publication
-evidence. After verified publication, security fixes target the latest stable
-10.5.x patch.
+source tree. Security fixes target the latest published patch of the latest
+published stable minor line. Earlier stable minor lines are superseded by
+that line. Reports affecting older versions are still triaged for impact on
+the supported contract. The [publication runbook](docs/operations/release-publication.md)
+defines where actual release status and verification evidence are recorded.
 
 | Release state | Security support |
 | --- | --- |
-| Prepared 10.5.0 source | Not a published support claim until release and package readback succeed |
-| Stable 10.5.x | Supported release line after verified publication; fixes may require its latest published patch |
-| Stable 10.4.x | Supported until verified 10.5.0 publication; then superseded by 10.5.x |
-| Stable 10.3.x | Superseded by the stable 10.4.x line |
-| Stable 10.2.x | Superseded by the stable 10.3.x line |
-| Stable 10.1.x | Superseded by later stable release lines |
-| Stable 10.0.x | Superseded by later stable release lines |
-| 10.0.0 release-candidate line | Superseded by stable releases; candidates are not independently serviced |
+| Latest published stable minor line | Supported; fixes may require its latest published patch |
+| Earlier stable minor lines | Superseded by the latest published stable minor line |
+| Release candidates and development versions | No independent servicing promise; use a supported stable release |
 | Earlier proof-of-concept or other release lines | No separate servicing promise; reports are still triaged for impact on the supported contract |
 
 Candidates qualify the same complete feature contract. This policy does not

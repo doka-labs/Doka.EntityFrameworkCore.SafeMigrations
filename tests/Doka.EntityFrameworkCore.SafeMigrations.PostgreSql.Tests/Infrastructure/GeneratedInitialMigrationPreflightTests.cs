@@ -1,58 +1,82 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed class GeneratedInitialMigrationPreflightTests
+/// <summary>Reports generated lifecycle, discriminator filtering and discriminator writes independently.</summary>
+public sealed class GeneratedInitialMigrationPreflightTests : IClassFixture<GeneratedInitialMigrationFixture>
 {
-    [GeneratedToolingFact("SAFE_MIGRATIONS_GENERATED_STRICT_CONNECTION_STRING")]
-    public Task StrictGeneratedInitialMigrationConvergesThroughPreflightAndReplay() => VerifyAsync(
-        "SAFE_MIGRATIONS_GENERATED_STRICT_CONNECTION_STRING",
-        "StrictScaffoldingProbe",
-        static connectionString => new StrictSafeMigrationScaffoldingDbContext(connectionString));
+    private readonly GeneratedInitialMigrationFixture _fixture;
 
-    [GeneratedToolingFact("SAFE_MIGRATIONS_GENERATED_LEGACY_CONNECTION_STRING")]
-    public Task LegacyGeneratedInitialMigrationConvergesThroughPreflightAndReplay() => VerifyAsync(
-        "SAFE_MIGRATIONS_GENERATED_LEGACY_CONNECTION_STRING",
-        "LegacyScaffoldingProbe",
-        static connectionString => new LegacySafeMigrationScaffoldingDbContext(connectionString));
-
-    private static async Task VerifyAsync(
-        string connectionVariable,
-        string migrationName,
-        Func<string, DbContext> createContext
-    )
+    /// <summary>Uses the once-only schema owner shared by the independent tooling contracts.</summary>
+    /// <param name="fixture">Captures each profile's lifecycle without depending on test-method order.</param>
+    public GeneratedInitialMigrationPreflightTests(GeneratedInitialMigrationFixture fixture)
     {
-        var connectionString = Environment.GetEnvironmentVariable(connectionVariable)
-            ?? throw new InvalidOperationException($"{connectionVariable} is required by the tooling gate.");
+        _fixture = fixture;
+    }
 
-        await using var context = createContext(connectionString);
-        var operations = GeneratedOperations(context, migrationName);
-        var runner = context.GetService<ISafeMigrationRunner>();
+    /// <summary>Preserves the strict initial application, idempotent replay and verification scenario.</summary>
+    [GeneratedToolingFact("SAFE_MIGRATIONS_GENERATED_STRICT_CONNECTION_STRING")]
+    public Task StrictGeneratedInitialMigrationConvergesThroughPreflightAndReplay() =>
+        VerifyLifecycleAsync(legacy: false);
 
-        var preflight = await runner.AnalyzeAsync(
-            context,
-            operations,
-            new SafeMigrationRunOptions($"generated-initial-{migrationName}"),
-            CancellationToken.None);
+    /// <summary>Preserves the legacy initial application, idempotent replay and verification scenario.</summary>
+    [GeneratedToolingFact("SAFE_MIGRATIONS_GENERATED_LEGACY_CONNECTION_STRING")]
+    public Task LegacyGeneratedInitialMigrationConvergesThroughPreflightAndReplay() =>
+        VerifyLifecycleAsync(legacy: true);
 
+    /// <summary>Excludes unknown numeric discriminator rows in the strict profile.</summary>
+    [GeneratedToolingFact("SAFE_MIGRATIONS_GENERATED_STRICT_CONNECTION_STRING")]
+    public Task StrictGeneratedNumericDiscriminatorFiltersUnknownRows() =>
+        VerifyNumericFilteringAsync(legacy: false);
+
+    /// <summary>Excludes unknown numeric discriminator rows in the legacy profile.</summary>
+    [GeneratedToolingFact("SAFE_MIGRATIONS_GENERATED_LEGACY_CONNECTION_STRING")]
+    public Task LegacyGeneratedNumericDiscriminatorFiltersUnknownRows() =>
+        VerifyNumericFilteringAsync(legacy: true);
+
+    /// <summary>
+    /// Resolves attributed string discriminator values and excludes unknown rows in the strict profile.
+    /// </summary>
+    [GeneratedToolingFact("SAFE_MIGRATIONS_GENERATED_STRICT_CONNECTION_STRING")]
+    public Task StrictGeneratedAttributedDiscriminatorFiltersUnknownRows() =>
+        VerifyAttributedFilteringAsync(legacy: false);
+
+    /// <summary>
+    /// Resolves attributed string discriminator values and excludes unknown rows in the legacy profile.
+    /// </summary>
+    [GeneratedToolingFact("SAFE_MIGRATIONS_GENERATED_LEGACY_CONNECTION_STRING")]
+    public Task LegacyGeneratedAttributedDiscriminatorFiltersUnknownRows() =>
+        VerifyAttributedFilteringAsync(legacy: true);
+
+    /// <summary>Persists converted attributed discriminator values in the strict profile.</summary>
+    [GeneratedToolingFact("SAFE_MIGRATIONS_GENERATED_STRICT_CONNECTION_STRING")]
+    public Task StrictGeneratedAttributedDiscriminatorWritesConvertedValues() =>
+        VerifyAttributedWritesAsync(legacy: false);
+
+    /// <summary>Persists converted attributed discriminator values in the legacy profile.</summary>
+    [GeneratedToolingFact("SAFE_MIGRATIONS_GENERATED_LEGACY_CONNECTION_STRING")]
+    public Task LegacyGeneratedAttributedDiscriminatorWritesConvertedValues() =>
+        VerifyAttributedWritesAsync(legacy: true);
+
+    /// <summary>Asserts the captured lifecycle without repeating its destructive initial application.</summary>
+    private async Task VerifyLifecycleAsync(bool legacy)
+    {
+        // Arrange
+        var fixture = _fixture;
+
+        // Act
+        var observation = await fixture.GetInitializedAsync(legacy);
+
+        // Assert
         var dataAssessment = Assert.Single(
-            preflight.Assessments,
+            observation.Preflight.Assessments,
             static assessment => assessment.OperationKind == SafeMigrationOperationKind.EnsureModelManagedData);
 
-        AssertReady(preflight);
+        GeneratedInitialMigrationFixture.AssertReady(observation.Preflight);
         Assert.Equal(SafeMigrationObservedState.Missing, dataAssessment.ObservedState);
         Assert.Equal(SafeMigrationAction.Apply, dataAssessment.Action);
         Assert.Equal("projected_missing", dataAssessment.Code);
-
-        await ExecuteOperationsAsync(context, operations);
-
-        var replayPreflight = await runner.AnalyzeAsync(
-            context,
-            operations,
-            new SafeMigrationRunOptions($"generated-initial-{migrationName}-replay"),
-            CancellationToken.None);
-
-        AssertReady(replayPreflight);
+        GeneratedInitialMigrationFixture.AssertReady(observation.Replay);
         Assert.All(
-            replayPreflight.Assessments,
+            observation.Replay.Assessments,
             static assessment =>
             {
                 Assert.True(
@@ -66,38 +90,49 @@ public sealed class GeneratedInitialMigrationPreflightTests
                     + $"analysis={assessment.AnalysisCode}; decision={assessment.DecisionCode}.");
             });
 
-        await ExecuteOperationsAsync(context, operations);
+        Assert.Equal(SafeMigrationReportStatus.Ready, observation.Postflight.Status);
+        Assert.All(observation.Postflight.Assessments, assessment => Assert.True(assessment.PostconditionSatisfied));
+        Assert.Equal(1, observation.SeedCount);
+    }
 
-        var postflight = await runner.VerifyAsync(
-            context,
-            operations,
-            new SafeMigrationRunOptions($"generated-initial-{migrationName}-postflight"),
-            CancellationToken.None);
+    /// <summary>Exercises numeric query filtering with transaction-owned rows independent of other contracts.</summary>
+    private async Task VerifyNumericFilteringAsync(bool legacy)
+    {
+        // Arrange
+        var observation = await _fixture.GetInitializedAsync(legacy);
+        await using var context = observation.CreateContext();
+        // WHY: Discriminator probes share an expensive generated schema, never committed mutable rows.
+        await using var transaction = await context.Database.BeginTransactionAsync(CancellationToken.None);
 
-        Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
-        Assert.All(postflight.Assessments, assessment => Assert.True(assessment.PostconditionSatisfied));
-        Assert.Equal(1, await ScalarIntAsync(
-            context,
-            "SELECT COUNT(*) FROM scaffolding_users "
-            + "WHERE \"Id\" = 1 AND \"TenantId\" = 7 AND \"Email\" = 'administrator@example.test';"));
-
+        // Act
         _ = await context.Database.ExecuteSqlRawAsync(
-            "INSERT INTO scaffolding_work_items (\"Id\", \"Caption\", \"Discriminator\") "
+            "INSERT INTO \"scaffolding_work_items\" (\"Id\", \"Caption\", \"Discriminator\") "
             + "VALUES (1, 'Known', 0), (2, 'External', 1), (3, 'Future', 2);",
             CancellationToken.None);
 
-        Assert.Equal(
-            2,
-            await context.Set<SafeMigrationScaffoldingWorkItem>().CountAsync(CancellationToken.None));
-        Assert.Equal(
-            1,
-            await context.Set<SafeMigrationScaffoldingTask>().CountAsync(CancellationToken.None));
-        Assert.Equal(
-            1,
-            await context.Set<SafeMigrationScaffoldingExternalWorkItem>().CountAsync(CancellationToken.None));
+        var baseCount = await context.Set<SafeMigrationScaffoldingWorkItem>()
+            .CountAsync(CancellationToken.None);
+        var taskCount = await context.Set<SafeMigrationScaffoldingTask>().CountAsync(CancellationToken.None);
+        var externalCount = await context.Set<SafeMigrationScaffoldingExternalWorkItem>()
+            .CountAsync(CancellationToken.None);
 
+        // Assert
+        Assert.Equal(2, baseCount);
+        Assert.Equal(1, taskCount);
+        Assert.Equal(1, externalCount);
+    }
+
+    /// <summary>Exercises attributed read filtering without relying on the separate writer's row population.</summary>
+    private async Task VerifyAttributedFilteringAsync(bool legacy)
+    {
+        // Arrange
+        var observation = await _fixture.GetInitializedAsync(legacy);
+        await using var context = observation.CreateContext();
+        await using var transaction = await context.Database.BeginTransactionAsync(CancellationToken.None);
+
+        // Act
         _ = await context.Database.ExecuteSqlRawAsync(
-            "INSERT INTO scaffolding_attributed_work_items "
+            "INSERT INTO \"scaffolding_attributed_work_items\" "
             + "(\"Id\", \"Caption\", \"AttributedDiscriminator\") VALUES "
             + "(11, 'Json', 'json-named'), "
             + "(12, 'Contract', 'contract-named'), "
@@ -105,6 +140,29 @@ public sealed class GeneratedInitialMigrationPreflightTests
             + "(14, 'Future', 'future-value');",
             CancellationToken.None);
 
+        var baseCount = await context.Set<SafeMigrationAttributedWorkItem>().CountAsync(CancellationToken.None);
+        var jsonCount = await context.Set<SafeMigrationJsonNamedWorkItem>().CountAsync(CancellationToken.None);
+        var contractCount = await context.Set<SafeMigrationContractNamedWorkItem>().CountAsync(CancellationToken.None);
+        var fallbackCount = await context.Set<SafeMigrationFallbackNamedWorkItem>().CountAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(3, baseCount);
+        Assert.Equal(1, jsonCount);
+        Assert.Equal(1, contractCount);
+        Assert.Equal(1, fallbackCount);
+    }
+
+    /// <summary>
+    /// Exercises converted writes independently of filtering's unknown-row and preexisting-row inputs.
+    /// </summary>
+    private async Task VerifyAttributedWritesAsync(bool legacy)
+    {
+        // Arrange
+        var observation = await _fixture.GetInitializedAsync(legacy);
+        await using var context = observation.CreateContext();
+        await using var transaction = await context.Database.BeginTransactionAsync(CancellationToken.None);
+
+        // Act
         context.AddRange(
             new SafeMigrationJsonNamedWorkItem
             {
@@ -122,99 +180,32 @@ public sealed class GeneratedInitialMigrationPreflightTests
                 Caption = "Converted fallback name",
             });
         _ = await context.SaveChangesAsync(CancellationToken.None);
-
-        Assert.Equal(
-            6,
-            await context.Set<SafeMigrationAttributedWorkItem>().CountAsync(CancellationToken.None));
-        Assert.Equal(
-            2,
-            await context.Set<SafeMigrationJsonNamedWorkItem>().CountAsync(CancellationToken.None));
-        Assert.Equal(
-            2,
-            await context.Set<SafeMigrationContractNamedWorkItem>().CountAsync(CancellationToken.None));
-        Assert.Equal(
-            2,
-            await context.Set<SafeMigrationFallbackNamedWorkItem>().CountAsync(CancellationToken.None));
-        Assert.Equal(3, await ScalarIntAsync(
+        var baseCount = await context.Set<SafeMigrationAttributedWorkItem>().CountAsync(CancellationToken.None);
+        var jsonCount = await context.Set<SafeMigrationJsonNamedWorkItem>().CountAsync(CancellationToken.None);
+        var contractCount = await context.Set<SafeMigrationContractNamedWorkItem>().CountAsync(CancellationToken.None);
+        var fallbackCount = await context.Set<SafeMigrationFallbackNamedWorkItem>().CountAsync(CancellationToken.None);
+        var convertedCount = await ScalarIntAsync(
             context,
-            "SELECT COUNT(*) FROM scaffolding_attributed_work_items "
+            "SELECT COUNT(*) FROM \"scaffolding_attributed_work_items\" "
             + "WHERE (\"Id\" = 15 AND \"AttributedDiscriminator\" = 'json-named') "
             + "OR (\"Id\" = 16 AND \"AttributedDiscriminator\" = 'contract-named') "
-            + "OR (\"Id\" = 17 AND \"AttributedDiscriminator\" = 'Fallback');"));
+            + "OR (\"Id\" = 17 AND \"AttributedDiscriminator\" = 'Fallback');");
+
+        // Assert
+        Assert.Equal(3, baseCount);
+        Assert.Equal(1, jsonCount);
+        Assert.Equal(1, contractCount);
+        Assert.Equal(1, fallbackCount);
+        Assert.Equal(3, convertedCount);
     }
 
-    private static IReadOnlyList<MigrationOperation> GeneratedOperations(
-        DbContext context,
-        string migrationName
-    )
-    {
-        var migrationsAssembly = context.GetService<IMigrationsAssembly>();
-
-        var migration = Assert.Single(
-            migrationsAssembly.Migrations,
-            entry => StringComparer.Ordinal.Equals(
-                migrationsAssembly.FindMigrationId(migrationName),
-                entry.Key));
-
-        return migrationsAssembly
-            .CreateMigration(migration.Value, context.Database.ProviderName!)
-            .UpOperations;
-    }
-
-    /// <summary>Reports the actual operation blockers when generated migration analysis fails.</summary>
-    private static void AssertReady(SafeMigrationRunReport report)
-    {
-        if (report.Status == SafeMigrationReportStatus.Ready)
-        {
-            return;
-        }
-
-        var blockers = report.Assessments
-            .Where(static assessment => assessment.Action is
-                SafeMigrationAction.RejectDifferent
-                or SafeMigrationAction.RejectUnsupported
-                or SafeMigrationAction.RejectDataBlocked
-                or SafeMigrationAction.RejectPrerequisiteMissing)
-            .Select(static assessment =>
-                $"{assessment.Ordinal}: {assessment.OperationKind} {assessment.ObjectName}; "
-                + $"state={assessment.ObservedState}; action={assessment.Action}; "
-                + $"analysis={assessment.AnalysisCode}; decision={assessment.DecisionCode}")
-            .ToArray();
-
-        Assert.Fail(
-            "Generated initial migration preflight was blocked:"
-            + Environment.NewLine
-            + string.Join(Environment.NewLine, blockers));
-    }
-
-    private static async Task ExecuteOperationsAsync(
-        DbContext context,
-        IReadOnlyList<MigrationOperation> operations
-    )
-    {
-        var generator = context.GetService<IMigrationsSqlGenerator>();
-        var commands = generator.Generate(operations, context.Model);
-        var connection = context.GetService<IRelationalConnection>();
-
-        foreach (var command in commands)
-        {
-            _ = await command.ExecuteNonQueryAsync(connection, cancellationToken: CancellationToken.None);
-        }
-    }
-
-    private static async Task<int> ScalarIntAsync(
-        DbContext context,
-        string sql
-    )
+    /// <summary>Reads exact stored discriminator values in the current test's transaction.</summary>
+    private static async Task<int> ScalarIntAsync(DbContext context, string sql)
     {
         var connection = context.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open)
-        {
-            await connection.OpenAsync(CancellationToken.None);
-        }
-
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
+        command.Transaction = context.Database.CurrentTransaction?.GetDbTransaction();
 
         return Convert.ToInt32(
             await command.ExecuteScalarAsync(CancellationToken.None),
@@ -222,9 +213,12 @@ public sealed class GeneratedInitialMigrationPreflightTests
     }
 }
 
+/// <summary>Runs freshly generated migration contracts only inside the dedicated EF tooling gate.</summary>
 [AttributeUsage(AttributeTargets.Method)]
 internal sealed class GeneratedToolingFactAttribute : FactAttribute
 {
+    /// <summary>Skips a profile unless its externally provisioned tooling connection is available.</summary>
+    /// <param name="connectionVariable">The environment variable containing the tooling connection string.</param>
     public GeneratedToolingFactAttribute(
         string connectionVariable
     )

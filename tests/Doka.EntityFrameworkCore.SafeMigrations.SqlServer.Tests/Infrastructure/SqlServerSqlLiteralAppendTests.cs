@@ -6,6 +6,96 @@ public sealed class SqlServerSqlLiteralAppendTests
     private const string ConnectionString = "Server=127.0.0.1,1433;Database=literal_append;"
         + "User ID=sa;Password=unused;TrustServerCertificate=True";
 
+    /// <summary>Non-continuation values retain the previous exact native literal form.</summary>
+    /// <param name="value">An ordinary string, including a harmless newline without a preceding backslash.</param>
+    [Theory]
+    [InlineData("")]
+    [InlineData("O'Brien")]
+    [InlineData("a\\path")]
+    [InlineData("line1\nline2")]
+    public void NativeLiteral_OrdinaryValuesRetainExactRendering(string value)
+    {
+        // Arrange
+        var expected = "N'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
+
+        // Act
+        var actual = SqlServerSqlStringLiteral.Render(value);
+
+        // Assert
+        Assert.Equal(expected, actual);
+    }
+
+    /// <summary>Native continuation-shaped data round-trips without MAX truncation or changed Unicode units.</summary>
+    /// <param name="continuation">The native T-SQL continuation sequence being preserved.</param>
+    [Theory]
+    [InlineData("\\\n")]
+    [InlineData("\\\r")]
+    [InlineData("\\\r\n")]
+    public void NativeLiteral_ContinuationExpressionsReconstructExactLongUnicode(string continuation)
+    {
+        // Arrange
+        var original = new string('x', 4097) + "O'Brien" + continuation + "\u20ac\ud83d\ude00";
+
+        // Act
+        var expression = SqlServerSqlStringLiteral.Render(original);
+        var wrapper = SqlServerSafeMigrationsSqlGenerator.BuildIsolatedGuardSql(new StringBuilder(
+            "DECLARE @doka_script_payload nvarchar(max) = " + expression
+            + "; EXEC sys.sp_executesql @doka_script_payload;"));
+        var decoded = SqlServerGeneratedHistoryScriptTests.DecodeIdempotentPayloads(wrapper);
+
+        // Assert
+        Assert.Equal(original, Assert.Single(decoded));
+        Assert.Contains("CAST(N'' AS nvarchar(max))", expression, StringComparison.Ordinal);
+        Assert.False(SqlServerSqlStringLiteral.RequiresExpression(expression.AsSpan()));
+    }
+
+    /// <summary>Binding an expression-rendered argument retains an existing captured analysis parameter.</summary>
+    [Fact]
+    public void NativeProcedureArgument_PreservesCapturedParameterAndUsesPrivateVariable()
+    {
+        // Arrange
+        const string value = "Later\\\nPayload";
+        const string captured = "@captured_value";
+
+        // Act
+        var argument = SqlServerSqlStringLiteral.ProcedureArgument(value, captured, "@private_value",
+            out var declaration);
+
+        // Assert
+        Assert.Equal("@private_value", argument);
+        Assert.Equal("DECLARE @private_value nvarchar(max) = @captured_value; ", declaration);
+    }
+
+    /// <summary>Ordinary procedure input needs neither a declaration nor a replacement literal allocation.</summary>
+    [Fact]
+    public void NativeProcedureArgument_OrdinaryInputRetainsRenderedReference()
+    {
+        // Arrange
+        const string rendered = "N'ordinary'";
+
+        // Act
+        var argument = SqlServerSqlStringLiteral.ProcedureArgument("ordinary", rendered, string.Empty,
+            out var declaration);
+
+        // Assert
+        Assert.Same(rendered, argument);
+        Assert.Same(string.Empty, declaration);
+    }
+
+    /// <summary>A missing native literal cannot silently become an empty metadata identity.</summary>
+    [Fact]
+    public void NativeLiteral_NullInputIsRejected()
+    {
+        // Arrange
+        string? value = null;
+
+        // Act
+        var failure = Record.Exception(() => SqlServerSqlStringLiteral.Render(value!));
+
+        // Assert
+        Assert.Equal("value", Assert.IsType<ArgumentNullException>(failure).ParamName);
+    }
+
     /// <summary>Appends the exact reference escaping while preserving existing prefix and suffix text.</summary>
     [Theory]
     [InlineData(null)]

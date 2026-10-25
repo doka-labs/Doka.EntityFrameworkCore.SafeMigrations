@@ -27,6 +27,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     )
     {
         List<int>? ordinals = null;
+        // WHY: Preserve binary-proof variable slots and their ordered bounded selection ranges.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < plans.Length; ordinal++)
         {
             if (states[ordinal] is null && !plans[ordinal].IsStaticallyUnsupported
@@ -66,6 +69,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 var plan = plans[ordinal];
                 var checkpoint = parameterizer.Capture();
                 var eligibility = new string[plan.BinaryDefaultProofs.Count];
+                // WHY: Preserve binary-proof variable slots and their ordered bounded selection ranges.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var proof = 0; proof < eligibility.Length; proof++)
                 {
                     eligibility[proof] = plan.RenderBinaryDefaultEligibilityExpression(
@@ -79,6 +85,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 var evaluationBytes = Encoding.UTF8.GetByteCount(evaluation);
                 var candidateSelections = new string[eligibility.Length];
                 var candidateSelectionBytes = 0;
+                // WHY: Preserve binary-proof variable slots and their ordered bounded selection ranges.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var proof = 0; proof < candidateSelections.Length; proof++)
                 {
                     var index = proofCount + proof;
@@ -145,6 +154,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 {
                     var plan = plans[ordinal];
                     var bindings = new MySqlSafeMigrationBinaryDefaultProof[plan.BinaryDefaultProofs.Count];
+                    // WHY: Preserve binary-proof variable slots and their ordered bounded selection ranges.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
                     for (var proof = 0; proof < bindings.Length; proof++)
                     {
                         if (!await reader.ReadAsync(cancellationToken)

@@ -58,12 +58,52 @@ string path and validates borrowed inputs without mutation. Doka also requires
 The latter is a low-level wire contract and does not replace the independently
 configurable model-level `Binary16`, `Char36` or MariaDB `Uuid` storage contract.
 
-The reviewed Doka 10.5 line adds UUID only on MariaDB 10.7 or later, with
+The reviewed Doka 10.6 line retains UUID introduced in 10.5 only on MariaDB 10.7 or later, with
 unsized storage, text-bound Guid values and 16-byte physical budgets. It does
 not permit implicit GUID representation changes. It also changes implicit
 application-owned 16-byte binary mappings to `varbinary(17)` independently of
 GUID defaults; inspect new model differences and migrations during upgrade.
 See [GUID storage and native UUID](mysql-mariadb-ddl-behavior.md#guid-storage-and-native-uuid).
+
+Doka 10.6 budgets implicit indexed string/binary lengths against complete
+physical composite keys, overlapping indexes and compatible principal-derived
+FK lengths. Its packed-DECIMAL correction agrees with SafeMigrations' existing
+width formulas. Explicit application facets are not shortened to make a model
+valid. Inspect new snapshot/model/scaffolding differences without rewriting
+previous migrations. The public migration-handler SPI remains unchanged; new
+query-composition APIs do not require SafeMigrations wrappers. See the
+[versioned index-budget contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/d1e40a7b211c10b354e5aa6df80d9fea710d8f58/docs/provider-configuration.md#index-key-byte-fidelity).
+
+During Doka migration-lock acquisition, a driver `CommandTimeoutExpired` from
+`GET_LOCK` is now normalized to `TimeoutException` with the native
+`MySqlException` retained as its inner cause, synchronously and asynchronously.
+This affects lock-acquisition exception handling, not SafeMigrations guard codes
+or permission to bypass the migration lock. See the
+[versioned history repository](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/d1e40a7b211c10b354e5aa6df80d9fea710d8f58/src/Doka.EntityFrameworkCore.MySql/Internal/Migrations/MySqlHistoryRepository.cs).
+
+### GUID SQL defaults
+
+Doka 10.6.1 corrects implicit client GUID generation for properties
+with an explicit store SQL default or computed expression, including shared
+table mappings. It retains the provider's effective generation/readback
+contract and restores explicit migration metadata in model differences.
+Explicit client-generation choices and historical snapshot annotations remain
+authoritative; this update does not rewrite them. Review unpublished model and
+scaffolding differences rather than editing deployed migration history.
+
+The current 10.6.2 minimum retains that correction and fixes metadata lookup
+when a GUID property belongs only to a secondary Entity Splitting table. Shared
+SQL, computed and literal defaults are resolved through actual property mappings;
+explicit generation choices remain authoritative. This is a model-metadata
+correction, not a schema migration or a change to GUID storage defaults.
+
+MariaDB supports readback of unknown server-generated GUID keys. MySQL rejects
+unsupported unknown generated-key inserts before execution. Separately, native
+MySQL can reject nondeterministic `ALTER ADD ... DEFAULT (UUID())` under its
+binary-logging rules; the metadata correction does not bypass that restriction.
+See Doka's [versioned GUID SQL-default contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/6e2618140d821bd6befdf46181fcb82dca323c4f/docs/operations/migrations.md#guid-sql-defaults).
+
+### Typed migration metadata
 
 Doka 10.3.0 also exposes an immutable typed migration-operation metadata
 snapshot for Guid format, value-generation strategy, and ordered index prefix

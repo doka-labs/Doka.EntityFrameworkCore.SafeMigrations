@@ -24,6 +24,6 @@ internal static partial class SafeMigrationStandardOperationFactory
         Name = definition.Name,
         Table = definition.Table,
         Schema = definition.Schema,
-        Sql = definition.Sql ?? Render(definition.Expression!, renderExpression),
+        Sql = definition.CapturedSql ?? definition.Sql ?? Render(definition.Expression!, renderExpression),
     };
 }

@@ -170,6 +170,10 @@ cp "$script_dir/../global.json" "$work_dir/global.json"
 cp "$script_dir/Directory.Build.props" "$work_dir/eng/Directory.Build.props"
 cp "$script_dir/package-consumer/Directory.Build.props" \
     "$work_dir/eng/package-consumer/Directory.Build.props"
+# WHY: Every isolated provider/profile links this shared source from its parent;
+# copying only Program.cs works in source mode but breaks package qualification.
+cp "$script_dir/package-consumer/GeneratedExpressionConsumerContract.cs" \
+    "$work_dir/eng/package-consumer/GeneratedExpressionConsumerContract.cs"
 dotnet tool restore --tool-manifest "$work_dir/.config/dotnet-tools.json" --disable-parallel
 
 verify_consumer() {
@@ -208,8 +212,9 @@ verify_consumer() {
     mkdir -p "$consumer_dir"
     cp "$script_dir/package-consumer/$consumer_name/$source_project" \
         "$consumer_dir/$source_project"
-    cp "$script_dir/package-consumer/$consumer_name/Imports.cs" "$consumer_dir/"
-    cp "$script_dir/package-consumer/$consumer_name/Program.cs" "$consumer_dir/"
+    # WHY: Isolated package profiles must compile the same provider-local
+    # helpers as the source consumer, not just its entry point and imports.
+    cp "$script_dir/package-consumer/$consumer_name/"*.cs "$consumer_dir/"
 
     consumer_project="$consumer_dir/$source_project"
 
@@ -616,8 +621,7 @@ verify_incremental_design_registration() {
 
     mkdir -p "$consumer_dir"
     cp "$script_dir/package-consumer/$consumer_name/$source_project" "$consumer_project"
-    cp "$script_dir/package-consumer/$consumer_name/Imports.cs" "$consumer_dir/"
-    cp "$script_dir/package-consumer/$consumer_name/Program.cs" "$consumer_dir/"
+    cp "$script_dir/package-consumer/$consumer_name/"*.cs "$consumer_dir/"
 
     local transition_index
     for transition_index in "${!transition_references[@]}"; do

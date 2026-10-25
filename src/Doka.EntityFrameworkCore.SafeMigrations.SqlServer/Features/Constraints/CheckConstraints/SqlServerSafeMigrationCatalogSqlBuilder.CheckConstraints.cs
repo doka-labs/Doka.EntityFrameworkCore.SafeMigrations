@@ -2,6 +2,27 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 {
+    private static string? GetUnsupportedCheckSourceFeature(ExpectedCheckConstraintDefinition definition)
+    {
+        var source = definition.CapturedSql ?? definition.Sql;
+        if (source is null)
+        {
+            return null;
+        }
+
+        var expression = definition.Expression ?? (SafeMigrationSqlExpressionParser.TryParseCapturedSource(source,
+            out var parsed)
+            ? parsed : null);
+
+        // WHY: QUOTED_IDENTIFIER is caller-owned and is not forced by this
+        // provider. Only bracket-quoted native source is independent of that
+        // session option; quoted text inside literals is not an identifier.
+        return expression is not null && (!SqlServerSourceExpressionRoles.IsNativePredicate(expression)
+            || definition.CapturedSql is not null
+                && !SafeMigrationSqlExpressionParser.IsCapturedSourceDialectCompatible(source, '['))
+            ? "check_expression_unproven" : null;
+    }
+
     private SqlServerSafeMigrationRuntimePlan BuildEnsureCheck(
         EnsureCheckConstraintIntent intent,
         bool orderedCapture = false
@@ -21,9 +42,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var safe = expression is not null && IsSafeIntegerCheckPredicate(expression);
         var columns = new HashSet<string>(StringComparer.Ordinal);
 
-        if (safe)
+        if (expression is not null && (safe || definition.Expression is not null))
         {
-            SafeMigrationSqlExpressionInspector.CollectIdentifiers(expression!, columns);
+            // WHY: Empty-only validation does not prove that a parsed member
+            // exists. Retain newly structured/captured operand existence even
+            // without the stronger row proof. Explicit raw SQL keeps its old
+            // empty-only boundary: unknown native functions may have type
+            // arguments that the portable function AST cannot identify.
+            SafeMigrationSqlExpressionInspector.CollectIdentifiers(expression, columns);
         }
 
         var support = safe ? BuildIntegerCheckColumnProof(definition, columns) : "1 = 1";
@@ -114,23 +140,42 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             definition.Name, CheckExpression(definition));
 
         var check = CheckExists(definition.Table, definition.Schema, definition.Name);
+        var contractValue = Literal(fingerprint);
+        var schemaName = EffectiveSchema(definition.Schema);
+        var variable = SqlServerSqlStringLiteral.RequiresExpression(schemaName.AsSpan())
+            || SqlServerSqlStringLiteral.RequiresExpression(definition.Table.AsSpan())
+            || SqlServerSqlStringLiteral.RequiresExpression(definition.Name.AsSpan())
+                ? "@doka_check_stamp_" + fingerprint : string.Empty;
+
+        var schemaArgument = SqlServerSqlStringLiteral.ProcedureArgument(
+            schemaName, Literal(schemaName), variable.Length == 0 ? string.Empty : variable + "_schema",
+            out var schemaDeclaration);
+        var tableArgument = SqlServerSqlStringLiteral.ProcedureArgument(
+            definition.Table, Literal(definition.Table), variable.Length == 0 ? string.Empty : variable + "_table",
+            out var tableDeclaration);
+        var nameArgument = SqlServerSqlStringLiteral.ProcedureArgument(
+            definition.Name, Literal(definition.Name), variable.Length == 0 ? string.Empty : variable + "_name",
+            out var nameDeclaration);
 
         return $"IF NOT {check} THROW 51004, N'SafeMigrations check contract was not created', 1; "
+            // WHY: Procedure arguments cannot contain the lossless string
+            // expression. Fingerprinted locals remain unique in table stamps.
+            + schemaDeclaration + tableDeclaration + nameDeclaration
             + "EXEC sys.sp_addextendedproperty "
             + "@name = N'Doka:SafeMigrations:Contract', "
-            + $"@value = {Literal(fingerprint)}, "
+            + $"@value = {contractValue}, "
             + "@level0type = N'SCHEMA', "
-            + $"@level0name = {Literal(EffectiveSchema(definition.Schema))}, "
+            + $"@level0name = {schemaArgument}, "
             + "@level1type = N'TABLE', "
-            + $"@level1name = {Literal(definition.Table)}, "
+            + $"@level1name = {tableArgument}, "
             + "@level2type = N'CONSTRAINT', "
-            + $"@level2name = {Literal(definition.Name)}";
+            + $"@level2name = {nameArgument}";
     }
 
     private string CheckExpression(
         ExpectedCheckConstraintDefinition definition
     )
-        => definition.Sql ?? (definition.Expression is { } expression
+        => definition.CapturedSql ?? definition.Sql ?? (definition.Expression is { } expression
             ? _expressionRenderer.Render(expression)
             : null)
                 ?? throw new InvalidOperationException("A check constraint has no expression.");

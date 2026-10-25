@@ -107,7 +107,7 @@ internal static class SafeMigrationSqlExpressionPropertyCases
         // Keep generated trees inside the lossless intersection of the parser
         // and both provider renderers. Opaque SQL, provider fragments, and
         // provider-typed literals require separate negative contracts.
-        return (selector % 10) switch
+        return (selector % 11) switch
         {
             0 => SafeMigrationSql.Binary(
                 CreateExpression(identifier, literal, first, depth - 1),
@@ -144,6 +144,13 @@ internal static class SafeMigrationSqlExpressionPropertyCases
                 CreateExpression(identifier, literal, first, depth - 1),
                 "canonical"),
             8 => CreateCurrentValue(selector),
+            9 => SafeMigrationSql.Case(
+                [
+                    new SafeMigrationSqlCaseWhenClause(
+                        SafeMigrationSql.IsNull(CreateExpression(identifier, literal, first, depth - 1)),
+                        CreateExpression(identifier, literal, second, depth - 1)),
+                ],
+                CreateExpression(identifier, literal, third, depth - 1)),
             _ => CreateLeaf(identifier, literal, selector),
         };
     }

@@ -1,8 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 /// <summary>Tracks accepted physical FK dependencies without snapshotting complete table definitions.</summary>
-internal sealed class SqlServerProjectedDependencyGraph :
-    ISafeMigrationProjectedDependencyAnalyzer,
+internal sealed partial class SqlServerProjectedDependencyGraph : ISafeMigrationProjectedDependencyAnalyzer,
     ISafeMigrationLivePrerequisiteSource
 {
     private readonly Dictionary<TableKey, int> _tables = [];
@@ -28,12 +27,19 @@ internal sealed class SqlServerProjectedDependencyGraph :
     private readonly Dictionary<SchemaObjectKey, ConstraintOccupancy> _constraintNames = [];
     private readonly SqlServerProjectedCandidateKeys _candidateKeys = new();
     private readonly Func<ExpectedTableDefinition, ExpectedForeignKeyDefinition, bool> _inlinePhysicalWidthSupported;
-    private Func<ExpectedColumnDefinition, ExpectedColumnDefinition, bool> _storageEquals = static (left, right)
-        => left.StoreType == right.StoreType && left.ClrType == right.ClrType
-            && left.IsUnicode == right.IsUnicode && left.MaxLength == right.MaxLength
-            && left.IsFixedLength == right.IsFixedLength && left.IsRowVersion == right.IsRowVersion
-            && left.Precision == right.Precision && left.Scale == right.Scale
-            && Equals(left.Collation, right.Collation);
+
+    private Func<ExpectedColumnDefinition, ExpectedColumnDefinition, bool> _storageEquals = static (
+            left,
+            right
+        ) => left.StoreType == right.StoreType
+        && left.ClrType == right.ClrType
+        && left.IsUnicode == right.IsUnicode
+        && left.MaxLength == right.MaxLength
+        && left.IsFixedLength == right.IsFixedLength
+        && left.IsRowVersion == right.IsRowVersion
+        && left.Precision == right.Precision
+        && left.Scale == right.Scale
+        && Equals(left.Collation, right.Collation);
 
     private int _nextTableId = -1;
     private int _nextForeignKeyId = -1;
@@ -49,453 +55,6 @@ internal sealed class SqlServerProjectedDependencyGraph :
         _inlinePhysicalWidthSupported = inlinePhysicalWidthSupported;
     }
 
-    /// <summary>Copies independently captured rename destination occupancy before ordered graph mutations.</summary>
-    /// <param name="operations">The operation stream used to bind the immutable catalog names.</param>
-    /// <param name="analyses">The corresponding immutable classifications to enrich.</param>
-    internal void CaptureRenameTargetPresence(
-        IReadOnlyList<SafeMigrationOperation> operations,
-        SafeMigrationProviderAnalysis[] analyses
-    )
-    {
-        for (var index = 0; index < operations.Count; index++)
-        {
-            if (operations[index].Intent is not RenameTableIntent rename)
-            {
-                continue;
-            }
-
-            var target = new TableKey(rename.NewSchema ?? rename.Schema ?? "dbo", rename.NewName ?? rename.Name);
-            if (!_tables.TryGetValue(target, out var identity))
-            {
-                continue;
-            }
-
-            // WHY: Rename identities are already bound using catalog collation.
-            // Reuse that snapshot without another query, and retain non-table
-            // occupants rather than mistaking them for a free schema name.
-            bool? intermediateExists = null;
-            if ((rename.NewName ?? rename.Name) != rename.Name
-                && (rename.NewSchema ?? rename.Schema ?? "dbo") != (rename.Schema ?? "dbo"))
-            {
-                var intermediate = new TableKey(rename.Schema ?? "dbo", rename.NewName ?? rename.Name);
-                if (_tables.TryGetValue(intermediate, out var intermediateIdentity))
-                {
-                    intermediateExists = !_missingTables.Contains(intermediateIdentity)
-                        || _nonTableNames.Contains(intermediate);
-                }
-            }
-
-            analyses[index] = analyses[index].WithRenameTargetExists(
-                !_missingTables.Contains(identity) || _nonTableNames.Contains(target), intermediateExists);
-        }
-    }
-
-    /// <summary>Determines whether an operation stream needs dependency metadata.</summary>
-    /// <param name="operations">The safe operation stream.</param>
-    /// <returns>Whether structural dependency or schema validation is necessary.</returns>
-    public static bool IsRequired(
-        IReadOnlyList<SafeMigrationOperation> operations
-    )
-        => operations.Any(static operation => operation.Intent is EnsureTableIntent or DropTableIntent
-            or RenameTableIntent or EnsureForeignKeyIntent or DropForeignKeyIntent
-            or EnsureSchemaIntent or DropSchemaIntent);
-
-    /// <summary>Reads one FK graph and bounded bindings using the caller's analysis transaction.</summary>
-    /// <param name="connection">The open provider connection.</param>
-    /// <param name="transaction">The active analysis transaction.</param>
-    /// <param name="operations">The stream whose names must resolve using catalog collation.</param>
-    /// <param name="commandTimeout">The configured command timeout.</param>
-    /// <param name="inlinePrerequisite">The provider's inline storage and candidate-key predicate.</param>
-    /// <param name="storageEquals">The provider's inferred physical column comparison.</param>
-    /// <param name="inlinePhysicalWidthSupported">The provider's authored inline key-width proof.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <param name="sparsePrerequisite">The catalog-only mixed live/authored endpoint validator.</param>
-    /// <returns>A mutable graph private to this analysis scope.</returns>
-    public static async Task<SqlServerProjectedDependencyGraph> ReadAsync(
-        DbConnection connection,
-        DbTransaction? transaction,
-        IReadOnlyList<SafeMigrationOperation> operations,
-        int? commandTimeout,
-        Func<ExpectedTableDefinition, ExpectedForeignKeyDefinition, string> inlinePrerequisite,
-        Func<ExpectedColumnDefinition, ExpectedColumnDefinition, bool> storageEquals,
-        Func<ExpectedTableDefinition, ExpectedForeignKeyDefinition, bool> inlinePhysicalWidthSupported,
-        CancellationToken cancellationToken,
-        Func<ExpectedTableDefinition?, ExpectedForeignKeyDefinition, int, string>? sparsePrerequisite = null
-    )
-    {
-        var graph = new SqlServerProjectedDependencyGraph(inlinePhysicalWidthSupported)
-        {
-            _storageEquals = storageEquals
-        };
-
-        await using var command = connection.CreateCommand();
-        command.Transaction = transaction;
-        if (commandTimeout is { } timeout)
-        {
-            command.CommandTimeout = timeout;
-        }
-
-        // WHY: Cascade topology is global, but one compact edge per FK is
-        // sufficient. Unrelated column/table metadata is never materialized.
-        command.CommandText = "SELECT object_id, parent_object_id, referenced_object_id, name, "
-            + "delete_referential_action, update_referential_action, key_index_id FROM sys.foreign_keys;";
-        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
-        {
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                var id = reader.GetInt32(0);
-                var edge = new ForeignKeyEdge(reader.GetInt32(1), reader.GetInt32(2),
-                    CatalogAction(reader.GetByte(4)), CatalogAction(reader.GetByte(5)), reader.GetInt32(6));
-
-                graph._foreignKeys[id] = edge;
-                graph._foreignKeyNames[new ForeignKeyKey(edge.Dependent, reader.GetString(3))] = id;
-            }
-        }
-
-        var inline = CollectInlineRequests(operations);
-        var requests = CollectRequests(operations);
-
-        foreach (var request in inline)
-        {
-            if (request.IsSparse)
-            {
-                graph._sparseCaptured.Add(request.ForeignKey);
-            }
-
-            if (request.IsStandalone)
-            {
-                graph._standaloneNames.Add(new SchemaObjectKey(
-                    request.ForeignKey.Schema ?? "dbo", request.ForeignKey.Name));
-                graph._standaloneObjectNames.Add(request.ForeignKey.Name);
-            }
-
-            foreach (var column in request.InitialForeignKey.PrincipalColumns)
-            {
-                requests.Add(new BindingRequest(request.InitialForeignKey.PrincipalSchema ?? "dbo",
-                    request.InitialForeignKey.PrincipalTable, column, null));
-            }
-        }
-
-        foreach (var operation in operations)
-        {
-            if (operation.Intent is not RenameTableIntent rename
-                || (rename.Schema ?? "dbo") == (rename.NewSchema ?? rename.Schema ?? "dbo"))
-            {
-                continue;
-            }
-
-            foreach (var name in graph._standaloneNames)
-            {
-                if (name.Schema == (rename.NewSchema ?? rename.Schema ?? "dbo"))
-                {
-                    // WHY: A live source can own the future FK name before
-                    // ALTER SCHEMA transfers it. Bind that owner in the same
-                    // bounded catalog batches; unrelated names stay uncaptured.
-                    requests.Add(new BindingRequest(rename.Schema ?? "dbo", rename.Name, null, name.Name));
-                }
-            }
-        }
-
-        foreach (var chunk in requests.Chunk(256))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            // WHY: Literal binding uses CATALOG_DEFAULT, not a guessed .NET
-            // case-folding comparer. A table alias maps to the real object id.
-            // Occupancy includes schema-scoped child objects, matching the
-            // runtime ObjectExists guard rather than assuming only root names collide.
-            var values = string.Join(", ", chunk.Select(static request => "("
-                + Literal(request.Schema) + ", " + Literal(request.Table) + ", "
-                + Literal(request.Column) + ", " + Literal(request.ForeignKey) + ")"));
-
-            command.CommandText = "SELECT requested.schema_name, requested.table_name, requested.column_name, "
-                + "requested.fk_name, s.schema_id, t.object_id, c.system_type_id, c.is_nullable, "
-                + "c.default_object_id, fk.object_id, "
-                + "CONVERT(bit, CASE WHEN EXISTS (SELECT 1 FROM sys.triggers tr JOIN sys.trigger_events te "
-                + "ON te.object_id = tr.object_id WHERE tr.parent_id = t.object_id "
-                + "AND tr.is_instead_of_trigger = 1 AND te.type_desc = N'DELETE') THEN 1 ELSE 0 END), "
-                + "CONVERT(bit, CASE WHEN EXISTS (SELECT 1 FROM sys.triggers tr JOIN sys.trigger_events te "
-                + "ON te.object_id = tr.object_id WHERE tr.parent_id = t.object_id "
-                + "AND tr.is_instead_of_trigger = 1 AND te.type_desc = N'UPDATE') THEN 1 ELSE 0 END), "
-                + "ix.index_id, kc.unique_index_id, c.column_id, occupied.object_id, "
-                + "named.object_id, named.parent_object_id, named.type "
-                + $"FROM (VALUES {values}) requested(schema_name, table_name, column_name, fk_name) "
-                + "LEFT JOIN sys.schemas s ON s.name = requested.schema_name COLLATE CATALOG_DEFAULT "
-                + "LEFT JOIN sys.tables t ON t.schema_id = s.schema_id "
-                + "AND t.name = requested.table_name COLLATE CATALOG_DEFAULT "
-                + "LEFT JOIN sys.objects occupied ON occupied.schema_id = s.schema_id "
-                + "AND occupied.name = requested.table_name COLLATE CATALOG_DEFAULT "
-                + "LEFT JOIN sys.objects named ON named.schema_id = s.schema_id "
-                + "AND named.name = requested.fk_name COLLATE CATALOG_DEFAULT "
-                + "LEFT JOIN sys.columns c ON c.object_id = t.object_id "
-                + "AND c.name = requested.column_name COLLATE CATALOG_DEFAULT "
-                + "LEFT JOIN sys.foreign_keys fk ON fk.parent_object_id = t.object_id "
-                + "AND fk.name = requested.fk_name COLLATE CATALOG_DEFAULT "
-                + "LEFT JOIN sys.indexes ix ON ix.object_id = t.object_id "
-                + "AND ix.name = requested.fk_name COLLATE CATALOG_DEFAULT "
-                + "LEFT JOIN sys.key_constraints kc ON kc.parent_object_id = t.object_id "
-                + "AND kc.name = requested.fk_name COLLATE CATALOG_DEFAULT;";
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                var schema = reader.GetString(0);
-                var table = reader.GetString(1);
-                var tableId = reader.IsDBNull(5) ? graph.GetTable(table, schema) : reader.GetInt32(5);
-
-                graph._tables[new TableKey(schema, table)] = tableId;
-                if (reader.IsDBNull(5))
-                {
-                    graph._missingTables.Add(tableId);
-                    if (!reader.IsDBNull(15))
-                    {
-                        graph._nonTableNames.Add(new TableKey(schema, table));
-                    }
-                }
-
-                graph._schemas[schema] = reader.IsDBNull(4) ? graph.GetSchema(schema) : reader.GetInt32(4);
-                graph._tableSchemas[tableId] = graph._schemas[schema];
-                if (reader.IsDBNull(4))
-                {
-                    graph._missingSchemas.Add(graph._schemas[schema]);
-                }
-
-                graph._triggers[tableId] = new TriggerSafety(reader.GetBoolean(10), reader.GetBoolean(11));
-                if (!reader.IsDBNull(6) && !reader.IsDBNull(2))
-                {
-                    graph._columns[new ColumnKey(tableId, reader.GetString(2))] =
-                        new ColumnSafety(reader.GetByte(6) == 189, reader.GetBoolean(7), reader.GetInt32(8) != 0);
-                    graph._columnIds[new ColumnKey(tableId, reader.GetString(2))] = reader.GetInt32(14);
-                }
-
-                if (!reader.IsDBNull(9) && !reader.IsDBNull(3))
-                {
-                    graph._foreignKeyNames[new ForeignKeyKey(tableId, reader.GetString(3))] = reader.GetInt32(9);
-                }
-
-                if (!reader.IsDBNull(3) && (!reader.IsDBNull(12) || !reader.IsDBNull(13)))
-                {
-                    graph._candidateKeys.BindName(tableId, reader.GetString(3),
-                        reader.IsDBNull(12) ? reader.GetInt32(13) : reader.GetInt32(12));
-                }
-
-                if (!reader.IsDBNull(3) && !reader.IsDBNull(16))
-                {
-                    var name = new SchemaObjectKey(schema, reader.GetString(3));
-                    if (graph._standaloneObjectNames.Contains(name.Name))
-                    {
-                        // WHY: Constraint names are schema-global, unlike index
-                        // names. Capture compact physical ownership in this
-                        // existing binding batch, including non-constraint
-                        // occupants, before a missing child hides the conflict.
-                        graph._constraintNames[name] = new ConstraintOccupancy(reader.GetInt32(16),
-                            reader.GetInt32(17), reader.GetString(18).TrimEnd());
-                    }
-                }
-            }
-        }
-
-        await graph.ReadSchemaObjectsAsync(command, operations, cancellationToken);
-        await graph._candidateKeys.ReadAsync(command,
-            inline.Select(request => graph.GetTable(request.InitialForeignKey.PrincipalTable,
-                request.InitialForeignKey.PrincipalSchema)), cancellationToken);
-
-        // WHY: A native fallback cannot prove an absent dependent column.
-        // Prune it after bindings so a newly added operand consumes only its
-        // authored alternatives in the existing bounded metadata transport.
-        inline = inline.Where(request => !request.IsSparse || request.Table is not null
-            || graph.HasLiveColumn(request.ForeignKey.Table, request.ForeignKey.Schema,
-                request.ForeignKey.Columns[request.OperandOrdinal])).ToArray();
-
-        for (var start = 0; start < inline.Length;)
-        {
-            var batch = new StringBuilder();
-            var count = 0;
-            var bytes = 0;
-            while (start + count < inline.Length && count < 32)
-            {
-                var request = inline[start + count];
-                var selection = "SELECT " + (start + count).ToString(CultureInfo.InvariantCulture)
-                    + ", CONVERT(bit, CASE WHEN "
-                    + (request.IsSparse && sparsePrerequisite is not null
-                        ? sparsePrerequisite(request.Table, request.InitialForeignKey, request.OperandOrdinal)
-                        : request.Table is null ? "1 = 0"
-                        : inlinePrerequisite(request.Table, request.InitialForeignKey))
-                    + " THEN 1 ELSE 0 END)";
-
-                var addedBytes = Encoding.UTF8.GetByteCount(selection) + (count == 0 ? 0 : 11);
-
-                if (addedBytes > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes)
-                {
-                    throw SafeMigrationCatalogQueryLimits.OversizedOperation(start + count, 0, addedBytes);
-                }
-
-                if (bytes + addedBytes > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes)
-                {
-                    break;
-                }
-
-                if (count > 0)
-                {
-                    batch.Append(" UNION ALL ");
-                }
-
-                batch.Append(selection);
-                bytes += addedBytes;
-                count++;
-            }
-
-            command.CommandText = batch.ToString();
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                if (reader.GetBoolean(1))
-                {
-                    var request = inline[reader.GetInt32(0)];
-
-                    var principal = graph.GetTable(
-                        request.InitialForeignKey.PrincipalTable, request.InitialForeignKey.PrincipalSchema);
-
-                    if (request.IsSparse)
-                    {
-                        var columnId = graph._columnIds.GetValueOrDefault(new ColumnKey(principal,
-                            request.InitialForeignKey.PrincipalColumns[request.OperandOrdinal]));
-
-                        if (columnId > 0)
-                        {
-                            if (!graph._sparseLiveReady.TryGetValue(request.ForeignKey, out var proofs))
-                            {
-                                proofs = [];
-                                graph._sparseLiveReady.Add(request.ForeignKey, proofs);
-                            }
-
-                            proofs.Add(new SparseStorageProof(principal, columnId, request.OperandOrdinal,
-                                request.Table?.Columns[0]));
-                        }
-
-                        continue;
-                    }
-
-                    var columnIds = request.InitialForeignKey.PrincipalColumns
-                        .Select(column => graph._columnIds.GetValueOrDefault(new ColumnKey(principal, column)))
-                        .ToArray();
-
-                    if (columnIds.All(static id => id > 0))
-                    {
-                        // WHY: One FK instance can be reused across authored
-                        // child contracts. A later successful capture must
-                        // neither certify an incompatible earlier operand nor
-                        // replace its independent valid full-definition proof.
-                        var key = new InlineProofKey(request.ForeignKey, request.Table!);
-
-                        var proof = new InlineStorageProof(principal, columnIds,
-                            request.Table!, request.IsStandalone);
-
-                        graph._liveInlineReady[key] = proof;
-                    }
-                }
-            }
-
-            start += count;
-        }
-
-        return graph;
-    }
-
-    /// <inheritdoc />
-    public bool HasLiveColumn(string table, string? schema, string column)
-    {
-        var identity = GetTable(table, schema);
-        var columnId = _columnIds.GetValueOrDefault(new ColumnKey(identity, column));
-
-        return !_unknown && identity > 0 && !_missingTables.Contains(identity) && columnId > 0
-            && !_invalidatedStorage.Contains(new ColumnIdentity(identity, columnId));
-    }
-
-    /// <inheritdoc />
-    public bool RequiresLiveForeignKeyQualification(EnsureForeignKeyIntent intent)
-    {
-        var definition = intent.Definition;
-
-        // WHY: Retain failed captures too. Identical authored CLR/null
-        // collation facets cannot override a native endpoint mismatch; wholly
-        // authored new owners keep their separate projection contract.
-
-        return _sparseCaptured.Contains(definition)
-            && GetTable(definition.Table, definition.Schema) > 0
-            && GetTable(definition.PrincipalTable, definition.PrincipalSchema) > 0;
-    }
-
-    /// <inheritdoc />
-    public IReadOnlyList<SafeMigrationLiveCandidateKey>? GetLiveForeignKeyCandidateKeys(
-        EnsureForeignKeyIntent intent,
-        ISafeMigrationProjectedColumnSource columns
-    )
-    {
-        var foreign = intent.Definition;
-        var dependent = GetTable(foreign.Table, foreign.Schema);
-        var principal = GetTable(foreign.PrincipalTable, foreign.PrincipalSchema);
-        var createdOwner = dependent < 0 && _createdTables.ContainsKey(dependent)
-            && columns is ISafeMigrationProjectedTableSource tables
-            && tables.TryGetProjectedTableState(foreign.Table, foreign.Schema, out var state)
-            && state.IsNewlyCreated && !state.HasDataMutation && !state.HasUnknownStructure;
-
-        // WHY: An accepted ordinary new owner can acquire columns after its
-        // CREATE. Its current empty lifetime is certified by Core, not by a
-        // future authoring proposal or the initially missing catalog name.
-        if (_unknown || (dependent <= 0 && !createdOwner) || principal <= 0
-            || _missingTables.Contains(dependent) || _missingTables.Contains(principal)
-            || !_sparseLiveReady.TryGetValue(foreign, out var proofs))
-        {
-            return null;
-        }
-
-        if (foreign.Columns.Count > 32)
-        {
-            return null;
-        }
-
-        Span<int> principalIds = stackalloc int[foreign.Columns.Count];
-        for (var ordinal = 0; ordinal < foreign.Columns.Count; ordinal++)
-        {
-            var id = _columnIds.GetValueOrDefault(new ColumnKey(principal, foreign.PrincipalColumns[ordinal]));
-            if (id <= 0 || _invalidatedStorage.Contains(new ColumnIdentity(principal, id)))
-            {
-                return null;
-            }
-
-            var authored = columns.TryGetProjectedColumn(foreign.Table, foreign.Schema,
-                foreign.Columns[ordinal], out var current);
-
-            var compatible = false;
-            foreach (var proof in proofs)
-            {
-                if (proof.Principal == principal && proof.PrincipalColumn == id && proof.OperandOrdinal == ordinal
-                    && (authored ? proof.DependentColumn is not null && current is not null
-                        && SafeMigrationDefinitionEquivalence.Column(proof.DependentColumn, current)
-                        : proof.DependentColumn is null
-                            && HasLiveColumn(foreign.Table, foreign.Schema, foreign.Columns[ordinal])))
-                {
-                    compatible = true;
-                    break;
-                }
-            }
-
-            if (!compatible)
-            {
-                return null;
-            }
-
-            principalIds[ordinal] = id;
-        }
-
-        // WHY: Existence-only NoOp and rejected proposals retain the earlier
-        // accepted definition. Independent operand certificates match that
-        // exact shape without a composite Cartesian product; Core separately
-        // proves row safety and each surviving owner, column, and key lifetime.
-
-        return _candidateKeys.GetLiveCandidates(principal, foreign.PrincipalColumns, principalIds);
-    }
-
     /// <summary>Recovers only complete provider graph proofs after an accepted ordinary-table rename.</summary>
     /// <param name="operation">The operation following an opaque generic provider postcondition.</param>
     /// <param name="liveAnalysis">The immutable provider assessment before ordered mutations.</param>
@@ -507,7 +66,8 @@ internal sealed class SqlServerProjectedDependencyGraph :
         ISafeMigrationProjectedColumnSource columns
     )
     {
-        if (_unknown || liveAnalysis.IsInvariantUnsupported
+        if (_unknown
+            || liveAnalysis.IsInvariantUnsupported
             || liveAnalysis.ObservedState is SafeMigrationObservedState.Unsupported
                 or SafeMigrationObservedState.DataBlocked)
         {
@@ -518,8 +78,8 @@ internal sealed class SqlServerProjectedDependencyGraph :
         {
             case EnsureSchemaIntent or DropSchemaIntent:
                 return ValidateSchemaOperation(operation.Intent, liveAnalysis);
-            case EnsureTableIntent table when liveAnalysis.ObservedState
-                is SafeMigrationObservedState.Missing or SafeMigrationObservedState.PrerequisiteMissing:
+            case EnsureTableIntent table when liveAnalysis.ObservedState is SafeMigrationObservedState.Missing
+                or SafeMigrationObservedState.PrerequisiteMissing:
                 var key = new TableKey(table.Definition.Schema ?? "dbo", table.Definition.Table);
 
                 if (!_missingTables.Contains(GetTable(table.Definition.Table, table.Definition.Schema))
@@ -534,21 +94,31 @@ internal sealed class SqlServerProjectedDependencyGraph :
                 }
 
                 var assessment = ValidateForeignKeys(
-                    table.Definition.ForeignKeys, liveAnalysis, columns, table.Definition);
+                    table.Definition.ForeignKeys,
+                    liveAnalysis,
+                    columns,
+                    table.Definition);
 
                 // WHY: Core cannot retain a complete existing-table model after
                 // a rename. This graph instead binds each surviving parent key
                 // and storage proof to its physical ids; no stale name or absent
                 // row proof is promoted merely because the original table was missing.
-                return assessment.ObservedState == SafeMigrationObservedState.PrerequisiteMissing
-                        && assessment.Code is "classified_prerequisite_missing" or "inline_foreign_key_prerequisite"
-                        && HasAllInlinePrerequisites(table.Definition, columns)
-                    ? new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
-                        SafeMigrationRepairCapability.None, false, "projected_inline_prerequisites_ready")
-                    : assessment;
+                return assessment is
+                    {
+                        ObservedState: SafeMigrationObservedState.PrerequisiteMissing,
+                        Code: "classified_prerequisite_missing" or "inline_foreign_key_prerequisite"
+                    }
+                    && HasAllInlinePrerequisites(table.Definition, columns)
+                        ? new SafeMigrationProviderAnalysis(
+                            SafeMigrationObservedState.Missing,
+                            SafeMigrationRepairCapability.None,
+                            false,
+                            "projected_inline_prerequisites_ready")
+                        : assessment;
             case RenameTableIntent table:
                 return liveAnalysis.ObservedState == SafeMigrationObservedState.Different
-                    ? null : ValidateOrderedRename(table);
+                    ? null
+                    : ValidateOrderedRename(table);
             default:
                 return null;
         }
@@ -567,24 +137,31 @@ internal sealed class SqlServerProjectedDependencyGraph :
         }
 
         var incomingOnlyDrop = operation.Intent is DropTableIntent
-            && projectedAnalysis.ObservedState == SafeMigrationObservedState.Different
-            && projectedAnalysis.Code == "incoming_foreign_key_dependency";
+            && projectedAnalysis is
+            {
+                ObservedState: SafeMigrationObservedState.Different, Code: "incoming_foreign_key_dependency"
+            };
 
         var incomingOnlyKeyDrop = operation.Intent is DropPrimaryKeyIntent or DropUniqueConstraintIntent
-            && projectedAnalysis.ObservedState == SafeMigrationObservedState.Different
-            && projectedAnalysis.Code == "incoming_foreign_key_key_dependency";
+            && projectedAnalysis is
+            {
+                ObservedState: SafeMigrationObservedState.Different, Code: "incoming_foreign_key_key_dependency"
+            };
 
         if (projectedAnalysis.IsInvariantUnsupported
             || projectedAnalysis.ObservedState is SafeMigrationObservedState.Unsupported
-            or SafeMigrationObservedState.DataBlocked
-            || projectedAnalysis.ObservedState == SafeMigrationObservedState.Different
-                && !incomingOnlyDrop && !incomingOnlyKeyDrop)
+                or SafeMigrationObservedState.DataBlocked
+            || (projectedAnalysis.ObservedState == SafeMigrationObservedState.Different
+                && !incomingOnlyDrop
+                && !incomingOnlyKeyDrop))
         {
             return projectedAnalysis;
         }
 
-        if (_unknown && (incomingOnlyKeyDrop || operation.Intent is EnsureForeignKeyIntent or DropTableIntent
-            || operation.Intent is EnsureTableIntent { Definition.ForeignKeys.Count: > 0 }))
+        if (_unknown
+            && (incomingOnlyKeyDrop
+                || operation.Intent is EnsureForeignKeyIntent or DropTableIntent
+                || operation.Intent is EnsureTableIntent { Definition.ForeignKeys.Count: > 0 }))
         {
             return Rejected("projected_dependency_state_unknown", unknown: true);
         }
@@ -603,14 +180,23 @@ internal sealed class SqlServerProjectedDependencyGraph :
                 }
 
                 var tableAnalysis = ValidateForeignKeys(
-                    table.Definition.ForeignKeys, projectedAnalysis, columns, table.Definition);
+                    table.Definition.ForeignKeys,
+                    projectedAnalysis,
+                    columns,
+                    table.Definition);
 
-                return tableAnalysis.ObservedState == SafeMigrationObservedState.PrerequisiteMissing
-                        && tableAnalysis.Code is "classified_prerequisite_missing" or "inline_foreign_key_prerequisite"
-                        && HasAllInlinePrerequisites(table.Definition, columns)
-                    ? new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
-                        SafeMigrationRepairCapability.None, false, "projected_inline_prerequisites_ready")
-                    : tableAnalysis;
+                return tableAnalysis is
+                    {
+                        ObservedState: SafeMigrationObservedState.PrerequisiteMissing,
+                        Code: "classified_prerequisite_missing" or "inline_foreign_key_prerequisite"
+                    }
+                    && HasAllInlinePrerequisites(table.Definition, columns)
+                        ? new SafeMigrationProviderAnalysis(
+                            SafeMigrationObservedState.Missing,
+                            SafeMigrationRepairCapability.None,
+                            false,
+                            "projected_inline_prerequisites_ready")
+                        : tableAnalysis;
             case EnsureForeignKeyIntent foreignKey
                 when projectedAnalysis.ObservedState != SafeMigrationObservedState.Matching:
                 return ValidateStandaloneForeignKey(foreignKey.Definition, projectedAnalysis, columns);
@@ -618,8 +204,11 @@ internal sealed class SqlServerProjectedDependencyGraph :
                 var tableId = GetTable(table.Table, table.Schema);
                 if (_foreignKeys.Values.Any(edge => edge.Principal == tableId && edge.Dependent != tableId))
                 {
-                    return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-                        SafeMigrationRepairCapability.None, false, "projected_incoming_foreign_key");
+                    return new SafeMigrationProviderAnalysis(
+                        SafeMigrationObservedState.Different,
+                        SafeMigrationRepairCapability.None,
+                        false,
+                        "projected_incoming_foreign_key");
                 }
 
                 if (incomingOnlyDrop)
@@ -627,8 +216,11 @@ internal sealed class SqlServerProjectedDependencyGraph :
                     // WHY: Only this provider classification proves every non-FK
                     // blocker absent. Reconcile the immutable FK snapshot with
                     // accepted removals without weakening other DROP contracts.
-                    return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Matching,
-                        SafeMigrationRepairCapability.None, true, "projected_incoming_foreign_keys_removed");
+                    return new SafeMigrationProviderAnalysis(
+                        SafeMigrationObservedState.Matching,
+                        SafeMigrationRepairCapability.None,
+                        true,
+                        "projected_incoming_foreign_keys_removed");
                 }
 
                 break;
@@ -638,13 +230,19 @@ internal sealed class SqlServerProjectedDependencyGraph :
                     return Rejected("projected_schema_missing");
                 }
 
-                if (projectedAnalysis.ObservedState == SafeMigrationObservedState.PrerequisiteMissing
-                    && projectedAnalysis.Code == "classified_prerequisite_missing"
+                if (projectedAnalysis is
+                    {
+                        ObservedState: SafeMigrationObservedState.PrerequisiteMissing,
+                        Code: "classified_prerequisite_missing"
+                    }
                     && !_missingTables.Contains(GetTable(table.Name, table.Schema))
                     && _missingTables.Contains(GetTable(table.NewName ?? table.Name, table.NewSchema ?? table.Schema)))
                 {
-                    return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Matching,
-                        SafeMigrationRepairCapability.None, false, "projected_schema_transfer_ready");
+                    return new SafeMigrationProviderAnalysis(
+                        SafeMigrationObservedState.Matching,
+                        SafeMigrationRepairCapability.None,
+                        false,
+                        "projected_schema_transfer_ready");
                 }
 
                 break;
@@ -672,805 +270,11 @@ internal sealed class SqlServerProjectedDependencyGraph :
         // WHY: Another FK may legitimately reference an independent UNIQUE
         // key on the same table. New edges without a resolved backing index
         // remain blockers; mere table identity is neither proof nor rejection.
-        return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Matching,
-            SafeMigrationRepairCapability.None, false, "projected_incoming_key_references_removed");
-    }
-
-    /// <inheritdoc />
-    public void ObserveAcceptedOperation(
-        SafeMigrationOperation operation,
-        SafeMigrationProviderAnalysis liveAnalysis,
-        SafeMigrationProviderAnalysis analysis,
-        SafeMigrationDecision decision
-    )
-    {
-        if (decision.Action is not (SafeMigrationAction.Apply or SafeMigrationAction.Repair))
-        {
-            return;
-        }
-
-        switch (operation.Intent)
-        {
-            case EnsureSchemaIntent schema:
-                _missingSchemas.Remove(GetSchema(schema.Name));
-                break;
-            case DropSchemaIntent schema:
-                _missingSchemas.Add(GetSchema(schema.Name));
-                break;
-            case EnsureTableIntent table:
-                var tableId = GetTable(table.Definition.Table, table.Definition.Schema);
-
-                _missingTables.Remove(tableId);
-                _tableSchemas[tableId] = GetSchema(table.Definition.Schema ?? "dbo");
-                _createdTables[tableId] = table.Definition;
-                RegisterSchemaObject(table.Definition.Schema, table.Definition.Table,
-                    new ConstraintOccupancy(tableId, 0, "U"));
-                if (table.Definition.PrimaryKey is { } primaryKey)
-                {
-                    AddCandidateKey(tableId, primaryKey.Name, primaryKey.Columns);
-                    RegisterConstraint(tableId, table.Definition.Schema, primaryKey.Name, "PK");
-                }
-
-                foreach (var unique in table.Definition.UniqueConstraints)
-                {
-                    AddCandidateKey(tableId, unique.Name, unique.Columns);
-                    RegisterConstraint(tableId, table.Definition.Schema, unique.Name, "UQ");
-                }
-
-                foreach (var check in table.Definition.CheckConstraints)
-                {
-                    RegisterConstraint(tableId, table.Definition.Schema, check.Name, "C");
-                }
-
-                foreach (var foreignKey in table.Definition.ForeignKeys)
-                {
-                    Add(foreignKey);
-                }
-
-                break;
-            case EnsureForeignKeyIntent foreignKey:
-                Add(foreignKey.Definition);
-                break;
-            case DropForeignKeyIntent foreignKey:
-                RemoveForeignKey(foreignKey.Table, foreignKey.Schema, foreignKey.Name);
-                break;
-            case DropTableIntent table:
-                RemoveTable(table.Table, table.Schema);
-                break;
-            case RenameTableIntent table:
-                _renameSafeTables.Add(GetTable(table.Name, table.Schema));
-                RenameTable(table.Name, table.Schema, table.NewName ?? table.Name, table.NewSchema ?? table.Schema);
-                break;
-            case RenameColumnIntent column:
-                RenameColumn(column.Table, column.Schema, column.Name, column.NewName);
-                break;
-            case DropColumnIntent column:
-                RemoveColumn(column.Table, column.Schema, column.Name);
-                break;
-            case EnsureColumnIntent column:
-                InvalidateColumnStorage(column.Table, column.Schema, column.Definition.Name);
-                break;
-            case AlterColumnIntent column:
-                InvalidateColumnStorage(column.Table, column.Schema, column.Definition.Name);
-                break;
-            case EnsurePrimaryKeyIntent key:
-                AddCandidateKey(
-                    GetTable(key.Definition.Table, key.Definition.Schema), key.Definition.Name, key.Definition.Columns);
-                RegisterConstraint(GetTable(key.Definition.Table, key.Definition.Schema), key.Definition.Schema,
-                    key.Definition.Name, "PK");
-                break;
-            case EnsureUniqueConstraintIntent key:
-                AddCandidateKey(
-                    GetTable(key.Definition.Table, key.Definition.Schema), key.Definition.Name, key.Definition.Columns);
-                RegisterConstraint(GetTable(key.Definition.Table, key.Definition.Schema), key.Definition.Schema,
-                    key.Definition.Name, "UQ");
-                break;
-            case DropPrimaryKeyIntent key:
-                _candidateKeys.Remove(GetTable(key.Table, key.Schema), key.Name);
-                RemoveConstraint(GetTable(key.Table, key.Schema), key.Schema, key.Name, "PK");
-                break;
-            case DropUniqueConstraintIntent key:
-                _candidateKeys.Remove(GetTable(key.Table, key.Schema), key.Name);
-                RemoveConstraint(GetTable(key.Table, key.Schema), key.Schema, key.Name, "UQ");
-                break;
-            case EnsureCheckConstraintIntent check:
-                RegisterConstraint(GetTable(check.Definition.Table, check.Definition.Schema), check.Definition.Schema,
-                    check.Definition.Name, "C");
-                break;
-            case DropCheckConstraintIntent check:
-                RemoveConstraint(GetTable(check.Table, check.Schema), check.Schema, check.Name, "C");
-                break;
-            case EnsureIndexIntent index:
-                AddCandidateIndex(index.Definition);
-                break;
-            case DropIndexIntent index:
-                _candidateKeys.Remove(GetTable(index.Table, index.Schema), index.Name);
-                break;
-            case RenameIndexIntent index:
-                _candidateKeys.Rename(GetTable(index.Table, index.Schema), index.Name, index.NewName);
-                break;
-        }
-    }
-
-    /// <inheritdoc />
-    public void ObserveProviderOperation(
-        MigrationOperation operation
-    )
-    {
-        switch (operation)
-        {
-            case DropForeignKeyOperation foreignKey:
-                RemoveForeignKey(foreignKey.Table, foreignKey.Schema, foreignKey.Name);
-                break;
-            case DropTableOperation table:
-                RemoveTable(table.Name, table.Schema);
-                break;
-            case RenameTableOperation table:
-                RenameTable(table.Name, table.Schema, table.NewName ?? table.Name, table.NewSchema ?? table.Schema);
-                break;
-            case EnsureSchemaOperation schema:
-                _missingSchemas.Remove(GetSchema(schema.Name));
-                break;
-            case DropSchemaOperation schema:
-                _missingSchemas.Add(GetSchema(schema.Name));
-                break;
-            case AddPrimaryKeyOperation key:
-                AddCandidateKey(GetTable(key.Table, key.Schema), key.Name, key.Columns);
-                RegisterConstraint(GetTable(key.Table, key.Schema), key.Schema, key.Name, "PK");
-                break;
-            case AddUniqueConstraintOperation key:
-                AddCandidateKey(GetTable(key.Table, key.Schema), key.Name, key.Columns);
-                RegisterConstraint(GetTable(key.Table, key.Schema), key.Schema, key.Name, "UQ");
-                break;
-            case DropPrimaryKeyOperation key:
-                _candidateKeys.Remove(GetTable(key.Table, key.Schema), key.Name);
-                RemoveConstraint(GetTable(key.Table, key.Schema), key.Schema, key.Name, "PK");
-                break;
-            case DropUniqueConstraintOperation key:
-                _candidateKeys.Remove(GetTable(key.Table, key.Schema), key.Name);
-                RemoveConstraint(GetTable(key.Table, key.Schema), key.Schema, key.Name, "UQ");
-                break;
-            case CreateIndexOperation index when index.IsUnique && index.Filter is null:
-                AddCandidateKey(GetTable(index.Table, index.Schema), index.Name, index.Columns);
-                break;
-            case DropIndexOperation index when index.Table is not null:
-                _candidateKeys.Remove(GetTable(index.Table, index.Schema), index.Name);
-                break;
-            case RenameIndexOperation index when index.Table is not null:
-                _candidateKeys.Rename(GetTable(index.Table, index.Schema), index.Name, index.NewName);
-                break;
-            case RenameColumnOperation column:
-                RenameColumn(column.Table, column.Schema, column.Name, column.NewName);
-                break;
-            case DropColumnOperation column:
-                RemoveColumn(column.Table, column.Schema, column.Name);
-                break;
-            case AddColumnOperation column:
-                InvalidateColumnStorage(column.Table, column.Schema, column.Name);
-                break;
-            case AlterColumnOperation column:
-                InvalidateColumnStorage(column.Table, column.Schema, column.Name);
-                break;
-            case AddCheckConstraintOperation check:
-                RegisterConstraint(GetTable(check.Table, check.Schema), check.Schema, check.Name, "C");
-                break;
-            case DropCheckConstraintOperation check:
-                RemoveConstraint(GetTable(check.Table, check.Schema), check.Schema, check.Name, "C");
-                break;
-            case CreateIndexOperation
-                or InsertDataOperation or UpdateDataOperation or DeleteDataOperation:
-                break;
-            default:
-                // WHY: Ordinary SQL or an unproven provider effect can change
-                // FKs and triggers. Retaining the original graph would authorize
-                // a later DROP or cascade based on evidence that no longer holds.
-                _unknown = true;
-                break;
-        }
-    }
-
-    /// <summary>Checks an event-aware graph with capped path counts.</summary>
-    /// <param name="foreignKeys">The live and candidate FK edges.</param>
-    /// <returns>Whether each DELETE/UPDATE action tree visits each physical table at most once.</returns>
-    internal static bool HasValidTopology(
-        IEnumerable<ForeignKeyEdge> foreignKeys
-    )
-    {
-        var adjacency = new Dictionary<ActionNode, List<ActionNode>>();
-        foreach (var edge in foreignKeys)
-        {
-            AddAction(edge.Principal, edge.Dependent, edge.OnDelete, isDelete: true);
-            AddAction(edge.Principal, edge.Dependent, edge.OnUpdate, isDelete: false);
-        }
-
-        var seen = new HashSet<int>();
-        var queue = new Queue<ActionNode>();
-        foreach (var root in adjacency.Keys)
-        {
-            seen.Clear();
-            queue.Clear();
-            seen.Add(root.Table);
-            queue.Enqueue(root);
-            while (queue.TryDequeue(out var node))
-            {
-                if (!adjacency.TryGetValue(node, out var children))
-                {
-                    continue;
-                }
-
-                foreach (var child in children)
-                {
-                    if (!seen.Add(child.Table))
-                    {
-                        return false;
-                    }
-
-                    queue.Enqueue(child);
-                }
-            }
-        }
-
-        return true;
-
-        void AddAction(
-            int principal,
-            int dependent,
-            ReferentialAction action,
-            bool isDelete
-        )
-        {
-            if (!SqlServerForeignKeySafety.IsCascading(action))
-            {
-                return;
-            }
-
-            var source = new ActionNode(principal, isDelete);
-            if (!adjacency.TryGetValue(source, out var targets))
-            {
-                targets = [];
-                adjacency.Add(source, targets);
-            }
-
-            targets.Add(new ActionNode(dependent, isDelete && action == ReferentialAction.Cascade));
-        }
-    }
-
-    /// <summary>Represents one FK's compact physical cascading contract.</summary>
-    /// <param name="Dependent">The dependent physical table id.</param>
-    /// <param name="Principal">The principal physical table id.</param>
-    /// <param name="OnDelete">The dependent action caused by deletion.</param>
-    /// <param name="OnUpdate">The dependent action caused by update.</param>
-    /// <param name="PrincipalKeyIndex">The captured backing index, or null for an unbound projected edge.</param>
-    internal readonly record struct ForeignKeyEdge(
-        int Dependent,
-        int Principal,
-        ReferentialAction OnDelete,
-        ReferentialAction OnUpdate,
-        int? PrincipalKeyIndex = null
-    );
-
-    private SafeMigrationProviderAnalysis ValidateForeignKeys(
-        IReadOnlyList<ExpectedForeignKeyDefinition> foreignKeys,
-        SafeMigrationProviderAnalysis analysis,
-        ISafeMigrationProjectedColumnSource columns,
-        ExpectedTableDefinition? inlineTable = null
-    )
-    {
-        var additions = new List<ForeignKeyEdge>(foreignKeys.Count);
-        if (inlineTable is not null && !HasAllInlinePrerequisites(inlineTable, columns))
-        {
-            return Rejected("inline_foreign_key_prerequisite");
-        }
-
-        foreach (var foreignKey in foreignKeys)
-        {
-            var dependentId = GetTable(foreignKey.Table, foreignKey.Schema);
-            var principalId = GetTable(foreignKey.PrincipalTable, foreignKey.PrincipalSchema);
-            if (_triggers.TryGetValue(dependentId, out var triggers)
-                && ((foreignKey.OnDelete == ReferentialAction.Cascade && triggers.Delete)
-                    || ((SqlServerForeignKeySafety.IsCascading(foreignKey.OnUpdate)
-                            || foreignKey.OnDelete is ReferentialAction.SetNull or ReferentialAction.SetDefault)
-                        && triggers.Update)))
-            {
-                return Rejected("foreign_key_instead_of_trigger");
-            }
-
-            for (var ordinal = 0; ordinal < foreignKey.Columns.Count; ordinal++)
-            {
-                var dependentColumn = ReadColumn(foreignKey.Table, foreignKey.Schema,
-                    foreignKey.Columns[ordinal], columns, inlineTable);
-
-                var principalColumn = ReadColumn(foreignKey.PrincipalTable, foreignKey.PrincipalSchema,
-                    foreignKey.PrincipalColumns[ordinal], columns, inlineTable);
-
-                if (SqlServerForeignKeySafety.HasCascadingAction(foreignKey)
-                    && (dependentColumn?.RowVersion == true || principalColumn?.RowVersion == true))
-                {
-                    return Rejected("foreign_key_rowversion_action");
-                }
-
-                if ((foreignKey.OnDelete == ReferentialAction.SetNull
-                        || foreignKey.OnUpdate == ReferentialAction.SetNull)
-                    && dependentColumn?.Nullable == false)
-                {
-                    return Rejected("foreign_key_set_null_required_column");
-                }
-
-                if ((foreignKey.OnDelete == ReferentialAction.SetDefault
-                        || foreignKey.OnUpdate == ReferentialAction.SetDefault)
-                    && dependentColumn is { Nullable: false, HasDefault: false })
-                {
-                    return Rejected("foreign_key_set_default_missing_default");
-                }
-            }
-
-            if (!_foreignKeyNames.TryGetValue(new ForeignKeyKey(dependentId, foreignKey.Name), out var existingId)
-                || !_foreignKeys.ContainsKey(existingId))
-            {
-                additions.Add(new ForeignKeyEdge(dependentId, principalId, foreignKey.OnDelete, foreignKey.OnUpdate));
-            }
-        }
-
-        var topologyValid = !additions.Any(static edge => SqlServerForeignKeySafety.IsCascading(edge.OnDelete)
-                    || SqlServerForeignKeySafety.IsCascading(edge.OnUpdate))
-                || HasValidTopology(_foreignKeys.Values.Concat(additions));
-
-        if (!topologyValid)
-        {
-            return Rejected("foreign_key_cascade_topology");
-        }
-
-        // WHY: The immutable catalog may reject a cascade that becomes
-        // valid after an accepted FK drop. This provider-specific code is
-        // emitted only after storage and orphan prerequisites are proven;
-        // unrelated missing prerequisites must never become an Apply.
-
-        return analysis.ObservedState == SafeMigrationObservedState.PrerequisiteMissing
-                && analysis.Code == "foreign_key_cascade_topology"
-            ? new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
-                SafeMigrationRepairCapability.None, false, "projected_foreign_key_topology_ready")
-            : analysis;
-    }
-
-    private bool HasAllInlinePrerequisites(
-        ExpectedTableDefinition table,
-        ISafeMigrationProjectedColumnSource columns
-    )
-        => HasForeignKeyPrerequisites(table, table.ForeignKeys, columns);
-
-    /// <summary>Requalifies only the captured live-parent contract of an accepted empty new child.</summary>
-    private SafeMigrationProviderAnalysis ValidateStandaloneForeignKey(
-        ExpectedForeignKeyDefinition foreignKey,
-        SafeMigrationProviderAnalysis analysis,
-        ISafeMigrationProjectedColumnSource columns
-    )
-    {
-        var ordinary = ValidateForeignKeys([foreignKey], analysis, columns);
-
-        // WHY: Schema-global occupancy takes priority for both missing states.
-        // Qualification below reads prerequisites without changing this map;
-        // only accepted Observe transitions can release an occupied name.
-        if (ordinary.ObservedState is SafeMigrationObservedState.Missing
-                or SafeMigrationObservedState.PrerequisiteMissing
-            && _constraintNames.ContainsKey(new SchemaObjectKey(foreignKey.Schema ?? "dbo", foreignKey.Name)))
-        {
-            return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-                SafeMigrationRepairCapability.None, false, "projected_constraint_name_occupied");
-        }
-
-        if (ordinary.ObservedState != SafeMigrationObservedState.PrerequisiteMissing
-            || ordinary.Code != "projected_structure_state_unknown"
-            || columns is not ISafeMigrationProjectedTableSource tables
-            || !tables.TryGetProjectedTableState(foreignKey.Table, foreignKey.Schema, out var state)
-            || !state.IsNewlyCreated || state.HasDataMutation || state.HasUnknownStructure
-            || !_createdTables.TryGetValue(GetTable(foreignKey.Table, foreignKey.Schema), out var createdTable)
-            || createdTable.Table != foreignKey.Table
-            || (createdTable.Schema ?? "dbo") != (foreignKey.Schema ?? "dbo")
-            || !_liveInlineReady.TryGetValue(new InlineProofKey(foreignKey, createdTable), out var proof)
-            || !proof.IsStandalone)
-        {
-            return ordinary;
-        }
-
-        var capturedTable = proof.DependentTable;
-
-        // WHY: A captured future child contract is not an accepted empty-table
-        // proof. Core supplies ordered creation/data/structure facts; every FK
-        // operand must still be the exact captured dependent definition.
-        foreach (var name in foreignKey.Columns)
-        {
-            var captured = capturedTable.Columns.FirstOrDefault(column => column.Name == name);
-            if (captured is null
-                || !columns.TryGetProjectedColumn(foreignKey.Table, foreignKey.Schema, name, out var current)
-                || !SafeMigrationDefinitionEquivalence.Column(captured, current))
-            {
-                return ordinary;
-            }
-        }
-
-        var principal = GetTable(foreignKey.PrincipalTable, foreignKey.PrincipalSchema);
-        if (principal != proof.Principal || _missingTables.Contains(principal)
-            || proof.ColumnIds.Count != foreignKey.PrincipalColumns.Count)
-        {
-            return ordinary;
-        }
-
-        for (var ordinal = 0; ordinal < foreignKey.PrincipalColumns.Count; ordinal++)
-        {
-            var columnId = _columnIds.GetValueOrDefault(new ColumnKey(principal,
-                foreignKey.PrincipalColumns[ordinal]));
-
-            if (columnId <= 0 || columnId != proof.ColumnIds[ordinal]
-                || _invalidatedStorage.Contains(new ColumnIdentity(principal, columnId)))
-            {
-                return ordinary;
-            }
-        }
-
-        if (!HasForeignKeyPrerequisites(capturedTable, [foreignKey], columns))
-        {
-            return ordinary;
-        }
-
-        // WHY: Only the original structural-unknown classifier is discharged.
-        // Runtime still checks its fresh physical contract and orphan state;
-        // DML, opaque SQL, trigger uncertainty, and independent failures retain
-        // their own rejection or traceable runtime-validation origin.
-        return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
-            SafeMigrationRepairCapability.None, false, "projected_foreign_key_prerequisites_ready")
-        {
-            RequiresLiveDataProof = true,
-        };
-    }
-
-    /// <summary>Checks the shared inline/standalone physical key and storage prerequisites without row scans.</summary>
-    private bool HasForeignKeyPrerequisites(
-        ExpectedTableDefinition table,
-        IReadOnlyList<ExpectedForeignKeyDefinition> foreignKeys,
-        ISafeMigrationProjectedColumnSource columns
-    )
-    {
-        var dependentId = GetTable(table.Table, table.Schema);
-        // WHY: SQL Server caps FK keys at 32 columns. A fixed stack buffer
-        // avoids allocating requested id vectors for every inline assessment.
-        Span<int> columnIds = stackalloc int[32];
-
-        foreach (var foreignKey in foreignKeys)
-        {
-            var principalId = GetTable(foreignKey.PrincipalTable, foreignKey.PrincipalSchema);
-            if (foreignKey.PrincipalColumns.Count > columnIds.Length
-                || !_inlinePhysicalWidthSupported(table, foreignKey))
-            {
-                return false;
-            }
-
-            ResolveColumnIds(principalId, foreignKey.PrincipalColumns, columnIds);
-
-            if (principalId != dependentId && (_missingTables.Contains(principalId)
-                || !_candidateKeys.Contains(principalId, foreignKey.PrincipalColumns,
-                    columnIds[..foreignKey.PrincipalColumns.Count])))
-            {
-                return false;
-            }
-
-            var principal = principalId == dependentId ? table : _createdTables.GetValueOrDefault(principalId);
-            if (principalId == dependentId
-                && !(table.PrimaryKey?.Columns.SequenceEqual(foreignKey.PrincipalColumns) == true
-                    || table.UniqueConstraints.Any(key => key.Columns.SequenceEqual(foreignKey.PrincipalColumns))))
-            {
-                return false;
-            }
-
-            for (var ordinal = 0; ordinal < foreignKey.Columns.Count; ordinal++)
-            {
-                var dependentColumn = table.Columns.First(column => column.Name == foreignKey.Columns[ordinal]);
-                var name = foreignKey.PrincipalColumns[ordinal];
-                var principalColumn = principal?.Columns.FirstOrDefault(column => column.Name == name);
-
-                if (principalId != dependentId
-                    && columns.TryGetProjectedColumn(foreignKey.PrincipalTable, foreignKey.PrincipalSchema, name,
-                        out var projectedColumn))
-                {
-                    principalColumn = projectedColumn;
-                }
-
-                if (principalColumn is not null)
-                {
-                    if (!_storageEquals(dependentColumn, principalColumn))
-                    {
-                        return false;
-                    }
-
-                    continue;
-                }
-
-                // WHY: A Boolean snapshot is not ordered evidence. Keep its
-                // physical table/column identity and require the same surviving
-                // candidate key; renames preserve ids, drops/replacements do not.
-                if (!_liveInlineReady.TryGetValue(new InlineProofKey(foreignKey, table), out var proof)
-                    || proof.Principal != principalId
-                    || proof.DependentTable.Columns.FirstOrDefault(column => column.Name
-                        == foreignKey.Columns[ordinal]) is not { } capturedDependent
-                    || !_storageEquals(capturedDependent, dependentColumn)
-                    || columnIds[ordinal] <= 0
-                    || proof.ColumnIds[ordinal] != columnIds[ordinal]
-                    || _invalidatedStorage.Contains(new ColumnIdentity(principalId, columnIds[ordinal])))
-                {
-                    return false;
-                }
-            }
-        }
-
-        return true;
-    }
-
-    private ColumnSafety? ReadColumn(
-        string table,
-        string? schema,
-        string column,
-        ISafeMigrationProjectedColumnSource columns,
-        ExpectedTableDefinition? inlineTable
-    )
-    {
-        ExpectedColumnDefinition? definition = null;
-        if (inlineTable?.Table == table && (inlineTable.Schema ?? "dbo") == (schema ?? "dbo"))
-        {
-            definition = inlineTable.Columns.FirstOrDefault(value => value.Name == column);
-        }
-
-        if (definition is null)
-        {
-            columns.TryGetProjectedColumn(table, schema, column, out definition);
-        }
-
-        if (definition is not null)
-        {
-            return new ColumnSafety(definition.IsRowVersion
-                    || definition.StoreType is { } type
-                        && (type.Equals("rowversion", StringComparison.OrdinalIgnoreCase)
-                        || type.Equals("timestamp", StringComparison.OrdinalIgnoreCase)),
-                definition.IsNullable, definition.DefaultValue.Kind != SafeMigrationDefaultValueKind.None);
-        }
-
-        return _columns.TryGetValue(new ColumnKey(GetTable(table, schema), column), out var live) ? live : null;
-    }
-
-    private void Add(
-        ExpectedForeignKeyDefinition definition
-    )
-    {
-        var dependent = GetTable(definition.Table, definition.Schema);
-        var key = new ForeignKeyKey(dependent, definition.Name);
-        if (!_foreignKeyNames.TryGetValue(key, out var id))
-        {
-            id = _nextForeignKeyId--;
-            _foreignKeyNames[key] = id;
-        }
-
-        _foreignKeys[id] = new ForeignKeyEdge(dependent,
-            GetTable(definition.PrincipalTable, definition.PrincipalSchema), definition.OnDelete, definition.OnUpdate);
-        RegisterConstraint(dependent, definition.Schema, definition.Name, "F");
-    }
-
-    private void RemoveForeignKey(
-        string table,
-        string? schema,
-        string name
-    )
-    {
-        RemoveConstraint(GetTable(table, schema), schema, name, "F");
-        if (_foreignKeyNames.TryGetValue(new ForeignKeyKey(GetTable(table, schema), name), out var id))
-        {
-            _foreignKeys.Remove(id);
-        }
-    }
-
-    /// <summary>Tracks only authored names needed by later standalone FK collision checks.</summary>
-    private void RegisterConstraint(
-        int owner,
-        string? schema,
-        string name,
-        string kind
-    )
-        => RegisterSchemaObject(schema, name, new ConstraintOccupancy(0, owner, kind));
-
-    private void RegisterSchemaObject(
-        string? schema,
-        string name,
-        ConstraintOccupancy occupancy
-    )
-    {
-        var key = new SchemaObjectKey(schema ?? "dbo", name);
-        if (_standaloneObjectNames.Contains(name))
-        {
-            // WHY: An authored alias cannot replace a captured physical owner.
-            // Only that owner's accepted DROP may clear an occupied name;
-            // retaining it is conservative when a prior repair reused aliases.
-            _constraintNames.TryAdd(key, occupancy);
-        }
-    }
-
-    /// <summary>Discharges namespace occupancy only for the accepted physical owner and constraint kind.</summary>
-    private void RemoveConstraint(
-        int owner,
-        string? schema,
-        string name,
-        string kind
-    )
-    {
-        var key = new SchemaObjectKey(schema ?? "dbo", name);
-        if (_constraintNames.TryGetValue(key, out var occupancy)
-            && occupancy.Owner == owner && occupancy.Kind == kind)
-        {
-            _constraintNames.Remove(key);
-        }
-    }
-
-    private void RemoveTable(
-        string table,
-        string? schema
-    )
-    {
-        var id = GetTable(table, schema);
-
-        foreach (var name in _constraintNames.Where(pair => pair.Value.Owner == id || pair.Value.Object == id)
-            .Select(static pair => pair.Key).ToArray())
-        {
-            _constraintNames.Remove(name);
-        }
-
-        _missingTables.Add(id);
-        _createdTables.Remove(id);
-        _renameSafeTables.Remove(id);
-        _triggers.Remove(id);
-        _candidateKeys.RemoveTable(id);
-        foreach (var key in _columns.Keys.Where(key => key.Table == id).ToArray())
-        {
-            _columns.Remove(key);
-            _columnIds.Remove(key);
-        }
-
-        foreach (var pair in _foreignKeys.Where(pair => pair.Value.Dependent == id).ToArray())
-        {
-            _foreignKeys.Remove(pair.Key);
-        }
-    }
-
-    private void AddCandidateIndex(
-        ExpectedIndexDefinition index
-    )
-    {
-        if (index.Unique && index.Filter is null && index.StructuredFilter is null
-            && index.Keys.All(static key => key.Column is not null))
-        {
-            AddCandidateKey(GetTable(index.Table, index.Schema), index.Name,
-                index.Keys.Select(static key => key.Column!).ToArray());
-        }
-    }
-
-    private void AddCandidateKey(
-        int table,
-        string name,
-        IReadOnlyList<string> columns
-    )
-    {
-        Span<int> columnIds = stackalloc int[32];
-
-        if (columns.Count > columnIds.Length)
-        {
-            return;
-        }
-
-        ResolveColumnIds(table, columns, columnIds);
-        _candidateKeys.Add(table, name, columns, columnIds[..columns.Count]);
-    }
-
-    private void ResolveColumnIds(
-        int table,
-        IReadOnlyList<string> columns,
-        Span<int> columnIds
-    )
-    {
-        for (var ordinal = 0; ordinal < columns.Count; ordinal++)
-        {
-            columnIds[ordinal] = _columnIds.GetValueOrDefault(new ColumnKey(table, columns[ordinal]));
-        }
-    }
-
-    private void RenameColumn(
-        string table,
-        string? schema,
-        string name,
-        string newName
-    )
-    {
-        var id = GetTable(table, schema);
-        var source = new ColumnKey(id, name);
-        var target = new ColumnKey(id, newName);
-
-        if (_columns.Remove(source, out var safety))
-        {
-            _columns[target] = safety;
-        }
-
-        var columnId = _columnIds.GetValueOrDefault(source);
-
-        if (_columnIds.Remove(source))
-        {
-            _columnIds[target] = columnId;
-        }
-
-        _candidateKeys.RenameColumn(id, name, newName, columnId);
-    }
-
-    private void RemoveColumn(
-        string table,
-        string? schema,
-        string name
-    )
-    {
-        var id = GetTable(table, schema);
-        var key = new ColumnKey(id, name);
-        var columnId = _columnIds.GetValueOrDefault(key);
-
-        _columns.Remove(key);
-        _columnIds.Remove(key);
-        _candidateKeys.RemoveColumn(id, name, columnId);
-    }
-
-    private void InvalidateColumnStorage(
-        string table,
-        string? schema,
-        string name
-    )
-    {
-        var id = GetTable(table, schema);
-
-        if (_columnIds.TryGetValue(new ColumnKey(id, name), out var columnId))
-        {
-            _invalidatedStorage.Add(new ColumnIdentity(id, columnId));
-        }
-    }
-
-    private void RenameTable(
-        string table,
-        string? schema,
-        string newTable,
-        string? newSchema
-    )
-    {
-        var id = GetTable(table, schema);
-        if (table == newTable && (schema ?? "dbo") == (newSchema ?? "dbo"))
-        {
-            return;
-        }
-
-        var oldName = new SchemaObjectKey(schema ?? "dbo", table);
-        if (_constraintNames.TryGetValue(oldName, out var occupancy)
-            && occupancy.Object == id && occupancy.Kind == "U")
-        {
-            _constraintNames.Remove(oldName);
-        }
-
-        RegisterSchemaObject(newSchema, newTable, new ConstraintOccupancy(id, 0, "U"));
-        if ((schema ?? "dbo") != (newSchema ?? "dbo"))
-        {
-            // WHY: ALTER SCHEMA transfers table-owned constraints as well as
-            // the table. Move accepted ownership rather than resurrecting
-            // names from the original authored definition after a prior DROP.
-            foreach (var pair in _constraintNames.Where(pair => pair.Value.Owner == id).ToArray())
-            {
-                _constraintNames.Remove(pair.Key);
-                RegisterSchemaObject(newSchema, pair.Key.Name, pair.Value);
-            }
-        }
-
-        _tables[new TableKey(newSchema ?? "dbo", newTable)] = id;
-        _tableSchemas[id] = GetSchema(newSchema ?? "dbo");
-        var missingSourceId = _nextTableId--;
-
-        _tables[new TableKey(schema ?? "dbo", table)] = missingSourceId;
-        _missingTables.Add(missingSourceId);
+        return new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Matching,
+            SafeMigrationRepairCapability.None,
+            false,
+            "projected_incoming_key_references_removed");
     }
 
     private SafeMigrationProviderAnalysis? ValidateOrderedRename(
@@ -1480,7 +284,8 @@ internal sealed class SqlServerProjectedDependencyGraph :
         var source = GetTable(intent.Name, intent.Schema);
         var targetName = new TableKey(intent.NewSchema ?? intent.Schema ?? "dbo", intent.NewName ?? intent.Name);
         var target = GetTable(targetName.Table, targetName.Schema);
-        if (!_renameSafeTables.Contains(source) || _missingTables.Contains(source))
+        if (!_renameSafeTables.Contains(source)
+            || _missingTables.Contains(source))
         {
             return null;
         }
@@ -1490,10 +295,14 @@ internal sealed class SqlServerProjectedDependencyGraph :
             return Rejected("projected_schema_missing");
         }
 
-        if (target != source && (!_missingTables.Contains(target) || _nonTableNames.Contains(targetName)))
+        if (target != source
+            && (!_missingTables.Contains(target) || _nonTableNames.Contains(targetName)))
         {
-            return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-                SafeMigrationRepairCapability.None, false, "projected_rename_target_occupied");
+            return new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.Different,
+                SafeMigrationRepairCapability.None,
+                false,
+                "projected_rename_target_occupied");
         }
 
         if (targetName.Table != intent.Name
@@ -1504,16 +313,22 @@ internal sealed class SqlServerProjectedDependencyGraph :
                 || !_missingTables.Contains(intermediateId)
                 || _nonTableNames.Contains(intermediate))
             {
-                return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-                    SafeMigrationRepairCapability.None, false, "projected_rename_target_occupied");
+                return new SafeMigrationProviderAnalysis(
+                    SafeMigrationObservedState.Different,
+                    SafeMigrationRepairCapability.None,
+                    false,
+                    "projected_rename_target_occupied");
             }
         }
 
         // WHY: Only an accepted prior rename carries this proof that the same
         // ordinary physical table has no unsafe textual dependencies. Catalog
         // absence under the later source name alone cannot authorize a rename.
-        return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Matching,
-            SafeMigrationRepairCapability.None, target == source, "projected_rename_source_ready");
+        return new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Matching,
+            SafeMigrationRepairCapability.None,
+            target == source,
+            "projected_rename_source_ready");
     }
 
     private int GetTable(
@@ -1546,8 +361,7 @@ internal sealed class SqlServerProjectedDependencyGraph :
 
     private bool SchemaExists(
         string? schema
-    )
-        => !_missingSchemas.Contains(GetSchema(schema ?? "dbo"));
+    ) => !_missingSchemas.Contains(GetSchema(schema ?? "dbo"));
 
     private SafeMigrationProviderAnalysis ValidateSchemaOperation(
         SafeMigrationIntent intent,
@@ -1568,12 +382,16 @@ internal sealed class SqlServerProjectedDependencyGraph :
         var schema = GetSchema(name);
         var exists = !_missingSchemas.Contains(schema);
 
-        if (intent is DropSchemaIntent && exists
+        if (intent is DropSchemaIntent
+            && exists
             && (_schemasWithOtherObjects.Contains(schema)
                 || _tableSchemas.Any(pair => pair.Value == schema && !_missingTables.Contains(pair.Key))))
         {
-            return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-                SafeMigrationRepairCapability.None, false, "projected_schema_not_empty");
+            return new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.Different,
+                SafeMigrationRepairCapability.None,
+                false,
+                "projected_schema_not_empty");
         }
 
         // WHY: Schema existence is ordered state, not the immutable analyzer
@@ -1582,395 +400,18 @@ internal sealed class SqlServerProjectedDependencyGraph :
 
         return new SafeMigrationProviderAnalysis(
             exists ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Missing,
-            SafeMigrationRepairCapability.None, intent is EnsureSchemaIntent ? exists : !exists,
+            SafeMigrationRepairCapability.None,
+            intent is EnsureSchemaIntent ? exists : !exists,
             exists ? "projected_schema_present" : "projected_schema_absent");
-    }
-
-    private async Task ReadSchemaObjectsAsync(
-        DbCommand command,
-        IReadOnlyList<SafeMigrationOperation> operations,
-        CancellationToken cancellationToken
-    )
-    {
-        var schemas = operations.Select(static operation => operation.Intent)
-            .OfType<DropSchemaIntent>().Select(intent => GetSchema(intent.Name))
-            .Where(static id => id > 0).Distinct();
-
-        foreach (var chunk in schemas.Chunk(256))
-        {
-            var ids = string.Join(", ", chunk.Select(static id => id.ToString(CultureInfo.InvariantCulture)));
-
-            // WHY: A schema DROP needs all resident tables, not just requested
-            // ones. Other top-level objects/types stay conservatively present;
-            // table-owned constraints and triggers disappear with their table.
-            command.CommandText = "SELECT s.schema_id, CONVERT(bit, CASE WHEN "
-                + "EXISTS (SELECT 1 FROM sys.objects o WHERE o.schema_id = s.schema_id "
-                + "AND o.type <> N'U' AND o.parent_object_id = 0) "
-                + "OR EXISTS (SELECT 1 FROM sys.types t WHERE t.schema_id = s.schema_id AND t.is_user_defined = 1) "
-                + "OR EXISTS (SELECT 1 FROM sys.xml_schema_collections x WHERE x.schema_id = s.schema_id) "
-                + "THEN 1 ELSE 0 END) FROM sys.schemas s "
-                + $"WHERE s.schema_id IN ({ids}); "
-                + $"SELECT object_id, schema_id FROM sys.tables WHERE schema_id IN ({ids});";
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                if (reader.GetBoolean(1))
-                {
-                    _schemasWithOtherObjects.Add(reader.GetInt32(0));
-                }
-            }
-
-            await reader.NextResultAsync(cancellationToken);
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                _tableSchemas[reader.GetInt32(0)] = reader.GetInt32(1);
-            }
-        }
     }
 
     private static SafeMigrationProviderAnalysis Rejected(
         string code,
         bool unknown = false
-    )
-        => new(SafeMigrationObservedState.PrerequisiteMissing, SafeMigrationRepairCapability.None, false, code)
-        {
-            IsOpaqueProjectionUnknown = unknown,
-        };
-
-    private static ReferentialAction CatalogAction(
-        byte action
-    )
-        => action switch
-        {
-            0 => ReferentialAction.NoAction,
-            1 => ReferentialAction.Cascade,
-            2 => ReferentialAction.SetNull,
-            3 => ReferentialAction.SetDefault,
-            _ => throw new InvalidOperationException("SQL Server returned an unknown FK action."),
-        };
-
-    private static HashSet<BindingRequest> CollectRequests(
-        IReadOnlyList<SafeMigrationOperation> operations
-    )
+    ) => new(SafeMigrationObservedState.PrerequisiteMissing, SafeMigrationRepairCapability.None, false, code)
     {
-        var result = new HashSet<BindingRequest>();
-        foreach (var operation in operations)
-        {
-            switch (operation.Intent)
-            {
-                case EnsureSchemaIntent schema:
-                    result.Add(new BindingRequest(schema.Name, string.Empty, null, null));
-                    break;
-                case DropSchemaIntent schema:
-                    result.Add(new BindingRequest(schema.Name, string.Empty, null, null));
-                    break;
-                case EnsureTableIntent table:
-                    result.Add(new BindingRequest(
-                        table.Definition.Schema ?? "dbo", table.Definition.Table, null, null));
-                    foreach (var foreignKey in table.Definition.ForeignKeys)
-                    {
-                        AddForeignKey(foreignKey);
-                    }
-
-                    break;
-                case DropTableIntent table:
-                    result.Add(new BindingRequest(table.Schema ?? "dbo", table.Table, null, null));
-                    break;
-                case RenameTableIntent table:
-                    result.Add(new BindingRequest(table.Schema ?? "dbo", table.Name, null, null));
-                    result.Add(new BindingRequest(
-                        table.NewSchema ?? table.Schema ?? "dbo", table.NewName ?? table.Name, null, null));
-                    if ((table.NewName ?? table.Name) != table.Name
-                        && (table.NewSchema ?? table.Schema ?? "dbo") != (table.Schema ?? "dbo"))
-                    {
-                        result.Add(new BindingRequest(table.Schema ?? "dbo", table.NewName ?? table.Name, null, null));
-                    }
-
-                    break;
-                case EnsureForeignKeyIntent foreignKey:
-                    AddForeignKey(foreignKey.Definition);
-                    break;
-                case DropForeignKeyIntent foreignKey:
-                    result.Add(new BindingRequest(foreignKey.Schema ?? "dbo", foreignKey.Table, null, foreignKey.Name));
-                    break;
-                case DropPrimaryKeyIntent key:
-                    result.Add(new BindingRequest(key.Schema ?? "dbo", key.Table, null, key.Name));
-                    break;
-                case DropUniqueConstraintIntent key:
-                    result.Add(new BindingRequest(key.Schema ?? "dbo", key.Table, null, key.Name));
-                    break;
-                case DropCheckConstraintIntent check:
-                    result.Add(new BindingRequest(check.Schema ?? "dbo", check.Table, null, check.Name));
-                    break;
-                case DropIndexIntent index:
-                    result.Add(new BindingRequest(index.Schema ?? "dbo", index.Table, null, index.Name));
-                    break;
-                case RenameIndexIntent index:
-                    result.Add(new BindingRequest(index.Schema ?? "dbo", index.Table, null, index.Name));
-                    break;
-                case RenameColumnIntent column:
-                    result.Add(new BindingRequest(column.Schema ?? "dbo", column.Table, column.Name, null));
-                    break;
-                case DropColumnIntent column:
-                    result.Add(new BindingRequest(column.Schema ?? "dbo", column.Table, column.Name, null));
-                    break;
-            }
-        }
-
-        return result;
-
-        void AddForeignKey(ExpectedForeignKeyDefinition definition)
-        {
-            for (var ordinal = 0; ordinal < definition.Columns.Count; ordinal++)
-            {
-                result.Add(new BindingRequest(
-                    definition.Schema ?? "dbo", definition.Table, definition.Columns[ordinal], definition.Name));
-                result.Add(new BindingRequest(
-                    definition.PrincipalSchema ?? "dbo", definition.PrincipalTable,
-                    definition.PrincipalColumns[ordinal], null));
-            }
-        }
-    }
-
-    private static InlineRequest[] CollectInlineRequests(
-        IReadOnlyList<SafeMigrationOperation> operations
-    )
-    {
-        var result = new List<InlineRequest>();
-        var renames = new List<SafeMigrationIntent>();
-        var authoredTables = new Dictionary<TableKey, ExpectedTableDefinition>();
-        var authoredColumns = new Dictionary<TableKey, Dictionary<string, List<ExpectedColumnDefinition>>>();
-        var requestedColumns = new Dictionary<TableKey, HashSet<string>>();
-
-        foreach (var operation in operations)
-        {
-            if (operation.Intent is not EnsureForeignKeyIntent foreign)
-            {
-                continue;
-            }
-
-            var owner = new TableKey(foreign.Definition.Schema ?? "dbo", foreign.Definition.Table);
-            if (!requestedColumns.TryGetValue(owner, out var requested))
-            {
-                requested = new HashSet<string>(StringComparer.Ordinal);
-                requestedColumns.Add(owner, requested);
-            }
-
-            requested.UnionWith(foreign.Definition.Columns);
-        }
-
-        foreach (var operation in operations)
-        {
-            if (operation.Intent is RenameTableIntent or RenameColumnIntent)
-            {
-                renames.Add(operation.Intent);
-            }
-
-            ExpectedTableDefinition? table;
-            IReadOnlyList<ExpectedForeignKeyDefinition> foreignKeys;
-            var standalone = false;
-            var sparse = false;
-            Dictionary<string, List<ExpectedColumnDefinition>>? alternatives = null;
-            switch (operation.Intent)
-            {
-                case EnsureTableIntent ensure:
-                    table = ensure.Definition;
-                    authoredTables[new TableKey(table.Schema ?? "dbo", table.Table)] = table;
-                    foreach (var definition in table.Columns)
-                    {
-                        CaptureColumn(new TableKey(table.Schema ?? "dbo", table.Table), definition);
-                    }
-
-                    foreignKeys = table.ForeignKeys;
-                    break;
-                case EnsureForeignKeyIntent ensure when authoredTables.TryGetValue(
-                    new TableKey(ensure.Definition.Schema ?? "dbo", ensure.Definition.Table), out var source)
-                    && ensure.Definition.Columns.All(name => source.Columns.Any(column => column.Name == name)):
-                    table = source;
-                    foreignKeys = [ensure.Definition];
-                    standalone = true;
-                    break;
-                case EnsureForeignKeyIntent ensure when authoredColumns.TryGetValue(
-                    new TableKey(ensure.Definition.Schema ?? "dbo", ensure.Definition.Table), out var additions):
-                    table = null;
-                    foreignKeys = [ensure.Definition];
-                    standalone = true;
-                    sparse = true;
-                    alternatives = additions;
-                    break;
-                case EnsureColumnIntent column:
-                    CaptureColumn(new TableKey(column.Schema ?? "dbo", column.Table), column.Definition);
-                    continue;
-                case DropColumnIntent column:
-                    if (authoredColumns.TryGetValue(new TableKey(column.Schema ?? "dbo", column.Table), out var old))
-                    {
-                        old.Remove(column.Name);
-                    }
-
-                    continue;
-                case DropTableIntent drop:
-                    authoredTables.Remove(new TableKey(drop.Schema ?? "dbo", drop.Table));
-                    authoredColumns.Remove(new TableKey(drop.Schema ?? "dbo", drop.Table));
-                    continue;
-                case RenameTableIntent rename:
-                    // WHY: A source rename is not proof that a captured authored
-                    // table reached its destination. Inline principal identity
-                    // rebinding remains supported; standalone children fail closed.
-                    authoredTables.Remove(new TableKey(rename.Schema ?? "dbo", rename.Name));
-                    authoredTables.Remove(new TableKey(rename.NewSchema ?? rename.Schema ?? "dbo",
-                        rename.NewName ?? rename.Name));
-                    authoredColumns.Remove(new TableKey(rename.Schema ?? "dbo", rename.Name));
-                    authoredColumns.Remove(new TableKey(rename.NewSchema ?? rename.Schema ?? "dbo",
-                        rename.NewName ?? rename.Name));
-                    continue;
-                default:
-                    continue;
-            }
-
-            foreach (var foreignKey in foreignKeys)
-            {
-                var principalTable = foreignKey.PrincipalTable;
-                var principalSchema = foreignKey.PrincipalSchema ?? "dbo";
-                var principalColumns = foreignKey.PrincipalColumns.ToArray();
-
-                // WHY: A later reference to an accepted rename target needs
-                // metadata from its initial source. This is only a hypothesis
-                // until projection proves the same physical ids reached that
-                // target; a rejected rename can never activate this proof.
-                for (var previous = renames.Count - 1; previous >= 0; previous--)
-                {
-                    switch (renames[previous])
-                    {
-                        case RenameTableIntent rename when (rename.NewName ?? rename.Name) == principalTable
-                            && (rename.NewSchema ?? rename.Schema ?? "dbo") == principalSchema:
-                            principalTable = rename.Name;
-                            principalSchema = rename.Schema ?? "dbo";
-                            break;
-                        case RenameColumnIntent rename when rename.Table == principalTable
-                            && (rename.Schema ?? "dbo") == principalSchema:
-                            for (var column = 0; column < principalColumns.Length; column++)
-                            {
-                                if (principalColumns[column] == rename.NewName)
-                                {
-                                    principalColumns[column] = rename.Name;
-                                }
-                            }
-
-                            break;
-                    }
-                }
-
-                var initial = new ExpectedForeignKeyDefinition(foreignKey.Name, foreignKey.Table, foreignKey.Columns,
-                    principalTable, principalColumns, foreignKey.Schema, principalSchema,
-                    onUpdate: foreignKey.OnUpdate, onDelete: foreignKey.OnDelete);
-
-                if (sparse)
-                {
-                    for (var ordinal = 0; ordinal < foreignKey.Columns.Count; ordinal++)
-                    {
-                        // WHY: Every authored proposal remains a hypothesis
-                        // until accepted. Capture independent alternatives,
-                        // never all combinations of a composite FK shape.
-                        result.Add(new InlineRequest(null, foreignKey, initial, standalone, ordinal));
-                        if (!alternatives!.TryGetValue(foreignKey.Columns[ordinal], out var definitions))
-                        {
-                            continue;
-                        }
-
-                        foreach (var definition in definitions)
-                        {
-                            var operand = new ExpectedTableDefinition(foreignKey.Table, [definition],
-                                foreignKey.Schema);
-
-                            result.Add(new InlineRequest(operand, foreignKey, initial, standalone, ordinal));
-                        }
-                    }
-
-                    continue;
-                }
-
-                result.Add(new InlineRequest(table, foreignKey, initial, standalone));
-            }
-        }
-
-        return result.ToArray();
-
-        void CaptureColumn(TableKey owner, ExpectedColumnDefinition definition)
-        {
-            if (!requestedColumns.TryGetValue(owner, out var wanted) || !wanted.Contains(definition.Name))
-            {
-                // WHY: A later ADD can complete an earlier CREATE's composite
-                // operands. Retain only requested columns from both sources;
-                // unrelated convergence columns never inflate this capture.
-                return;
-            }
-
-            if (!authoredColumns.TryGetValue(owner, out var added))
-            {
-                added = [];
-                authoredColumns.Add(owner, added);
-            }
-
-            if (!added.TryGetValue(definition.Name, out var definitions))
-            {
-                definitions = [];
-                added.Add(definition.Name, definitions);
-            }
-
-            if (!definitions.Any(candidate => SafeMigrationDefinitionEquivalence.Column(candidate, definition)))
-            {
-                definitions.Add(definition);
-            }
-        }
-    }
-
-    private static string Literal(
-        string? value
-    )
-        => value is null
-            ? "CONVERT(nvarchar(128), NULL)"
-            : "N'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
-
-    private readonly record struct BindingRequest(
-        string Schema,
-        string Table,
-        string? Column,
-        string? ForeignKey
-    );
-
-    private readonly record struct InlineRequest(
-        ExpectedTableDefinition? Table,
-        ExpectedForeignKeyDefinition ForeignKey,
-        ExpectedForeignKeyDefinition InitialForeignKey,
-        bool IsStandalone,
-        int OperandOrdinal = -1
-    )
-    {
-        /// <summary>Distinguishes independent sparse operand facts from complete inline child proofs.</summary>
-        public bool IsSparse => OperandOrdinal >= 0;
-    }
-
-    /// <summary>Binds one exact dependent alternative to a surviving native principal operand.</summary>
-    private readonly record struct SparseStorageProof(
-        int Principal,
-        int PrincipalColumn,
-        int OperandOrdinal,
-        ExpectedColumnDefinition? DependentColumn
-    );
-
-    private readonly record struct InlineStorageProof(
-        int Principal,
-        IReadOnlyList<int> ColumnIds,
-        ExpectedTableDefinition DependentTable,
-        bool IsStandalone
-    );
-
-    /// <summary>Binds a captured FK certificate to the authored dependent table that supplied its operands.</summary>
-    private readonly record struct InlineProofKey(
-        ExpectedForeignKeyDefinition ForeignKey,
-        ExpectedTableDefinition Table
-    );
+        IsOpaqueProjectionUnknown = unknown,
+    };
 
     private readonly record struct SchemaObjectKey(
         string Schema,
@@ -2001,21 +442,5 @@ internal sealed class SqlServerProjectedDependencyGraph :
     private readonly record struct ColumnKey(
         int Table,
         string Column
-    );
-
-    private readonly record struct ColumnSafety(
-        bool RowVersion,
-        bool Nullable,
-        bool HasDefault
-    );
-
-    private readonly record struct TriggerSafety(
-        bool Delete,
-        bool Update
-    );
-
-    private readonly record struct ActionNode(
-        int Table,
-        bool Delete
     );
 }

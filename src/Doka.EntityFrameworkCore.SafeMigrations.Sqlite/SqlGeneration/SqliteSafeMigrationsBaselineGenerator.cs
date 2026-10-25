@@ -20,6 +20,9 @@ internal sealed class SqliteSafeMigrationsBaselineGenerator<TGenerator> : ISqlit
     public IReadOnlyList<MigrationCommand> Generate(
         IReadOnlyList<MigrationOperation> operations,
         IModel? model = null,
-        MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default
-    ) => _generator.Generate(operations, model, options);
+        MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default,
+        IReadOnlyList<MigrationOperation>? guardedOperations = null
+    ) => guardedOperations is not null && _generator is SqliteSafeMigrationsBaselineSqlGenerator native
+        ? native.GenerateSafe(operations, model, options, guardedOperations)
+        : _generator.Generate(operations, model, options);
 }

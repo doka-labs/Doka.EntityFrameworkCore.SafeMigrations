@@ -12,7 +12,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
     /// <inheritdoc />
     public bool HasLiveColumn(string table, string? schema, string column)
-        => _livePrerequisiteColumns?.ContainsKey(LiveColumnKey(table, schema, column)) == true;
+        => HasCurrentGeneratedLiveBinding(table, schema, column)
+            && _livePrerequisiteColumns?.ContainsKey(LiveColumnKey(table, schema, column)) == true;
 
     /// <inheritdoc />
     public bool RequiresLiveForeignKeyQualification(EnsureForeignKeyIntent intent)
@@ -40,6 +41,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         }
 
         var definition = intent.Definition;
+        // WHY: Compare dependent and principal FK storage at the same key position.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < definition.Columns.Count; ordinal++)
         {
             if (!TryGetCurrentForeignKeyStorage(definition.Table, definition.Schema,
@@ -72,6 +76,16 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         _indexInputShortCircuitCodes = null;
         _indexInputOrderedReplacementOrdinals = null;
         _providerIndexColumnProposals = null;
+        _generatedCaseRequalificationCandidates = null;
+        _stateEvaluationGuardShortCircuitCodes = null;
+        _expiredGeneratedLiveColumns = null;
+        _expiredGeneratedLiveOwners = null;
+        _acceptedGeneratedCaseColumns = null;
+        _occupiedGeneratedIndexSymbols = null;
+        _requestedGeneratedIndexSymbols = null;
+        _generatedIndexHasOpaqueBoundary = false;
+        _nativeGeneratedDropDependencies = null;
+        _nativeGeneratedDropCapabilityRefusals = null;
     }
 
     /// <summary>Tracks only requested native constraint symbols through accepted executable family changes.</summary>
@@ -85,6 +99,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         var identity = operation.Intent switch
         {
             DropForeignKeyIntent value => LiveForeignKeyName(value.Table, value.Schema, value.Name),
+            EnsureForeignKeyIntent value => LiveForeignKeyName(value.Definition.Table,
+                value.Definition.Schema, value.Definition.Name),
             DropPrimaryKeyIntent value => LiveForeignKeyName(value.Table, value.Schema, value.Name),
             DropUniqueConstraintIntent value => LiveForeignKeyName(value.Table, value.Schema, value.Name),
             DropCheckConstraintIntent value => LiveForeignKeyName(value.Table, value.Schema, value.Name),
@@ -101,7 +117,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         {
             var kind = operation.Intent switch
             {
-                DropForeignKeyIntent => "f",
+                DropForeignKeyIntent or EnsureForeignKeyIntent => "f",
                 DropPrimaryKeyIntent or EnsurePrimaryKeyIntent => "p",
                 DropUniqueConstraintIntent or EnsureUniqueConstraintIntent => "u",
                 DropCheckConstraintIntent or EnsureCheckConstraintIntent => "c",
@@ -207,7 +223,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             return identity is { } type && _livePrerequisiteTypes?.TryGetValue(type, out storage) == true;
         }
 
-        return _livePrerequisiteColumns?.TryGetValue(LiveColumnKey(table, schema, column), out storage) == true;
+        return HasCurrentGeneratedLiveBinding(table, schema, column)
+            && _livePrerequisiteColumns?.TryGetValue(LiveColumnKey(table, schema, column), out storage) == true;
     }
 
     /// <summary>Captures requested sparse dependencies in one bounded metadata phase, never application rows.</summary>
@@ -227,12 +244,15 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         cancellationToken.ThrowIfCancellationRequested();
 
         SelectOrderedIndexInputRequests(operations, results, cancellationToken);
+        var nativeDrop = CaptureNativeGeneratedDropEvidence(operations, results);
 
         var requests = CollectLivePrerequisiteRequests(operations, results, cancellationToken);
         if (requests is null || requests.Count == 0)
         {
             _indexInputProofs = await CaptureIndexInputProofsAsync(connection, operations, results,
                 null, null, commandTimeout, cancellationToken);
+            _nativeGeneratedDropDependencies = nativeDrop.Dependencies;
+            _nativeGeneratedDropCapabilityRefusals = nativeDrop.CapabilityRefusals;
 
             return;
         }
@@ -434,6 +454,39 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             .Select(definition => LiveForeignKeyName(definition.Table, definition.Schema, definition.Name))
             .ToHashSet();
 
+        HashSet<int>? caseCandidates = null;
+        // WHY: Capture missing-member evidence for the matching operation and result.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var ordinal = 0; ordinal < operations.Count; ordinal++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (operations[ordinal].Intent is EnsureColumnIntent column
+                && NeedsGeneratedCaseInputCapture(column, results[ordinal])
+                && IsDynamicGeneratedCaseRejection(results[ordinal])
+                && !liveColumns.ContainsKey(LiveColumnKey(column.Table, column.Schema, column.Definition.Name)))
+            {
+                // WHY: The ordered protocol validated every requested member,
+                // including this exact target's absence. Unsupported binding
+                // alone says nothing about whether an ADD would be idempotent.
+                (caseCandidates ??= []).Add(ordinal);
+            }
+            else if (operations[ordinal].Intent is EnsureCheckConstraintIntent check
+                && NeedsGeneratedCaseInputCapture(check, results[ordinal])
+                && (results[ordinal].ObservedState == SafeMigrationObservedState.Missing
+                    || IsDynamicGeneratedCaseRejection(results[ordinal])))
+            {
+                // WHY: The CASE preliminary guard emits this mutable
+                // Unsupported state only for an independently absent CHECK;
+                // ordinary Missing has the same exact absence certificate.
+                // An occupied native name emits Different instead. Retain its
+                // exact symbol so accepted prefix creations expire that proof.
+                (caseCandidates ??= []).Add(ordinal);
+                (requestedNames ??= []).Add(LiveForeignKeyName(check.Definition.Table,
+                    check.Definition.Schema, check.Definition.Name));
+            }
+        }
+
         cancellationToken.ThrowIfCancellationRequested();
 
         // WHY: A malformed later row or cancellation cannot publish a partly
@@ -445,7 +498,20 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         _requestedLiveConstraintNames = requestedNames;
         _liveConstraintCollisionKinds = collisionKinds;
         _sparseCheckTypeFacts = checkFacts;
+        _generatedCaseRequalificationCandidates = caseCandidates;
         _indexInputProofs = indexFacts;
+        _nativeGeneratedDropDependencies = nativeDrop.Dependencies;
+        _nativeGeneratedDropCapabilityRefusals = nativeDrop.CapabilityRefusals;
+        if (indexFacts is not null)
+        {
+            foreach (var request in indexFacts.Keys)
+            {
+                if (request.AbsentRelationName is { } name)
+                {
+                    (_requestedGeneratedIndexSymbols ??= []).Add((request.OwnerSchema, name));
+                }
+            }
+        }
     }
 
     /// <summary>Deduplicates only sparse operations whose missing live member has an earlier authored ADD.</summary>
@@ -456,12 +522,16 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     )
     {
         var hasMissingPrerequisite = false;
+        // WHY: Check prerequisite observations against their corresponding operations.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < results.Count; ordinal++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (results[ordinal].ObservedState == SafeMigrationObservedState.PrerequisiteMissing
                 || operations[ordinal].Intent is EnsureIndexIntent
-                    && NeedsIndexInputCapture(results[ordinal], ordinal))
+                    && NeedsIndexInputCapture(results[ordinal], ordinal)
+                || NeedsGeneratedCaseInputCapture(operations[ordinal].Intent, results[ordinal]))
             {
                 hasMissingPrerequisite = true;
 
@@ -477,21 +547,26 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         }
 
         var relevantColumns = new HashSet<LiveColumnIdentity>();
+        // WHY: Collect each operation's requests using its own prerequisite verdict.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var intent = operations[ordinal].Intent;
             if (!(results[ordinal].ObservedState == SafeMigrationObservedState.PrerequisiteMissing
-                    || intent is EnsureIndexIntent && NeedsIndexInputCapture(results[ordinal], ordinal))
+                    || intent is EnsureIndexIntent && NeedsIndexInputCapture(results[ordinal], ordinal)
+                    || NeedsGeneratedCaseInputCapture(intent, results[ordinal]))
                 || intent is not (EnsureForeignKeyIntent or EnsureIndexIntent or EnsurePrimaryKeyIntent
-                    or EnsureUniqueConstraintIntent or EnsureCheckConstraintIntent))
+                    or EnsureUniqueConstraintIntent or EnsureCheckConstraintIntent)
+                    && !PostgreSqlSafeMigrationCatalogSqlBuilder.RequiresGeneratedCaseInputCapture(intent))
             {
                 continue;
             }
 
             var owner = PostgreSqlSafeMigrationSchemaIdentity.GetOwner(intent);
             var local = intent is EnsureIndexIntent index
-                ? GetIndexPrerequisiteColumns(index) : SafeMigrationPrerequisiteColumns.Local(intent);
+                ? GetIndexPrerequisiteColumns(index) : NativePrerequisiteColumns(intent);
 
             foreach (var column in local)
             {
@@ -515,6 +590,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
         CaptureProviderIndexColumnProposals(operations, results, cancellationToken);
 
+        // WHY: Resolve rename chains backward from requested targets to prior sources.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = operations.Count - 1; ordinal >= 0; ordinal--)
         {
             if (operations[ordinal].Intent is RenameColumnIntent rename && relevantColumns.Contains(
@@ -535,6 +613,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         var requestedForeignKeys = new HashSet<ExpectedForeignKeyDefinition>(
             new LiveForeignKeyComparer(_currentSchema));
 
+        // WHY: Apply authored column transitions in their original operation order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -549,7 +630,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             }
 
             var intent = operations[ordinal].Intent;
-            if (results[ordinal].ObservedState == SafeMigrationObservedState.Unsupported)
+            if (results[ordinal].ObservedState == SafeMigrationObservedState.Unsupported
+                && !NeedsGeneratedCaseInputCapture(intent, results[ordinal]))
             {
                 // WHY: An unsupported proposal cannot be accepted later and
                 // must not introduce even a metadata type-resolution request.
@@ -568,6 +650,15 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
             if (intent is EnsureColumnIntent added)
             {
+                if (NeedsGeneratedCaseInputCapture(intent, results[ordinal]))
+                {
+                    AddColumns(added.Table, added.Schema, NativePrerequisiteColumns(added));
+                    if (IsDynamicGeneratedCaseRejection(results[ordinal]))
+                    {
+                        AddColumns(added.Table, added.Schema, [added.Definition.Name]);
+                    }
+                }
+
                 RecordColumn(LiveColumnKey(added.Table, added.Schema, added.Definition.Name), added.Definition);
 
                 continue;
@@ -601,7 +692,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             }
 
             if (!(results[ordinal].ObservedState == SafeMigrationObservedState.PrerequisiteMissing
-                    || intent is EnsureIndexIntent && NeedsIndexInputCapture(results[ordinal], ordinal))
+                    || intent is EnsureIndexIntent && NeedsIndexInputCapture(results[ordinal], ordinal)
+                    || NeedsGeneratedCaseInputCapture(intent, results[ordinal]))
                 || intent is not (EnsureForeignKeyIntent or EnsureIndexIntent or EnsurePrimaryKeyIntent
                     or EnsureUniqueConstraintIntent or EnsureCheckConstraintIntent))
             {
@@ -611,7 +703,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             var owner = PostgreSqlSafeMigrationSchemaIdentity.GetOwner(intent);
             var local = intent is EnsureIndexIntent index
                 ? GetIndexPrerequisiteColumns(index)
-                : SafeMigrationPrerequisiteColumns.Local(intent);
+                : NativePrerequisiteColumns(intent);
 
             var hasPriorColumn = local.Any(column => priorColumns.ContainsKey(
                 LiveColumnKey(owner.Table!, owner.Schema, column)));
@@ -623,7 +715,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                         foreignKey.Definition.PrincipalSchema, column)));
             }
 
-            if (!hasPriorColumn && intent is not EnsureIndexIntent)
+            if (!hasPriorColumn && intent is not EnsureIndexIntent
+                && !NeedsGeneratedCaseInputCapture(intent, results[ordinal]))
             {
                 continue;
             }

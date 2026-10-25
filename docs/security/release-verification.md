@@ -5,7 +5,7 @@ and verification; it does not dispatch workflows, create tags, request OIDC
 credentials, or publish packages.
 
 The five-package inventory below applies beginning with 10.4.6, SQL Server's
-first package version, and remains unchanged for prepared 10.5.0. Releases
+first package version, and remains unchanged in version 10.6.0. Releases
 10.4.2 through 10.4.5 contain four packages and no SQL Server artifact; earlier
 stable releases contain three packages. Verify a historical release with its
 matching reviewed source and inventory rather than the current five-package
@@ -19,6 +19,7 @@ allowed-signers policy:
 ```bash
 release_tag='vYOUR_APPROVED_VERSION'
 expected_commit='YOUR_APPROVED_40_CHARACTER_COMMIT'
+expected_source_ref='refs/heads/main'
 trusted_signers='/absolute/path/to/allowed-signers'
 
 git cat-file -t "refs/tags/$release_tag"
@@ -31,6 +32,13 @@ git -c gpg.format=ssh \
 Require an annotated tag, an authorized signature, and exact equality between
 the peeled commit and `expected_commit`. A key downloaded only alongside the
 release is not an independent trust root.
+
+Pin expected_source_ref to the independently reviewed original publication
+branch, not to the latest active policy or an untrusted field copied from the
+downloaded bundle. Historical main-only releases retain refs/heads/main;
+separately activated maintained releases use their exact original branch.
+Historical verification does not require continued active publication rights
+or GitHub Latest status. See [Release lines](../operations/release-lines.md).
 
 ## Verify immutable Release assets
 
@@ -89,7 +97,7 @@ for artifact in \
     --repo "$release_repo" \
     --signer-workflow "$release_repo/.github/workflows/release-candidate.yml" \
     --signer-digest "$expected_commit" \
-    --source-ref refs/heads/main \
+    --source-ref "$expected_source_ref" \
     --source-digest "$expected_commit" \
     --deny-self-hosted-runners
 done
@@ -119,7 +127,7 @@ for artifact in "$verification_dir"/*.nupkg "$verification_dir"/*.snupkg; do
     --repo "$release_repo" \
     --signer-workflow "$release_repo/.github/workflows/release-candidate.yml" \
     --signer-digest "$expected_commit" \
-    --source-ref refs/heads/main \
+    --source-ref "$expected_source_ref" \
     --source-digest "$expected_commit" \
     --predicate-type https://spdx.dev/Document/v2.2 \
     --deny-self-hosted-runners

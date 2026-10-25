@@ -280,6 +280,9 @@ internal sealed partial class SafeMigrationPreflightProjection
             return true;
         }
 
+        // WHY: Index the retained candidate-key snapshot without allocating an interface enumerator.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < liveKeys.Count; ordinal++)
         {
             if (LiveCandidateKeySurvives(definition, liveKeys[ordinal]))
@@ -360,6 +363,9 @@ internal sealed partial class SafeMigrationPreflightProjection
             return false;
         }
 
+        // WHY: Match each index part to the corresponding candidate-key column ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < columns.Count; ordinal++)
         {
             var part = index.Keys[ordinal];
@@ -554,6 +560,9 @@ internal sealed partial class SafeMigrationPreflightProjection
         ExpectedForeignKeyDefinition definition
     )
     {
+        // WHY: Pair dependent and principal foreign-key members at their declared ordinals.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < definition.Columns.Count; ordinal++)
         {
             if (!TryGetProjectedColumnDefinition(
@@ -586,6 +595,9 @@ internal sealed partial class SafeMigrationPreflightProjection
             return false;
         }
 
+        // WHY: Compare the two ordered key-member lists at the same ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < left.Count; index++)
         {
             if (!(objectIdentityNormalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal)

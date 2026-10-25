@@ -22,6 +22,8 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
     [InlineData("between")]
     [InlineData("negate")]
     [InlineData("not")]
+    [InlineData("case")]
+    [InlineData("case-null")]
     public async Task EmptyMixedCheckRetainsValidNativeExpressionBinding(string shape)
     {
         // Arrange
@@ -59,6 +61,12 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
                 SafeMigrationSql.Identifier("added")),
             "not" => SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Not, SqlColumnAndInt("added",
                 SafeMigrationSqlBinaryOperator.GreaterThan, 0)),
+            "case" => SafeMigrationSql.Case(
+                [new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.IsNull(SafeMigrationSql.Identifier("id")),
+                    SafeMigrationSql.Literal(0))], SafeMigrationSql.Identifier("added")),
+            "case-null" => SafeMigrationSql.Case(
+                [new SafeMigrationSqlCaseWhenClause(SqlColumnAndInt("added",
+                    SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0), SafeMigrationSql.Identifier("added"))]),
             _ => throw new ArgumentOutOfRangeException(nameof(shape)),
         };
 
@@ -233,6 +241,8 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
     [InlineData("function")]
     [InlineData("cast")]
     [InlineData("coalesce")]
+    [InlineData("case-condition")]
+    [InlineData("case-result")]
     public async Task EmptyMixedCheckRejectsInvalidNativeExpressionBinding(string shape)
     {
         // Arrange
@@ -248,6 +258,12 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
             "cast" => SafeMigrationSql.Cast(SafeMigrationSql.Identifier("id"), "integer"),
             "coalesce" => SafeMigrationSql.Function("COALESCE", SafeMigrationSql.Identifier("id"),
                 SafeMigrationSql.Identifier("added")),
+            "case-condition" => SafeMigrationSql.Case(
+                [new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.Identifier("added"),
+                    SafeMigrationSql.Literal(0))], SafeMigrationSql.Literal(1)),
+            "case-result" => SafeMigrationSql.Case(
+                [new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.IsNotNull(SafeMigrationSql.Identifier("id")),
+                    SafeMigrationSql.Identifier("id"))], SafeMigrationSql.Identifier("added")),
             _ => throw new ArgumentOutOfRangeException(nameof(shape)),
         };
 
@@ -280,6 +296,7 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
     [InlineData("literal-cast")]
     [InlineData("integer-cast")]
     [InlineData("coalesce")]
+    [InlineData("case")]
     public async Task CheckNativeDeparseDoesNotApproveDifferentPredicate(string shape)
     {
         // Arrange
@@ -290,6 +307,7 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
             "literal-cast" => "CAST('1' AS integer) >= 0",
             "integer-cast" => "CAST(added AS bigint) >= 0",
             "coalesce" => "COALESCE(added, 0) >= 0",
+            "case" => "CASE WHEN added > 0 THEN added ELSE 0 END >= 0",
             _ => throw new ArgumentOutOfRangeException(nameof(shape)),
         };
 
@@ -304,6 +322,10 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
             "literal-cast" => SafeMigrationSql.Cast(SafeMigrationSql.Literal("2"), "integer"),
             "integer-cast" => SafeMigrationSql.Cast(SafeMigrationSql.Identifier("added"), "integer"),
             "coalesce" => SafeMigrationSql.Function("COALESCE", SafeMigrationSql.Identifier("added"),
+                SafeMigrationSql.Literal(1)),
+            "case" => SafeMigrationSql.Case(
+                [new SafeMigrationSqlCaseWhenClause(SqlColumnAndInt("added",
+                    SafeMigrationSqlBinaryOperator.GreaterThan, 0), SafeMigrationSql.Identifier("added"))],
                 SafeMigrationSql.Literal(1)),
             _ => throw new ArgumentOutOfRangeException(nameof(shape)),
         };

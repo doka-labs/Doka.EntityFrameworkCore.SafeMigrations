@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "revision": "2026-10-25.1",
+  "repository": "doka-labs/Doka.EntityFrameworkCore.SafeMigrations",
+  "authorityRef": "refs/heads/main",
+  "lines": [
+    {
+      "sourceRef": "refs/heads/main",
+      "role": "main",
+      "packageMajor": 10,
+      "channel": "stable-and-prerelease",
+      "upstreamStage": "ga",
+      "state": "active",
+      "workflowPath": ".github/workflows/release-candidate.yml",
+      "publisherEnvironment": "nuget"
+    },
+    {
+      "sourceRef": "refs/heads/maintenance/10.x",
+      "role": "maintenance",
+      "packageMajor": 10,
+      "channel": "stable-and-prerelease",
+      "upstreamStage": "ga",
+      "state": "inactive",
+      "workflowPath": ".github/workflows/release-candidate.yml",
+      "publisherEnvironment": "nuget"
+    }
+  ]
+}

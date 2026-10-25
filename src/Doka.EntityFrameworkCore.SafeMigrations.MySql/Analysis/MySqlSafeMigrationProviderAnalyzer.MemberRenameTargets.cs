@@ -24,11 +24,16 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         cancellationToken.ThrowIfCancellationRequested();
 
         List<int>? candidates = null;
+        // WHY: Keep rename operations, physical identities and returned evidence aligned by ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             if (operations[ordinal].Intent is RenameColumnIntent or RenameIndexIntent
-                && results[ordinal].ObservedState is not (SafeMigrationObservedState.Unsupported
-                    or SafeMigrationObservedState.PrerequisiteMissing)
+                && (results[ordinal].ObservedState is not (SafeMigrationObservedState.Unsupported
+                        or SafeMigrationObservedState.PrerequisiteMissing)
+                    || (!results[ordinal].IsInvariantUnsupported
+                        && IsGeneratedDependencyRefusal(results[ordinal].Code)))
                 && TargetsCurrentDatabase(operations[ordinal].Intent, currentDatabase))
             {
                 (candidates ??= []).Add(ordinal);
@@ -134,6 +139,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
         // WHY: Cancellation or a malformed later result must not expose a
         // partially certified destination set to ordered projection.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < candidates.Count; index++)
         {
             var ordinal = candidates[index];

@@ -11,6 +11,7 @@ public sealed class MySqlRequiredColumnAddStagingContractTests
     [InlineData("default")]
     [InlineData("opaque")]
     [InlineData("structured")]
+    [InlineData("captured")]
     public void NullableStagingCopiesEveryDefinitionFacet(string expressionKind)
     {
         // Arrange
@@ -33,16 +34,18 @@ public sealed class MySqlRequiredColumnAddStagingContractTests
             defaultValue: expressionKind == "default" ? SafeMigrationDefaultValue.Literal("kept") : null,
             computedColumnSql: expressionKind == "opaque" ? "`source_value`" : null,
             isStored: expressionKind == "default" ? null : true,
-            computedExpression: expressionKind == "structured"
+            computedExpression: expressionKind is "structured" or "captured"
                 ? new SafeMigrationSqlIdentifierExpression(["source_value"])
                 : null)
         {
             ProviderAnnotations = SafeMigrationProviderAnnotation.Capture(annotated),
+            CapturedComputedSql = expressionKind == "captured" ? "`source_value`" : null,
         };
 
         string[] expectedProperties =
         [
-            "ClrType", "Collation", "Comment", "ComputedColumnSql", "ComputedExpression", "DefaultValue",
+            "CapturedComputedSql", "ClrType", "Collation", "Comment", "ComputedColumnSql", "ComputedExpression",
+            "DefaultValue",
             "IsFixedLength", "IsNullable", "IsRowVersion", "IsStored", "IsUnicode", "MaxLength", "Name",
             "Precision", "ProviderAnnotations", "Scale", "StoreType",
         ];
@@ -65,6 +68,7 @@ public sealed class MySqlRequiredColumnAddStagingContractTests
         Assert.Same(definition.ProviderAnnotations, staging.ProviderAnnotations);
         Assert.Same(definition.DefaultValue, staging.DefaultValue);
         Assert.Same(definition.ComputedExpression, staging.ComputedExpression);
+        Assert.Same(definition.CapturedComputedSql, staging.CapturedComputedSql);
         Assert.All(properties.Where(static property => property.Name != nameof(ExpectedColumnDefinition.IsNullable)),
             property => Assert.Equal(property.GetValue(definition), property.GetValue(staging)));
     }

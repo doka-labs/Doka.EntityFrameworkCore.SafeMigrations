@@ -14,9 +14,16 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 VERIFIER = REPOSITORY_ROOT / "eng/verify-dependency-license-exceptions.py"
 APPROVED_VERSIONS = {
-    "Microsoft.Data.SqlClient.SNI.runtime": "6.0.2",
+    "Microsoft.Data.SqlClient.SNI.runtime": "6.0.3",
     "Microsoft.Identity.Client.NativeInterop": "0.20.6",
 }
+
+
+def encode_package_initial(purl):
+    """Encode a package initial without hiding the identity from the action matcher."""
+    package_type, identity = purl.split("/", 1)
+
+    return f"{package_type}/%{ord(identity[0]):02x}{identity[1:]}"
 
 
 def dependency(name, version, change_type="added"):
@@ -46,10 +53,17 @@ def verify(payload):
 
 def run_workflow_guard(payload, snapshot_warning="", transport_error=False):
     """Execute the actual workflow step with an isolated, read-only API stub."""
-    workflow = (REPOSITORY_ROOT / ".github/workflows/dependency-review.yml").read_text(encoding="ascii")
+    workflow = (REPOSITORY_ROOT / ".github/workflows/dependency-review-results.yml").read_text(encoding="ascii")
     step = workflow.split("- name: Require complete snapshots and exact license-exception versions", 1)[1]
     run_block = step.split("        run: |\n", 1)[1]
-    command = "\n".join(line[10:] for line in run_block.splitlines())
+    command_lines = []
+    for line in run_block.splitlines():
+        if line and not line.startswith("          "):
+            break
+
+        command_lines.append(line[10:])
+
+    command = "\n".join(command_lines)
 
     with tempfile.TemporaryDirectory() as temporary_root:
         fixture_root = Path(temporary_root)
@@ -121,6 +135,14 @@ class DependencyLicenseExceptionTests(unittest.TestCase):
                     self.assertNotEqual(0, result.returncode)
                     self.assertIn(f"license exception requires NuGet {name.lower()}", result.stderr)
 
+    def test_previous_sni_exception_is_not_carried_forward(self):
+        pages = [[dependency("Microsoft.Data.SqlClient.SNI.runtime", "6.0.2")]]
+
+        result = verify(pages)
+
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("license exception requires NuGet microsoft.data.sqlclient.sni.runtime 6.0.3", result.stderr)
+
     def test_rejects_inconsistent_or_missing_excepted_metadata(self):
         mutations = (
             ("version", None),
@@ -155,7 +177,7 @@ class DependencyLicenseExceptionTests(unittest.TestCase):
             with self.subTest(name=name):
                 entry = dependency(name, "99.0.0")
                 entry["ecosystem"] = "npm"
-                entry["package_url"] = entry["package_url"].replace("Microsoft", "%4dicrosoft")
+                entry["package_url"] = encode_package_initial(entry["package_url"])
 
                 result = verify([[entry]])
 
@@ -165,7 +187,7 @@ class DependencyLicenseExceptionTests(unittest.TestCase):
     def test_accepts_encoded_identity_with_consistent_approved_metadata(self):
         entries = [dependency(name, version) for name, version in APPROVED_VERSIONS.items()]
         for entry in entries:
-            entry["package_url"] = entry["package_url"].replace("Microsoft", "%4dicrosoft")
+            entry["package_url"] = encode_package_initial(entry["package_url"])
 
         result = verify([entries])
 
@@ -190,6 +212,18 @@ class DependencyLicenseExceptionTests(unittest.TestCase):
         result = verify(pages)
 
         self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_doka_license_metadata_remains_the_review_actions_responsibility(self):
+        # Arrange
+        pages = [[dependency("Doka.EntityFrameworkCore.MySql", "99.0.0")]]
+        pages[0][0]["license"] = None
+
+        # Act
+        result = verify(pages)
+
+        # Assert
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertNotIn("metadata fallback", result.stdout + result.stderr)
 
     def test_an_empty_complete_delta_is_valid(self):
         pages = [[]]
@@ -249,7 +283,7 @@ class DependencyLicenseExceptionTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
 
     def test_workflow_keeps_other_gates_and_requires_paginated_version_validation(self):
-        workflow = (REPOSITORY_ROOT / ".github/workflows/dependency-review.yml").read_text(encoding="ascii")
+        workflow = (REPOSITORY_ROOT / ".github/workflows/dependency-review-results.yml").read_text(encoding="ascii")
         quality = (REPOSITORY_ROOT / ".github/workflows/quality-gates.yml").read_text(encoding="ascii")
         exception_block = re.search(r"allow-dependencies-licenses: >-\n((?:            .*\n)+)", workflow)
         license_block = re.search(r"allow-licenses: >-\n((?:            .*\n)+)", workflow)
@@ -260,7 +294,8 @@ class DependencyLicenseExceptionTests(unittest.TestCase):
 
         self.assertEqual(expected, actual)
         self.assertEqual(
-            {"Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "CC0-1.0", "ISC", "MIT", "MIT-0", "Unlicense"},
+            {"Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "CC0-1.0", "ISC", "MIT", "MIT-0", "PostgreSQL",
+             "Unlicense"},
             licenses,
         )
         self.assertIn("fail-on-severity: high", workflow)
@@ -270,6 +305,7 @@ class DependencyLicenseExceptionTests(unittest.TestCase):
         self.assertIn("gh api --paginate --slurp", workflow)
         self.assertIn('python3 eng/verify-dependency-license-exceptions.py "$response_body"', workflow)
         self.assertIn("python3 -m unittest eng/tests/test_dependency_license_exceptions.py -v", quality)
+        self.assertNotIn("verify-nuget-license-metadata.py", workflow)
 
 
 class DependencyLicenseWorkflowTests(unittest.TestCase):

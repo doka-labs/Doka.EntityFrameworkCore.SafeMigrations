@@ -6,7 +6,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
 {
     private const string DefaultImage =
-        "mcr.microsoft.com/mssql/server@sha256:4402d880dd4c34bfa7d8705e56a86cd6c88da80a1f6bbbe741f999e76264a090";
+        "mcr.microsoft.com/mssql/server@sha256:cf8f0ab2ebe61feec2eed2629061a07d247f791c2a8ddda74a4ac9f06a291718";
     private const string Password = "SafeMigrations_Test_2026!";
 
     private readonly List<string> _databases = [];

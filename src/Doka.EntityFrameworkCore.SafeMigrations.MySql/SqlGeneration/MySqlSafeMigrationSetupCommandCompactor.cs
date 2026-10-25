@@ -5,6 +5,7 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
 {
     private const int MaximumOriginalFragmentCount = 128;
     private const int MaximumOriginalTextLength = 1_048_576;
+
     /// <summary>Bounds each grouped transport payload in encoded UTF-8 bytes.</summary>
     internal const int MaximumGroupedPayloadBytes = 4096;
 
@@ -77,7 +78,8 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
         int providerSetupOffset,
         int providerSetupCount,
         int fusedSetupFragmentCount
-    ) where TSource : struct, IFragmentSource
+    )
+        where TSource : struct, IFragmentSource
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(bodyCommand);
         ArgumentNullException.ThrowIfNull(cleanupCommands);
@@ -112,21 +114,22 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
             ? MaximumGroupedPayloadBytes
             : Math.Min(MaximumGroupedPayloadBytes, Encoding.UTF8.GetByteCount(bodyCommand));
 
-        // WHY: The inputs are indexable; interface enumeration boxes a List enumerator
-        // on every operation even when its first fragment already settles the payload bound.
+        // WHY: The struct source exposes indexed fragments, not an enumerator. Retain that
+        // allocation-free contract even when the first fragment settles the payload bound.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < setupCommands.Count; index++)
         {
             var command = setupCommands[index];
-            if (maximumBytes == MaximumGroupedPayloadBytes || command.Length >= MaximumGroupedPayloadBytes)
+            if (maximumBytes == MaximumGroupedPayloadBytes
+                || command.Length >= MaximumGroupedPayloadBytes)
             {
                 maximumBytes = MaximumGroupedPayloadBytes;
 
                 break;
             }
 
-            maximumBytes = Math.Max(
-                maximumBytes,
-                Math.Min(MaximumGroupedPayloadBytes, command.Utf8ByteCount));
+            maximumBytes = Math.Max(maximumBytes, Math.Min(MaximumGroupedPayloadBytes, command.Utf8ByteCount));
         }
 
         List<string>? compacted = null;
@@ -181,6 +184,10 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
                     // WHY: This first completed group proves a smaller upper bound; later groups
                     // can only reduce the result further, so no original-sized backing array is needed.
                     compacted = new List<string>(setupCommands.Count - (end - offset - 1));
+                    // WHY: Retain the struct source's indexed fragment ranges without introducing an enumerable
+                    // adapter.
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    // ReSharper disable once LoopCanBeConvertedToQuery
                     for (var index = 0; index < offset; index++)
                     {
                         compacted.Add(setupCommands[index].ToSql());
@@ -191,19 +198,24 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
                 // those bytes; adding SQL or delimiters would alter the certified execution contract.
                 // Deferred pieces write into this final allocation, avoiding the intermediate
                 // assignment strings that would otherwise be immediately copied into the group.
-                compacted.Add(string.Create(
-                    length,
-                    (Commands: setupCommands, Offset: offset, End: end),
-                    static (destination, state) =>
-                    {
-                        var position = 0;
-                        for (var index = state.Offset; index < state.End; index++)
+                compacted.Add(
+                    string.Create(
+                        length,
+                        (Commands: setupCommands, Offset: offset, End: end),
+                        static (destination, state) =>
                         {
-                            var command = state.Commands[index];
-                            command.WriteTo(destination.Slice(position, command.Length));
-                            position += command.Length;
-                        }
-                    }));
+                            var position = 0;
+                            // WHY: Retain the struct source's indexed fragment ranges without introducing an enumerable
+                            // adapter.
+                            // ReSharper disable once ForCanBeConvertedToForeach
+                            // ReSharper disable once LoopCanBeConvertedToQuery
+                            for (var index = state.Offset; index < state.End; index++)
+                            {
+                                var command = state.Commands[index];
+                                command.WriteTo(destination.Slice(position, command.Length));
+                                position += command.Length;
+                            }
+                        }));
             }
 
             offset = end;
@@ -217,7 +229,8 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
         TSource setupCommands,
         string bodyCommand,
         IReadOnlyList<string> cleanupCommands
-    ) where TSource : struct, IFragmentSource
+    )
+        where TSource : struct, IFragmentSource
     {
         if ((long)setupCommands.Count + cleanupCommands.Count + 1 > MaximumOriginalFragmentCount)
         {
@@ -225,12 +238,18 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
         }
 
         var length = (long)bodyCommand.Length;
+
         // WHY: Indexing keeps validation allocation-free for List and read-only array inputs.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < setupCommands.Count; index++)
         {
             length += setupCommands[index].Length;
         }
 
+        // WHY: Indexing keeps read-only cleanup validation free of interface-enumerator allocations.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < cleanupCommands.Count; index++)
         {
             length += cleanupCommands[index].Length;
@@ -283,6 +302,9 @@ internal static class MySqlSafeMigrationSetupCommandCompactor
             }
 
             var result = new string[commands.Count];
+            // WHY: Fill the SQL array at each fragment's original ordinal without an intermediate sequence.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var index = 0; index < commands.Count; index++)
             {
                 result[index] = commands[index].ToSql();

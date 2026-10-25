@@ -13,6 +13,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         }
 
         var proofs = new MySqlSafeMigrationBinaryDefaultProof[plan.BinaryDefaultProofs.Count];
+        // WHY: Fill each bound proof slot using the matching original proof ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < proofs.Length; ordinal++)
         {
             proofs[ordinal] = plan.BinaryDefaultProofs[ordinal] with
@@ -41,6 +44,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         }
 
         var eligibility = new string[plan.BinaryDefaultProofs.Count];
+        // WHY: Fill each bound proof slot using the matching original proof ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < eligibility.Length; ordinal++)
         {
             eligibility[ordinal] = MySqlSafeMigrationRuntimePlan.RenderPreparedBinaryDefaultEligibilityExpression(

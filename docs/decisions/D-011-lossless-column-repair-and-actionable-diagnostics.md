@@ -235,6 +235,14 @@ recovery. D-005 remains authoritative for evidence bounds and privacy.
   assumptions. Preserve origin-bearing runtime validation and independent
   unsupported contracts; include CLR implementations in the SQL Server target-trigger guard.
 
+- 2026-10-23: Separate certified index-removal column provenance from complete
+  physical key evidence. Permit independently qualified sibling transitions and
+  interrupted prefixes without reviving opaque, row, owner or trigger-invalidated
+  authority. Add bounded MySQL/MariaDB and PostgreSQL signed-integer widening
+  with native old-source, storage and dependency checks; SQLite retains physical
+  INTEGER matches without adding a store-conversion contract. SQL Server keeps
+  its separate exact-dependency transition system and native qualification gate.
+
 ### Implementation References
 
 - [SQLite lossless rebuild proof](../../src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/Analysis/SqliteColumnRepairProof.cs)

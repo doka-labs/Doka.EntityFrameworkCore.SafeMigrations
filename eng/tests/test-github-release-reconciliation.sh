@@ -32,6 +32,37 @@ digest() {
 }
 
 case "${1:-} ${2:-}" in
+    "api --include")
+        endpoint="${!#}"
+        case "$endpoint" in
+            */releases/latest)
+                if [[ "${FAKE_GH_LATEST_FAILURE:-false}" == true ]]; then
+                    printf 'HTTP/2.0 503 Service Unavailable\r\n\r\n{}\n'
+                    exit 1
+                fi
+
+                if [[ ! -f "$FAKE_GH_STATE/latest.json" ]]; then
+                    printf 'HTTP/2.0 404 Not Found\r\n\r\n{"message":"Not Found"}\n'
+                    exit 1
+                fi
+
+                printf 'HTTP/2.0 200 OK\r\n\r\n'
+                cat "$FAKE_GH_STATE/latest.json"
+                ;;
+            */git/ref/tags/*)
+                printf 'HTTP/2.0 200 OK\r\n\r\n'
+                jq -n '{object: {type: "tag", sha: ("a" * 40)}}'
+                ;;
+            */git/tags/*)
+                printf 'HTTP/2.0 200 OK\r\n\r\n'
+                jq -n '{object: {type: "commit", sha: ("b" * 40)}}'
+                ;;
+            *)
+                echo "Unsupported fake metadata endpoint: $endpoint" >&2
+                exit 2
+                ;;
+        esac
+        ;;
     "api --paginate")
         if [[ "${FAKE_GH_API_FAILURE:-false}" == true ]]; then
             echo "simulated GitHub API failure" >&2
@@ -248,8 +279,13 @@ run_reconciler() {
         FAKE_GH_DUPLICATE_RELEASE="$duplicate_release" \
         FAKE_GH_ASSET_VERIFY_FAILURES="$asset_failures" \
         FAKE_GH_API_FAILURE="$api_failure" \
+        FAKE_GH_LATEST_FAILURE="${FAKE_GH_LATEST_FAILURE:-false}" \
         SAFE_MIGRATIONS_RELEASE_READBACK_ATTEMPTS=3 \
         SAFE_MIGRATIONS_RELEASE_READBACK_DELAY_SECONDS=0 \
+        SAFE_MIGRATIONS_PUBLICATION_LOCK_GROUP=safe-migrations-publication \
+        SAFE_MIGRATIONS_PUBLICATION_LOCK_HELD="${TEST_PUBLICATION_LOCK_HELD:-1}" \
+        GITHUB_ACTIONS=true \
+        GITHUB_REPOSITORY=owner/repository \
             bash "$reconciler" "$operation" "$run_version" "$run_tag"
     )
 }
@@ -402,9 +438,151 @@ fi
 run_reconciler "$stable_case" publish 0 "$stable_version" \
     >"$stable_case/publish.stdout" \
     2>"$stable_case/publish.stderr"
-grep -Fq -- "--latest" "$stable_case/state/commands.log"
+grep -Fq -- "release edit v$stable_version --draft=false --latest=true" \
+    "$stable_case/state/commands.log"
 assert_empty "$stable_case/stage.stderr"
 assert_empty "$stable_case/publish.stderr"
+
+# Arrange: a valid newer stable release is already Latest in another line.
+older_stable_case="$(create_case older-stable "$stable_version")"
+run_reconciler "$older_stable_case" stage 0 "$stable_version" >/dev/null
+jq -n \
+    '{id: 42, tag_name: "v11.0.0", draft: false, prerelease: false, immutable: true}' \
+    >"$older_stable_case/state/latest.json"
+
+# Act
+run_reconciler "$older_stable_case" publish 0 "$stable_version" \
+    >"$older_stable_case/publish.stdout" \
+    2>"$older_stable_case/publish.stderr"
+
+# Assert
+if ! grep -Fq -- "release edit v$stable_version --draft=false --latest=false" \
+    "$older_stable_case/state/commands.log"; then
+    echo "An older stable release incorrectly displaced a newer Latest release." >&2
+    exit 1
+fi
+assert_empty "$older_stable_case/publish.stderr"
+
+# Arrange: a higher patch completed before this stable candidate.
+older_patch_case="$(create_case older-patch "$stable_version")"
+run_reconciler "$older_patch_case" stage 0 "$stable_version" >/dev/null
+jq -n \
+    '{id: 43, tag_name: "v10.0.1", draft: false, prerelease: false, immutable: true}' \
+    >"$older_patch_case/state/latest.json"
+
+# Act
+run_reconciler "$older_patch_case" publish 0 "$stable_version" \
+    >"$older_patch_case/publish.stdout" \
+    2>"$older_patch_case/publish.stderr"
+
+# Assert
+grep -Fq -- "release edit v$stable_version --draft=false --latest=false" \
+    "$older_patch_case/state/commands.log"
+assert_empty "$older_patch_case/publish.stderr"
+
+# Arrange: preview metadata remains subordinate even to an older stable major.
+preview_latest_case="$(create_case preview-with-stable)"
+run_reconciler "$preview_latest_case" stage >/dev/null
+jq -n \
+    '{id: 44, tag_name: "v9.0.0", draft: false, prerelease: false, immutable: true}' \
+    >"$preview_latest_case/state/latest.json"
+
+# Act
+run_reconciler "$preview_latest_case" publish \
+    >"$preview_latest_case/publish.stdout" \
+    2>"$preview_latest_case/publish.stderr"
+
+# Assert
+grep -Fq -- "release edit $release_tag --draft=false --latest=false --prerelease" \
+    "$preview_latest_case/state/commands.log"
+assert_empty "$preview_latest_case/publish.stderr"
+
+# Arrange: equal versions belong to a published identity, not a second draft.
+equal_version_case="$(create_case equal-version "$stable_version")"
+run_reconciler "$equal_version_case" stage 0 "$stable_version" >/dev/null
+jq -n \
+    '{id: 45, tag_name: "v10.0.0", draft: false, prerelease: false, immutable: true}' \
+    >"$equal_version_case/state/latest.json"
+
+# Act
+if run_reconciler "$equal_version_case" publish 0 "$stable_version" \
+    >"$equal_version_case/publish.stdout" \
+    2>"$equal_version_case/publish.stderr"; then
+    echo "A draft with an already published Latest version unexpectedly passed." >&2
+    exit 1
+fi
+
+# Assert
+grep -Fq "Current Latest conflicts with this draft release identity." \
+    "$equal_version_case/publish.stderr"
+test "$(grep -c '^release edit ' "$equal_version_case/state/commands.log" || true)" -eq 0
+
+# Arrange: API unavailability must not be mistaken for no Latest release.
+latest_failure_case="$(create_case latest-unavailable "$stable_version")"
+run_reconciler "$latest_failure_case" stage 0 "$stable_version" >/dev/null
+
+# Act
+if FAKE_GH_LATEST_FAILURE=true run_reconciler "$latest_failure_case" publish 0 "$stable_version" \
+    >"$latest_failure_case/publish.stdout" \
+    2>"$latest_failure_case/publish.stderr"; then
+    echo "Unavailable Latest metadata unexpectedly allowed publication." >&2
+    exit 1
+fi
+
+# Assert
+grep -Fq "GitHub Latest metadata request failed." "$latest_failure_case/publish.stderr"
+test "$(grep -c '^release edit ' "$latest_failure_case/state/commands.log" || true)" -eq 0
+
+# Arrange: a successful API status still carries invalid response JSON.
+malformed_latest_case="$(create_case latest-malformed "$stable_version")"
+run_reconciler "$malformed_latest_case" stage 0 "$stable_version" >/dev/null
+printf 'not-json\n' >"$malformed_latest_case/state/latest.json"
+
+# Act
+if run_reconciler "$malformed_latest_case" publish 0 "$stable_version" \
+    >"$malformed_latest_case/publish.stdout" \
+    2>"$malformed_latest_case/publish.stderr"; then
+    echo "Malformed Latest metadata unexpectedly allowed publication." >&2
+    exit 1
+fi
+
+# Assert
+grep -Fq "GitHub returned invalid Latest response JSON." "$malformed_latest_case/publish.stderr"
+test "$(grep -c '^release edit ' "$malformed_latest_case/state/commands.log" || true)" -eq 0
+
+# Arrange: a release already published by the same exact bytes is historical.
+: >"$older_stable_case/state/commands.log"
+
+# Act
+FAKE_GH_LATEST_FAILURE=true TEST_PUBLICATION_LOCK_HELD=0 \
+    run_reconciler "$older_stable_case" publish 0 "$stable_version" \
+    >"$older_stable_case/retry.stdout" \
+    2>"$older_stable_case/retry.stderr"
+
+# Assert
+test "$(grep -c '^release edit ' "$older_stable_case/state/commands.log" || true)" -eq 0
+test "$(grep -c '^api --include ' "$older_stable_case/state/commands.log" || true)" -eq 0
+grep -Fxq "Immutable GitHub Release and every asset attestation are verified." \
+    "$older_stable_case/retry.stdout"
+assert_empty "$older_stable_case/retry.stderr"
+
+# Arrange: draft promotion without the shared queue is not authorized.
+missing_lock_case="$(create_case missing-lock "$stable_version")"
+run_reconciler "$missing_lock_case" stage 0 "$stable_version" >/dev/null
+
+# Act
+if TEST_PUBLICATION_LOCK_HELD=0 run_reconciler "$missing_lock_case" publish 0 "$stable_version" \
+    >"$missing_lock_case/publish.stdout" \
+    2>"$missing_lock_case/publish.stderr"; then
+    echo "A draft without the shared publication lock unexpectedly passed." >&2
+    exit 1
+fi
+
+# Assert
+grep -Fq "Latest promotion requires the shared publication lock." \
+    "$missing_lock_case/publish.stderr"
+test "$(grep -c '^release edit ' "$missing_lock_case/state/commands.log" || true)" -eq 0
+test "$(grep -c '^api --include ' "$missing_lock_case/state/commands.log" || true)" -eq 0
 
 partial_case="$(create_case partial)"
 create_remote_draft "$partial_case"
@@ -626,6 +804,22 @@ grep -Fxq "no attestations for tag $release_tag" "$timeout_case/publish.stderr"
 grep -Fxq \
     "Timed out waiting for GitHub Release and asset attestations after 3 attempts." \
     "$timeout_case/publish.stderr"
+
+# Arrange: publication completed, but the first run exhausted attestation readback.
+: >"$timeout_case/state/commands.log"
+
+# Act
+FAKE_GH_LATEST_FAILURE=true TEST_PUBLICATION_LOCK_HELD=0 \
+    run_reconciler "$timeout_case" publish \
+    >"$timeout_case/retry.stdout" \
+    2>"$timeout_case/retry.stderr"
+
+# Assert
+test "$(grep -c '^release edit ' "$timeout_case/state/commands.log" || true)" -eq 0
+test "$(grep -c '^api --include ' "$timeout_case/state/commands.log" || true)" -eq 0
+grep -Fxq "Immutable GitHub Release and every asset attestation are verified." \
+    "$timeout_case/retry.stdout"
+assert_empty "$timeout_case/retry.stderr"
 
 missing_notes_case="$(create_case missing-notes)"
 printf '# Changelog\n\n## [10.0.0-rc.2]\n' >"$missing_notes_case/CHANGELOG.md"

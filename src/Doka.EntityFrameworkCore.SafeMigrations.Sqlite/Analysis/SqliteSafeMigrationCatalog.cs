@@ -109,6 +109,9 @@ internal static partial class SqliteSafeMigrationCatalog
 
         var uniqueConstraints = new SqliteUniqueSnapshot[uniqueIndexes.Length];
 
+        // WHY: Fill unique-constraint slots from the corresponding ordered catalog index entries.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < uniqueIndexes.Length; index++)
         {
             var uniqueIndex = uniqueIndexes[index];
@@ -348,8 +351,11 @@ internal static partial class SqliteSafeMigrationCatalog
             }
 
             found = true;
-            var directionAndAction = action[(start + "ON".Length)..].TrimStart();
-            action = directionAndAction[direction.Length..].TrimStart();
+            var directionAndAction = action.AsSpan(start + "ON".Length)
+                .TrimStart(SqliteSqlIdentifierScanner.WhitespaceCharacters);
+
+            action = directionAndAction[direction.Length..]
+                .TrimStart(SqliteSqlIdentifierScanner.WhitespaceCharacters).ToString();
         }
 
         if (!found)
@@ -402,6 +408,9 @@ internal static partial class SqliteSafeMigrationCatalog
     )
     {
         var quote = '\0';
+        // WHY: Respect escaped quotes before selecting a structural parenthesis offset.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < sql.Length; index++)
         {
             var character = sql[index];
@@ -531,6 +540,9 @@ internal static partial class SqliteSafeMigrationCatalog
     {
         var depth = 0;
         var quote = '\0';
+        // WHY: Track quote escapes and parenthesis depth at exact UTF-16 offsets before slicing SQL.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = openParenthesis; index < sql.Length; index++)
         {
             var character = sql[index];
@@ -572,7 +584,8 @@ internal static partial class SqliteSafeMigrationCatalog
             else if (character == ')'
                      && --depth == 0)
             {
-                return sql.AsSpan(openParenthesis + 1, index - openParenthesis - 1).Trim().ToString();
+                return sql.AsSpan(openParenthesis + 1, index - openParenthesis - 1)
+                    .Trim(SqliteSqlIdentifierScanner.WhitespaceCharacters).ToString();
             }
         }
 
@@ -586,6 +599,9 @@ internal static partial class SqliteSafeMigrationCatalog
     {
         var depth = 0;
         var quote = '\0';
+        // WHY: Track quote escapes and parenthesis depth at exact UTF-16 offsets before slicing SQL.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = openParenthesis; index < sql.Length; index++)
         {
             var character = sql[index];
@@ -654,6 +670,9 @@ internal static partial class SqliteSafeMigrationCatalog
         var start = 0;
         var depth = 0;
         var quote = '\0';
+        // WHY: Track quote escapes and parenthesis depth at exact UTF-16 offsets before slicing SQL.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < sql.Length; index++)
         {
             var character = sql[index];
@@ -689,7 +708,8 @@ internal static partial class SqliteSafeMigrationCatalog
             {
                 if (depth == 0)
                 {
-                    yield return sql.AsSpan(start, index - start).Trim().ToString();
+                    yield return sql.AsSpan(start, index - start)
+                        .Trim(SqliteSqlIdentifierScanner.WhitespaceCharacters).ToString();
                     yield break;
                 }
 
@@ -698,14 +718,15 @@ internal static partial class SqliteSafeMigrationCatalog
             else if (character == ','
                      && depth == 0)
             {
-                yield return sql.AsSpan(start, index - start).Trim().ToString();
+                yield return sql.AsSpan(start, index - start)
+                    .Trim(SqliteSqlIdentifierScanner.WhitespaceCharacters).ToString();
                 start = index + 1;
             }
         }
 
         if (start < sql.Length)
         {
-            yield return sql.AsSpan(start).Trim().ToString();
+            yield return sql.AsSpan(start).Trim(SqliteSqlIdentifierScanner.WhitespaceCharacters).ToString();
         }
     }
 
@@ -736,7 +757,7 @@ internal static partial class SqliteSafeMigrationCatalog
 
         var length = 0;
         while (length < clause.Length
-               && !char.IsWhiteSpace(clause[length]))
+               && !SqliteSqlIdentifierScanner.IsWhitespace(clause[length]))
         {
             length++;
         }
@@ -750,6 +771,9 @@ internal static partial class SqliteSafeMigrationCatalog
     )
     {
         var builder = new StringBuilder(value.Length);
+        // WHY: Consume escaped delimiters together while retaining the quoted token's exact source offsets.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 1; index < value.Length; index++)
         {
             if (value[index] != quote)
@@ -805,7 +829,7 @@ internal static partial class SqliteSafeMigrationCatalog
         var where = SqliteSqlIdentifierScanner.IndexOfKeyword(sql, "WHERE");
 
         return where >= 0
-            ? sql.AsSpan(where + "WHERE".Length).Trim().ToString()
+            ? sql.AsSpan(where + "WHERE".Length).Trim(SqliteSqlIdentifierScanner.WhitespaceCharacters).ToString()
             : null;
     }
 
@@ -844,6 +868,9 @@ internal static partial class SqliteSafeMigrationCatalog
 
         var builder = new StringBuilder(sql.Length);
         var quote = '\0';
+        // WHY: Keep quote-aware lookahead aligned while removing comment-delimiter ranges.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < sql.Length; index++)
         {
             var character = sql[index];
@@ -887,7 +914,7 @@ internal static partial class SqliteSafeMigrationCatalog
             {
                 index += 2;
                 while (index < sql.Length
-                       && sql[index] is not '\r' and not '\n')
+                       && sql[index] != '\n')
                 {
                     index++;
                 }
@@ -962,7 +989,8 @@ internal static partial class SqliteSafeMigrationCatalog
         string clause
     )
     {
-        var value = s_indexSortOrderPattern.Replace(clause.Trim(), string.Empty);
+        var value = s_indexSortOrderPattern.Replace(
+            clause.AsSpan().Trim(SqliteSqlIdentifierScanner.WhitespaceCharacters).ToString(), string.Empty);
 
         return s_indexCollationPattern.Replace(value, string.Empty);
     }
@@ -977,6 +1005,9 @@ internal static partial class SqliteSafeMigrationCatalog
             return false;
         }
 
+        // WHY: Compare ordered identifier members at matching offsets to preserve native identity semantics.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < left.Length; index++)
         {
             if (!s_identifierComparer.Equals(left[index], right[index]))

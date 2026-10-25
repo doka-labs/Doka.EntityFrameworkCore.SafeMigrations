@@ -1,3 +1,8 @@
+if (args is ["--maintenance-attribution", "--output", var maintenanceOutput])
+{
+    return MySqlMaintenanceAttribution.Run(maintenanceOutput);
+}
+
 using var context = new MySqlGenerationContext();
 
 var generator = context.GetService<IMigrationsSqlGenerator>();

@@ -151,6 +151,60 @@ internal static class SqlServerIdentifierContract
         return names.ToArray();
     }
 
+    /// <summary>Adds typed CHECK owner lifetimes without interpreting arbitrary provider SQL.</summary>
+    /// <param name="operations">The original ordered safe and provider operations.</param>
+    /// <param name="references">The existing safe-operation identity inventory.</param>
+    /// <returns>The augmented inventory, or the original instance when no CHECK declaration is present.</returns>
+    internal static IReadOnlyList<SqlServerIdentifierReference> IncludeCheckDeclarationReferences(
+        IReadOnlyList<MigrationOperation> operations,
+        IReadOnlyList<SqlServerIdentifierReference> references
+    )
+    {
+        if (!operations.Any(static operation => operation is AddCheckConstraintOperation
+            or CreateTableOperation { CheckConstraints.Count: > 0, }
+            or SafeMigrationOperation { Intent: EnsureCheckConstraintIntent
+                or EnsureTableIntent { Definition.CheckConstraints.Count: > 0, }, }))
+        {
+            return references;
+        }
+
+        HashSet<SqlServerIdentifierReference>? names = null;
+        foreach (var operation in operations)
+        {
+            switch (operation)
+            {
+                case CreateTableOperation { CheckConstraints.Count: > 0, } table:
+                    names ??= new HashSet<SqlServerIdentifierReference>(references);
+                    AddTable(names, table.Schema, table.Name);
+                    foreach (var check in table.CheckConstraints)
+                    {
+                        AddConstraint(names, table.Schema, table.Name, check.Name);
+                    }
+
+                    break;
+                case AddCheckConstraintOperation check:
+                    names ??= new HashSet<SqlServerIdentifierReference>(references);
+                    AddConstraint(names, check.Schema, check.Table, check.Name);
+                    break;
+                case DropCheckConstraintOperation check:
+                    names ??= new HashSet<SqlServerIdentifierReference>(references);
+                    AddConstraint(names, check.Schema, check.Table, check.Name);
+                    break;
+                case DropTableOperation table:
+                    names ??= new HashSet<SqlServerIdentifierReference>(references);
+                    AddTable(names, table.Schema, table.Name);
+                    break;
+                case RenameTableOperation table:
+                    names ??= new HashSet<SqlServerIdentifierReference>(references);
+                    AddTable(names, table.Schema, table.Name);
+                    AddTable(names, table.NewSchema ?? table.Schema, table.NewName ?? table.Name);
+                    break;
+            }
+        }
+
+        return names?.ToArray() ?? references;
+    }
+
     /// <summary>Builds bounded catalog-collation checks in one operation-owned temporary scope.</summary>
     /// <param name="references">The physical names collected from the operation stream.</param>
     /// <param name="throwOnCollision">Whether an unsafe identity throws instead of returning a proof result.</param>
@@ -283,6 +337,9 @@ internal static class SqlServerIdentifierContract
         // grouped names. Stop at the first repeat while leaving every original
         // reference available to the unchanged catalog guard after validation.
         var scopes = new HashSet<(SqlServerIdentifierScope Scope, string Schema, string? Table)>();
+        // WHY: Scan the captured reference list without an interface enumerator.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < references.Count; index++)
         {
             var reference = references[index];
@@ -316,6 +373,9 @@ internal static class SqlServerIdentifierContract
             return false;
         }
 
+        // WHY: Advance over UTF-16 surrogate pairs as one valid identifier character.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < value.Length; index++)
         {
             if (char.IsHighSurrogate(value[index]))
@@ -337,7 +397,7 @@ internal static class SqlServerIdentifierContract
     }
 
     private static string Literal(string value)
-        => "N'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
+        => SqlServerSqlStringLiteral.Render(value);
 
     private static void AddTableDefinition(
         HashSet<SqlServerIdentifierReference> names,

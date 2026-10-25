@@ -1,93 +1,38 @@
 name: dependency-review
 
-# Reviews the resolved dependency delta before a pull request can merge.
-# GitHub Automatic Dependency Submission owns the NuGet snapshots; the
-# official review action owns bounded retries while those snapshots propagate.
-
+# Contributor restore hooks run only in this unprivileged PR context, including
+# forks and Dependabot. The receiver consumes exact immutable data artifacts.
 on:
   pull_request:
-    branches:
-      - main
+    # WHY: Registered inactive lines need preparation PR checks before activation.
+    # The trusted receiver independently rejects unregistered target bases.
 
-permissions:
-  contents: read
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-  # A newer revision supersedes the dependency verdict for the same pull
-  # request. Automatic submissions remain independent and are not cancelled.
-  cancel-in-progress: true
+permissions: {}
 
 jobs:
-  dependency-review:
+  prepare-base:
     permissions:
       contents: read
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    cache-mode: none
+    uses: ./.github/workflows/dependency-snapshot.yml
+    with:
+      sha: ${{ github.event.pull_request.base.sha }}
+      revision: base
 
+  prepare-head:
+    permissions:
+      contents: read
+    cache-mode: none
+    uses: ./.github/workflows/dependency-snapshot.yml
+    with:
+      sha: ${{ github.event.pull_request.head.sha }}
+      revision: head
+
+  request-dependency-review:
+    needs: [prepare-base, prepare-head]
+    runs-on: ubuntu-26.04
+    cache-mode: none
+    timeout-minutes: 1
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      # The allowlist is the repository's dependency-license policy. Missing
-      # package metadata remains visible in the summary and is never treated
-      # as proof that an otherwise unapproved license is acceptable.
-      - name: Review dependency changes
-        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
-        with:
-          fail-on-severity: high
-          allow-licenses: >-
-            Apache-2.0,
-            BSD-2-Clause,
-            BSD-3-Clause,
-            CC0-1.0,
-            ISC,
-            MIT,
-            MIT-0,
-            Unlicense
-          # v5.0.0 ignores PURL versions. The mandatory version guard below
-          # binds these exceptions to the exact reviewed package versions.
-          allow-dependencies-licenses: >-
-            pkg:nuget/Microsoft.Data.SqlClient.SNI.runtime@6.0.2,
-            pkg:nuget/Microsoft.Identity.Client.NativeInterop@0.20.6
-          comment-summary-in-pr: never
-          show-openssf-scorecard: true
-          # Snapshot warnings remain fail-closed after the action's bounded
-          # retry through the explicit header check below. No second polling
-          # state machine is introduced.
-          retry-on-snapshot-warnings: true
-          retry-on-snapshot-warnings-timeout: 180
-
-      # v5.0.0 proceeds after its retry timeout even when GitHub still returns
-      # snapshot warnings. Query the same comparison endpoint once more and
-      # require its warning header to be present and empty before this gate can
-      # report success. GitHub's public REST reference did not specify this
-      # header on 2026-08-28; the pinned action source consumes it directly.
-      # A vendor-side removal therefore remains an explicit fail-closed event.
-      - name: Require complete snapshots and exact license-exception versions
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          response_headers="$(mktemp)"
-          response_body="$(mktemp)"
-          trap 'rm -f "$response_headers" "$response_body"' EXIT
-
-          gh api --include \
-            -H 'Accept: application/vnd.github+json' \
-            "repos/${GITHUB_REPOSITORY}/dependency-graph/compare/${BASE_SHA}...${HEAD_SHA}?per_page=100" \
-            --jq empty >"$response_headers"
-
-          bash eng/verify-dependency-snapshot-headers.sh "$response_headers"
-
-          # Read every page rather than allowing an unreviewed version hidden
-          # after the first 100 changes. This is not another retry loop.
-          gh api --paginate --slurp \
-            -H 'Accept: application/vnd.github+json' \
-            "repos/${GITHUB_REPOSITORY}/dependency-graph/compare/${BASE_SHA}...${HEAD_SHA}?per_page=100" \
-            >"$response_body"
-
-          python3 eng/verify-dependency-license-exceptions.py "$response_body"
+      - name: Request independent dependency resolution
+        run: echo 'Both exact dependency revisions are ready for independent data-only review.'

@@ -1,6 +1,11 @@
 # SQL Server behavior
 
-Prepared stable 10.5.0 runtime diagnostics retain the native guard error
+Version 10.6.0 adds certified computed/CHECK contracts and retains
+native DROP blockers across ordered source confirmations. Review the
+[upgrade notes](support-and-qualification.md#upgrade-to-1060) for conditional
+contract-fingerprint changes, dependency floors and conservative boundaries.
+
+Runtime diagnostics introduced in 10.5.0 retain the native guard error
 number/state while adding bounded owner/reason text. Identity-scope recovery and ordinary native
 errors remain separate; see [diagnostics](diagnostics.md#runtime-provider-differences).
 
@@ -19,14 +24,14 @@ cannot switch off inherited session state; uncertain acquisition quarantines
 the connection instead of guessing. Physical rename endpoints and canonical
 managed-key members retain independent provider identity. Proven integer
 widening, populated-table CHECK validation, permission-first catalog checks
-and trigger-aware freshness from 10.4.9 remain. Provider signatures, dependencies,
-migration source, policy selection and history are unchanged. Core diagnostic
-APIs and report schemas advance in 10.5.0 as described above.
+and trigger-aware freshness from 10.4.9 remain. Those earlier corrections
+preserved provider signatures, dependencies, migration source, policy selection
+and history. Report schemas and diagnostic transport remain as introduced in
+10.5.0; the separate 10.6.0 dependency and approval changes are described above.
 Native elapsed-time comparisons are informational; functional cancellation,
-ownership and evidence assertions remain blocking. Availability requires full
-qualification and verified five-package publication, not source preparation
-or skipped Apple Silicon tests. Selecting another provider does not introduce
-SQL Server runtime dependencies.
+ownership and evidence assertions remain blocking. Skipped Apple Silicon tests
+do not satisfy native x86-64 qualification. Selecting another provider does not
+introduce SQL Server runtime dependencies.
 
 ## Supported engine boundary
 
@@ -39,7 +44,9 @@ part of the declared support contract.
 [Microsoft supports SQL Server Linux containers only on x86-64 hosts](https://learn.microsoft.com/en-us/sql/linux/install-upgrade/quickstart-install-docker?view=sql-server-ver17).
 The Apple Silicon development host can run source and static tests, but an
 emulated local container is not release evidence. The GitHub-hosted
-`ubuntu-24.04` matrix is the intended live qualification environment.
+`ubuntu-26.04` x64 matrix is the intended live qualification environment.
+The hosted image changes, not the digest-pinned SQL Server container images;
+successful native runs on that host remain required for release qualification.
 
 ## Catalog and safety boundary
 
@@ -470,6 +477,151 @@ Required omitted seed columns need the shared provider-qualified non-NULL
 default proof. Default presence alone, opaque or null-producing expressions,
 and computed values without a row-bound proof do not establish that contract.
 
+## Computed columns
+
+Computed columns preserve the authored virtual or `PERSISTED` storage form.
+The adapter never forces persistence or adds a CHECK to make a required CLR
+property appear supported. EF-captured SQL is translated through the bounded
+expression grammar, including searched CASE and two-argument
+`CONVERT(type, expression)`. The native SQL Server limit of ten nested CASE
+levels also counts predicate-to-scalar CASE forms emitted by the renderer.
+Opaque grammar, unproved deterministic semantics or unsupported expression
+rendering remain blocked; see
+[generated-column authoring](migration-authoring.md#generated-columns).
+
+The native result type is inferred by SQL Server, not declared after a computed
+column's name. SafeMigrations compiles the reviewed expression against exact
+supported built-in operand metadata in a private, command-local temporary
+table. It reads the resulting definition, type, physical nullability and index
+properties from native metadata. It does not select application rows or execute
+the expression over them. Unknown source types, user-defined types and
+computed-column dependencies do not acquire an inferred type certificate.
+Operand names resolve under the target database's native identifier collation.
+If actual distinct operand/target identities cannot remain distinct under
+tempdb's identifier collation, analysis rejects with
+`computed_column_operand_identity_unproven` before creating the compiler
+table. This is a precise identity boundary, not a blanket rejection of
+case-sensitive databases: unambiguous source names remain admissible.
+Temporary objects belong to the nested compiler scope; an occupied scope is
+not overwritten, and failure/cancellation must leave no acquired object behind.
+The connection must be allowed to create the required temporary object; no
+permission is granted automatically.
+
+A logically required result has a separate bounded semantic proof. Supported
+untyped non-NULL literal values are accepted independently. Composite results
+use a finite integral/bit 0/1 domain: supported null tests, integral casts of
+that finite domain, and searched CASE with every THEN and an explicit ELSE in
+that domain can establish it. COALESCE must have only finite 0/1-or-NULL
+arguments and a proven non-NULL fallback. An arbitrary non-NULL input does not
+prove a narrowing cast, mixed-type CASE coercion or COALESCE expression safe.
+For example, overflowing integer conversions and `COALESCE(column, 1)` do not
+obtain this certificate merely from their syntax.
+Unknown or null-producing expressions remain
+`computed_column_nullability_unproven`; nullable native metadata is not simply
+ignored. An unproved native result type remains
+`computed_column_native_type_unproven`. Matching additionally compares exact
+compiled expression identity, physical nullability and persistence. A matching
+ordinary EF-created column does not need a SafeMigrations ownership stamp, but
+a stamp alone cannot hide native expression or type drift.
+
+Native source-renaming restrictions remain independent of expression support.
+A known accepted CHECK dependency rejects with
+`projected_check_source_dependency`; an unresolved parsed dependency remains
+`projected_check_source_dependency_unproven`. SafeMigrations does not silently
+drop or rewrite a dependent computed column or CHECK to make a rename succeed.
+An explicitly removed dependency must cease supplying proof in later steps.
+
+The same ordered dependency lifetime applies to source-column DROP. A surviving
+computed dependency blocks removal before DDL; removing that dependent first
+can discharge only its own proof, not unrelated indexes, CHECKs, keys or
+statistics. Existing native expression-dependency reads retain their metadata
+visibility and SELECT-permission gate. No new grant, automatic cascade or
+application-row scan is introduced. A known generated dependency and an
+unproven surviving set are reported separately; see
+[failure codes](runbooks/failure-codes.md).
+
+Confirming that the source column already matches does not certify dependency
+absence. Native index, CHECK, key, FK, default, statistics and expression
+blockers remain independent of projected column presence. Only exact,
+native-qualified dependency removals accepted earlier in the stream can
+discharge their own blockers. Retained siblings, recreated dependencies and
+unproven owner/member lifetimes do not inherit an old removal certificate.
+SafeMigrations does not introduce an implicit default-removal operation.
+
+Optimizer-created statistics are distinguished by native `auto_created`
+metadata, not their names: native schema changes may remove them automatically.
+User-created statistics remain an independent blocker, including versions with
+an `AUTO_DROP` option. A table-level dependency row does not mean every column
+is referenced by a schema-bound expression. Only a fully bound, visible
+same-expression column set can prove an unrelated member; unresolved or
+object-only evidence remains conservative. See Microsoft's
+[statistics lifetime](https://learn.microsoft.com/en-us/sql/t-sql/statements/create-statistics-transact-sql?view=sql-server-ver17#auto_drop---on--off)
+and [dependency catalog](https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-sql-expression-dependencies-transact-sql?view=sql-server-ver17).
+
+Validated captured source is used unchanged for native compilation and DDL,
+including bare numeric tokens whose inferred SQL types differ from explicit
+CLR-derived casts. Parsed Boolean keywords or exponent tokens do not inherit
+an unrelated typed-literal proof. Unsupported native quoting/function/type
+roles stay rejected rather than being rewritten into another valid expression.
+
+An index key on a computed column separately requires native deterministic and
+indexable metadata plus the supported key type/length contract. An imprecise
+expression requires `PERSISTED` for key membership. A deterministic virtual
+imprecise result can instead be an included nonkey column when its native type
+and the remaining index contract permit it; precision is not a blanket INCLUDE
+requirement. See Microsoft's [included-column requirements][ic].
+The session must have `ANSI_NULLS`, `ANSI_PADDING`, `ANSI_WARNINGS`,
+`CONCAT_NULL_YIELDS_NULL` and `QUOTED_IDENTIFIER` ON, `NUMERIC_ROUNDABORT` OFF,
+and effective `ARITHABORT` ON. The latter includes SQL Server's documented
+implicit behavior with ANSI_WARNINGS ON at compatibility level 90 or later.
+SafeMigrations verifies those settings; it does not change the session to make
+an index admissible. Filtered-index grammar and ordinary ownership, uniqueness
+and source-binding gates remain independent. See Microsoft's
+[syntax](https://learn.microsoft.com/en-us/sql/t-sql/statements/alter-table-computed-column-definition-transact-sql),
+[catalog][cc]
+and [index requirements](https://learn.microsoft.com/en-us/sql/relational-databases/indexes/indexes-on-computed-columns)
+(primary sources; retrieved 2026-10-20).
+
+For generated migration scripts, the ODBC `sqlcmd` clients supplied by
+`mssql-tools` and `mssql-tools18` require `-I` to enable `QUOTED_IDENTIFIER`;
+their default is OFF. The repository tooling supplies that option for every
+Strict/LegacyConvergence normal/idempotent script connection, including replay.
+The other native SET requirements above still apply. This configures the
+script caller, not SafeMigrations session mutation or a policy bypass.
+See Microsoft's [ODBC sqlcmd option](https://learn.microsoft.com/en-us/sql/tools/sqlcmd/sqlcmd-utility#-i-1)
+(primary source; retrieved 2026-10-25).
+
+SafeMigrations also protects its own SQL payloads from EF's line-based
+`SqlOperation` processing and idempotent history indentation. Idempotent
+commands, and runtime/normal commands containing vulnerable CRLF, continuation
+or GO-line shapes, travel as one physical line. A private `nvarchar(max)` scope
+reconstructs their exact UTF-16 contents with `NCHAR`, without changing
+comparison predicates, caller variables, transaction ownership or SET options.
+The MAX operand precedes concatenation to prevent 4000-character truncation.
+Protected commands add one server-local dynamic execution scope, not a client
+roundtrip; ordinary non-vulnerable commands retain their original SQL reference.
+This applies to guarded operations, identifier guards and the provider-owned
+managed-data mutation stage, not unrelated consumer-authored raw EF scripts.
+
+Native Unicode literals also need lossless transport: a backslash followed by
+CR, LF or CRLF can be interpreted as line continuation inside `N'...'`. Catalog values
+and nested dynamic statements must preserve the original characters before
+SQL Server parses them, not only before EF formats the outer command.
+Affected values use MAX-first `NCHAR` expressions; stored-procedure arguments
+use private variables where expressions are not accepted. This prevents a
+different physical identifier from being mistaken for the authored name.
+Line-bearing schema creation and rename baselines avoid invalid function-valued
+procedure arguments while retaining the existing guarded scope and transfer rules.
+It does not rename objects already created by older SQL or rewrite migration
+history; genuine differences continue to require a reviewed transition.
+
+[cc]: https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-computed-columns-transact-sql
+[ic]: https://learn.microsoft.com/sql/relational-databases/indexes/create-indexes-with-included-columns
+
+Source and static tests on ARM do not qualify these native compilation,
+temporary-object, session or index semantics. The independent SQL Server
+2019/2022/2025 x86-64 jobs remain required release evidence.
+
 ## Ordered key prerequisites
 
 SQL Server uniqueness compares the complete key tuple, including `NULL`:
@@ -561,6 +713,27 @@ each statement separately. Both shapes retain a 256-operation group capacity,
 subject to 2,000 parameters and 4 MiB of UTF-8 SQL plus source payload,
 including dynamic quote expansion. These are dispatch bounds, not measured
 compilation or execution-time improvements.
+
+Direct metadata-only `UNION ALL` statements containing a complex classifier
+additionally use a 64 KiB UTF-8 text budget for grouping. Combined existing-table
+matchers can have expensive compilation even when each classifier returns only
+one row. Splitting those groups bounds the combined optimizer input while
+retaining up to 32 cheap classifiers and up to eight statements per transport batch.
+Groups containing only certified simple missing-table classifiers retain their
+32-operation limit even above this soft text budget. Adding a complex classifier
+restores the budget for the entire group. An individual classifier may exceed
+this grouping budget: it still executes alone subject to the existing 4 MiB and
+parameter limits. Delayed classifiers, all original ordinals, result completeness,
+cancellation and report atomicity
+remain unchanged. This is a deterministic query-shape bound, not an elapsed-time
+CI threshold. Command failures and incomplete results remain errors.
+
+Ordinary whole-table column matching reads identity metadata only when an
+expected column is an identity, and default-constraint/stamp metadata only
+when an expected column declares a default. Native `sys.columns` identity and
+default-object facets still reject unexpected identities and defaults when
+those joins are omitted. Expected identity settings and default fingerprints
+retain their complete metadata checks.
 
 A baseline qualification run over the hundred-thousand-operation contract attributes
 almost all analysis time to this classifier capture: of its 392 `catalog-batch`
@@ -767,7 +940,10 @@ migration source; without design assets, scaffolding must fail closed.
 The release gate scaffolds Strict and LegacyConvergence migrations separately,
 generates normal and idempotent SQL scripts for both, applies each migration
 twice, builds a migration bundle for each context, applies each bundle twice
-to another database, and checks both model-managed rows and migration history.
+to another database, and independently checks exact migration history,
+model-managed rows, generated-column metadata and CASE results, computed-index
+keys and enabled/trusted CHECK enforcement on every target. Synthetic DML
+probes roll back; unrelated errors cannot satisfy the expected CHECK rejection.
 The three engine cells, package-content checks, locked restore, merged
 coverage, SBOM, and public NuGet readback are all
 blocking. A successful build or a skipped ARM64 live test is not a substitute
@@ -781,6 +957,11 @@ bootstrap, use `ConnectTimeout`; changing EF's command timeout alone does not
 cover this path. These are test-harness settings, not product defaults or
 performance thresholds. Failed execution still rejects qualification without
 automatic retry or a higher CI job limit.
+
+Native `sqlcmd` execution and readback also use explicit 120-second login/query
+budgets; readiness and failure diagnostics use separate five-second budgets.
+Every native connection retains `-I` and error abort. Cleanup-only errors fail
+the gate, while a cleanup failure cannot replace the original execution error.
 
 Before failed tooling-container cleanup, the harness retains `server.log` and,
 when sqlcmd is available, `server-waits.log` under the existing tooling artifact

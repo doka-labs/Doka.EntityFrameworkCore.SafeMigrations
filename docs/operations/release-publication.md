@@ -1,30 +1,41 @@
 # Release publication operations
 
 Use this runbook for every RC and stable release. The workflow qualifies an
-untagged `main` commit first, then waits at the protected `nuget` environment.
+untagged authorized source-line commit first, then waits at the protected `nuget` environment.
 Only after that wait begins does the operator create the signed tag and approve
 publication. Run every command separately and stop on the first failure.
 
-The current source prepares 10.5.0 for all five package IDs, retaining the
+The release target is stable 10.6.0 for all five package IDs, retaining the
 inventory introduced in 10.4.6. Review the
-[10.5.0 compatibility notes](../../CHANGELOG.md#1050---2026-10-15), including
-report schemas, owned MySQL/MariaDB exceptions, Doka 10.5 and persisted defaults.
-Existing migration source, policies, fingerprint formats, history, concurrency
-and recovery guards remain. Timing evidence is informational; functional and
+[10.6.0 compatibility notes](../../CHANGELOG.md#1060---2026-10-25) and
+[upgrade procedure](../support-and-qualification.md#upgrade-to-1060), including
+captured computed/CHECK contract-fingerprint reapproval, exact expression
+identity, lossless integer upgrades, ordered projection corrections,
+conservative dependency proofs and the current Doka 10.6.2/EF patch floors.
+Historical migration source, policies, report schemas, relational model-
+fingerprint format, history, concurrency and recovery guards remain. Timing
+evidence is informational; functional and
 evidence failures remain blocking. Do not publish a subset or treat preparation,
 earlier engine runs or native ARM skips as proof that this candidate's complete
 qualification or public readback has succeeded.
+
+As of 2026-10-25, 10.6.0 has not been published. The changelog date identifies
+the consolidated release notes, not completed publication. Record actual
+qualification and publication status in the candidate run's
+release evidence, including the source commit, exact package identities,
+completed checks and public readback. Product version references describe the
+contract, not the workflow's current state.
 
 ## One-time configuration
 
 Configure these controls before the first release:
 
-- protect `main` and require the successful CI jobs used by this repository;
+- protect each authorized publication branch and require its own successful CI;
 - protect `v*` tags against update and deletion;
 - enable immutable GitHub Releases;
-- create environment `nuget`, restrict it to protected `main`, require a
-  maintainer review, disable administrator bypass where the organization can
-  support it, and store only the NuGet profile name as `NUGET_USER`;
+- retain the existing environment `nuget`, maintainer reviewers, self-review and
+  administrator-bypass policy; restrict deployment to the reviewed protected
+  active refs and store only the NuGet profile name as `NUGET_USER`;
 - configure one NuGet Trusted Publishing policy with repository owner
   `doka-labs`, repository `Doka.EntityFrameworkCore.SafeMigrations`, workflow
   file `release-candidate.yml`, and environment `nuget`; and
@@ -33,24 +44,30 @@ Configure these controls before the first release:
 
 Do not configure a long-lived NuGet API key. The protected job exchanges its
 GitHub OIDC token for a short-lived key immediately before publication.
+Only main/10 is active. The registered maintenance/10.x line remains inactive;
+this implementation creates no branch, grant or .NET 11 support. Additional
+line preparation/activation requires the separate review in
+[Release lines](release-lines.md). It does not require a new environment or
+credential generation.
 
 ## Publication procedure
 
-### 1. Prepare reviewed main
+### 1. Prepare the reviewed source line
 
-Merge the complete release preparation through protected `main`. The source
+Merge the complete release preparation through its protected authorized branch. The source
 must contain the intended `VersionPrefix`, one dated changelog entry for the
 full version, current package metadata, API baselines, dependencies, and
 support documentation. Then run:
 
 ```bash
-git fetch origin main --tags
-git switch main
-git merge --ff-only origin/main
+release_branch='main'
+git fetch origin "$release_branch" --tags
+git switch "$release_branch"
+git merge --ff-only "origin/$release_branch"
 git status --porcelain --untracked-files=all
 
 release_commit="$(git rev-parse HEAD)"
-test "${release_commit}" = "$(git rev-parse origin/main)"
+test "${release_commit}" = "$(git rev-parse "origin/$release_branch")"
 ```
 
 `git status --porcelain --untracked-files=all` must print nothing. Its stable
@@ -64,7 +81,7 @@ pushed.
 ./eng/pre-tag-check.sh
 ```
 
-This confirms a clean current `main`, no existing semantic release tag on the
+This confirms an eligible exact line, its clean current source, no existing semantic release tag on the
 candidate, and usable SSH tag-signing configuration. It creates no tag and
 does not request publication credentials. A successful run prints one
 `[PASS]` row for the branch, working tree, source commit, release tag, and tag
@@ -74,10 +91,12 @@ the workflow.
 
 ### 3. Start the untagged candidate and wait
 
-In GitHub Actions, start **Release candidate**. Select branch `main` and enter:
+In GitHub Actions, start **Release candidate**. Select the authorized source
+branch (`main` in the current active configuration) and enter:
 
 ```text
 version: <release_version>
+qualification-only: false
 ```
 
 `release_version` never includes a leading `v`. Wait until these jobs are
@@ -92,6 +111,11 @@ The final `Verify tag and publish` job must show **Waiting** for approval on
 environment `nuget`. Confirm that the run SHA equals `release_commit`. Do not
 approve it yet.
 
+For a prepared line or a nonpublishing rehearsal, set qualification-only true.
+The complete reversible qualification and attestation run, but the publisher job
+is skipped before requesting its environment or NuGet credentials. Do not create
+a tag or perform steps 4/5 for that run.
+
 ### 4. Create the signed immutable identity
 
 Only after the protected wait is visible, run:
@@ -101,7 +125,7 @@ release_version="<release_version>"
 release_tag="v${release_version}"
 
 test "$(git rev-parse HEAD)" = "${release_commit}"
-test "$(git rev-parse origin/main)" = "${release_commit}"
+test "$(git rev-parse "origin/$release_branch")" = "${release_commit}"
 git tag -s "${release_tag}" "${release_commit}" \
   -m "Doka.EntityFrameworkCore.SafeMigrations ${release_version}"
 git tag -v "${release_tag}"
@@ -136,6 +160,12 @@ environment `nuget`. The job then:
    signatures, and compares their content with the qualified packages; and
 8. publishes the prepared draft and waits for the immutable Release plus every
    Release-asset attestation through a bounded five-minute readback window.
+
+Before public draft state, NuGet credentials and final publication, the same
+publisher checks current protected-main line authority and the original
+admission, qualified artifact identities and exact bytes. All lines share its
+non-cancelling queue. A lower stable major/patch can publish without displacing
+a higher stable Latest; prereleases never become Latest.
 
 No package is rebuilt after qualification. A same-run retry skips primary
 packages already visible on NuGet.org and safely repeats duplicate-tolerant
@@ -200,6 +230,13 @@ but the workflow's bounded signed-package readback must already have passed.
   verification to be skipped.
 - If qualification artifacts expired or the original run can no longer be
   rerun, stop for maintainer recovery. Do not rebuild under the same tag.
+- Retain the original frozen-line and admission workflow artifacts. A failed-job
+  retry verifies their original run, producer attempt, archive digest and exact
+  candidate bytes; it must not infer original identities from the new attempt.
+  Missing/expired admission after a write may have started cannot be replaced.
+  Re-run all jobs is not an exact-byte retry if it rebuilds the candidate.
+- Complete an affected publication before deactivating/reassigning its line.
+  A frozen qualification is not a fallback for missing current authorization.
 
 Stable releases use the same procedure. A stable package is independently
 qualified for its own version; an RC package is never renamed into a stable

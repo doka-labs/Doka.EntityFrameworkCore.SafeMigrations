@@ -4,7 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// Inspects and transforms provider-neutral SQL expression trees without
 /// rendering provider SQL.
 /// </summary>
-internal static class SafeMigrationSqlExpressionInspector
+internal static partial class SafeMigrationSqlExpressionInspector
 {
     /// <summary>Collects the terminal identifier parts referenced by an expression.</summary>
     /// <param name="expression">The expression tree to inspect.</param>
@@ -17,62 +17,39 @@ internal static class SafeMigrationSqlExpressionInspector
         ArgumentNullException.ThrowIfNull(expression);
         ArgumentNullException.ThrowIfNull(identifiers);
 
-        // Advance through single-child and final branches iteratively. The
-        // bounded parser still limits authored depth, while this shape avoids
-        // adding one recursive frame for every right-associated binary node.
-        while (true)
+        var cursor = new InspectionCursor(expression);
+
+        try
         {
-            switch (expression)
+            while (cursor.TryMoveNext(out var current))
             {
-                case SafeMigrationSqlIdentifierExpression value:
-                    identifiers.Add(value.Parts[^1]);
-                    break;
-                case SafeMigrationSqlLiteralExpression:
-                case SafeMigrationSqlCurrentValueExpression:
-                case SafeMigrationSqlProviderFragmentExpression:
-                case SafeMigrationSqlOpaqueExpression:
-                    break;
-                case SafeMigrationSqlUnaryExpression value:
-                    expression = value.Operand;
-                    continue;
-                case SafeMigrationSqlBinaryExpression value:
-                    CollectIdentifiers(value.Left, identifiers);
-                    expression = value.Right;
-                    continue;
-                case SafeMigrationSqlNullTestExpression value:
-                    expression = value.Operand;
-                    continue;
-                case SafeMigrationSqlBetweenExpression value:
-                    CollectIdentifiers(value.Operand, identifiers);
-                    CollectIdentifiers(value.Lower, identifiers);
-                    expression = value.Upper;
-                    continue;
-                case SafeMigrationSqlInExpression value:
-                    CollectIdentifiers(value.Operand, identifiers);
-                    foreach (var candidate in value.Values)
-                    {
-                        CollectIdentifiers(candidate, identifiers);
-                    }
-
-                    break;
-                case SafeMigrationSqlFunctionExpression value:
-                    foreach (var argument in value.Arguments)
-                    {
-                        CollectIdentifiers(argument, identifiers);
-                    }
-
-                    break;
-                case SafeMigrationSqlCastExpression value:
-                    expression = value.Operand;
-                    continue;
-                case SafeMigrationSqlCollateExpression value:
-                    expression = value.Operand;
-                    continue;
-                default:
-                    throw new UnreachableException();
+                switch (current)
+                {
+                    case SafeMigrationSqlIdentifierExpression value:
+                        identifiers.Add(value.Parts[^1]);
+                        break;
+                    case SafeMigrationSqlLiteralExpression
+                        or SafeMigrationSqlCurrentValueExpression
+                        or SafeMigrationSqlProviderFragmentExpression
+                        or SafeMigrationSqlOpaqueExpression
+                        or SafeMigrationSqlUnaryExpression
+                        or SafeMigrationSqlBinaryExpression
+                        or SafeMigrationSqlNullTestExpression
+                        or SafeMigrationSqlBetweenExpression
+                        or SafeMigrationSqlInExpression
+                        or SafeMigrationSqlFunctionExpression
+                        or SafeMigrationSqlCaseExpression
+                        or SafeMigrationSqlCastExpression
+                        or SafeMigrationSqlCollateExpression:
+                        break;
+                    default:
+                        throw new UnreachableException();
+                }
             }
-
-            break;
+        }
+        finally
+        {
+            cursor.Dispose();
         }
     }
 
@@ -88,10 +65,64 @@ internal static class SafeMigrationSqlExpressionInspector
         ArgumentNullException.ThrowIfNull(expression);
         ArgumentException.ThrowIfNullOrWhiteSpace(identifier);
 
-        var identifiers = new HashSet<string>(StringComparer.Ordinal);
-        CollectIdentifiers(expression, identifiers);
+        return ReferencesColumnIdentifier(expression, identifier, StringComparer.Ordinal);
+    }
 
-        return identifiers.Contains(identifier);
+    /// <summary>
+    /// Finds one terminal member without allocating a collection for the common unrelated-rename path.
+    /// </summary>
+    internal static bool ReferencesColumnIdentifier(
+        SafeMigrationSqlExpression expression,
+        string identifier,
+        IEqualityComparer<string> comparer
+    )
+    {
+        ArgumentNullException.ThrowIfNull(expression);
+        ArgumentException.ThrowIfNullOrWhiteSpace(identifier);
+        ArgumentNullException.ThrowIfNull(comparer);
+
+        // WHY: Reference search historically visits IN values before its operand.
+        // Preserve that short-circuit order independently of collection/rendering order.
+        var cursor = new InspectionCursor(expression, inValuesFirst: true);
+
+        try
+        {
+            while (cursor.TryMoveNext(out var current))
+            {
+                switch (current)
+                {
+                    case SafeMigrationSqlIdentifierExpression value:
+                        if (comparer.Equals(value.Parts[^1], identifier))
+                        {
+                            return true;
+                        }
+
+                        break;
+                    case SafeMigrationSqlLiteralExpression
+                        or SafeMigrationSqlCurrentValueExpression
+                        or SafeMigrationSqlProviderFragmentExpression
+                        or SafeMigrationSqlOpaqueExpression
+                        or SafeMigrationSqlUnaryExpression
+                        or SafeMigrationSqlBinaryExpression
+                        or SafeMigrationSqlNullTestExpression
+                        or SafeMigrationSqlBetweenExpression
+                        or SafeMigrationSqlInExpression
+                        or SafeMigrationSqlFunctionExpression
+                        or SafeMigrationSqlCaseExpression
+                        or SafeMigrationSqlCastExpression
+                        or SafeMigrationSqlCollateExpression:
+                        break;
+                    default:
+                        throw new UnreachableException();
+                }
+            }
+        }
+        finally
+        {
+            cursor.Dispose();
+        }
+
+        return false;
     }
 
     /// <summary>Determines whether every node has provider-neutral structural semantics.</summary>
@@ -99,28 +130,48 @@ internal static class SafeMigrationSqlExpressionInspector
     /// <returns><see langword="true" /> when structural comparison is safe.</returns>
     public static bool IsStructurallyComparable(
         SafeMigrationSqlExpression expression
-    ) => expression switch
+    )
     {
-        SafeMigrationSqlIdentifierExpression => true,
-        SafeMigrationSqlLiteralExpression => true,
-        SafeMigrationSqlUnaryExpression value => IsStructurallyComparable(value.Operand),
-        SafeMigrationSqlBinaryExpression value =>
-            IsStructurallyComparable(value.Left) && IsStructurallyComparable(value.Right),
-        SafeMigrationSqlNullTestExpression value => IsStructurallyComparable(value.Operand),
-        SafeMigrationSqlBetweenExpression value =>
-            IsStructurallyComparable(value.Operand)
-            && IsStructurallyComparable(value.Lower)
-            && IsStructurallyComparable(value.Upper),
-        SafeMigrationSqlInExpression value =>
-            IsStructurallyComparable(value.Operand) && value.Values.All(IsStructurallyComparable),
-        SafeMigrationSqlFunctionExpression value => value.Arguments.All(IsStructurallyComparable),
-        SafeMigrationSqlCastExpression value => IsStructurallyComparable(value.Operand),
-        SafeMigrationSqlCollateExpression value => IsStructurallyComparable(value.Operand),
-        SafeMigrationSqlCurrentValueExpression => true,
-        SafeMigrationSqlProviderFragmentExpression => false,
-        SafeMigrationSqlOpaqueExpression => false,
-        _ => throw new UnreachableException(),
-    };
+        if (expression is null)
+        {
+            throw new UnreachableException();
+        }
+
+        var cursor = new InspectionCursor(expression);
+
+        try
+        {
+            while (cursor.TryMoveNext(out var current))
+            {
+                switch (current)
+                {
+                    case SafeMigrationSqlProviderFragmentExpression or SafeMigrationSqlOpaqueExpression:
+                        return false;
+                    case SafeMigrationSqlIdentifierExpression
+                        or SafeMigrationSqlLiteralExpression
+                        or SafeMigrationSqlCurrentValueExpression
+                        or SafeMigrationSqlUnaryExpression
+                        or SafeMigrationSqlBinaryExpression
+                        or SafeMigrationSqlNullTestExpression
+                        or SafeMigrationSqlBetweenExpression
+                        or SafeMigrationSqlInExpression
+                        or SafeMigrationSqlFunctionExpression
+                        or SafeMigrationSqlCaseExpression
+                        or SafeMigrationSqlCastExpression
+                        or SafeMigrationSqlCollateExpression:
+                        break;
+                    default:
+                        throw new UnreachableException();
+                }
+            }
+        }
+        finally
+        {
+            cursor.Dispose();
+        }
+
+        return true;
+    }
 
     /// <summary>Renames matching identifier parts throughout a structural expression.</summary>
     /// <param name="expression">The expression tree to transform.</param>
@@ -146,53 +197,4 @@ internal static class SafeMigrationSqlExpressionInspector
         string target,
         IEqualityComparer<string> columnComparer
     ) => RenameIdentifiers(expression, source, target, columnComparer, columnOnly: true);
-
-    /// <summary>Shares expression traversal while retaining the caller's explicit identifier roles.</summary>
-    private static SafeMigrationSqlExpression RenameIdentifiers(
-        SafeMigrationSqlExpression expression,
-        string source,
-        string target,
-        IEqualityComparer<string> comparer,
-        bool columnOnly
-    )
-    {
-        SafeMigrationSqlExpression RenameChild(SafeMigrationSqlExpression child) =>
-            RenameIdentifiers(child, source, target, comparer, columnOnly);
-
-        // WHY: Column-dependent identifiers end with the column member. Earlier
-        // parts qualify its owner and must not inherit column case semantics.
-        return expression switch
-        {
-            SafeMigrationSqlIdentifierExpression value =>
-                new SafeMigrationSqlIdentifierExpression(value.Parts.Select((part, ordinal) =>
-                    (!columnOnly || ordinal == value.Parts.Count - 1) && comparer.Equals(part, source)
-                        ? target : part)),
-            SafeMigrationSqlLiteralExpression => expression,
-            SafeMigrationSqlUnaryExpression value =>
-                new SafeMigrationSqlUnaryExpression(value.Operator, RenameChild(value.Operand)),
-            SafeMigrationSqlBinaryExpression value =>
-                new SafeMigrationSqlBinaryExpression(RenameChild(value.Left), value.Operator, RenameChild(value.Right)),
-            SafeMigrationSqlNullTestExpression value =>
-                new SafeMigrationSqlNullTestExpression(RenameChild(value.Operand), value.Negated),
-            SafeMigrationSqlBetweenExpression value =>
-                new SafeMigrationSqlBetweenExpression(
-                    RenameChild(value.Operand),
-                    RenameChild(value.Lower),
-                    RenameChild(value.Upper),
-                    value.Negated),
-            SafeMigrationSqlInExpression value =>
-                new SafeMigrationSqlInExpression(RenameChild(value.Operand), value.Values.Select(RenameChild),
-                    value.Negated),
-            SafeMigrationSqlFunctionExpression value =>
-                new SafeMigrationSqlFunctionExpression(value.Name, value.Arguments.Select(RenameChild)),
-            SafeMigrationSqlCastExpression value =>
-                new SafeMigrationSqlCastExpression(RenameChild(value.Operand), value.StoreType),
-            SafeMigrationSqlCollateExpression value =>
-                new SafeMigrationSqlCollateExpression(RenameChild(value.Operand), value.Name, value.Schema),
-            SafeMigrationSqlCurrentValueExpression => expression,
-            SafeMigrationSqlProviderFragmentExpression value => SafeMigrationSql.OpaqueAfterRename(value.Sql),
-            SafeMigrationSqlOpaqueExpression value => SafeMigrationSql.OpaqueAfterRename(value.Sql),
-            _ => throw new UnreachableException(),
-        };
-    }
 }

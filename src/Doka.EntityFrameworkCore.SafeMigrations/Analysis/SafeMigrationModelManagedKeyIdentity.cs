@@ -17,6 +17,9 @@ internal static class SafeMigrationModelManagedKeyIdentity
         var normalized = NormalizeColumns(columns, normalizer);
         canonicalOrdinals = null;
         var sorted = true;
+        // WHY: Adjacent labels determine whether the authored key order already is canonical.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 1; index < normalized.Count; index++)
         {
             if (StringComparer.Ordinal.Compare(normalized[index - 1], normalized[index]) > 0)
@@ -36,6 +39,9 @@ internal static class SafeMigrationModelManagedKeyIdentity
         // order is not physical identity. This permutation never normalizes
         // ordered INDEX/FK definitions, nor copies or sorts the row matrices.
         canonicalOrdinals = new int[normalized.Count];
+        // WHY: Seed the authored ordinal permutation before sorting labels without moving row values.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < canonicalOrdinals.Length; index++)
         {
             canonicalOrdinals[index] = index;
@@ -61,6 +67,9 @@ internal static class SafeMigrationModelManagedKeyIdentity
         }
 
         string[]? normalized = null;
+        // WHY: Keep canonical labels aligned with authored ordinals while allocating only after a change.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < columns.Count; index++)
         {
             var canonical = normalizer.NormalizeColumnIdentifier(columns[index]);
@@ -69,6 +78,9 @@ internal static class SafeMigrationModelManagedKeyIdentity
                 // WHY: Most providers preserve authored spelling. An owned
                 // array is needed only after an actual canonicalization change.
                 normalized = new string[columns.Count];
+                // WHY: Copy only the unchanged prefix when the first normalized label differs.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var prior = 0; prior < index; prior++)
                 {
                     normalized[prior] = columns[prior];
@@ -100,6 +112,9 @@ internal static class SafeMigrationModelManagedKeyIdentity
         // so an ASCII suffix still canonicalizes consistently in that case.
         Span<char> runeBuffer = stackalloc char[2];
         var length = 0;
+        // WHY: Advance by decoded rune width while measuring the exact UTF-16 destination length.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var offset = 0; offset < identifier.Length;)
         {
             length = checked(length + FoldOrdinalRune(identifier.AsSpan(offset), runeBuffer, out var consumed));
@@ -110,6 +125,9 @@ internal static class SafeMigrationModelManagedKeyIdentity
         {
             Span<char> buffer = stackalloc char[2];
             var written = 0;
+            // WHY: Advance source and destination offsets independently when canonical rune widths differ.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var offset = 0; offset < source.Length;)
             {
                 var count = FoldOrdinalRune(source.AsSpan(offset), buffer, out var consumed);

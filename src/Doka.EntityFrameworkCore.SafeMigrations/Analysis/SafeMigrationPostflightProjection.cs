@@ -4,7 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// Identifies safe operations whose resource state is replaced by a later safe
 /// operation before postflight observes the final database catalog.
 /// </summary>
-internal sealed class SafeMigrationPostflightProjection
+internal sealed partial class SafeMigrationPostflightProjection
 {
     private readonly HashSet<int> _supersededOrdinals = [];
     private HashSet<int>? _identityUnprovenOrdinals;
@@ -16,11 +16,13 @@ internal sealed class SafeMigrationPostflightProjection
     /// </param>
     /// <param name="projectedKeyAnalyzer">The optional provider capability for name-independent PK identity.</param>
     /// <param name="liveAnalyses">Fresh final-catalog analyses aligned with the safe subset only.</param>
+    /// <param name="renamedManagedIntents">Verified renamed row metadata keyed by original stream position.</param>
     public SafeMigrationPostflightProjection(
         IReadOnlyList<MigrationOperation> operations,
         ISafeMigrationProviderObjectIdentityNormalizer? objectIdentityNormalizer = null,
         ISafeMigrationProjectedKeyAnalyzer? projectedKeyAnalyzer = null,
-        IReadOnlyList<SafeMigrationProviderAnalysis>? liveAnalyses = null
+        IReadOnlyList<SafeMigrationProviderAnalysis>? liveAnalyses = null,
+        IReadOnlyDictionary<int, ModelManagedDataIntent>? renamedManagedIntents = null
     )
     {
         var postflightNormalizer = objectIdentityNormalizer?.GetPostflightIdentityNormalizer(operations);
@@ -35,6 +37,9 @@ internal sealed class SafeMigrationPostflightProjection
         // earlier transient states cannot make an ordered replacement fail.
         // Provider-certified pass-through operations never enter this
         // reduction because they own no SafeMigrations catalog resource.
+        // WHY: Reverse traversal gives the final operation precedence when proving final catalog state.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = operations.Count - 1; ordinal >= 0; ordinal--)
         {
             if (operations[ordinal] is not SafeMigrationOperation safeOperation)
@@ -65,8 +70,12 @@ internal sealed class SafeMigrationPostflightProjection
                 continue;
             }
 
+            // WHY: Resource reduction must use the same certified renamed key
+            // metadata as its fresh row probe. Reports and historical identity
+            // qualification still refer to the untouched authored operation.
+            var resourceIntent = renamedManagedIntents?.GetValueOrDefault(ordinal) ?? safeOperation.Intent;
             if (!TryCreateResources(
-                    safeOperation.Intent,
+                    resourceIntent,
                     postflightNormalizer,
                     primaryKeyNameIndependent,
                     sharedUniqueIndexIdentity,
@@ -381,9 +390,15 @@ internal sealed class SafeMigrationPostflightProjection
             intent.KeyColumns, objectIdentityNormalizer, out var keyOrdinals);
 
         var rowFingerprints = new string[intent.RowCount];
+        // WHY: Build one canonical fingerprint for each authored row without copying the matrix.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var row = 0; row < intent.RowCount; row++)
         {
             using var rowWriter = new CanonicalHashWriter();
+            // WHY: Pair each canonical key label with its value through the same ordinal mapping.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var column = 0; column < intent.KeyColumns.Count; column++)
             {
                 var ordinal = keyOrdinals?[column] ?? column;

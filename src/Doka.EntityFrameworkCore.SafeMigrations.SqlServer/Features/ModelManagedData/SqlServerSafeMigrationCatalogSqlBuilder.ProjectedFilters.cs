@@ -9,41 +9,59 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         SafeMigrationSqlExpression expression
     )
     {
-        switch (expression)
+        // WHY: An iterator cannot retain the pooled ref-struct work stack across
+        // yield boundaries. One ordinary stack replaces the former iterator per
+        // ancestor and is reclaimed with this invocation's enumerator.
+        var pending = new Stack<SafeMigrationSqlExpression>();
+        try
         {
-            case SafeMigrationSqlNullTestExpression { Operand: SafeMigrationSqlIdentifierExpression identifier }:
-                yield return (identifier.Parts[0], null);
-                break;
-            case SafeMigrationSqlBinaryExpression { Operator: SafeMigrationSqlBinaryOperator.And } conjunction:
-                foreach (var comparison in GetIndexFilterComparisons(conjunction.Left))
-                {
-                    yield return comparison;
-                }
-
-                foreach (var comparison in GetIndexFilterComparisons(conjunction.Right))
-                {
-                    yield return comparison;
-                }
-
-                break;
-            case SafeMigrationSqlBinaryExpression
+            do
             {
-                Left: SafeMigrationSqlIdentifierExpression identifier,
-                Right: SafeMigrationSqlLiteralExpression literal,
-            }:
-                yield return (identifier.Parts[0], literal);
-                break;
-            case SafeMigrationSqlInExpression { Operand: SafeMigrationSqlIdentifierExpression identifier } predicate:
-                foreach (var value in predicate.Values)
+                switch (expression)
                 {
-                    yield return (identifier.Parts[0], (SafeMigrationSqlLiteralExpression)value);
+                    case SafeMigrationSqlNullTestExpression
+                        { Operand: SafeMigrationSqlIdentifierExpression identifier }:
+                        yield return (identifier.Parts[0], null);
+                        break;
+
+                    case SafeMigrationSqlBinaryExpression { Operator: SafeMigrationSqlBinaryOperator.And } conjunction:
+                        pending.Push(conjunction.Right);
+                        expression = conjunction.Left;
+                        continue;
+
+                    case SafeMigrationSqlBinaryExpression
+                    {
+                        Left: SafeMigrationSqlIdentifierExpression identifier,
+                        Right: SafeMigrationSqlLiteralExpression literal,
+                    }:
+                        yield return (identifier.Parts[0], literal);
+                        break;
+
+                    case SafeMigrationSqlInExpression
+                        { Operand: SafeMigrationSqlIdentifierExpression identifier } predicate:
+                        foreach (var value in predicate.Values)
+                        {
+                            yield return (identifier.Parts[0], (SafeMigrationSqlLiteralExpression)value);
+                        }
+
+                        break;
+
+                    default:
+                        throw new ArgumentException(
+                            "A filtered-index predicate must be validated before extracting comparisons.",
+                            nameof(expression));
                 }
 
-                break;
-            default:
-                throw new ArgumentException(
-                    "A filtered-index predicate must be validated before extracting comparisons.",
-                    nameof(expression));
+                if (!pending.TryPop(out expression!))
+                {
+                    yield break;
+                }
+            }
+            while (true);
+        }
+        finally
+        {
+            pending.Clear();
         }
     }
 
@@ -211,7 +229,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // WHY: Bind constant-only SQL only after installed-collation validation.
         // Neither missing destinations nor empty row sets can authorize an
         // invalid filter conversion, and malformed constants never touch rows.
-        var sql = $"IF {installedGuard} BEGIN TRY EXEC sys.sp_executesql {Literal(body)}; "
+        var argument = SqlServerSqlStringLiteral.ProcedureArgument(
+            body, Literal(body), "@doka_projected_filter_sql", out var declaration);
+        var sql = declaration + $"IF {installedGuard} BEGIN TRY EXEC sys.sp_executesql {argument}; "
             + "END TRY BEGIN CATCH IF ERROR_NUMBER() IN (241, 242, 245, 248, 529, 8114, 8115) "
             + "SELECT 0; ELSE THROW; END CATCH ELSE SELECT 0;";
 
@@ -284,78 +304,260 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     internal static bool IsSupportedIndexFilter(
         SafeMigrationSqlExpression expression
     )
-        => expression switch
+    {
+        var pending = default(SafeMigrationWorkStack<SafeMigrationSqlExpression>);
+        try
         {
-            SafeMigrationSqlNullTestExpression
-                { Operand: SafeMigrationSqlIdentifierExpression { Parts.Count: 1 } } => true,
-            SafeMigrationSqlBinaryExpression { Operator: SafeMigrationSqlBinaryOperator.And } conjunction
-                => IsSupportedIndexFilter(conjunction.Left) && IsSupportedIndexFilter(conjunction.Right),
-            SafeMigrationSqlBinaryExpression
+            do
             {
-                Left: SafeMigrationSqlIdentifierExpression { Parts.Count: 1 },
-                Right: SafeMigrationSqlLiteralExpression { Value: not null } literal,
-            } comparison when comparison.Operator is SafeMigrationSqlBinaryOperator.Equal
-                or SafeMigrationSqlBinaryOperator.NotEqual or SafeMigrationSqlBinaryOperator.LessThan
-                or SafeMigrationSqlBinaryOperator.LessThanOrEqual or SafeMigrationSqlBinaryOperator.GreaterThan
-                or SafeMigrationSqlBinaryOperator.GreaterThanOrEqual
-                => literal.StoreType is null || IsManagedValueRepresentable(literal.Value, literal.StoreType),
-            SafeMigrationSqlInExpression
-            {
-                Operand: SafeMigrationSqlIdentifierExpression { Parts.Count: 1 },
-                Negated: false,
-            } predicate => predicate.Values.All(static value => value is SafeMigrationSqlLiteralExpression
-                { Value: not null } literal
-                && (literal.StoreType is null || IsManagedValueRepresentable(literal.Value, literal.StoreType))),
-            _ => false,
-        };
+                if (expression is SafeMigrationSqlBinaryExpression
+                    { Operator: SafeMigrationSqlBinaryOperator.And } conjunction)
+                {
+                    pending.Push(conjunction.Right);
+                    expression = conjunction.Left;
+                    continue;
+                }
+
+                var supported = expression switch
+                {
+                    SafeMigrationSqlNullTestExpression
+                        { Operand: SafeMigrationSqlIdentifierExpression { Parts.Count: 1 } } => true,
+                    SafeMigrationSqlBinaryExpression
+                    {
+                        Left: SafeMigrationSqlIdentifierExpression { Parts.Count: 1 },
+                        Right: SafeMigrationSqlLiteralExpression { Value: not null } literal,
+                    } comparison when comparison.Operator is SafeMigrationSqlBinaryOperator.Equal
+                        or SafeMigrationSqlBinaryOperator.NotEqual or SafeMigrationSqlBinaryOperator.LessThan
+                        or SafeMigrationSqlBinaryOperator.LessThanOrEqual or SafeMigrationSqlBinaryOperator.GreaterThan
+                        or SafeMigrationSqlBinaryOperator.GreaterThanOrEqual
+                        => literal.StoreType is null || IsManagedValueRepresentable(literal.Value, literal.StoreType),
+                    SafeMigrationSqlInExpression
+                    {
+                        Operand: SafeMigrationSqlIdentifierExpression { Parts.Count: 1 },
+                        Negated: false,
+                    } predicate => predicate.Values.All(static value => value is SafeMigrationSqlLiteralExpression
+                        { Value: not null } literal
+                        && (literal.StoreType is null
+                            || IsManagedValueRepresentable(literal.Value, literal.StoreType))),
+                    _ => false,
+                };
+
+                if (!supported)
+                {
+                    return false;
+                }
+
+                if (!pending.TryPop(out expression!))
+                {
+                    return true;
+                }
+            }
+            while (true);
+        }
+        finally
+        {
+            pending.Dispose();
+        }
+    }
 
     private static SafeMigrationSqlExpression? BindProjectedSeedFilter(
         SafeMigrationSqlExpression expression,
         Dictionary<string, ExpectedColumnDefinition> columns,
         Dictionary<string, string> aliases
     )
+        => RewriteFilter(expression, new SeedFilterRewriter(columns, aliases));
+
+    /// <summary>Rebuilds a supported filter in source order without allocating a closure per ancestor.</summary>
+    private static SafeMigrationSqlExpression? RewriteFilter<TRewriter>(
+        SafeMigrationSqlExpression expression,
+        TRewriter rewriter
+    ) where TRewriter : struct, IFilterRewriter
     {
-        // WHY: Bind immutable identifier nodes to typed row aliases rather than
-        // replacing SQL text. Opaque fragments and qualified paths cannot prove
-        // which destination column is being filtered and remain unproven.
-        switch (expression)
+        var pending = default(SafeMigrationWorkStack<FilterRewriteFrame>);
+        try
         {
-            case SafeMigrationSqlIdentifierExpression identifier
-                when identifier.Parts.Count == 1 && columns.ContainsKey(identifier.Parts[0]):
-                var name = identifier.Parts[0];
-                if (!aliases.TryGetValue(name, out var alias))
+            do
+            {
+                switch (expression)
                 {
-                    alias = "f" + aliases.Count.ToString(CultureInfo.InvariantCulture);
-                    aliases.Add(name, alias);
+                    case SafeMigrationSqlBinaryExpression binary when rewriter.SupportsBinary(binary.Operator):
+                        pending.Push(new FilterRewriteFrame(binary));
+                        expression = binary.Left;
+                        continue;
+
+                    case SafeMigrationSqlNullTestExpression test when rewriter.RewriteOperands:
+                        pending.Push(new FilterRewriteFrame(test));
+                        expression = test.Operand;
+                        continue;
+
+                    case SafeMigrationSqlInExpression predicate:
+                        var values = new SafeMigrationSqlExpression?[predicate.Values.Count];
+                        pending.Push(new FilterRewriteFrame(predicate, Index: -1, Values: values));
+                        if (rewriter.RewriteOperands)
+                        {
+                            expression = predicate.Operand;
+                            continue;
+                        }
+
+                        break;
                 }
 
-                return new SafeMigrationSqlIdentifierExpression([alias]);
-            case SafeMigrationSqlLiteralExpression literal:
-                return literal;
-            case SafeMigrationSqlNullTestExpression test:
-                var tested = BindProjectedSeedFilter(test.Operand, columns, aliases);
+                var result = expression is SafeMigrationSqlInExpression unchanged && !rewriter.RewriteOperands
+                    ? unchanged.Operand : rewriter.RewriteLeaf(expression);
 
-                return tested is null ? null : new SafeMigrationSqlNullTestExpression(tested, test.Negated);
-            case SafeMigrationSqlBinaryExpression binary
-                when binary.Operator is SafeMigrationSqlBinaryOperator.And
-                    or SafeMigrationSqlBinaryOperator.Equal or SafeMigrationSqlBinaryOperator.NotEqual
-                    or SafeMigrationSqlBinaryOperator.LessThan or SafeMigrationSqlBinaryOperator.LessThanOrEqual
-                    or SafeMigrationSqlBinaryOperator.GreaterThan or SafeMigrationSqlBinaryOperator.GreaterThanOrEqual:
-                var left = BindProjectedSeedFilter(binary.Left, columns, aliases);
-                var right = BindProjectedSeedFilter(binary.Right, columns, aliases);
+                do
+                {
+                    if (!pending.TryPop(out var frame))
+                    {
+                        return result;
+                    }
 
-                return left is null || right is null ? null
-                    : new SafeMigrationSqlBinaryExpression(left, binary.Operator, right);
-            case SafeMigrationSqlInExpression predicate:
-                var operand = BindProjectedSeedFilter(predicate.Operand, columns, aliases);
-                var values = predicate.Values.Select(value => BindProjectedSeedFilter(value, columns, aliases))
-                    .ToArray();
+                    switch (frame.Expression)
+                    {
+                        case SafeMigrationSqlBinaryExpression binary when frame.Index == 0:
+                            pending.Push(frame with { Index = 1, First = result });
+                            expression = binary.Right;
+                            break;
 
-                return operand is null || values.Any(static value => value is null) ? null
-                    : new SafeMigrationSqlInExpression(
-                        operand, values.Select(static value => value!), predicate.Negated);
-            default:
-                return null;
+                        case SafeMigrationSqlBinaryExpression binary:
+                            result = frame.First is null || result is null ? null
+                                : new SafeMigrationSqlBinaryExpression(frame.First, binary.Operator, result);
+                            continue;
+
+                        case SafeMigrationSqlNullTestExpression test:
+                            result = result is null ? null
+                                : new SafeMigrationSqlNullTestExpression(result, test.Negated);
+                            continue;
+
+                        case SafeMigrationSqlInExpression predicate:
+                            if (frame.Index < 0)
+                            {
+                                frame = frame with { First = result };
+                            }
+                            else
+                            {
+                                frame.Values![frame.Index] = result;
+                            }
+
+                            var next = frame.Index + 1;
+                            if (next < predicate.Values.Count)
+                            {
+                                pending.Push(frame with { Index = next });
+                                expression = predicate.Values[next];
+                                break;
+                            }
+
+                            result = frame.First is null || frame.Values!.Any(static value => value is null) ? null
+                                : new SafeMigrationSqlInExpression(frame.First,
+                                    frame.Values!.Select(static value => value!), predicate.Negated);
+                            continue;
+
+                        default:
+                            throw new UnreachableException();
+                    }
+
+                    break;
+                }
+                while (true);
+            }
+            while (true);
+        }
+        finally
+        {
+            pending.Dispose();
         }
     }
+
+    /// <summary>Keeps filter grammar policies explicit while sharing only the stack-safe reconstruction.</summary>
+    private interface IFilterRewriter
+    {
+        /// <summary>Gets whether identifier operands also need rewriting.</summary>
+        bool RewriteOperands { get; }
+
+        /// <summary>Recognizes binary nodes admitted by this existing reconstruction path.</summary>
+        bool SupportsBinary(SafeMigrationSqlBinaryOperator operation);
+
+        /// <summary>Rewrites a leaf, retaining the policy's original unsupported-node result.</summary>
+        SafeMigrationSqlExpression? RewriteLeaf(SafeMigrationSqlExpression expression);
+    }
+
+    /// <summary>Binds immutable identifiers to invocation-owned aliases without replacing SQL text.</summary>
+    private readonly struct SeedFilterRewriter : IFilterRewriter
+    {
+        private readonly Dictionary<string, ExpectedColumnDefinition> _columns;
+        private readonly Dictionary<string, string> _aliases;
+
+        /// <summary>Retains invocation-owned lookup and alias order without copying the dictionaries.</summary>
+        internal SeedFilterRewriter(
+            Dictionary<string, ExpectedColumnDefinition> columns,
+            Dictionary<string, string> aliases
+        )
+        {
+            _columns = columns;
+            _aliases = aliases;
+        }
+
+        /// <inheritdoc />
+        public bool RewriteOperands => true;
+
+        /// <inheritdoc />
+        public bool SupportsBinary(SafeMigrationSqlBinaryOperator operation)
+            => operation is SafeMigrationSqlBinaryOperator.And
+                or >= SafeMigrationSqlBinaryOperator.Equal and <= SafeMigrationSqlBinaryOperator.GreaterThanOrEqual;
+
+        /// <inheritdoc />
+        public SafeMigrationSqlExpression? RewriteLeaf(SafeMigrationSqlExpression expression)
+        {
+            if (expression is SafeMigrationSqlLiteralExpression)
+            {
+                return expression;
+            }
+
+            if (expression is not SafeMigrationSqlIdentifierExpression { Parts.Count: 1 } identifier
+                || !_columns.ContainsKey(identifier.Parts[0]))
+            {
+                return null;
+            }
+
+            var name = identifier.Parts[0];
+            if (!_aliases.TryGetValue(name, out var alias))
+            {
+                alias = "f" + _aliases.Count.ToString(CultureInfo.InvariantCulture);
+                _aliases.Add(name, alias);
+            }
+
+            return new SafeMigrationSqlIdentifierExpression([alias]);
+        }
+    }
+
+    /// <summary>Retains the caller's literal encoding queue and unchanged nonliteral identities.</summary>
+    private readonly struct LiteralTypeFilterRewriter : IFilterRewriter
+    {
+        private readonly Queue<string> _strings;
+
+        /// <summary>Retains the already tokenized raw-literal encoding order.</summary>
+        internal LiteralTypeFilterRewriter(Queue<string> strings)
+        {
+            _strings = strings;
+        }
+
+        /// <inheritdoc />
+        public bool RewriteOperands => false;
+
+        /// <inheritdoc />
+        public bool SupportsBinary(SafeMigrationSqlBinaryOperator operation) => true;
+
+        /// <inheritdoc />
+        public SafeMigrationSqlExpression RewriteLeaf(SafeMigrationSqlExpression expression)
+            => expression is SafeMigrationSqlLiteralExpression { Value: string } literal
+                ? new SafeMigrationSqlLiteralExpression(literal.Value, _strings.Dequeue()) : expression;
+    }
+
+    /// <summary>Retains reconstructed siblings until their immutable parent can be rebuilt.</summary>
+    private readonly record struct FilterRewriteFrame(
+        SafeMigrationSqlExpression Expression,
+        int Index = 0,
+        SafeMigrationSqlExpression? First = null,
+        SafeMigrationSqlExpression?[]? Values = null
+    );
 }

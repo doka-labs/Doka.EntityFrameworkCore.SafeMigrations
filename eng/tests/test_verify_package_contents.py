@@ -13,7 +13,7 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 VERIFIER = REPOSITORY_ROOT / "eng/verify-package-contents.sh"
 CORE_ID = "Doka.EntityFrameworkCore.SafeMigrations"
-PACKAGE_VERSION = "10.5.0"
+PACKAGE_VERSION = "10.6.0"
 PKCS_ID = "System.Security.Cryptography.Pkcs"
 PROVIDER_DEPENDENCIES = {
     "": "Microsoft.EntityFrameworkCore.Relational",
@@ -33,7 +33,7 @@ def write_packages(
     """Create the exact five-package fixture without restoring or loading code."""
     for suffix, provider in PROVIDER_DEPENDENCIES.items():
         package_id = CORE_ID + suffix
-        dependencies = [(provider, "[10.0.12,10.1.0)")]
+        dependencies = [(provider, "[10.0.13,10.1.0)")]
         if suffix:
             dependencies.append((CORE_ID, PACKAGE_VERSION))
 

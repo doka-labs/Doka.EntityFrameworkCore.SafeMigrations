@@ -63,6 +63,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         // WHY: Most null filters reference an existing key column. Reuse the immutable dependency list
         // for that case; only a genuinely additional predicate column needs one exact-sized snapshot.
         var result = new string[columns.Count + 1];
+        // WHY: Copy prerequisite names directly into their corresponding output slots.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < columns.Count; index++)
         {
             result[index] = columns[index];

@@ -56,10 +56,23 @@ public sealed class SqliteParallelTestContractTests : SqliteIntegrationTestBase
         // Assert
         Assert.True(owner.IsAbstract);
         Assert.DoesNotContain(ownerMethods, method => method.GetCustomAttribute<FactAttribute>() is not null);
-        Assert.Equal(195, featureTests.Length);
+        // WHY: Four additional methods expose the original three aggregate
+        // contracts independently without adding runnable feature classes.
+        Assert.Equal(199, featureTests.Length);
         Assert.All(featureTests, test => Assert.Equal(test.Feature, test.Method.DeclaringType));
         Assert.All(featureTests.GroupBy(test => test.Method.Name, StringComparer.Ordinal), group =>
             Assert.Single(group));
+        Assert.Contains(featureTests, test => test.Method.Name
+            == "ModelManagedData_UniqueCollisionFailsClosedWithoutMutation");
+        Assert.Contains(featureTests, test => test.Method.Name
+            == "ModelManagedData_UnmodeledDependencyDeletionFailsClosedWithoutMutation");
+        Assert.Contains(featureTests, test => test.Method.Name
+            == "GeneratedArithmeticColumn_IsComparedByPhysicalFacet");
+        Assert.Contains(featureTests, test => test.Method.Name
+            == "StringDefaultAndCollation_AreComparedByPhysicalFacet");
+        Assert.Contains(featureTests, test => test.Method.Name == "SchemaIntent_MainIsNoOp");
+        Assert.Contains(featureTests, test => test.Method.Name == "SchemaIntent_ForeignSchemaIsRejected");
+        Assert.Contains(featureTests, test => test.Method.Name == "SchemaIntent_DropSchemaIsRejected");
         Assert.Equal(
             typeof(SqliteSafeMigrationPerformanceIntegrationTests),
             Assert.Single(featureTests, test => test.Method.Name

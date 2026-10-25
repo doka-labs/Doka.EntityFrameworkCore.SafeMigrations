@@ -114,7 +114,7 @@ public sealed partial class MySqlColumnsStructuredExpressionsIntegrationTests : 
     }
 
     [Fact]
-    public async Task NonNullableGeneratedColumn_ConvergesOnMySqlAndFailsClosedOnMariaDb()
+    public async Task NonNullableGeneratedColumnConvergesWithQualifiedNativeSemantics()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
@@ -147,23 +147,6 @@ public sealed partial class MySqlColumnsStructuredExpressionsIntegrationTests : 
                 builder.Operations,
                 new SafeMigrationRunOptions("nonnullable-generated-column"),
                 CancellationToken.None);
-
-        if (Fixture.IsMariaDb)
-        {
-            Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-            Assert.Contains(
-                report.Assessments,
-                static assessment => assessment.ObservedState == SafeMigrationObservedState.Unsupported
-                    && assessment.Code == "generated_column_nullability");
-            Assert.Equal(
-                0,
-                await ScalarIntAsync(
-                    connectionString,
-                    "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-                    + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'nonnullable_generated_column';"));
-
-            return;
-        }
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
 

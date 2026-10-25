@@ -20,6 +20,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         SafeMigrationProviderAnalysis[] analyses
     )
     {
+        // WHY: Record identity conflicts only for the operation owning that verdict.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             if (operations[ordinal].Intent is EnsureColumnIntent column
@@ -78,8 +81,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         switch (operation.Intent)
         {
             case EnsureTableIntent table when decision.ShouldExecute
-                || table.Mode == SafeMigrationTableMode.StrictDefinition
-                    && analysis.ObservedState == SafeMigrationObservedState.Matching:
+                || (table.Mode == SafeMigrationTableMode.StrictDefinition
+                    && analysis.ObservedState == SafeMigrationObservedState.Matching):
                 var identityColumn = table.Definition.Columns.FirstOrDefault(static column =>
                     SqlServerSafeMigrationCatalogSqlBuilder.TryGetIdentity(column, out var identity, out _, out _)
                         && identity);

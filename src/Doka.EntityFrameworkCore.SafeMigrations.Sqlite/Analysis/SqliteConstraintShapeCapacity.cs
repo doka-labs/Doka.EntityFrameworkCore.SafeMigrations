@@ -40,9 +40,14 @@ internal static class SqliteConstraintShapeCapacity
             // classes, so greedy slot consumption is injective without a
             // general graph matcher. Usually-small vectors remain on stack;
             // exceptional large vectors rent bounded synchronous scratch.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var ordinal = 0; ordinal < actual.Count; ordinal++)
             {
                 var witness = -1;
+                // WHY: Retain candidate positions so witness reuse follows the constraint-capacity policy.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var candidate = 0; candidate < allowed.Count; candidate++)
                 {
                     if (consumed[candidate] == 0 && matches(actual[ordinal], allowed[candidate]))
@@ -61,9 +66,16 @@ internal static class SqliteConstraintShapeCapacity
             }
 
             consumed.Clear();
+
+            // WHY: Retain candidate positions so witness reuse follows the constraint-capacity policy.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var ordinal = 0; ordinal < required.Count; ordinal++)
             {
                 var witness = -1;
+                // WHY: Retain candidate positions so witness reuse follows the constraint-capacity policy.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var candidate = 0; candidate < actual.Count; candidate++)
                 {
                     if ((coalesceRequiredShapes || consumed[candidate] == 0)

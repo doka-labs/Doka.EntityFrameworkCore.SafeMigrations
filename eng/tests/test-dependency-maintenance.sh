@@ -24,7 +24,7 @@ setup_count="$(
 )"
 global_json_count="$(
   grep -R -h --include='*.yml' --include='*.yaml' \
-    'global-json-file: global.json' .github/workflows \
+    -E 'global-json-file: (snapshot-source/)?global\.json[[:space:]]*$' .github/workflows \
     | wc -l \
     | tr -d ' '
 )"
@@ -47,25 +47,26 @@ fi
 
 unexpected_ubuntu_runners="$(
   grep -R -n --include='*.yml' --include='*.yaml' \
-    'runs-on:[[:space:]]*ubuntu-' .github/workflows \
-    | grep -Ev 'runs-on:[[:space:]]*ubuntu-24\.04[[:space:]]*$' || true
+    '^[[:space:]]*runs-on:' .github/workflows \
+    | grep -Ev 'runs-on:[[:space:]]*ubuntu-26\.04[[:space:]]*$' || true
 )"
 
 if [[ -n "$unexpected_ubuntu_runners" ]]; then
   printf '%s\n' "$unexpected_ubuntu_runners" >&2
-  echo "GitHub-hosted Linux jobs must use the qualified ubuntu-24.04 runner." >&2
+  echo "GitHub-hosted jobs must use the pinned ubuntu-26.04 x64 runner." >&2
   exit 1
 fi
 
 pinned_ubuntu_runner_count="$(
-  grep -R -h --include='*.yml' --include='*.yaml' \
-    'runs-on:[[:space:]]*ubuntu-24\.04[[:space:]]*$' .github/workflows \
+  # WHY: An empty inventory must reach the explicit failure, not exit silently under pipefail.
+  { grep -R -h --include='*.yml' --include='*.yaml' \
+    '^[[:space:]]*runs-on:[[:space:]]*ubuntu-26\.04[[:space:]]*$' .github/workflows || true; } \
     | wc -l \
     | tr -d ' '
 )"
 
 if [[ "$pinned_ubuntu_runner_count" == "0" ]]; then
-  echo "At least one qualified ubuntu-24.04 workflow job is required." >&2
+  echo "At least one pinned ubuntu-26.04 x64 workflow job is required." >&2
   exit 1
 fi
 

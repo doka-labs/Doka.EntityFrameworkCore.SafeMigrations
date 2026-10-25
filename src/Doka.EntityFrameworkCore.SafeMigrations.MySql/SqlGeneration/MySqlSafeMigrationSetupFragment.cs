@@ -60,6 +60,8 @@ internal readonly struct MySqlSafeMigrationSetupFragment
 
             // WHY: Owned generated fragments have known SQL structure. This is not a SQL parser;
             // fragments without the owned terminator remain independent commands.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var index = _parts.Length - 1; index >= 0; index--)
             {
                 var part = _parts[index];

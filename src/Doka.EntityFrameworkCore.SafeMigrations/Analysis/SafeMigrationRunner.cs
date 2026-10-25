@@ -1,7 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Default provider-neutral preflight and postflight runner.</summary>
-public sealed class SafeMigrationRunner : ISafeMigrationRunner
+public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
 {
     private readonly ISafeMigrationProviderAnalyzer _providerAnalyzer;
     private readonly TimeProvider _timeProvider;
@@ -329,17 +329,30 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
             throw new InvalidOperationException("The SafeMigrations analyzer returned an inconsistent result count.");
         }
 
+        var objectIdentityNormalizer = _providerAnalyzer as ISafeMigrationProviderObjectIdentityNormalizer;
+        var postflightIdentityNormalizer = mode == SafeMigrationReportMode.Postflight
+            ? objectIdentityNormalizer?.GetPostflightIdentityNormalizer(operations)
+            : null;
+
+        IReadOnlyDictionary<int, ModelManagedDataIntent>? renamedManagedIntents = null;
+        if (mode == SafeMigrationReportMode.Postflight)
+        {
+            var revalidated = await RevalidateRenamedContractsAsync(
+                context, operations, targetModels, liveAnalyses, postflightIdentityNormalizer, cancellationToken);
+
+            liveAnalyses = revalidated.Analyses;
+            renamedManagedIntents = revalidated.ManagedIntents;
+        }
+
         using (SafeMigrationTelemetry.StartAnalysisStage("ordered-projection", operations.Count))
         {
-            var objectIdentityNormalizer =
-                _providerAnalyzer as ISafeMigrationProviderObjectIdentityNormalizer;
-
             var postflightProjection = mode == SafeMigrationReportMode.Postflight
                 ? new SafeMigrationPostflightProjection(
                     operations,
-                    objectIdentityNormalizer,
+                    postflightIdentityNormalizer,
                     _providerAnalyzer as ISafeMigrationProjectedKeyAnalyzer,
-                    liveAnalyses)
+                    liveAnalyses,
+                    renamedManagedIntents)
                 : null;
 
             var preflightProjection = mode == SafeMigrationReportMode.Preflight
@@ -355,6 +368,9 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
                 : null;
 
             var safeOperationOrdinal = 0;
+            // WHY: Retain original operation ordinals for projection ownership and report evidence.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var ordinal = 0; ordinal < operations.Count; ordinal++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -746,6 +762,8 @@ public sealed class SafeMigrationRunner : ISafeMigrationRunner
 
         // WHY: These retained snapshots expose indexed immutable reads. Enumerating
         // IReadOnlyList allocates an iterator, including the one-column metadata view.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < identifiers.Count; index++)
         {
             if (string.IsNullOrWhiteSpace(identifiers[index]))

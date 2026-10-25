@@ -259,6 +259,9 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
         var parameterCountPerRow = intent.KeyColumns.Count + intent.Columns.Count;
         var batchSize = Math.Max(1, SqliteSafeMigrationLimits.MaximumParametersPerCommand / parameterCountPerRow);
 
+        // WHY: Keep row selectors, declared column types and matrix values aligned by their original ordinals.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var offset = 0; offset < intent.RowCount; offset += batchSize)
         {
             using var command = connection.CreateCommand();
@@ -274,10 +277,17 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
                 .ToArray();
 
             var rows = new string[count];
+
+            // WHY: Keep row selectors, declared column types and matrix values aligned by their original ordinals.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var localRow = 0; localRow < count; localRow++)
             {
                 var row = offset + localRow;
                 var parameters = new string[parameterCountPerRow];
+                // WHY: Keep row selectors, declared column types and matrix values aligned by their original ordinals.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var column = 0; column < intent.KeyColumns.Count; column++)
                 {
                     var name = $"$r{localRow}_k{column}";
@@ -285,6 +295,9 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
                     AddParameter(command, name, intent.KeyValues.GetUnsafeValue(row, column));
                 }
 
+                // WHY: Keep row selectors, declared column types and matrix values aligned by their original ordinals.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var column = 0; column < intent.Columns.Count; column++)
                 {
                     var name = $"$r{localRow}_v{column}";
@@ -329,6 +342,9 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
         var parameterCountPerRow = intent.KeyColumns.Count + (intent.Columns.Count * 2);
         var batchSize = Math.Max(1, SqliteSafeMigrationLimits.MaximumParametersPerCommand / parameterCountPerRow);
 
+        // WHY: Keep row selectors, declared column types and matrix values aligned by their original ordinals.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var offset = 0; offset < intent.RowCount; offset += batchSize)
         {
             using var command = connection.CreateCommand();
@@ -348,11 +364,19 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
                 .ToArray();
 
             var rows = new string[count];
+
+            // WHY: Keep row selectors, declared column types and matrix values aligned by their original ordinals.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var localRow = 0; localRow < count; localRow++)
             {
                 var row = offset + localRow;
                 var parameters = new string[parameterCountPerRow];
                 var parameterIndex = 0;
+
+                // WHY: Keep row selectors, declared column types and matrix values aligned by their original ordinals.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var column = 0; column < intent.KeyColumns.Count; column++)
                 {
                     var name = $"$r{localRow}_k{column}";
@@ -360,6 +384,9 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
                     AddParameter(command, name, intent.KeyValues.GetUnsafeValue(row, column));
                 }
 
+                // WHY: Keep row selectors, declared column types and matrix values aligned by their original ordinals.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var column = 0; column < intent.Columns.Count; column++)
                 {
                     var name = $"$r{localRow}_s{column}";
@@ -367,6 +394,9 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
                     AddParameter(command, name, intent.OldValues.GetUnsafeValue(row, column));
                 }
 
+                // WHY: Keep row selectors, declared column types and matrix values aligned by their original ordinals.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var column = 0; column < intent.Columns.Count; column++)
                 {
                     var name = $"$r{localRow}_t{column}";
@@ -404,6 +434,9 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
         var parameterCountPerRow = intent.KeyColumns.Count + intent.Columns.Count;
         var batchSize = Math.Max(1, SqliteSafeMigrationLimits.MaximumParametersPerCommand / parameterCountPerRow);
 
+        // WHY: Keep row selectors, declared column types and matrix values aligned by their original ordinals.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var offset = 0; offset < intent.RowCount; offset += batchSize)
         {
             using var command = connection.CreateCommand();
@@ -419,11 +452,18 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
                 .ToArray();
 
             var rows = new string[count];
+
+            // WHY: Keep row selectors, declared column types and matrix values aligned by their original ordinals.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var localRow = 0; localRow < count; localRow++)
             {
                 var row = offset + localRow;
                 var parameters = new string[parameterCountPerRow];
                 var parameterIndex = 0;
+                // WHY: Pair each key-column slot with the same row and column of its value matrix.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var column = 0; column < intent.KeyColumns.Count; column++)
                 {
                     var name = $"$r{localRow}_k{column}";
@@ -431,6 +471,9 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
                     AddParameter(command, name, intent.KeyValues.GetUnsafeValue(row, column));
                 }
 
+                // WHY: Bind each old-value matrix column in the parameter slot following the row keys.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var column = 0; column < intent.Columns.Count; column++)
                 {
                     var name = $"$r{localRow}_s{column}";

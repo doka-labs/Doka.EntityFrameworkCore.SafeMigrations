@@ -637,7 +637,8 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         Assert.Contains("nullable_fk.DELETE_RULE = 'SET NULL' OR nullable_fk.UPDATE_RULE = 'SET NULL'", resume,
             StringComparison.Ordinal);
         Assert.DoesNotContain("nullable_fk.DELETE_RULE = 'CASCADE'", resume, StringComparison.Ordinal);
-        Assert.Contains("cc.CHECK_CLAUSE IN (", resume, StringComparison.Ordinal);
+        Assert.Contains("CAST(LOWER(CONVERT(cc.CHECK_CLAUSE USING utf8mb4)) AS BINARY)", resume,
+            StringComparison.Ordinal);
         Assert.Contains("CAST(cc.CHECK_CLAUSE AS BINARY) IN (", resume, StringComparison.Ordinal);
         Assert.Equal(mariaDb, resume.Contains("UPPER(c.COLUMN_DEFAULT) = 'NULL'", StringComparison.Ordinal));
         Assert.Equal(!mariaDb, resume.Contains("tc.ENFORCED = 'YES'", StringComparison.Ordinal));

@@ -1,0 +1,117 @@
+name: Release line maintenance
+run-name: ${{ inputs.maintenance && format('maintenance {0}', inputs.schedule-correlation) || 'Release-line maintenance coordinator' }}
+
+on:
+  schedule:
+    - cron: '17 4 * * *'
+    - cron: '37 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      maintenance:
+        description: Execute this exact branch-native audit after coordinator dispatch.
+        type: boolean
+        default: false
+      schedule-correlation:
+        description: Exact coordinator run and attempt identity.
+        type: string
+        default: ''
+      schedule-source-sha:
+        description: Exact protected branch head resolved before dispatch.
+        type: string
+        default: ''
+      workload:
+        description: Maintenance workload requested by a default-branch coordinator.
+        type: choice
+        options: [audit, qualification]
+        default: audit
+
+permissions:
+  contents: read
+
+concurrency:
+  group: safe-migrations-maintenance-${{ github.ref }}-${{ inputs.maintenance && inputs.schedule-correlation || github.event.schedule || 'manual' }}
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  coordinate:
+    if: ${{ !inputs.maintenance }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 245
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout current coordinator source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # WHY: GitHub schedules only the default branch. Dispatch every active
+      # line's own workflow, including main once, and verify actual child jobs.
+      - name: Coordinate branch-native maintenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKLOAD: ${{ github.event_name == 'schedule' && (github.event.schedule == '37 4 * * 1' && 'qualification' || 'audit') || inputs.workload }}
+        run: >-
+          python3 -m eng.release.maintenance coordinate
+          --workload "$WORKLOAD"
+          --output artifacts/release-lines/maintenance.json
+
+      - name: Retain exact child observations
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-line-maintenance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/release-lines/maintenance.json
+          if-no-files-found: error
+          retention-days: 14
+
+  schedule-identity:
+    name: schedule-identity
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.maintenance }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact native source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Require active source and coordinator identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_MAINTENANCE: ${{ inputs.maintenance }}
+          INPUT_CORRELATION: ${{ inputs.schedule-correlation }}
+          INPUT_SOURCE_SHA: ${{ inputs.schedule-source-sha }}
+        run: python3 -m eng.release.maintenance guard --workflow release-line-maintenance.yml
+
+  dependency-vulnerability-audit:
+    name: dependency-vulnerability-audit
+    needs: schedule-identity
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout branch-native dependency graph
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup branch-native SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Require fresh complete transitive advisory evidence
+        run: >-
+          python3 -m eng.release.maintenance audit
+          --output artifacts/security-audit
+
+      - name: Retain audit and restore evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-line-audit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/security-audit
+          if-no-files-found: error
+          retention-days: 14

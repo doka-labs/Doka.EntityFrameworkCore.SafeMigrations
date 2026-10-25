@@ -368,7 +368,8 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
         uniqueConstraints: kind == SafeMigrationOperationKind.EnsureUniqueConstraint
             ? names.Select(name => new ExpectedUniqueConstraintDefinition(name, "shape_items", ["Code"])) : [],
         checkConstraints: kind == SafeMigrationOperationKind.EnsureCheckConstraint
-            ? names.Select(name => new ExpectedCheckConstraintDefinition(name, "shape_items", "Code > 0")) : [],
+            ? names.Select(name => SafeMigrationExpectedDefinitionFactory.CheckConstraint(
+                name, "shape_items", "Code > 0", schema: null)) : [],
         foreignKeys: kind == SafeMigrationOperationKind.EnsureForeignKey
             ? names.Select(name => new ExpectedForeignKeyDefinition(name, "shape_items", ["ParentId"],
                 "shape_parents", ["Id"])) : []);

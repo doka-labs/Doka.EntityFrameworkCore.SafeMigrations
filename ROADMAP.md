@@ -22,9 +22,8 @@ functionality into a later version.
 - The verified rc.3 contract was promoted to stable 10.0.0 without a feature
   delta, and the exact stable package bytes were independently qualified.
 
-Prepared release notes and workflow files do not prove a package is published.
-The actual [release record](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/releases)
-and NuGet readback are the publication authority.
+The [publication runbook](docs/operations/release-publication.md) defines how
+release status and exact package readback are recorded in release evidence.
 
 ## Maintenance during the horizon
 
@@ -96,12 +95,15 @@ PostgreSQL CHECK/index-input qualification and bounded prerequisite SQL, and
 SQLite strict capacity, parent-key equality and appended-FK ordering. SQL Server
 uses compatible live endpoint/key evidence without weakening permission or row
 guards. The same public signatures, dependencies, migrations, policies, reports,
-history and full five-package release gates remain; no general performance or
-publication claim follows from source preparation.
-Prepared stable 10.5.0 adds readable diagnostics and report owners, optional
-MariaDB native UUID through Doka 10.5, exact persisted-default checks and
-isolated parallel provider tests. See the [changelog](CHANGELOG.md) for schema,
-exception and dependency upgrade notes; the full release gates remain required.
+history and full five-package release gates remain. Performance measurements
+apply to their recorded workloads and environments.
+Version 10.6.0 adds public CASE expressions and certified generated
+columns/CHECKs, corrects independent DROP proofs and deep-expression traversal,
+and qualifies Doka 10.6 with the reviewed dependency baseline. Review the
+[upgrade notes](docs/support-and-qualification.md#upgrade-to-1060) for affected
+contract fingerprints, exact expression identity and dependency floors.
+Existing diagnostics and report schemas remain; the full release gates remain
+required. Detailed changes belong in the [changelog](CHANGELOG.md).
 These releases follow changed dependency conditions and confirmed correctness
 requirements; they are not deferred initial scope.
 

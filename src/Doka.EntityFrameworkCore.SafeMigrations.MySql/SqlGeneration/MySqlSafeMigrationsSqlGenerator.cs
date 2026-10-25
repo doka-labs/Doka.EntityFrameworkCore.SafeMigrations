@@ -38,7 +38,13 @@ internal sealed class MySqlSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
             return _providerGenerator.Generate(operations, model, options);
         }
 
-        using var generation = _planCapture.BeginGeneration(operations);
+        var generatedCandidates = MySqlGeneratedColumnModelCandidates.CaptureTargets(
+            operations,
+            null,
+            model,
+            _dependencies?.CurrentContext.Context.GetService<IModelRuntimeInitializer>());
+
+        using var generation = _planCapture.BeginGeneration(operations, generatedCandidates);
         var commands = _providerGenerator.Generate(operations, model, options);
         if ((options & MigrationsSqlGenerationOptions.Script) != 0)
         {
@@ -47,6 +53,9 @@ internal sealed class MySqlSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
 
         MigrationCommand[]? decorated = null;
         IRelationalCommand? metadataCommand = null;
+        // WHY: Keep execution wrappers and provider command slots in the original command order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < commands.Count; index++)
         {
             var command = commands[index];
@@ -56,14 +65,22 @@ internal sealed class MySqlSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
                 continue;
             }
 
-            var dependencies = _dependencies ?? throw new InvalidOperationException(
-                "MySQL runtime diagnostics require the registered EF migrations command services.");
+            var dependencies = _dependencies
+                ?? throw new InvalidOperationException(
+                    "MySQL runtime diagnostics require the registered EF migrations command services.");
 
             // WHY: The native scoped command remains the execution owner.
             // A shared empty base command avoids duplicating every SQL payload.
             decorated ??= commands.ToArray();
-            metadataCommand ??= dependencies.CommandBuilderFactory.Create().Build();
-            decorated[index] = new MySqlSafeMigrationDiagnosticCommand(command, diagnostic, dependencies,
+            metadataCommand ??= dependencies
+                .CommandBuilderFactory
+                .Create()
+                .Build();
+
+            decorated[index] = new MySqlSafeMigrationDiagnosticCommand(
+                command,
+                diagnostic,
+                dependencies,
                 metadataCommand);
         }
 

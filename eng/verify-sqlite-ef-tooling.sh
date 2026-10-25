@@ -21,9 +21,81 @@ case "$work_dir" in
 esac
 
 cleanup() {
+    local original_exit=$?
+    local cleanup_exit
+    trap - EXIT
+    set +e
+
     rm -rf -- "$work_dir"
+    cleanup_exit=$?
+    if ((cleanup_exit != 0)); then
+        echo "SQLite tooling cleanup failed (exit $cleanup_exit)." >&2
+        if ((original_exit == 0)); then
+            original_exit=$cleanup_exit
+        fi
+    fi
+
+    exit "$original_exit"
 }
 trap cleanup EXIT
+
+# WHY: An unrelated design-time/startup error is not evidence that the intended
+# script capability guard ran. Keep both failure identity and no-output checks.
+verify_script_rejection() {
+    local context=$1
+    local output_path=$2
+    shift 2
+    local diagnostic_path="$output_path.log"
+    local idempotent_requested=false
+    local argument
+    for argument in "$@"; do
+        if [[ "$argument" == --idempotent ]]; then
+            idempotent_requested=true
+        fi
+    done
+
+    local native_idempotent_message="System.NotSupportedException: Generating idempotent scripts for migrations "
+    native_idempotent_message+="is not currently supported for SQLite. "
+    native_idempotent_message+="See https://go.microsoft.com/fwlink/?LinkId=723262 for more information and examples."
+    local native_idempotent_stack='^[[:space:]]+at Microsoft\.EntityFrameworkCore\.Sqlite\.Migrations\.Internal\.'
+    native_idempotent_stack+='SqliteHistoryRepository\.GetEndIfScript\(\)($|[[:space:]])'
+
+    # WHY: EF's native capability diagnostic is localized; select English for
+    # the exact expected-error contract rather than accepting arbitrary failure.
+    if LC_ALL=C LANG=C DOTNET_CLI_UI_LANGUAGE=en-US dotnet ef migrations script \
+        --project "$project" \
+        --context "$context" \
+        --configuration Release \
+        --no-build \
+        --output "$output_path" "$@" >"$diagnostic_path" 2>&1; then
+        cat "$diagnostic_path"
+        echo "SQLite tooling unexpectedly generated a safe-operation SQL script." >&2
+        return 1
+    fi
+
+    cat "$diagnostic_path"
+    local expected_rejection=false
+    if grep -Eq '(^|[[:space:]])doka_sm_script_unsupported:' "$diagnostic_path"; then
+        expected_rejection=true
+    elif [[ "$idempotent_requested" == true ]] \
+        && grep -Fxq "$native_idempotent_message" "$diagnostic_path" \
+        && grep -Eq "$native_idempotent_stack" "$diagnostic_path"; then
+        # WHY: The pinned EF SQLite history repository rejects idempotent
+        # scripts before SafeMigrations sees the operations. Normal scripts
+        # must still reach the SafeMigrations guard, not this separate boundary.
+        expected_rejection=true
+    fi
+
+    if [[ "$expected_rejection" != true ]]; then
+        echo "SQLite script rejection did not reach its expected capability guard ($context)." >&2
+        return 1
+    fi
+
+    if [[ -s "$output_path" ]]; then
+        echo "SQLite tooling left a partial SQL script after rejecting generation." >&2
+        return 1
+    fi
+}
 
 repository_root="$work_dir/repository"
 rsync -a \
@@ -136,6 +208,19 @@ grep -Fq 'migrationBuilder.ConvergeTableFromModel(' "$legacy_migration_file"
 grep -Fq 'migrationBuilder.EnsureModelManagedDataFromModel(' "$legacy_migration_file"
 grep -Fq 'using Doka.EntityFrameworkCore.SafeMigrations;' "$legacy_migration_file"
 
+for migration in "$strict_migration_file" "$legacy_migration_file"; do
+    for generated_contract in \
+        'scaffolding_generated_nodes' \
+        'HasDescendants' \
+        'CASE WHEN' \
+        'ck_scaffolding_generated_bounds'; do
+        if ! grep -Fq "$generated_contract" "$migration"; then
+            echo "SQLite scaffolding is missing its generated expression contract: $generated_contract" >&2
+            exit 1
+        fi
+    done
+done
+
 if grep -Fq 'migrationBuilder.CreateTable(' "$strict_migration_file" \
     || grep -Fq 'migrationBuilder.InsertData(' "$strict_migration_file" \
     || grep -Fq 'migrationBuilder.CreateTable(' "$legacy_migration_file" \
@@ -210,37 +295,36 @@ legacy_bundle_connection="Data Source=$database_directory/legacy-bundle.db;Forei
 
 strict_migration_id="$(basename "$strict_migration_file" .cs)"
 legacy_migration_id="$(basename "$legacy_migration_file" .cs)"
-for database_and_migration in \
-    "$database_directory/strict-cli.db:$strict_migration_id" \
-    "$database_directory/legacy-cli.db:$legacy_migration_id" \
-    "$database_directory/strict-bundle.db:$strict_migration_id" \
-    "$database_directory/legacy-bundle.db:$legacy_migration_id"; do
-    database_path="${database_and_migration%%:*}"
-    migration_id="${database_and_migration#*:}"
+strict_transition_id="$(basename "$strict_transition_file" .cs)"
+legacy_transition_id="$(basename "$legacy_transition_file" .cs)"
+for database_name in strict-cli legacy-cli strict-bundle legacy-bundle; do
+    if [[ "$database_name" == strict-* ]]; then
+        migration_id="$strict_migration_id"
+        transition_id="$strict_transition_id"
+    else
+        migration_id="$legacy_migration_id"
+        transition_id="$legacy_transition_id"
+    fi
+
     dotnet run \
         --project "$consumer_project" \
         --configuration Release --no-build --no-restore \
         -p:SafeMigrationsPackageConsumerMode=Source \
         -p:SafeMigrationsEfToolingReference=Design \
-        -- --verify-database "$database_path" "$migration_id"
+        -- --verify-database "$database_directory/$database_name.db" "$migration_id" "$transition_id"
 done
 
-script_path="$work_dir/unsupported.sql"
-export SAFE_MIGRATIONS_SQLITE_CONNECTION_STRING="Data Source=$database_directory/strict-cli.db;Foreign Keys=True"
-if dotnet ef migrations script \
-    --project "$project" \
-    --context SqliteToolingDbContext \
-    --configuration Release \
-    --no-build \
-    --output "$script_path"; then
-    echo "SQLite tooling unexpectedly generated a safe-operation SQL script." >&2
-    exit 1
-fi
+for mode in strict legacy; do
+    if [[ "$mode" == strict ]]; then
+        context="SqliteToolingDbContext"
+    else
+        context="SqliteLegacyToolingDbContext"
+    fi
 
-if [[ -s "$script_path" ]]; then
-    echo "SQLite tooling left a partial SQL script after rejecting generation." >&2
-    exit 1
-fi
+    export SAFE_MIGRATIONS_SQLITE_CONNECTION_STRING="Data Source=$database_directory/$mode-cli.db;Foreign Keys=True"
+    verify_script_rejection "$context" "$work_dir/$mode-unsupported.sql"
+    verify_script_rejection "$context" "$work_dir/$mode-idempotent-unsupported.sql" --idempotent
+done
 
 evidence_directory="$source_root/artifacts/ef-tooling/sqlite"
 mkdir -p "$evidence_directory"
@@ -249,8 +333,8 @@ printf '%s\n' \
     '- strict and legacy safe migration scaffolding: passed' \
     '- database update and identical replay: passed for both modes' \
     '- migration bundle application and identical replay: passed for both modes' \
-    '- history, schema, model-managed data, and integrity readback: passed' \
-    '- safe-operation SQL script rejection without partial output: passed' \
+    '- exact initial/transition history, final schema, generated CASE/CHECK/index, data and integrity: passed' \
+    '- strict/legacy normal/idempotent scripts: expected guard verified without partial output' \
     >"$evidence_directory/summary.txt"
 
 echo "SafeMigrations SQLite EF CLI and bundle tooling verified."

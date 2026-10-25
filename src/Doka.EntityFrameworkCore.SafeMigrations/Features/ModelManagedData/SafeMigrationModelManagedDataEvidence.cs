@@ -65,6 +65,9 @@ internal sealed class SafeMigrationModelManagedDataEvidence
         }
 
         var states = new SafeMigrationModelManagedRowState[rowStates.Length];
+        // WHY: Map each protocol character to the row-state entry at the same ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < rowStates.Length; index++)
         {
             states[index] = rowStates[index] switch

@@ -1,0 +1,75 @@
+version: 2
+updates:
+  # Central Package Management defines the shipped dependency ranges. The five
+  # publishable package lock files preserve their qualified compile graphs.
+  # Test, benchmark, sample, and engineering projects intentionally restore from
+  # the same central declarations without maintaining per-project lock files.
+  # D-006 records the accepted loss of content-hash and transitive-diff evidence
+  # for those execution projects.
+  # Group normal updates so one pull request exercises the complete
+  # qualification matrix. Three days leave time for early release feedback
+  # without requiring a full week's minimum age. Security updates are not delayed.
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    cooldown:
+      default-days: 3
+    groups:
+      nuget-dependencies:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: chore
+      include: scope
+    labels:
+      - dependencies
+      - .NET
+
+  # Workflow actions are SHA-pinned. Dependabot therefore proposes the new
+  # immutable revision while the pull request keeps the reviewable release tag
+  # comment and passes the same repository gates as source changes.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    cooldown:
+      default-days: 3
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: chore
+      include: scope
+    labels:
+      - dependencies
+      - github_actions
+
+  # global.json is the immutable build and publication toolchain contract.
+  # SDK changes must therefore arrive as reviewable pull requests and pass the
+  # exact-version, release-evidence, and repository gates.
+  - package-ecosystem: dotnet-sdk
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    cooldown:
+      default-days: 3
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: chore
+      include: scope
+    labels:
+      - dependencies
+      - .NET

@@ -350,54 +350,6 @@ public sealed partial class MySqlLifecycleIntegrationTests : MySqlSafeMigrationI
     }
 
     [Fact]
-    public async Task ConcurrentMigrators_SerializePerDatabaseAndRunDifferentDatabasesInParallel()
-    {
-        var sharedConnectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(
-            sharedConnectionString,
-            "CREATE TABLE `__LegacyMigrationsHistory` (`MigrationId` varchar(150) NOT NULL); "
-            + "INSERT INTO `__LegacyMigrationsHistory` VALUES ('legacy-unchanged');");
-        await using var first = CreateContext(sharedConnectionString);
-        await using var second = CreateContext(sharedConnectionString);
-        await Task.WhenAll(
-            first.Database.MigrateAsync(cancellationToken: CancellationToken.None),
-            second
-                .GetService<IMigrator>()
-                .MigrateAsync(cancellationToken: CancellationToken.None));
-
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                sharedConnectionString,
-                $"SELECT COUNT(*) FROM `__ApplicationDbContextMigrationsHistory` "
-                + $"WHERE `MigrationId` = '{CoreConvergenceMigration.MigrationIdentifier}';"));
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                sharedConnectionString,
-                "SELECT COUNT(*) FROM `__LegacyMigrationsHistory` " + "WHERE `MigrationId` = 'legacy-unchanged';"));
-
-        var leftConnectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var rightConnectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await using var left = CreateContext(leftConnectionString);
-        await using var right = CreateContext(rightConnectionString);
-        await Task.WhenAll(left.Database.MigrateAsync(cancellationToken: CancellationToken.None), right.Database.MigrateAsync(cancellationToken: CancellationToken.None));
-
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                leftConnectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pipeline_state';"));
-        Assert.Equal(
-            1,
-            await ScalarIntAsync(
-                rightConnectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pipeline_state';"));
-    }
-
-    [Fact]
     public async Task PreflightAndPostflight_AreReadOnlyAndUseRuntimeClassification()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);

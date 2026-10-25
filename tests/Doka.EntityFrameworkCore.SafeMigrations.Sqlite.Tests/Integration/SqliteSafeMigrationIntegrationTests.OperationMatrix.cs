@@ -178,9 +178,11 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
                 + "WHERE name = 'Code' AND \"notnull\" = 1;"));
     }
 
+    /// <summary>A generated arithmetic column applies, replays and retains its physical SQLite facets.</summary>
     [Fact]
-    public async Task GeneratedColumns_DefaultsAndCollationsAreComparedByPhysicalFacet()
+    public async Task GeneratedArithmeticColumn_IsComparedByPhysicalFacet()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync();
         await ExecuteSqlAsync(connection, "CREATE TABLE generated_values (a INTEGER NOT NULL, b INTEGER NOT NULL);");
         await using var context = CreateContext(connection);
@@ -198,14 +200,8 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
                     SafeMigrationSql.Identifier("b")),
                 isStored: false),
             SafeMigrationPolicy.ThrowIfDifferent);
-        builder.AddColumnIfNotExists<string>(
-            "code",
-            "generated_values",
-            type: "TEXT",
-            nullable: false,
-            defaultValue: "default",
-            collation: new SafeMigrationCollationIdentifier("NOCASE"));
 
+        // Act
         await ExecuteOperationsAsync(context, builder.Operations);
         await ExecuteOperationsAsync(context, builder.Operations);
 
@@ -216,14 +212,52 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
                 builder.Operations,
                 new SafeMigrationRunOptions("sqlite-generated-columns-replay"));
 
+        // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.All(report.Assessments, assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
+        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(report.Assessments).Action);
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connection,
                 "SELECT COUNT(*) FROM pragma_table_xinfo('generated_values') "
                 + "WHERE name = 'sum_value' AND hidden = 2 AND \"notnull\" = 1;"));
+    }
+
+    /// <summary>A string default and collation apply, replay and match their physical persisted facets.</summary>
+    [Fact]
+    public async Task StringDefaultAndCollation_AreComparedByPhysicalFacet()
+    {
+        // Arrange
+        await using var connection = await OpenConnectionAsync();
+        await ExecuteSqlAsync(connection, "CREATE TABLE generated_values (a INTEGER NOT NULL, b INTEGER NOT NULL);");
+        await using var context = CreateContext(connection);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.AddColumnIfNotExists<string>(
+            "code",
+            "generated_values",
+            type: "TEXT",
+            nullable: false,
+            defaultValue: "default",
+            collation: new SafeMigrationCollationIdentifier("NOCASE"));
+
+        // Act
+        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations);
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-string-default-collation-replay"));
+
+        var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
+        var column = snapshot.Tables["generated_values"].Columns["code"];
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(report.Assessments).Action);
+        Assert.Equal("TEXT", column.StoreType);
+        Assert.False(column.IsNullable);
+        Assert.Equal("'default'", column.DefaultSql);
+        Assert.Equal("NOCASE", column.Collation);
     }
 
     [Fact]
@@ -305,16 +339,17 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
                 + "WHERE name = 'unsupported_value';"));
     }
 
+    /// <summary>The SQLite main schema is already present and needs no migration command.</summary>
     [Fact]
-    public async Task SchemaIntent_MainIsNoOpAndForeignSchemaOperationsAreRejected()
+    public async Task SchemaIntent_MainIsNoOp()
     {
+        // Arrange
         await using var connection = await OpenConnectionAsync();
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureSchemaExists("main");
-        builder.EnsureSchemaExists("attached");
-        builder.DropSchemaIfExists("main");
 
+        // Act
         var report = await context
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(
@@ -322,12 +357,54 @@ public sealed class SqliteSafeMigrationOperationMatrixIntegrationTests : SqliteS
                 builder.Operations,
                 new SafeMigrationRunOptions("sqlite-schema-boundary"));
 
-        Assert.Equal(SafeMigrationObservedState.Matching, report.Assessments[0].ObservedState);
-        Assert.Equal(SafeMigrationAction.NoOp, report.Assessments[0].Action);
-        Assert.Equal("database_qualifier_mismatch", report.Assessments[1].AnalysisCode);
-        Assert.Equal(SafeMigrationAction.RejectUnsupported, report.Assessments[1].Action);
-        Assert.Equal("schema_operations", report.Assessments[2].AnalysisCode);
-        Assert.Equal(SafeMigrationAction.RejectUnsupported, report.Assessments[2].Action);
+        // Assert
+        var assessment = Assert.Single(report.Assessments);
+        Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
+    }
+
+    /// <summary>An attached schema cannot be mistaken for the owned main database.</summary>
+    [Fact]
+    public async Task SchemaIntent_ForeignSchemaIsRejected()
+    {
+        // Arrange
+        await using var connection = await OpenConnectionAsync();
+        await using var context = CreateContext(connection);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureSchemaExists("attached");
+
+        // Act
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-foreign-schema-boundary"));
+
+        // Assert
+        var assessment = Assert.Single(report.Assessments);
+        Assert.Equal("database_qualifier_mismatch", assessment.AnalysisCode);
+        Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
+    }
+
+    /// <summary>The main database identity does not authorize unsupported schema deletion.</summary>
+    [Fact]
+    public async Task SchemaIntent_DropSchemaIsRejected()
+    {
+        // Arrange
+        await using var connection = await OpenConnectionAsync();
+        await using var context = CreateContext(connection);
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.DropSchemaIfExists("main");
+
+        // Act
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-drop-schema-boundary"));
+
+        // Assert
+        var assessment = Assert.Single(report.Assessments);
+        Assert.Equal("schema_operations", assessment.AnalysisCode);
+        Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
     }
 
     [Fact]

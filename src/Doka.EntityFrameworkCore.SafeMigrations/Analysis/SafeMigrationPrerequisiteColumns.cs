@@ -18,6 +18,20 @@ internal static class SafeMigrationPrerequisiteColumns
     {
         ArgumentNullException.ThrowIfNull(intent);
 
+        // WHY: Ordinary column definitions commonly have no structured source references. Prove
+        // absence on both sides of an ALTER before allocating the deduplication set; opaque SQL
+        // remains the provider's capability concern, not an identifier-collection permission.
+        if (intent switch
+            {
+                EnsureColumnIntent value => !HasColumnExpressions(value.Definition),
+                AlterColumnIntent value => !HasColumnExpressions(value.Definition)
+                    && (value.OldDefinition is null || !HasColumnExpressions(value.OldDefinition)),
+                _ => false,
+            })
+        {
+            return [];
+        }
+
         var columns = new HashSet<string>(StringComparer.Ordinal);
         switch (intent)
         {
@@ -41,7 +55,7 @@ internal static class SafeMigrationPrerequisiteColumns
             case EnsureUniqueConstraintIntent value:
                 Add(columns, value.Definition.Columns);
                 break;
-            case EnsureCheckConstraintIntent value when value.Definition.Expression is not null:
+            case EnsureCheckConstraintIntent { Definition.Expression: not null } value:
                 SafeMigrationSqlExpressionInspector.CollectIdentifiers(value.Definition.Expression, columns);
                 break;
             case EnsureForeignKeyIntent value:
@@ -73,6 +87,13 @@ internal static class SafeMigrationPrerequisiteColumns
                 .Order(StringComparer.Ordinal)
                 .ToArray();
     }
+
+    /// <summary>Identifies every expression role consumed by local column-prerequisite collection.</summary>
+    /// <param name="definition">The exact old or target column definition.</param>
+    /// <returns>Whether collecting structured references may be necessary.</returns>
+    private static bool HasColumnExpressions(
+        ExpectedColumnDefinition definition
+    ) => definition.ComputedExpression is not null || definition.DefaultValue.StructuredExpression is not null;
 
     private static void AddColumnExpressions(
         ExpectedColumnDefinition definition,

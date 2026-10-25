@@ -24,6 +24,9 @@ internal static class SqliteColumnRepairProof
     /// <summary>Reads the only supported SQLite-owned generation annotation without allocating.</summary>
     private static bool Autoincrement(ExpectedColumnDefinition definition)
     {
+        // WHY: Indexing avoids an interface enumerator for each source/target annotation check.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < definition.ProviderAnnotations.Count; index++)
         {
             var annotation = definition.ProviderAnnotations[index];

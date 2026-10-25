@@ -1,5 +1,102 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 
+/// <summary>Records raw prepared-workload samples without imposing hardware-sensitive limits.</summary>
+internal static class MaintenanceAttribution
+{
+    private static readonly JsonSerializerOptions s_jsonOptions = new() { WriteIndented = true };
+
+    /// <summary>Samples the same prepared action after warmup, keeping allocation and elapsed evidence separate.</summary>
+    /// <param name="action">The synchronous action whose result prevents dead-code elimination.</param>
+    /// <param name="iterations">The fixed number of invocations in each raw sample.</param>
+    /// <returns>Seven unsorted samples, each retaining its result checksum.</returns>
+    internal static object[] Measure(
+        Func<int> action,
+        int iterations
+    )
+    {
+        for (var warmup = 0; warmup < 8; warmup++)
+        {
+            _ = action();
+        }
+
+        var samples = new object[7];
+        for (var sample = 0; sample < samples.Length; sample++)
+        {
+            var allocated = GC.GetAllocatedBytesForCurrentThread();
+            var started = Stopwatch.GetTimestamp();
+            var checksum = 0L;
+            for (var iteration = 0; iteration < iterations; iteration++)
+            {
+                checksum += action();
+            }
+
+            samples[sample] = new
+            {
+                Iterations = iterations,
+                ElapsedMilliseconds = Stopwatch.GetElapsedTime(started)
+                    .TotalMilliseconds,
+                AllocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocated,
+                Checksum = checksum,
+            };
+        }
+
+        return samples;
+    }
+
+    /// <summary>Writes source-labeled attribution results; execution and serialization errors remain fatal.</summary>
+    /// <param name="outputPath">The caller-owned evidence file.</param>
+    /// <param name="provider">The provider profile, not a claim of live engine execution.</param>
+    /// <param name="results">All measured workload results and structural controls.</param>
+    /// <returns>Zero once complete evidence has been persisted.</returns>
+    internal static int Write(
+        string outputPath,
+        string provider,
+        IReadOnlyList<object> results
+    )
+    {
+        var path = Path.GetFullPath(outputPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(
+            path,
+            JsonSerializer.Serialize(
+                new
+                {
+                    Runtime = Environment.Version.ToString(),
+                    Architecture = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
+                    Provider = provider,
+                    Measurement = "prepared client workload; elapsed times informational",
+                    SourceLabel = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_ATTRIBUTION_SOURCE")
+                        ?? "unlabelled",
+                    Results = results,
+                },
+                s_jsonOptions));
+        Console.WriteLine($"Recorded {results.Count} maintenance workloads in {path}.");
+
+        return 0;
+    }
+
+    /// <summary>Hashes exact output outside measured actions so equality costs do not pollute generation evidence.</summary>
+    /// <param name="value">The complete deterministic structural output.</param>
+    /// <returns>The uppercase SHA-256 digest of its UTF-8 representation.</returns>
+    internal static string Hash(
+        string value
+    ) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value)));
+
+    /// <summary>Fails attribution immediately when a structural or adversarial control is not satisfied.</summary>
+    /// <param name="condition">The exact functional invariant.</param>
+    /// <param name="message">The violated measurement contract.</param>
+    internal static void Require(
+        bool condition,
+        string message
+    )
+    {
+        if (!condition)
+        {
+            throw new InvalidOperationException(message);
+        }
+    }
+}
+
 /// <summary>
 /// Captures complete benchmark evidence with an optional informational budget verdict.
 /// </summary>
@@ -276,8 +373,8 @@ internal sealed class BenchmarkRunner
     {
         var options = arguments switch
         {
-            [] => (OutputPath: (string?)null, ReportOnly: false),
-            ["--report-only"] => (OutputPath: (string?)null, ReportOnly: true),
+            [] => (OutputPath: null, ReportOnly: false),
+            ["--report-only"] => (OutputPath: null, ReportOnly: true),
             ["--output", var path] => (OutputPath: (string?)path, ReportOnly: false),
             ["--report-only", "--output", var path] => (OutputPath: (string?)path, ReportOnly: true),
             ["--output", var path, "--report-only"] => (OutputPath: (string?)path, ReportOnly: true),

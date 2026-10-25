@@ -2,15 +2,36 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 {
+    /// <summary>Collects only proven CHECK column roles for native rename-dependency comparison.</summary>
+    /// <param name="definition">The exact authored CHECK contract.</param>
+    /// <returns>Known local members, or null when native argument roles remain unproven.</returns>
+    internal static string[]? GetCheckRenamePrerequisiteColumns(ExpectedCheckConstraintDefinition definition)
+    {
+        var expression = GetStructuredCheckExpression(definition);
+        if (expression is null || !SqlServerComputedColumnContract.IsDeterministic(expression)
+            || !SqlServerSourceExpressionRoles.IsNativePredicate(expression))
+        {
+            // WHY: Portable function arguments do not identify every native
+            // type role. An unknown TRY_CONVERT type token, literal contents,
+            // or function name must never become a column-name comparison.
+            return null;
+        }
+
+        var referenced = new HashSet<string>(StringComparer.Ordinal);
+        SafeMigrationSqlExpressionInspector.CollectIdentifiers(expression, referenced);
+
+        return referenced.ToArray();
+    }
+
     /// <summary>Parses a bounded raw predicate without rewriting its authored SQL or contract fingerprint.</summary>
     /// <param name="definition">The immutable authored CHECK.</param>
     /// <returns>The existing or completely parsed AST, or null for opaque syntax.</returns>
     internal static SafeMigrationSqlExpression? GetStructuredCheckExpression(
         ExpectedCheckConstraintDefinition definition
     )
-        => definition.Sql is { } authored && !HasSupportedRawCheckQuoting(authored) ? null
+        => (definition.CapturedSql ?? definition.Sql) is { } authored && !HasSupportedRawCheckQuoting(authored) ? null
             : definition.Expression ?? (definition.Sql is { } sql
-                && SafeMigrationSqlExpressionParser.TryParse(sql, out var parsed) ? parsed : null);
+                && SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var parsed) ? parsed : null);
 
     private static bool HasSupportedRawCheckQuoting(
         string sql
@@ -22,6 +43,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // may contain either character and must retain their exact identity.
         var bracketed = false;
 
+        // WHY: Track bracket escape lookahead without treating quoted content as syntax.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < sql.Length; index++)
         {
             if (bracketed)
@@ -131,6 +155,16 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         out decimal value
     )
     {
+        if (literal.NumericSourceToken.Span.IndexOfAny('e', 'E') >= 0)
+        {
+            // WHY: T-SQL exponent tokens are floating-point values, even when
+            // the shared parser's CLR numeric value happens to be integral.
+            // Preserve that distinction before granting an exact integer proof.
+            value = 0;
+
+            return false;
+        }
+
         // WHY: SQL Server promotes large bare integer constants to decimal;
         // direct comparison remains exact because every built-in integer fits
         // the literal's decimal domain. No arithmetic or narrowing CAST is

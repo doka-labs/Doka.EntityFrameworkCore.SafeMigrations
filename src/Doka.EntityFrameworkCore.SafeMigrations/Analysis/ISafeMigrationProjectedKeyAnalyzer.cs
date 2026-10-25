@@ -16,6 +16,13 @@ internal interface ISafeMigrationProjectedKeyAnalyzer
     /// <remarks>Providers with named primary-key constraints retain exact physical-name identity by default.</remarks>
     bool PrimaryKeyUsesNameIndependentIdentity => false;
 
+    /// <summary>Gets whether the provider can qualify keys after a certified independent column removal.</summary>
+    /// <remarks>
+    /// This permits a callback with an explicitly unproven state; it proves neither current key identity
+    /// nor row safety. Other providers retain the complete-structure uncertainty boundary by default.
+    /// </remarks>
+    bool CanValidateAfterColumnDrops => false;
+
     /// <summary>Applies provider physical limits to a projected index.</summary>
     /// <param name="intent">The index contract being projected.</param>
     /// <param name="columns">The ordered projected-column source.</param>
@@ -59,6 +66,41 @@ internal interface ISafeMigrationProjectedKeyAnalyzer
 /// <summary>Provides exact ordered column definitions without allocating snapshots.</summary>
 internal interface ISafeMigrationProjectedColumnSource
 {
+    /// <summary>Checks whether native row evidence for a member retains its original value-domain lifetime.</summary>
+    /// <param name="table">The physical table owner.</param>
+    /// <param name="schema">The normalized provider schema.</param>
+    /// <param name="column">The physical member whose original row proof would be reused.</param>
+    /// <returns>True only when no accepted operation invalidated the captured member's original values.</returns>
+    /// <remarks>This does not establish existence, native key feasibility, NULL-freedom or uniqueness.</remarks>
+    bool PreservesLiveColumnValues(
+        string table,
+        string? schema,
+        string column
+    ) => false;
+
+    /// <summary>Reads an accepted member addition or value-change origin for mandatory runtime qualification.</summary>
+    /// <param name="table">The physical table owner.</param>
+    /// <param name="schema">The normalized provider schema.</param>
+    /// <param name="column">The current member whose values do not belong to the original live snapshot.</param>
+    /// <returns>The original complete-stream position, or null when no current accepted origin is proven.</returns>
+    int? GetColumnValueMutationOrigin(
+        string table,
+        string? schema,
+        string column
+    ) => null;
+
+    /// <summary>Reads accepted exact index identity without replacing it with historical native absence.</summary>
+    /// <param name="definition">The requested complete index definition.</param>
+    /// <param name="liveAnalysis">The original physical-alias evidence, not a fabricated Missing result.</param>
+    /// <param name="includeConstraintBackingIndexNames">Whether keys share their native backing-index name.</param>
+    /// <returns>The accepted identity state, or null when no ordered index evidence exists.</returns>
+    /// <remarks>The provider must still qualify dependency lifetimes, row effects and native feasibility.</remarks>
+    SafeMigrationProviderAnalysis? GetProjectedIndexIdentityAnalysis(
+        ExpectedIndexDefinition definition,
+        SafeMigrationProviderAnalysis liveAnalysis,
+        bool includeConstraintBackingIndexNames = false
+    ) => null;
+
     /// <summary>Checks whether the current accepted primary key contains a projected column.</summary>
     /// <param name="table">The projected table identity.</param>
     /// <param name="schema">The optional provider-normalized owner schema.</param>

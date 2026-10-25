@@ -4,8 +4,12 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// Pairs provider-enriched forward and inverse EF data rows into immutable,
 /// source-frozen SafeMigrations scaffolding operations.
 /// </summary>
-internal static class SafeMigrationModelManagedDataPairer
+internal static partial class SafeMigrationModelManagedDataPairer
 {
+    /// <summary>Pairs forward and inverse model-managed rows before migration source generation.</summary>
+    /// <param name="operations">The provider-enriched forward operations in execution order.</param>
+    /// <param name="inverseOperations">The provider-enriched inverse operations from the same model difference.</param>
+    /// <returns>The source-frozen paired operations in their original forward order.</returns>
     public static IReadOnlyList<MigrationOperation> Pair(
         IReadOnlyList<MigrationOperation> operations,
         IReadOnlyList<MigrationOperation> inverseOperations
@@ -96,6 +100,9 @@ internal static class SafeMigrationModelManagedDataPairer
         if (inverseRows.HasDeleteRows(operation.Table, operation.Schema))
         {
             var matches = new DataRow[operation.Values.GetLength(0)];
+            // WHY: Store each inverse insert match at the corresponding authored row ordinal.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var row = 0; row < matches.Length; row++)
             {
                 matches[row] = inverseRows.FindForInsert(operation, row);
@@ -167,6 +174,9 @@ internal static class SafeMigrationModelManagedDataPairer
         var columnTypes = RequiredTypes(operation.ColumnTypes, operation.Columns.Length, "update");
         var matches = new DataRow[operation.KeyValues.GetLength(0)];
 
+        // WHY: Store each inverse update match at the corresponding authored row ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var row = 0; row < matches.Length; row++)
         {
             matches[row] = inverseRows.FindForUpdate(operation, row);
@@ -180,6 +190,9 @@ internal static class SafeMigrationModelManagedDataPairer
 
         var inverseOrdinals = ColumnOrdinals(firstInverse.Columns);
         var oldValues = new object?[matches.Length, operation.Columns.Length];
+        // WHY: Keep authored column types aligned while resolving inverse-operation column ordinals.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var column = 0; column < operation.Columns.Length; column++)
         {
             var columnName = operation.Columns[column];
@@ -194,6 +207,9 @@ internal static class SafeMigrationModelManagedDataPairer
                         + "uses an inconsistent store type.");
                 }
 
+                // WHY: Read matched inverse rows into the same target row and authored column coordinates.
+                // ReSharper disable once ForCanBeConvertedToForeach
+                // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var row = 0; row < matches.Length; row++)
                 {
                     var inverse = (UpdateDataOperation)matches[row].Operation;
@@ -211,6 +227,9 @@ internal static class SafeMigrationModelManagedDataPairer
                 columnName,
                 columnTypes[column]);
 
+            // WHY: Backfill the selected target column for every authored row at its original ordinal.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var row = 0; row < matches.Length; row++)
             {
                 oldValues[row, column] = initialValue;
@@ -273,6 +292,9 @@ internal static class SafeMigrationModelManagedDataPairer
         var keyColumnTypes = RequiredTypes(operation.KeyColumnTypes, operation.KeyColumns.Length, "delete key");
         var matches = new DataRow[operation.KeyValues.GetLength(0)];
 
+        // WHY: Store each inverse delete match at the corresponding authored row ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var row = 0; row < matches.Length; row++)
         {
             matches[row] = inverseRows.FindForDelete(operation, row);
@@ -331,6 +353,9 @@ internal static class SafeMigrationModelManagedDataPairer
         }
 
         var batchSize = Math.Min(SafeMigrationModelManagedDataLimits.MaximumRowsPerOperation, cellBound);
+        // WHY: Advance by bounded batch windows while retaining the final partial batch.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var offset = 0; offset < rowCount; offset += batchSize)
         {
             result.Add(create(offset, Math.Min(batchSize, rowCount - offset)));
@@ -344,6 +369,9 @@ internal static class SafeMigrationModelManagedDataPairer
     )
         where T : MigrationOperation
     {
+        // WHY: Retain each source matrix row ordinal in its lightweight inverse-row descriptor.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var row = 0; row < rowCount; row++)
         {
             result.Add(new DataRow(operation, row));
@@ -357,6 +385,9 @@ internal static class SafeMigrationModelManagedDataPairer
         int deleteRow
     )
     {
+        // WHY: Pair each delete-key value with the matching insert column instead of assuming equal layouts.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var keyOrdinal = 0; keyOrdinal < delete.KeyColumns.Length; keyOrdinal++)
         {
             var insertOrdinal = Array.FindIndex(
@@ -387,6 +418,9 @@ internal static class SafeMigrationModelManagedDataPairer
             return false;
         }
 
+        // WHY: Compare corresponding matrix cells without changing either row's column order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var column = 0; column < left.GetLength(1); column++)
         {
             if (!SafeMigrationModelManagedValue.AreEqual(left[leftRow, column], right[rightRow, column]))
@@ -405,9 +439,15 @@ internal static class SafeMigrationModelManagedDataPairer
     )
     {
         var result = new object?[rows.Count, columnCount];
+        // WHY: Place each selected source row into its exact destination row coordinate.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var row = 0; row < rows.Count; row++)
         {
             var values = getValues(rows[row]);
+            // WHY: Copy matching column coordinates while resolving the selected source row separately.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var column = 0; column < columnCount; column++)
             {
                 result[row, column] = values[rows[row].Row, column];
@@ -424,8 +464,14 @@ internal static class SafeMigrationModelManagedDataPairer
     )
     {
         var result = new object?[count, values.GetLength(1)];
+        // WHY: Map each batch-local row back to the original matrix through its source offset.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var row = 0; row < count; row++)
         {
+            // WHY: Preserve column coordinates while copying the selected row window.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var column = 0; column < values.GetLength(1); column++)
             {
                 result[row, column] = values[offset + row, column];
@@ -440,6 +486,9 @@ internal static class SafeMigrationModelManagedDataPairer
     )
     {
         var result = new Dictionary<string, int>(columns.Length, StringComparer.Ordinal);
+        // WHY: Record the authored column ordinal needed to interpret inverse update matrices.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < columns.Length; ordinal++)
         {
             if (!result.TryAdd(columns[ordinal], ordinal))
@@ -536,483 +585,5 @@ internal static class SafeMigrationModelManagedDataPairer
         public int Row { get; } = row;
 
         public bool Consumed { get; set; }
-    }
-
-    private sealed class ColumnTransitionIndex
-    {
-        private readonly Dictionary<ColumnIdentity, (AddColumnOperation Operation, bool Ambiguous)> _added = [];
-        private readonly HashSet<ColumnIdentity> _dropped = [];
-
-        public ColumnTransitionIndex(
-            IReadOnlyList<MigrationOperation> operations
-        )
-        {
-            foreach (var operation in operations)
-            {
-                if (operation is DropColumnOperation drop)
-                {
-                    _dropped.Add(Identity(drop.Table, drop.Schema, drop.Name));
-                }
-            }
-        }
-
-        public void Observe(
-            MigrationOperation operation
-        )
-        {
-            switch (operation)
-            {
-                case AddColumnOperation add:
-                {
-                    var identity = Identity(add.Table, add.Schema, add.Name);
-                    var ambiguous = _added.ContainsKey(identity);
-                    _added[identity] = (add, ambiguous);
-                    break;
-                }
-
-                case DropColumnOperation drop:
-                    _added.Remove(Identity(drop.Table, drop.Schema, drop.Name));
-                    break;
-            }
-        }
-
-        public object? AddedColumnInitialValue(
-            UpdateDataOperation update,
-            string column,
-            string expectedStoreType
-        )
-        {
-            var identity = Identity(update.Table, update.Schema, column);
-            if (!_added.TryGetValue(identity, out var addition)
-                || addition.Ambiguous)
-            {
-                throw new InvalidOperationException(
-                    $"Model-managed update column '{SafeMigrationDiagnosticMessages.BoundForDisplay(column)}' "
-                    + "has no inverse value or preceding column addition. Keep the provider-generated inverse "
-                    + "operation, or supply an explicit source-frozen data contract.");
-            }
-
-            var operation = addition.Operation;
-            if (operation.ColumnType is not null
-                && !StringComparer.OrdinalIgnoreCase.Equals(operation.ColumnType, expectedStoreType))
-            {
-                throw new InvalidOperationException(
-                    $"Added model-managed column '{SafeMigrationDiagnosticMessages.BoundForDisplay(column)}' "
-                    + "uses an inconsistent store type.");
-            }
-
-            if (operation.ComputedColumnSql is not null
-                || operation.DefaultValueSql is not null)
-            {
-                throw new InvalidOperationException(
-                    $"Added model-managed column '{SafeMigrationDiagnosticMessages.BoundForDisplay(column)}' "
-                    + "has no deterministic source-frozen initial value. Supply an explicit data transition "
-                    + "rather than deriving old row values from a SQL default or computed expression.");
-            }
-
-            if (operation.DefaultValue is not null)
-            {
-                return operation.DefaultValue;
-            }
-
-            return operation.IsNullable
-                ? null
-                : throw new InvalidOperationException(
-                    $"Required model-managed column '{SafeMigrationDiagnosticMessages.BoundForDisplay(column)}' "
-                    + "has no explicit initial value. Supply a deterministic initial value or an explicit "
-                    + "source-frozen data transition.");
-        }
-
-        public void RequireDrop(
-            UpdateDataOperation update,
-            string column
-        )
-        {
-            var identity = Identity(update.Table, update.Schema, column);
-            if (!_dropped.Contains(identity))
-            {
-                throw new InvalidOperationException(
-                    $"Inverse update column '{SafeMigrationDiagnosticMessages.BoundForDisplay(column)}' "
-                    + "is absent without a column drop.");
-            }
-        }
-
-        private static ColumnIdentity Identity(
-            string table,
-            string? schema,
-            string column
-        ) => new(schema, table, column);
-
-        private readonly record struct ColumnIdentity(
-            string? Schema,
-            string Table,
-            string Column
-        );
-    }
-
-    private sealed class InverseRowIndex
-    {
-        private readonly HashSet<TableIdentity> _droppedTables = [];
-        private readonly Dictionary<TableIdentity, string[]> _deleteKeyShapes = [];
-        private readonly Dictionary<string, List<DataRow>> _deleteRows = new(StringComparer.Ordinal);
-        private readonly Dictionary<TableIdentity, List<DataRow>> _insertRows = [];
-        private readonly Dictionary<LookupShape, Dictionary<string, List<DataRow>>> _insertRowsByKey = [];
-        private readonly Dictionary<string, List<DataRow>> _updateRows = new(StringComparer.Ordinal);
-        private readonly IReadOnlyList<DataRow> _rows;
-
-        public InverseRowIndex(
-            IReadOnlyList<MigrationOperation> operations
-        )
-        {
-            var rows = CreateRows(operations);
-            _rows = rows;
-
-            foreach (var dropTable in operations.OfType<DropTableOperation>())
-            {
-                _droppedTables.Add(new TableIdentity(dropTable.Name, dropTable.Schema));
-            }
-
-            foreach (var row in rows)
-            {
-                switch (row.Operation)
-                {
-                    case InsertDataOperation insert:
-                        Add(_insertRows, new TableIdentity(insert.Table, insert.Schema), row);
-                        break;
-                    case UpdateDataOperation update:
-                        Add(
-                            _updateRows,
-                            Fingerprint(
-                                update.Table,
-                                update.Schema,
-                                update.KeyColumns,
-                                update.KeyValues,
-                                row.Row),
-                            row);
-                        break;
-                    case DeleteDataOperation delete:
-                        AddDeleteRow(delete, row);
-                        break;
-                }
-            }
-        }
-
-        public bool HasUnconsumedRows => _rows.Any(static row => !row.Consumed);
-
-        public bool DropsTable(
-            string table,
-            string? schema
-        ) => _droppedTables.Contains(new TableIdentity(table, schema));
-
-        public bool HasDeleteRows(
-            string table,
-            string? schema
-        ) => _deleteKeyShapes.ContainsKey(new TableIdentity(table, schema));
-
-        public void ConsumeRowsSubsumedByDroppedTables(
-            IReadOnlyList<MigrationOperation> operations
-        )
-        {
-            var droppedTables = operations
-                .OfType<DropTableOperation>()
-                .Select(static operation => new TableIdentity(operation.Name, operation.Schema))
-                .ToHashSet();
-
-            if (droppedTables.Count == 0)
-            {
-                return;
-            }
-
-            foreach (var row in _rows)
-            {
-                var table = row.Operation switch
-                {
-                    InsertDataOperation insert => new TableIdentity(insert.Table, insert.Schema),
-                    UpdateDataOperation update => new TableIdentity(update.Table, update.Schema),
-                    DeleteDataOperation delete => new TableIdentity(delete.Table, delete.Schema),
-                    _ => throw new UnreachableException(),
-                };
-
-                if (droppedTables.Contains(table))
-                {
-                    row.Consumed = true;
-                }
-            }
-        }
-
-        public DataRow FindForInsert(
-            InsertDataOperation operation,
-            int row
-        )
-        {
-            var table = new TableIdentity(operation.Table, operation.Schema);
-            if (!_deleteKeyShapes.TryGetValue(table, out var keyColumns))
-            {
-                return MissingInverse();
-            }
-
-            var keyOrdinals = KeyOrdinals(operation.Columns, keyColumns);
-            var fingerprint = Fingerprint(
-                operation.Table,
-                operation.Schema,
-                keyColumns,
-                keyOrdinals.Length,
-                column => operation.Values[row, keyOrdinals[column]]);
-
-            return FindSingle(
-                _deleteRows.GetValueOrDefault(fingerprint),
-                candidate => candidate.Operation is DeleteDataOperation delete
-                    && SameTable(operation.Table, operation.Schema, delete.Table, delete.Schema)
-                    && RowMatchesInsertKey(operation, row, delete, candidate.Row));
-        }
-
-        public DataRow FindForUpdate(
-            UpdateDataOperation operation,
-            int row
-        )
-        {
-            var fingerprint = Fingerprint(
-                operation.Table,
-                operation.Schema,
-                operation.KeyColumns,
-                operation.KeyValues,
-                row);
-
-            return FindSingle(
-                _updateRows.GetValueOrDefault(fingerprint),
-                candidate => candidate.Operation is UpdateDataOperation inverse
-                    && SameTable(operation.Table, operation.Schema, inverse.Table, inverse.Schema)
-                    && operation.KeyColumns.SequenceEqual(inverse.KeyColumns, StringComparer.Ordinal)
-                    && MatrixRowEquals(operation.KeyValues, row, inverse.KeyValues, candidate.Row));
-        }
-
-        public DataRow FindForDelete(
-            DeleteDataOperation operation,
-            int row
-        )
-        {
-            var shape = new LookupShape(
-                new TableIdentity(operation.Table, operation.Schema),
-                ColumnShape(operation.KeyColumns));
-
-            if (!_insertRowsByKey.TryGetValue(shape, out var index))
-            {
-                index = BuildInsertIndex(shape.Table, operation.KeyColumns);
-                _insertRowsByKey.Add(shape, index);
-            }
-
-            var fingerprint = Fingerprint(
-                operation.Table,
-                operation.Schema,
-                operation.KeyColumns,
-                operation.KeyValues,
-                row);
-
-            return FindSingle(
-                index.GetValueOrDefault(fingerprint),
-                candidate => candidate.Operation is InsertDataOperation insert
-                    && SameTable(operation.Table, operation.Schema, insert.Table, insert.Schema)
-                    && RowMatchesInsertKey(insert, candidate.Row, operation, row));
-        }
-
-        private void AddDeleteRow(
-            DeleteDataOperation operation,
-            DataRow row
-        )
-        {
-            var table = new TableIdentity(operation.Table, operation.Schema);
-            if (_deleteKeyShapes.TryGetValue(table, out var existingShape)
-                && !existingShape.SequenceEqual(operation.KeyColumns, StringComparer.Ordinal))
-            {
-                throw new InvalidOperationException(
-                    "Inverse delete rows for one table use inconsistent key columns.");
-            }
-
-            _deleteKeyShapes.TryAdd(table, operation.KeyColumns.ToArray());
-            Add(
-                _deleteRows,
-                Fingerprint(
-                    operation.Table,
-                    operation.Schema,
-                    operation.KeyColumns,
-                    operation.KeyValues,
-                    row.Row),
-                row);
-        }
-
-        private Dictionary<string, List<DataRow>> BuildInsertIndex(
-            TableIdentity table,
-            string[] keyColumns
-        )
-        {
-            var result = new Dictionary<string, List<DataRow>>(StringComparer.Ordinal);
-            if (!_insertRows.TryGetValue(table, out var rows))
-            {
-                return result;
-            }
-
-            foreach (var row in rows)
-            {
-                var insert = (InsertDataOperation)row.Operation;
-                var keyOrdinals = KeyOrdinals(insert.Columns, keyColumns);
-                var fingerprint = Fingerprint(
-                    insert.Table,
-                    insert.Schema,
-                    keyColumns,
-                    keyOrdinals.Length,
-                    column => insert.Values[row.Row, keyOrdinals[column]]);
-
-                Add(result, fingerprint, row);
-            }
-
-            return result;
-        }
-
-        private static DataRow FindSingle(
-            IReadOnlyList<DataRow>? candidates,
-            Func<DataRow, bool> predicate
-        )
-        {
-            // Canonical hashes only narrow the candidate set. The exact
-            // predicate remains authoritative so a hash collision cannot pair
-            // two different model-managed rows.
-            DataRow? match = null;
-            if (candidates is not null)
-            {
-                foreach (var candidate in candidates)
-                {
-                    if (candidate.Consumed || !predicate(candidate))
-                    {
-                        continue;
-                    }
-
-                    if (match is not null)
-                    {
-                        throw new InvalidOperationException(
-                            "SafeMigrations found more than one inverse row for one "
-                            + "model-managed-data transition.");
-                    }
-
-                    match = candidate;
-                }
-            }
-
-            return match ?? MissingInverse();
-        }
-
-        private static DataRow MissingInverse() => throw new InvalidOperationException(
-            "SafeMigrations could not find the exact inverse row required for "
-            + "model-managed-data convergence. Preserve the provider-generated inverse data operation, "
-            + "or author an explicit source-frozen contract; row values were not included in this diagnostic.");
-
-        private static int[] KeyOrdinals(
-            string[] columns,
-            string[] keyColumns
-        )
-        {
-            var result = new int[keyColumns.Length];
-            for (var key = 0; key < keyColumns.Length; key++)
-            {
-                var ordinal = -1;
-                for (var column = 0; column < columns.Length; column++)
-                {
-                    if (StringComparer.Ordinal.Equals(columns[column], keyColumns[key]))
-                    {
-                        ordinal = column;
-                        break;
-                    }
-                }
-
-                if (ordinal < 0)
-                {
-                    throw new InvalidOperationException(
-                        "An inverse insert row does not contain key column "
-                        + $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(keyColumns[key])}'.");
-                }
-
-                result[key] = ordinal;
-            }
-
-            return result;
-        }
-
-        private static string Fingerprint(
-            string table,
-            string? schema,
-            string[] columns,
-            object?[,] values,
-            int row
-        ) => Fingerprint(
-            table,
-            schema,
-            columns,
-            columns.Length,
-            column => values[row, column]);
-
-        private static string Fingerprint(
-            string table,
-            string? schema,
-            string[] columns,
-            int valueCount,
-            Func<int, object?> value
-        )
-        {
-            using var writer = new CanonicalHashWriter();
-            writer.Add(schema);
-            writer.Add(table);
-            writer.Add(columns.Length);
-            for (var column = 0; column < columns.Length; column++)
-            {
-                writer.Add(columns[column]);
-            }
-
-            writer.Add(valueCount);
-            for (var column = 0; column < valueCount; column++)
-            {
-                SafeMigrationModelManagedValue.Write(writer, value(column));
-            }
-
-            return writer.GetHash();
-        }
-
-        private static string ColumnShape(
-            string[] columns
-        )
-        {
-            using var writer = new CanonicalHashWriter();
-            writer.Add(columns.Length);
-            foreach (var column in columns)
-            {
-                writer.Add(column);
-            }
-
-            return writer.GetHash();
-        }
-
-        private static void Add<TKey>(
-            Dictionary<TKey, List<DataRow>> index,
-            TKey key,
-            DataRow row
-        )
-            where TKey : notnull
-        {
-            if (!index.TryGetValue(key, out var rows))
-            {
-                rows = [];
-                index.Add(key, rows);
-            }
-
-            rows.Add(row);
-        }
-
-        private readonly record struct TableIdentity(
-            string Table,
-            string? Schema
-        );
-
-        private readonly record struct LookupShape(
-            TableIdentity Table,
-            string Columns
-        );
     }
 }

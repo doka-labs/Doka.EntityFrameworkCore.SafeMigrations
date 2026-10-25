@@ -275,9 +275,11 @@ public sealed partial class MySqlModelManagedDataIntegrationTests : MySqlSafeMig
             "SELECT COUNT(*) FROM `model_user_roles` WHERE `role_id` = 2;"));
     }
 
+    /// <summary>Preserves the coherent ensure, update, delete and idempotent replay lifecycle.</summary>
     [Fact]
-    public async Task ModelManagedDataTransitionsAreIdempotentAndRejectDrift()
+    public async Task ModelManagedDataTransitionsAreIdempotent()
     {
+        // Arrange.
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
@@ -285,7 +287,7 @@ public sealed partial class MySqlModelManagedDataIntegrationTests : MySqlSafeMig
             + "`id` int NOT NULL, `code` varchar(64) NOT NULL, `name` varchar(64) NULL, "
             + "PRIMARY KEY (`id`), UNIQUE KEY `ux_model_roles_code` (`code`)) ENGINE=InnoDB;"
             + "INSERT INTO `model_roles` (`id`, `code`, `name`) VALUES "
-            + "(1, 'administrator', 'Administrator'), (3, 'drift', 'Live value');");
+            + "(1, 'administrator', 'Administrator');");
 
         await using var context = CreateContext(connectionString);
         var ensure = new MigrationBuilder(context.Database.ProviderName!);
@@ -303,6 +305,8 @@ public sealed partial class MySqlModelManagedDataIntegrationTests : MySqlSafeMig
             uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["code"])]);
 
         var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act.
         var ensurePreflight = await runner.AnalyzeAsync(
             context,
             ensure.Operations,
@@ -358,6 +362,37 @@ public sealed partial class MySqlModelManagedDataIntegrationTests : MySqlSafeMig
         await ExecuteOperationsAsync(context, delete.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, delete.Operations, CancellationToken.None);
 
+        // Assert.
+        Assert.Equal(SafeMigrationReportStatus.Ready, ensurePreflight.Status);
+        Assert.Equal(SafeMigrationObservedState.Missing, Assert.Single(ensurePreflight.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationReportStatus.Ready, ensureReplay.Status);
+        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(ensureReplay.Assessments).Action);
+        Assert.Equal(SafeMigrationObservedState.TransitionReady,
+            Assert.Single(updatePreflight.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.TransitionReady,
+            Assert.Single(deletePreflight.Assessments).ObservedState);
+        Assert.Equal(0, await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `model_roles` WHERE `id` = 1;"));
+        Assert.Equal(1, await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `model_roles` WHERE `id` = 2 AND `name` = 'Member';"));
+    }
+
+    /// <summary>Rejects source-controlled row drift without overwriting the live value.</summary>
+    [Fact]
+    public async Task ModelManagedDataEnsureRejectsExistingRowDriftAndPreservesContent()
+    {
+        // Arrange.
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `model_roles` ("
+            + "`id` int NOT NULL, `code` varchar(64) NOT NULL, `name` varchar(64) NULL, "
+            + "PRIMARY KEY (`id`), UNIQUE KEY `ux_model_roles_code` (`code`)) ENGINE=InnoDB;"
+            + "INSERT INTO `model_roles` (`id`, `code`, `name`) VALUES (3, 'drift', 'Live value');");
+
+        await using var context = CreateContext(connectionString);
         var drift = new MigrationBuilder(context.Database.ProviderName!);
         _ = drift.EnsureModelManagedDataFromModel(
             "model_roles",
@@ -367,6 +402,9 @@ public sealed partial class MySqlModelManagedDataIntegrationTests : MySqlSafeMig
             ["int", "varchar(64)", "varchar(64)"],
             new object?[,] { { 3, "drift", "Source-controlled value" } });
 
+        var runner = context.GetService<ISafeMigrationRunner>();
+
+        // Act.
         var driftPreflight = await runner.AnalyzeAsync(
             context,
             drift.Operations,
@@ -376,14 +414,7 @@ public sealed partial class MySqlModelManagedDataIntegrationTests : MySqlSafeMig
         _ = await AssertOwnedGuardFailureAsync(() =>
             ExecuteOperationsAsync(context, drift.Operations, CancellationToken.None));
 
-        Assert.Equal(SafeMigrationReportStatus.Ready, ensurePreflight.Status);
-        Assert.Equal(SafeMigrationObservedState.Missing, Assert.Single(ensurePreflight.Assessments).ObservedState);
-        Assert.Equal(SafeMigrationReportStatus.Ready, ensureReplay.Status);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(ensureReplay.Assessments).Action);
-        Assert.Equal(SafeMigrationObservedState.TransitionReady,
-            Assert.Single(updatePreflight.Assessments).ObservedState);
-        Assert.Equal(SafeMigrationObservedState.TransitionReady,
-            Assert.Single(deletePreflight.Assessments).ObservedState);
+        // Assert.
         var driftAssessment = Assert.Single(driftPreflight.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, driftPreflight.Status);
@@ -391,12 +422,6 @@ public sealed partial class MySqlModelManagedDataIntegrationTests : MySqlSafeMig
         Assert.Collection(
             driftAssessment.Differences,
             difference => Assert.Equal("model_managed_row_content", difference.Facet));
-        Assert.Equal(0, await ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM `model_roles` WHERE `id` = 1;"));
-        Assert.Equal(1, await ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM `model_roles` WHERE `id` = 2 AND `name` = 'Member';"));
         Assert.Equal(1, await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM `model_roles` WHERE `id` = 3 AND `name` = 'Live value';"));

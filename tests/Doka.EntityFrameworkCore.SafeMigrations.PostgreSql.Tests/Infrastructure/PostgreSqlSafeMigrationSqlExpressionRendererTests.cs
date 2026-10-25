@@ -1,46 +1,50 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
-public sealed class PostgreSqlSafeMigrationSqlExpressionRendererTests
+/// <summary>Reports independent PostgreSQL expression-rendering contracts.</summary>
+public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
 {
-    [Fact]
-    public void Render_ProducesDeterministicSqlForEveryStructuredNode()
+    /// <summary>Preserves the exact authored SQL for one independently selectable node shape.</summary>
+    /// <param name="caseId">The stable, serializable expression case identifier.</param>
+    [Theory]
+    [InlineData("identifier")]
+    [InlineData("null")]
+    [InlineData("typed-null")]
+    [InlineData("alias-null")]
+    [InlineData("array-null")]
+    [InlineData("integer")]
+    [InlineData("typed-integer")]
+    [InlineData("not")]
+    [InlineData("negate")]
+    [InlineData("is-null")]
+    [InlineData("is-not-null")]
+    [InlineData("between")]
+    [InlineData("in")]
+    [InlineData("function")]
+    [InlineData("cast")]
+    [InlineData("alias-cast")]
+    [InlineData("collate")]
+    [InlineData("current-date")]
+    [InlineData("current-time")]
+    [InlineData("current-timestamp")]
+    [InlineData("provider-fragment")]
+    [InlineData("opaque")]
+    public void Render_ProducesDeterministicSqlForStructuredNode(string caseId)
     {
+        // Arrange
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
-        var value = SafeMigrationSql.Identifier("app", "Value");
+        var (expression, expectedSql) = StructuredNodeCase(caseId);
 
-        var expectations = new (SafeMigrationSqlExpression Expression, string Sql)[]
-        {
-            (value, "app.\"Value\""), (SafeMigrationSql.Literal(null), "NULL"),
-            (SafeMigrationSql.Literal(null, "integer"), "NULL::integer"),
-            (SafeMigrationSql.Literal(null, "int4"), "NULL::integer"),
-            (SafeMigrationSql.Literal(null, "int4[]"), "NULL::integer[]"),
-            (SafeMigrationSql.Literal(42), "42"), (SafeMigrationSql.Literal(42, "bigint"), "42::bigint"),
-            (SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Not, value), "(NOT app.\"Value\")"),
-            (SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Negate, value), "(-app.\"Value\")"),
-            (SafeMigrationSql.IsNull(value), "(app.\"Value\" IS NULL)"),
-            (SafeMigrationSql.IsNotNull(value), "(app.\"Value\" IS NOT NULL)"),
-            (SafeMigrationSql.Between(value, SafeMigrationSql.Literal(1), SafeMigrationSql.Literal(10)),
-                "(app.\"Value\" BETWEEN 1 AND 10)"),
-            (SafeMigrationSql.In(value, [SafeMigrationSql.Literal(1), SafeMigrationSql.Literal(2)]),
-                "(app.\"Value\" IN (1, 2))"),
-            (SafeMigrationSql.Function("LOWER", value), "lower(app.\"Value\")"),
-            (SafeMigrationSql.Cast(value, "text"), "CAST(app.\"Value\" AS text)"),
-            (SafeMigrationSql.Cast(value, "int4"), "CAST(app.\"Value\" AS integer)"),
-            (SafeMigrationSql.Collate(value, "C", "pg_catalog"), "(app.\"Value\" COLLATE pg_catalog.\"C\")"),
-            (SafeMigrationSql.Current(SafeMigrationSqlCurrentValue.Date), "CURRENT_DATE"),
-            (SafeMigrationSql.Current(SafeMigrationSqlCurrentValue.Time, precision: 3), "CURRENT_TIME(3)"),
-            (SafeMigrationSql.Current(SafeMigrationSqlCurrentValue.Timestamp), "CURRENT_TIMESTAMP"),
-            (SafeMigrationSql.ProviderFragment("npgsql_postgresql", "CURRENT_USER"), "CURRENT_USER"),
-            (SafeMigrationSql.Opaque("value + 1"), "value + 1"),
-        };
+        // Act
+        var actual = renderer.Render(expression);
 
-        foreach (var expectation in expectations)
-        {
-            Assert.Equal(expectation.Sql, renderer.Render(expectation.Expression));
-        }
+        // Assert
+        Assert.Equal(expectedSql, actual);
     }
 
+    /// <summary>Uses PostgreSQL's canonical spelling for one supported built-in alias.</summary>
+    /// <param name="storeType">The authored alias with its precision and array suffixes.</param>
+    /// <param name="expectedStoreType">The corresponding native catalog spelling.</param>
     [Theory]
     [InlineData("int", "integer")]
     [InlineData("int2", "smallint")]
@@ -68,19 +72,24 @@ public sealed class PostgreSqlSafeMigrationSqlExpressionRendererTests
         string expectedStoreType
     )
     {
+        // Arrange
         using var context = CreateContext();
         var renderer = new PostgreSqlSafeMigrationSqlExpressionRenderer(
             context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
+        // Act
         var result = renderer.Render(
             SafeMigrationSql.Cast(
                 SafeMigrationSql.Identifier("value"),
                 storeType));
 
+        // Assert
         Assert.Equal($"CAST(value AS {expectedStoreType})", result);
     }
 
+    /// <summary>Rejects a malformed or out-of-range FLOAT alias before rendering.</summary>
+    /// <param name="storeType">The unsupported authored alias.</param>
     [Theory]
     [InlineData("float(0)")]
     [InlineData("float(54)")]
@@ -90,57 +99,18 @@ public sealed class PostgreSqlSafeMigrationSqlExpressionRendererTests
         string storeType
     )
     {
+        // Arrange
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
         var expression = SafeMigrationSql.Cast(SafeMigrationSql.Identifier("value"), storeType);
 
-        Assert.Equal("structured_cast_type", renderer.GetUnsupportedFeature(expression));
-        Assert.Throws<NotSupportedException>(() => renderer.Render(expression));
-    }
+        // Act
+        var feature = renderer.GetUnsupportedFeature(expression);
+        var exception = Record.Exception(() => renderer.Render(expression));
 
-    [Fact]
-    public void RenderCatalogCandidateSql_UsesServerAuthoritativeIdentifierQuotingAndCatalogShapes()
-    {
-        using var context = CreateContext();
-        var renderer = CreateRenderer(context);
-        var value = SafeMigrationSql.Identifier("app", "value");
-
-        Assert.Equal(
-            "(pg_catalog.quote_ident('app') || '.' || pg_catalog.quote_ident('value'))",
-            renderer.RenderCatalogCandidateSql(value, Literal));
-        Assert.Equal(
-            "pg_catalog.quote_ident('user')",
-            renderer.RenderCatalogCandidateSql(SafeMigrationSql.Identifier("user"), Literal));
-        Assert.Equal(
-            "pg_catalog.quote_ident('a$b')",
-            renderer.RenderCatalogCandidateSql(SafeMigrationSql.Identifier("a$b"), Literal));
-        Assert.Equal(
-            "('((' || pg_catalog.quote_ident('app') || '.' || pg_catalog.quote_ident('value') || ' >= 1) AND (' "
-            + "|| pg_catalog.quote_ident('app') || '.' || pg_catalog.quote_ident('value') || ' <= 10))')",
-            renderer.RenderCatalogCandidateSql(
-                SafeMigrationSql.Between(value, SafeMigrationSql.Literal(1), SafeMigrationSql.Literal(10)),
-                Literal));
-
-        var inCandidate = renderer.RenderCatalogCandidateSql(
-            SafeMigrationSql.In(value, [SafeMigrationSql.Literal(1), SafeMigrationSql.Literal(2)]),
-            Literal);
-        var castCandidate = renderer.RenderCatalogCandidateSql(SafeMigrationSql.Cast(value, "text"), Literal);
-        var deparsedCandidate = renderer.RenderCatalogDeparsedCandidateSql(
-            SafeMigrationSql.Binary(
-                SafeMigrationSql.Binary(
-                    SafeMigrationSql.Identifier("user"),
-                    SafeMigrationSqlBinaryOperator.Add,
-                    SafeMigrationSql.Identifier("a$b")),
-                SafeMigrationSqlBinaryOperator.Add,
-                SafeMigrationSql.Identifier("ordinary")),
-            Literal);
-
-        Assert.Contains(" = ANY (ARRAY[1, 2])", inCandidate, StringComparison.Ordinal);
-        Assert.Contains(")::text", castCandidate, StringComparison.Ordinal);
-        Assert.Equal(
-            "('(' || pg_catalog.quote_ident('user') || ' + ' || pg_catalog.quote_ident('a$b') || ' + ' "
-            + "|| pg_catalog.quote_ident('ordinary') || ')')",
-            deparsedCandidate);
+        // Assert
+        Assert.Equal("structured_cast_type", feature);
+        Assert.IsType<NotSupportedException>(exception);
     }
 
     /// <summary>Catalog collation names resolve exact namespaces before using PostgreSQL's deparsed spelling.</summary>
@@ -170,7 +140,9 @@ public sealed class PostgreSqlSafeMigrationSqlExpressionRendererTests
         Assert.Contains("pg_catalog.quote_ident('value')", candidate, StringComparison.Ordinal);
     }
 
-    /// <summary>The pretty catalog candidate keeps nested collation without extra function-argument parentheses.</summary>
+    /// <summary>
+    /// The pretty catalog candidate keeps nested collation without extra function-argument parentheses.
+    /// </summary>
     [Fact]
     public void RenderCatalogDeparsedCandidateSql_PreservesNestedCollationWithoutExtraParentheses()
     {
@@ -185,52 +157,128 @@ public sealed class PostgreSqlSafeMigrationSqlExpressionRendererTests
         var candidate = renderer.RenderCatalogDeparsedCandidateSql(expression, Literal);
 
         // Assert
-        Assert.Contains("'lower(' || pg_catalog.quote_ident('value') || ' COLLATE '", candidate, StringComparison.Ordinal);
+        Assert.Contains("'lower(' || pg_catalog.quote_ident('value') || ' COLLATE '", candidate,
+            StringComparison.Ordinal);
         Assert.DoesNotContain("'lower(('", candidate, StringComparison.Ordinal);
         Assert.Contains("pg_catalog.to_regcollation(", candidate, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void Render_ProducesEveryBinaryOperatorAndRejectsUnsupportedValues()
+    /// <summary>Preserves every binary token as an independently selectable rendering contract.</summary>
+    /// <param name="value">The structured binary operator.</param>
+    /// <param name="token">The expected PostgreSQL SQL token.</param>
+    [Theory]
+    [InlineData(SafeMigrationSqlBinaryOperator.And, "AND")]
+    [InlineData(SafeMigrationSqlBinaryOperator.Or, "OR")]
+    [InlineData(SafeMigrationSqlBinaryOperator.Equal, "=")]
+    [InlineData(SafeMigrationSqlBinaryOperator.NotEqual, "<>")]
+    [InlineData(SafeMigrationSqlBinaryOperator.LessThan, "<")]
+    [InlineData(SafeMigrationSqlBinaryOperator.LessThanOrEqual, "<=")]
+    [InlineData(SafeMigrationSqlBinaryOperator.GreaterThan, ">")]
+    [InlineData(SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, ">=")]
+    [InlineData(SafeMigrationSqlBinaryOperator.Add, "+")]
+    [InlineData(SafeMigrationSqlBinaryOperator.Subtract, "-")]
+    [InlineData(SafeMigrationSqlBinaryOperator.Multiply, "*")]
+    [InlineData(SafeMigrationSqlBinaryOperator.Divide, "/")]
+    [InlineData(SafeMigrationSqlBinaryOperator.Modulo, "%")]
+    public void Render_ProducesBinaryOperator(SafeMigrationSqlBinaryOperator value, string token)
     {
+        // Arrange
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
-        var operators = Enum.GetValues<SafeMigrationSqlBinaryOperator>();
+        var expression = SafeMigrationSql.Binary(SafeMigrationSql.Literal(1), value, SafeMigrationSql.Literal(2));
 
-        var rendered = operators
-            .Select(value => renderer.Render(
-                SafeMigrationSql.Binary(SafeMigrationSql.Literal(1), value, SafeMigrationSql.Literal(2))))
-            .ToArray();
+        // Act
+        var actual = renderer.Render(expression);
 
-        Assert.Equal(13, rendered.Length);
-        Assert.Contains("(1 % 2)", rendered, StringComparer.Ordinal);
-        Assert.Throws<ArgumentNullException>(() => renderer.Render(null!));
-        Assert.Throws<NotSupportedException>(() => renderer.Render(SafeMigrationSql.Literal(new object())));
-        Assert.Throws<NotSupportedException>(() => renderer.Render(
-            SafeMigrationSql.Cast(SafeMigrationSql.Literal(1), "integer); DROP TABLE items; --")));
-        Assert.Throws<NotSupportedException>(() => renderer.Render(
-            SafeMigrationSql.ProviderFragment("other", "CURRENT_USER")));
-        Assert.Null(renderer.GetUnsupportedFeature(
-            SafeMigrationSql.ProviderFragment("npgsql_postgresql", "CURRENT_USER")));
-        Assert.Equal(
-            "provider_fragment_mismatch",
-            renderer.GetUnsupportedFeature(
-                SafeMigrationSql.ProviderFragment("other", "CURRENT_USER")));
-        Assert.Equal(
-            "structured_cast_type",
-            renderer.GetUnsupportedFeature(
-                SafeMigrationSql.Cast(
-                    SafeMigrationSql.Identifier("value"),
-                    "integer); DROP TABLE items; --")));
+        // Assert
+        Assert.Equal($"(1 {token} 2)", actual);
     }
 
+    /// <summary>Fails when a new binary operator has no independently reported rendering case.</summary>
+    [Fact]
+    public void Render_BinaryOperatorCasesCoverEveryDefinedOperator()
+    {
+        // Arrange
+        var method = typeof(PostgreSqlSafeMigrationSqlExpressionRendererTests)
+            .GetMethod(nameof(Render_ProducesBinaryOperator))!;
+
+        // Act
+        var covered = method.GetCustomAttributes<InlineDataAttribute>()
+            .SelectMany(attribute => attribute.GetData(method))
+            .Select(static data => Assert.IsType<SafeMigrationSqlBinaryOperator>(data[0]))
+            .OrderBy(static value => value)
+            .ToArray();
+
+        // Assert
+        Assert.Equal(Enum.GetValues<SafeMigrationSqlBinaryOperator>().OrderBy(static value => value), covered);
+        Assert.Equal(13, covered.Length);
+    }
+
+    /// <summary>Rejects a missing expression before attempting SQL generation.</summary>
+    [Fact]
+    public void Render_RejectsNullExpression()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var renderer = CreateRenderer(context);
+
+        // Act
+        var exception = Record.Exception(() => renderer.Render(null!));
+
+        // Assert
+        Assert.IsType<ArgumentNullException>(exception);
+    }
+
+    /// <summary>Reports and rejects one independently selectable unsupported input.</summary>
+    /// <param name="caseId">The stable unsupported-input case identifier.</param>
+    /// <param name="expectedFeature">The exact provider compatibility code.</param>
+    [Theory]
+    [InlineData("unmapped-literal", "structured_literal_mapping")]
+    [InlineData("unsafe-cast-literal", "structured_cast_type")]
+    [InlineData("unsafe-cast-identifier", "structured_cast_type")]
+    [InlineData("foreign-fragment", "provider_fragment_mismatch")]
+    public void Render_RejectsUnsupportedValue(string caseId, string expectedFeature)
+    {
+        // Arrange
+        using var context = CreateContext();
+        var renderer = CreateRenderer(context);
+        var expression = UnsupportedExpressionCase(caseId);
+
+        // Act
+        var feature = renderer.GetUnsupportedFeature(expression);
+        var exception = Record.Exception(() => renderer.Render(expression));
+
+        // Assert
+        Assert.Equal(expectedFeature, feature);
+        Assert.IsType<NotSupportedException>(exception);
+    }
+
+    /// <summary>Accepts an explicitly PostgreSQL-owned provider fragment.</summary>
+    [Fact]
+    public void GetUnsupportedFeature_AcceptsPostgreSqlProviderFragment()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var renderer = CreateRenderer(context);
+        var expression = SafeMigrationSql.ProviderFragment("npgsql_postgresql", "CURRENT_USER");
+
+        // Act
+        var feature = renderer.GetUnsupportedFeature(expression);
+
+        // Assert
+        Assert.Null(feature);
+    }
+
+    /// <summary>Creates only the services needed for resource-free rendering contracts.</summary>
     private static SafeMigrationDbContext CreateContext() =>
         new("Host=localhost;Database=renderer;Username=test;Password=test");
 
+    /// <summary>Uses the active provider's real mapping and delimiting services.</summary>
     private static PostgreSqlSafeMigrationSqlExpressionRenderer CreateRenderer(
         DbContext context
     ) => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
+    /// <summary>Encodes catalog text without opening a database connection.</summary>
     private static string Literal(
         string value
     ) => $"'{value.Replace("'", "''", StringComparison.Ordinal)}'";

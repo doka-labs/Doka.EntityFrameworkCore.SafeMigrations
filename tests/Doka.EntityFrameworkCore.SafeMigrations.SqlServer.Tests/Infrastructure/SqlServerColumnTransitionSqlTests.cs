@@ -6,9 +6,9 @@ public sealed class SqlServerColumnTransitionSqlTests
     private const string ConnectionString = "Server=127.0.0.1,1433;Database=column_transition_sql;"
         + "User ID=sa;Password=unused;TrustServerCertificate=True";
 
-    /// <summary>Only column alteration admits optimizer-owned statistics that SQL Server removes itself.</summary>
+    /// <summary>Column changes admit only optimizer-owned statistics that SQL Server removes itself.</summary>
     [Fact]
-    public void AlterColumn_DistinguishesAutomaticFromCallerOwnedStatistics()
+    public void ColumnChanges_DistinguishAutomaticFromCallerOwnedStatistics()
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
@@ -31,7 +31,8 @@ public sealed class SqlServerColumnTransitionSqlTests
         Assert.Equal(SafeMigrationRepairCapability.Safe, alterationPlan.RepairCapability);
         Assert.Contains("s.auto_created = 0", alterationPlan.StateExpression, StringComparison.Ordinal);
         Assert.Contains("s.auto_created = 0", alterationPlan.RepairPrecondition, StringComparison.Ordinal);
-        Assert.DoesNotContain("s.auto_created = 0", deletionPlan.StateExpression, StringComparison.Ordinal);
+        Assert.Contains("s.auto_created = 0", deletionPlan.StateExpression, StringComparison.Ordinal);
+        Assert.DoesNotContain("s.auto_drop", deletionPlan.StateExpression, StringComparison.Ordinal);
         Assert.Contains("sys.index_columns", alterationPlan.StateExpression, StringComparison.Ordinal);
         Assert.Contains("sys.foreign_key_columns", alterationPlan.StateExpression, StringComparison.Ordinal);
     }

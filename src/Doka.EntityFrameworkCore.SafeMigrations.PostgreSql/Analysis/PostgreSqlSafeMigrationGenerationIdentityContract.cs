@@ -14,6 +14,9 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
     {
         var segments = new Segment?[operations.Count];
         var pending = new List<(int Ordinal, SafeMigrationOperation Operation)>();
+        // WHY: Retain original operation ordinals when forming identity segments.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             var operation = operations[ordinal];
@@ -178,7 +181,8 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
         public Segment(SafeMigrationOperation[] operations)
         {
             SafeMigrationExpectedIndexTransitions.Validate(operations);
-            Exact = SafeMigrationExpectedTableConstraints.FromOperations(operations);
+            Exact = SafeMigrationExpectedTableConstraints.FromOperations(operations, static schema => schema,
+                StringComparer.Ordinal, '"', foldUnquotedCapturedSqlIdentifiers: true);
             foreach (var operation in operations)
             {
                 var owner = PostgreSqlSafeMigrationSchemaIdentity.GetOwner(operation.Intent);
@@ -317,7 +321,8 @@ internal sealed class PostgreSqlSafeMigrationGenerationIdentityContract
             try
             {
                 SafeMigrationExpectedIndexTransitions.Validate(Operations, Normalize);
-                result = SafeMigrationExpectedTableConstraints.FromOperations(Operations, Normalize);
+                result = SafeMigrationExpectedTableConstraints.FromOperations(Operations, Normalize,
+                    StringComparer.Ordinal, '"', foldUnquotedCapturedSqlIdentifiers: true);
             }
             catch (InvalidOperationException)
             {

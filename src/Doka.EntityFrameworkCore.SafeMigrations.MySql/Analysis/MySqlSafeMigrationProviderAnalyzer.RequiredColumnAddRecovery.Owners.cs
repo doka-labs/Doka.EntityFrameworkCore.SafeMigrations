@@ -229,6 +229,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         }
 
         var authoredOwners = new Dictionary<string, int>(StringComparer.Ordinal);
+        // WHY: Retain the authored operation ordinal when resolving each recovery owner.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             if (operations[ordinal] is SafeMigrationOperation { Intent: EnsureColumnIntent ensure }

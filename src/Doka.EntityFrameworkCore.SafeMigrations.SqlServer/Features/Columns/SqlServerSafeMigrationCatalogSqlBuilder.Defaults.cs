@@ -24,6 +24,15 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             return "default_expression_unproven";
         }
 
+        if (definition.DefaultValue.SqlExpression is { } source
+            && (!SqlServerSourceExpressionRoles.IsNativeScalar(expression)
+                || !SafeMigrationSqlExpressionParser.IsCapturedSourceDialectCompatible(source, '[')))
+        {
+            // WHY: Source defaults cannot borrow the portable renderer's scalar
+            // conversions or an unverified session-specific quoting dialect.
+            return "default_expression_unproven";
+        }
+
         return GetDefaultExpressionFeature(expression, storeType, definition.IsNullable);
     }
 
@@ -37,7 +46,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         }
 
         return definition.DefaultValue.SqlExpression is { } sql
-            && SafeMigrationSqlExpressionParser.TryParse(sql, out var parsed) ? parsed : null;
+            && SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var parsed) ? parsed : null;
     }
 
     private string? GetDefaultExpressionFeature(
@@ -46,9 +55,65 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         bool nullable
     )
     {
+        var pending = default(SafeMigrationWorkStack<DefaultExpressionFrame>);
+        var current = new DefaultExpressionFrame(expression, nullable);
+        try
+        {
+            do
+            {
+                if (current.Expression is SafeMigrationSqlFunctionExpression function
+                    && function.Name.Equals("COALESCE", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (current.Index == 0
+                        && (function.Arguments.Count < 2 || !function.Arguments.Any(IsNonNullDefaultExpression)))
+                    {
+                        return "default_expression_unproven";
+                    }
+
+                    if (current.Index < function.Arguments.Count)
+                    {
+                        pending.Push(current with { Index = current.Index + 1 });
+                        current = new DefaultExpressionFrame(function.Arguments[current.Index], Nullable: true);
+                        continue;
+                    }
+                }
+                else
+                {
+                    var feature = GetDefaultLeafFeature(current.Expression, storeType, current.Nullable);
+                    if (feature is not null)
+                    {
+                        return feature;
+                    }
+                }
+
+                if (!pending.TryPop(out current))
+                {
+                    return null;
+                }
+            }
+            while (true);
+        }
+        finally
+        {
+            pending.Dispose();
+        }
+    }
+
+    /// <summary>Validates a scalar leaf after COALESCE continuations have established branch nullability.</summary>
+    private string? GetDefaultLeafFeature(
+        SafeMigrationSqlExpression expression,
+        string storeType,
+        bool nullable
+    )
+    {
         switch (expression)
         {
             case SafeMigrationSqlLiteralExpression literal:
+                if (literal.NumericSourceToken.Span.IndexOfAny('e', 'E') >= 0)
+                {
+                    return "default_expression_unproven";
+                }
+
                 return (literal.StoreType is null
                         || IsDefaultValueRepresentable(literal.Value, literal.StoreType, nullable))
                     && IsDefaultValueRepresentable(literal.Value, storeType, nullable)
@@ -64,22 +129,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     return "default_expression_unproven";
                 }
 
-                return GetDefaultExpressionFeature(literal, cast.StoreType, nullable)
-                    ?? GetDefaultExpressionFeature(literal, storeType, nullable);
-
-            case SafeMigrationSqlFunctionExpression function
-                when function.Name.Equals("COALESCE", StringComparison.OrdinalIgnoreCase):
-                if (function.Arguments.Count < 2 || !function.Arguments.Any(IsNonNullDefaultExpression))
-                {
-                    return "default_expression_unproven";
-                }
-
-                // WHY: COALESCE chooses the highest-precedence argument type,
-                // not the column type. Prove every branch in one compatible
-                // scalar family before evaluating the expression itself.
-                return function.Arguments.Select(argument
-                    => GetDefaultExpressionFeature(argument, storeType, nullable: true))
-                    .FirstOrDefault(static feature => feature is not null);
+                return GetDefaultLeafFeature(literal, cast.StoreType, nullable)
+                    ?? GetDefaultLeafFeature(literal, storeType, nullable);
 
             case SafeMigrationSqlCurrentValueExpression current:
                 return IsCompatibleCurrentTemporalType(current.Value, storeType) ? null : "default_expression_unproven";
@@ -97,19 +148,57 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
     private static bool IsNonNullDefaultExpression(
         SafeMigrationSqlExpression expression
-    ) => expression switch
+    )
     {
-        SafeMigrationSqlLiteralExpression literal => literal.Value is not null,
-        SafeMigrationSqlCastExpression { Operand: SafeMigrationSqlLiteralExpression literal }
-            => literal.Value is not null,
-        SafeMigrationSqlCurrentValueExpression => true,
-        SafeMigrationSqlFunctionExpression function
-            when SqlServerSafeMigrationSqlExpressionRenderer.IsCurrentTemporalFunction(function.Name) => true,
-        SafeMigrationSqlFunctionExpression function
-            when function.Name.Equals("COALESCE", StringComparison.OrdinalIgnoreCase)
-            => function.Arguments.Any(IsNonNullDefaultExpression),
-        _ => false,
-    };
+        var pending = default(SafeMigrationWorkStack<DefaultExpressionFrame>);
+        var current = new DefaultExpressionFrame(expression, Nullable: true);
+        try
+        {
+            do
+            {
+                switch (current.Expression)
+                {
+                    case SafeMigrationSqlLiteralExpression { Value: not null }:
+                    case SafeMigrationSqlCastExpression
+                        { Operand: SafeMigrationSqlLiteralExpression { Value: not null } }:
+                    case SafeMigrationSqlCurrentValueExpression:
+                        return true;
+
+                    case SafeMigrationSqlFunctionExpression temporal
+                        when SqlServerSafeMigrationSqlExpressionRenderer.IsCurrentTemporalFunction(temporal.Name):
+                        return true;
+
+                    case SafeMigrationSqlFunctionExpression function
+                        when function.Name.Equals("COALESCE", StringComparison.OrdinalIgnoreCase):
+                        if (current.Index < function.Arguments.Count)
+                        {
+                            pending.Push(current with { Index = current.Index + 1 });
+                            current = new DefaultExpressionFrame(function.Arguments[current.Index], Nullable: true);
+                            continue;
+                        }
+
+                        break;
+                }
+
+                if (!pending.TryPop(out current))
+                {
+                    return false;
+                }
+            }
+            while (true);
+        }
+        finally
+        {
+            pending.Dispose();
+        }
+    }
+
+    /// <summary>Resumes one COALESCE branch without changing its established nullable-input contract.</summary>
+    private readonly record struct DefaultExpressionFrame(
+        SafeMigrationSqlExpression Expression,
+        bool Nullable,
+        int Index = 0
+    );
 
     private static bool IsCompatibleCurrentTemporalType(
         SafeMigrationSqlCurrentValue value,
@@ -284,13 +373,65 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         string? collation
     )
     {
-        if (expression is SafeMigrationSqlFunctionExpression function
-            && function.Name.Equals("COALESCE", StringComparison.OrdinalIgnoreCase))
+        var pending = default(SafeMigrationWorkStack<DefaultExpressionFrame>);
+        var current = new DefaultExpressionFrame(expression, nullable);
+        var builder = new StringBuilder();
+        try
         {
-            return "(" + string.Join(" AND ", function.Arguments.Select(argument =>
-                BuildDefaultExpressionSupportPredicate(argument, storeType, nullable: true, collation))) + ")";
-        }
+            // WHY: Build the final predicate once. Joining a newly materialized
+            // child string at every COALESCE ancestor is quadratic for a deep
+            // public tree and also consumes the process call stack.
+            do
+            {
+                if (current.Expression is SafeMigrationSqlFunctionExpression function
+                    && function.Name.Equals("COALESCE", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (current.Index == 0)
+                    {
+                        builder.Append('(');
+                    }
 
+                    if (current.Index < function.Arguments.Count)
+                    {
+                        if (current.Index > 0)
+                        {
+                            builder.Append(" AND ");
+                        }
+
+                        pending.Push(current with { Index = current.Index + 1 });
+                        current = new DefaultExpressionFrame(function.Arguments[current.Index], Nullable: true);
+                        continue;
+                    }
+
+                    builder.Append(')');
+                }
+                else
+                {
+                    builder.Append(BuildDefaultLeafSupportPredicate(
+                        current.Expression, storeType, current.Nullable, collation));
+                }
+
+                if (!pending.TryPop(out current))
+                {
+                    return builder.ToString();
+                }
+            }
+            while (true);
+        }
+        finally
+        {
+            pending.Dispose();
+        }
+    }
+
+    /// <summary>Builds the unchanged scalar conversion proof at a non-COALESCE leaf.</summary>
+    private string BuildDefaultLeafSupportPredicate(
+        SafeMigrationSqlExpression expression,
+        string storeType,
+        bool nullable,
+        string? collation
+    )
+    {
         if (expression is SafeMigrationSqlLiteralExpression { Value: null }
             || expression is SafeMigrationSqlCastExpression
                 { Operand: SafeMigrationSqlLiteralExpression { Value: null } })

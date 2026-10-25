@@ -35,11 +35,18 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         foreach (var column in operations.Select(static operation => operation.Intent).OfType<EnsureColumnIntent>())
         {
             RegisterColumnLayoutRequest(requested, column.Schema, column.Table, column.Definition.Name);
+            if (SqlServerComputedColumnContract.Expression(column.Definition) is { } expression)
+            {
+                var names = requested[(column.Schema ?? "dbo", column.Table)];
+                SafeMigrationSqlExpressionInspector.CollectIdentifiers(expression, names);
+            }
         }
 
         // WHY: A later column target can be absent in the immutable catalog
         // because an earlier rename creates its identity. Read that source,
         // not every unrelated table in a large initial migration.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = operations.Count - 1; ordinal >= 0; ordinal--)
         {
             if (operations[ordinal].Intent is RenameTableIntent table
@@ -62,12 +69,36 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     RegisterColumnLayoutRequest(requested, column.Schema, column.Table, column.Name);
                     RegisterColumnLayoutRequest(requested, column.Schema, column.Table, column.NewName);
                     break;
+                case EnsureIndexIntent index when requested.TryGetValue(
+                    (index.Definition.Schema ?? "dbo", index.Definition.Table), out var names):
+                    foreach (var key in index.Definition.Keys)
+                    {
+                        if (key.Column is not null)
+                        {
+                            names.Add(key.Column);
+                        }
+                    }
+
+                    names.UnionWith(index.Definition.IncludedColumns);
+                    break;
                 case EnsurePrimaryKeyIntent primary when requested.ContainsKey(
                     (primary.Definition.Schema ?? "dbo", primary.Definition.Table)):
                     foreach (var name in primary.Definition.Columns)
                     {
                         RegisterColumnLayoutRequest(requested,
                             primary.Definition.Schema, primary.Definition.Table, name);
+                    }
+
+                    break;
+                case EnsureCheckConstraintIntent check when requested.TryGetValue(
+                    (check.Definition.Schema ?? "dbo", check.Definition.Table), out var checkNames):
+                    if (SqlServerSafeMigrationCatalogSqlBuilder.GetCheckRenamePrerequisiteColumns(check.Definition)
+                        is { } checkSources)
+                    {
+                        // WHY: Bind CHECK-role aliases in this already-required
+                        // column metadata batch. A CLR case-folding guess or an
+                        // extra query cannot certify the native column identity.
+                        checkNames.UnionWith(checkSources);
                     }
 
                     break;
@@ -154,7 +185,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     + "CASE WHEN ty.name IN(N'varchar',N'nvarchar',N'varbinary') THEN CONVERT(int,c.max_length) "
                     + "ELSE 0 END,CONVERT(bit,CASE WHEN EXISTS(SELECT 1 FROM sys.index_columns ic JOIN sys.indexes i "
                     + "ON i.object_id=ic.object_id AND i.index_id=ic.index_id WHERE i.type=1 AND ic.key_ordinal>0 "
-                    + "AND ic.object_id=c.object_id AND ic.column_id=c.column_id) THEN 1 ELSE 0 END) "
+                    + "AND ic.object_id=c.object_id AND ic.column_id=c.column_id) THEN 1 ELSE 0 END),c.name "
                     + "FROM (VALUES " + string.Join(",", chunk.Select(static item =>
                         "(" + KeyLiteral(item.Schema) + "," + KeyLiteral(item.Table)
                             + "," + KeyLiteral(item.Name) + ")"))
@@ -226,6 +257,12 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             && layout is not null)
         {
             layout.Bindings[reader.GetString(2)] = reader.GetInt32(3);
+            if (reader.FieldCount > 6)
+            {
+                // WHY: Both caller spelling and canonical native spelling must
+                // share the same lifetime, including CI aliases in the stream.
+                layout.Bindings[reader.GetString(6)] = reader.GetInt32(3);
+            }
             if (reader.GetInt32(4) != 0)
             {
                 layout.VariableWidths[reader.GetInt32(3)] = reader.GetInt32(4);
@@ -297,19 +334,25 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             await using var command = connection.CreateCommand();
             command.Transaction = transaction;
             ApplyCommandTimeout(command, commandTimeout);
-            command.CommandText = string.Join(" ", chunk.Select(key =>
+            command.CommandText = string.Join(" ", chunk.Select((key, ordinal) =>
             {
                 var qualified = _sqlGenerationHelper.DelimitIdentifier(key.Table, key.Schema);
                 var prefix = "SELECT " + KeyLiteral(key.Schema) + "," + KeyLiteral(key.Table) + ",";
                 var select = prefix + "CONVERT(bit,CASE WHEN EXISTS(SELECT TOP(1)1 FROM "
                     + qualified + ") THEN 1 ELSE 0 END);";
+                var argument = SqlServerSqlStringLiteral.ProcedureArgument(
+                    select, KeyLiteral(select), SqlServerSqlStringLiteral.RequiresExpression(select.AsSpan())
+                        ? "@doka_layout_row_sql" + ordinal.ToString(CultureInfo.InvariantCulture) : string.Empty,
+                    out var declaration);
 
                 // WHY: VIEW DEFINITION does not grant SELECT. Keep unauthorized
                 // table binding inside the guarded dynamic branch and retain
                 // unknown row presence for a structured fail-closed decision.
 
                 return "IF HAS_PERMS_BY_NAME(" + KeyLiteral(qualified) + ",N'OBJECT',N'SELECT')=1 "
-                    + "EXEC sys.sp_executesql " + KeyLiteral(select) + "; ELSE "
+                    + (declaration.Length == 0 ? string.Empty : "BEGIN " + declaration)
+                    + "EXEC sys.sp_executesql " + argument + "; "
+                    + (declaration.Length == 0 ? string.Empty : "END ") + "ELSE "
                     + prefix + "CONVERT(bit,NULL);";
             }));
 
@@ -376,6 +419,15 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         if (layout.Bindings.ContainsKey(column.Definition.Name))
         {
             return analysis;
+        }
+
+        if (SqlServerComputedColumnContract.IsComputed(column.Definition) && column.Definition.IsStored != true)
+        {
+            // WHY: A virtual expression allocates no row storage. Retained
+            // ordinary-column history therefore cannot invalidate its capacity;
+            // an unknown identity still remains unknown and the native column
+            // count is independently bounded before any ADD can be accepted.
+            return layout.VisibleColumns >= 1024 ? ColumnLayoutFailure("column_limit") : analysis;
         }
 
         var code = layout.AdditionFailure(addition);
@@ -527,6 +579,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 break;
             case AlterColumnOperation column:
                 InvalidateProjectedColumnLayout(column.Schema, column.Table);
+                RemoveProjectedMatchingColumnBinding(column.Schema, column.Table, column.Name);
                 break;
             case CreateTableOperation table:
                 _projectedColumnLayouts[(table.Schema ?? "dbo", table.Name)] = null;
@@ -537,6 +590,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     if (layout is not null)
                     {
                         layout.IsKnown = false;
+                        layout.Bindings.Clear();
                     }
                 }
 
@@ -615,7 +669,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     {
         if (_projectedColumnLayouts.TryGetValue((schema ?? "dbo", table), out var layout) && layout is not null)
         {
-            layout.Bindings.Remove(name);
+            RemoveProjectedColumnIdentity(layout, name);
         }
     }
 
@@ -640,9 +694,24 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     )
     {
         if (_projectedColumnLayouts.TryGetValue((schema ?? "dbo", table), out var layout) && layout is not null
-            && layout.Bindings.Remove(name, out var identity))
+            && layout.Bindings.TryGetValue(name, out var identity))
         {
+            RemoveProjectedColumnIdentity(layout, name);
             layout.Bindings[newName] = identity;
+        }
+    }
+
+    private static void RemoveProjectedColumnIdentity(ColumnLayoutState layout, string name)
+    {
+        if (!layout.Bindings.TryGetValue(name, out var identity))
+        {
+            return;
+        }
+
+        foreach (var alias in layout.Bindings.Where(pair => pair.Value == identity).Select(static pair => pair.Key)
+            .ToArray())
+        {
+            layout.Bindings.Remove(alias);
         }
     }
 

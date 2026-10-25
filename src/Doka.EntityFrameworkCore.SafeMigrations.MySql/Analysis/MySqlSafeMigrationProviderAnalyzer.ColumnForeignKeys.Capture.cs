@@ -27,6 +27,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         Dictionary<(string? Schema, string Table, string Column, bool Nullable), int>? identities = null;
         List<MySqlColumnDependencyRequest>? requests = null;
         Dictionary<int, HashSet<SafeMigrationOperation>>? aliases = null;
+        // WHY: Pair each operation with its own analysis before requesting dependency evidence.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             var operation = operations[ordinal];
@@ -269,6 +272,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             }
         }
 
+        // WHY: Keep returned dependency facts and sentinels aligned with their request offsets.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < count; index++)
         {
             if (!sentinels[index] || primarySeen[index] != requests[offset + index].Nullable)
@@ -279,6 +285,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        // WHY: Keep returned dependency facts and sentinels aligned with their request offsets.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < count; index++)
         {
             var completed = names[index] is { } captured

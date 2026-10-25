@@ -30,7 +30,7 @@ equivalent.
 - `Doka.EntityFrameworkCore.SafeMigrations`: provider-neutral intent,
   definitions, planning, reports, and `MigrationBuilder` extensions
 - `Doka.EntityFrameworkCore.SafeMigrations.MySql`: MySQL and MariaDB adapter on
-  the public `Doka.EntityFrameworkCore.MySql` 10.5 operation-handler and
+  the public `Doka.EntityFrameworkCore.MySql` 10.6 operation-handler (minimum 10.6.2) and
   typed migration-metadata SPI
 - `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql`: PostgreSQL adapter on
   Npgsql 10
@@ -55,35 +55,35 @@ evidence. See [Support and qualification](docs/support-and-qualification.md).
 ## Installation
 
 Install one provider package. The core package is included transitively. The
-examples target prepared stable 10.5.0 and select that version exactly, so
-restore does not move to another version implicitly. Verify public package
-availability before installation; source preparation is not publication
-evidence. Release changes and compatibility notes belong in the
-[changelog](CHANGELOG.md).
+examples target version 10.6.0 and select that version exactly, so
+restore does not move to another version implicitly. Release changes and
+compatibility notes belong in the [10.6.0 changelog](CHANGELOG.md#1060---2026-10-25). Review the
+[10.6.0 upgrade notes](docs/support-and-qualification.md#upgrade-to-1060)
+before updating an application.
 
 ```bash
-package_version='10.5.0'
+package_version='10.6.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.5.0'
+package_version='10.6.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.5.0'
+package_version='10.6.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.Sqlite --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.5.0'
+package_version='10.6.0'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.SqlServer --version "$package_version"
 ```
 
@@ -151,7 +151,7 @@ it after an attention or timeout; SQL Server `TRY/CATCH` does not catch those
 client interruptions.
 
 `UseMySqlSafeMigrations()` declares its user-variable requirement through the
-Doka 10.5 line. For a provider-owned connection string, Doka supplies
+Doka 10.6 line. For a provider-owned connection string, Doka supplies
 `AllowUserVariables=true` when it was omitted. An explicitly contradictory
 setting is rejected. Caller-owned `DbConnection` and `MySqlDataSource` inputs
 are never mutated and must already use `AllowUserVariables=true` and
@@ -567,6 +567,13 @@ an already matching target remains a no-op. This applies to ordinary strict
 migrations as well as legacy-convergence streams. SQLite and SQL Server keep
 their own provider-specific alteration contracts.
 
+MySQL/MariaDB and PostgreSQL also qualify explicit built-in signed-integer
+widening with exact old-source and native storage/dependency proofs. Accepted
+ordinary index removals and certified sibling transitions retain only bounded
+column evidence, not complete key authority. See the provider-specific
+[MySQL/MariaDB](docs/mysql-mariadb-ddl-behavior.md#lossless-signed-integer-alterations)
+and [PostgreSQL](docs/postgresql-behavior.md#lossless-signed-integer-alterations) boundaries.
+
 SQL Server also supports explicit lossless `tinyint -> smallint/int/bigint`,
 `smallint -> int/bigint`, and `int -> bigint` alterations under `RepairIfSafe`.
 The exact source, unchanged defaults and identity semantics, supported storage,
@@ -858,16 +865,17 @@ classification for unknown type grammar. PostgreSQL `float` and `float(p)` are
 normalized according to their documented binary-precision ranges before type
 mapping, including array forms.
 
-MariaDB generated columns cannot preserve a `NOT NULL` facet; that
-unrepresentable definition fails before DDL with
-`generated_column_nullability`, while MySQL retains and verifies the facet.
-
 EF-scaffolded check constraints using this bounded grammar are converted to
 the same structured tree automatically. Unsupported SQL stops scaffolding
 before a migration file is accepted; use an explicit `FromExpression`
 definition for a reviewed equivalent. The complete authoring behavior and
 failure boundary are documented in
 [Migration authoring paths](docs/migration-authoring.md#generated-check-constraints).
+
+Computed columns captured from EF use the same bounded expression grammar,
+including searched `CASE`. Generated-column type, nullability, storage and
+index eligibility remain provider-specific; see
+[generated columns](docs/migration-authoring.md#generated-columns).
 
 Legacy raw SQL remains representable as opaque input, but opaque expressions
 cannot authorize `Matching`; they are classified with
@@ -982,9 +990,12 @@ MariaDB capture provider plans in 512-operation windows while retaining the
 complete expected unique-index catalog. Every transport batch remains bounded
 by 16,000 parameters and 4 MiB of UTF-8 payload; MySQL/MariaDB additionally cap
 a batch at half the live `max_allowed_packet`.
+SQL Server additionally splits large direct catalog statements into smaller
+optimizer groups without reducing the supported size of an individual operation;
+see [catalog transport](docs/sqlserver-behavior.md#catalog-transport-and-opaque-sql).
 Configured EF command timeouts apply to catalog commands and batches. A single
-operation that exceeds a bound is rejected before query execution; a failed
-later batch never publishes a partial report. The live server-provider suites
+operation that exceeds a hard payload or parameter limit is rejected before
+query execution; a failed later batch never publishes a partial report. The live server-provider suites
 qualify 100,000 deterministically ordered mixed operations on every supported
 server profile. The workload covers every observed state and planned action across
 tables, columns, indexes, and primary-key, unique, check, and foreign-key
@@ -1044,7 +1055,7 @@ timing overruns retain a false JSON budget verdict without failing qualification
 Invalid measurements, execution and artifact-write failures remain blocking.
 
 Release candidates and stable releases use the same manually dispatched path.
-The workflow qualifies and attests exact bytes from current `main` before it
+The workflow qualifies and attests exact bytes from the selected authorized line before it
 waits at the protected NuGet environment. Only then does the operator create a
 signed annotated tag on that qualified commit and approve publication. The
 write-capable job validates and cryptographically verifies the portable SLSA
@@ -1053,6 +1064,9 @@ signatures and package content, and creates or verifies an immutable GitHub
 Release with the exact ten package files, checksums, SPDX manifest, and
 `release-provenance.intoto.jsonl`. Candidates are marked prerelease and never
 replace the latest stable release.
+Maintained lines share the existing publisher, retain their own qualification
+and cannot move Latest backwards. Only main/10 is active; additional lines stay
+inactive and no .NET 11 adoption is implied. See [Release lines](docs/operations/release-lines.md).
 See [Publication operations](docs/operations/release-publication.md) for the
 step-by-step maintainer guide and current readiness, and
 [Release process](docs/release-process.md) for the qualification contract.

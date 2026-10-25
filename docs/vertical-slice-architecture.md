@@ -27,7 +27,7 @@ Provider packages may depend on Core, but never on each other. The package-only
 qualification restores one consumer per provider package so a combined test
 application cannot conceal an accidental cross-provider dependency.
 
-Inside every package, the same feature slices are mirrored:
+The common feature ownership model contains these slices:
 
 - `Schemas`
 - `Tables`
@@ -47,6 +47,7 @@ src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Features/<slice>/
 src/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/Features/<slice>/
 src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/Analysis/
 src/Doka.EntityFrameworkCore.SafeMigrations.Sqlite/SqlGeneration/
+src/Doka.EntityFrameworkCore.SafeMigrations.SqlServer/Features/<slice>/
 src/Doka.EntityFrameworkCore.SafeMigrations.SqlServer/Analysis/
 src/Doka.EntityFrameworkCore.SafeMigrations.SqlServer/SqlGeneration/
 tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Features/<slice>/
@@ -60,6 +61,11 @@ benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/
 benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks/
 benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks/
 ```
+
+This hybrid layout combines feature-owned partials with provider-specific
+analysis and SQL-generation orchestration. SQLite keeps its composition boundary
+in `Analysis` and `SqlGeneration`; shared responsibilities do not require a
+cosmetic folder mirror.
 
 The provider test trees additionally contain `Lifecycle` and `Identifiers`;
 the core test tree contains `Lifecycle` for provider-neutral cross-slice
@@ -121,7 +127,7 @@ The allowed dependency direction is:
 provider feature slice -> provider kernel -> core feature slice -> core kernel
 ```
 
-Core must not reference either provider. Provider feature slices may use their
+Core must not reference any provider. Provider feature slices may use their
 own provider kernel and the corresponding core feature contracts. A feature
 slice must not register services, open connections, write migration history,
 or select policy independently; those responsibilities belong to the shared

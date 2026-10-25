@@ -7,6 +7,10 @@ internal sealed partial class SafeMigrationPreflightProjection
         SafeMigrationProviderAnalysis liveAnalysis
     )
     {
+        intent = (EnsureTableIntent)SafeMigrationCapturedExpressionNormalization.NormalizeIntent(
+            intent,
+            _objectIdentityNormalizer?.FoldUnquotedCapturedSqlIdentifiers == true);
+
         var key = new TableKey(intent.Definition.Table, intent.Definition.Schema);
         if (_projectedMissingTables.Contains(key))
         {
@@ -68,10 +72,9 @@ internal sealed partial class SafeMigrationPreflightProjection
             return Analysis(SafeMigrationObservedState.Missing);
         }
 
-        return TryGet(intent.Table, intent.Schema, out _)
-            || _prerequisites.ContainsKey(key)
-                ? Analysis(SafeMigrationObservedState.Matching)
-                : liveAnalysis;
+        return TryGet(intent.Table, intent.Schema, out _) || _prerequisites.ContainsKey(key)
+            ? Analysis(SafeMigrationObservedState.Matching)
+            : liveAnalysis;
     }
 
     private SafeMigrationProviderAnalysis Project(
@@ -100,8 +103,11 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         if (liveAnalysis.RenameApplyUnsupportedCode is { } unsupportedCode)
         {
-            return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
-                SafeMigrationRepairCapability.None, postconditionSatisfied: false, unsupportedCode);
+            return new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.Unsupported,
+                SafeMigrationRepairCapability.None,
+                postconditionSatisfied: false,
+                unsupportedCode);
         }
 
         var intermediate = new TableKey(intent.NewName ?? intent.Name, intent.Schema);
@@ -114,14 +120,13 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
 
         if ((liveAnalysis.ObservedState == SafeMigrationObservedState.Different
-             || liveAnalysis.RenameTargetExists == true)
+                || liveAnalysis.RenameTargetExists == true)
             && !_projectedMissingTables.Contains(target))
         {
             return Analysis(SafeMigrationObservedState.Different);
         }
 
-        if (liveAnalysis.ObservedState == SafeMigrationObservedState.Missing
-            && liveAnalysis.RenameTargetExists is null
+        if (liveAnalysis is { ObservedState: SafeMigrationObservedState.Missing, RenameTargetExists: null }
             && !_projectedMissingTables.Contains(target))
         {
             // WHY: Missing source is also the replay state. It contains no
@@ -141,9 +146,14 @@ internal sealed partial class SafeMigrationPreflightProjection
         EnsureTableIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis,
         SafeMigrationProviderAnalysis analysis,
-        SafeMigrationDecision decision
+        SafeMigrationDecision decision,
+        bool hasExactTargetDefinition
     )
     {
+        intent = (EnsureTableIntent)SafeMigrationCapturedExpressionNormalization.NormalizeIntent(
+            intent,
+            _objectIdentityNormalizer?.FoldUnquotedCapturedSqlIdentifiers == true);
+
         var key = new TableKey(intent.Definition.Table, intent.Definition.Schema);
         if (analysis.ObservedState == SafeMigrationObservedState.Missing)
         {
@@ -159,6 +169,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             _projectedColumnDropOnlyTables?.Remove(key);
             _projectedForeignKeyDropOnlyTables?.Remove(key);
             _projectedIntrinsicColumnSourceTables?.Remove(key);
+            _projectedIndexDropOnlyTables?.Remove(key);
             _projectedChangedColumns.Remove(key);
             RemoveProjectedColumnDefinitions(intent.Definition.Table, intent.Definition.Schema);
             foreach (var column in intent.Definition.Columns)
@@ -182,13 +193,14 @@ internal sealed partial class SafeMigrationPreflightProjection
                 newlyCreated: true,
                 dataMutationVersion: _providerDataMutationVersion,
                 objectIdentityNormalizer: _objectIdentityNormalizer,
-                sharesUniqueIndexIdentity: SharesUniqueConstraintAndIndexIdentity);
+                sharesUniqueIndexIdentity: SharesUniqueConstraintAndIndexIdentity)
+            {
+                GeneratedColumnsComplete = true,
+            };
 
             foreach (var column in intent.Definition.Columns)
             {
-                prerequisites.Columns[column.Name] = ProjectedColumn.From(
-                    column,
-                    addedToExistingTable: false);
+                prerequisites.Columns[column.Name] = ProjectedColumn.From(column, addedToExistingTable: false);
             }
 
             CaptureConstraintPrerequisites(prerequisites, intent.Definition, liveAnalysis);
@@ -211,12 +223,14 @@ internal sealed partial class SafeMigrationPreflightProjection
             // WHY: A repeated semantic table NoOp cannot reset physical aliases,
             // tombstones or row-proof epochs established by preceding operations.
             var prerequisites = GetOrCreateProviderPrerequisites(intent.Definition.Table, intent.Definition.Schema);
+            if (hasExactTargetDefinition)
+            {
+                prerequisites.GeneratedColumnsComplete = true;
+            }
 
             foreach (var column in intent.Definition.Columns)
             {
-                prerequisites.Columns[column.Name] = ProjectedColumn.From(
-                    column,
-                    addedToExistingTable: false);
+                prerequisites.Columns[column.Name] = ProjectedColumn.From(column, addedToExistingTable: false);
             }
 
             CaptureConstraintPrerequisites(prerequisites, intent.Definition, liveAnalysis);
@@ -260,6 +274,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             _projectedColumnDropOnlyTables?.Remove(key);
             _projectedForeignKeyDropOnlyTables?.Remove(key);
             _projectedIntrinsicColumnSourceTables?.Remove(key);
+            _projectedIndexDropOnlyTables?.Remove(key);
             _projectedChangedColumns.Remove(key);
             RemoveProjectedColumnDefinitions(intent.Table, intent.Schema);
             _projectedMissingTables.Add(key);
@@ -302,11 +317,7 @@ internal sealed partial class SafeMigrationPreflightProjection
                 _projectedUnknownTableStructures.Add(target);
             }
 
-            RenameProjectedTableColumnDefinitions(
-                intent.Name,
-                intent.Schema,
-                targetTable,
-                targetSchema);
+            RenameProjectedTableColumnDefinitions(intent.Name, intent.Schema, targetTable, targetSchema);
 
             if (_projectedDataMutationTables.Remove(source))
             {
@@ -391,7 +402,10 @@ internal sealed partial class SafeMigrationPreflightProjection
             && _renamedTableAnalyzer is not null)
         {
             return _renamedTableAnalyzer.TryGetRenamedTableAnalysis(
-                operation, source.Table, source.Schema, out analysis);
+                operation,
+                source.Table,
+                source.Schema,
+                out analysis);
         }
 
         analysis = null;

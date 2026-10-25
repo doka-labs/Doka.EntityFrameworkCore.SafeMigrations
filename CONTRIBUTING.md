@@ -7,7 +7,7 @@ unredacted migration reports in issues, pull requests, or test fixtures.
 
 ## Prerequisites
 
-- .NET SDK 10.0.401, selected by `global.json`
+- .NET SDK 10.0.402, selected by `global.json`
 - Docker for MySQL, MariaDB, PostgreSQL, and SQL Server tests; SQLite tests run
   in-process
 - Bash, `jq`, `curl`, `unzip`, and `rsync` for engineering gates
@@ -72,23 +72,51 @@ add hardware-dependent duration gates. Local elapsed times are informational;
 test discovery, overlap, database isolation and cleanup are verified contracts.
 Native SQL Server qualification still requires the declared x86-64 engine cells.
 
-The default local engines are MariaDB 11.8.8 and PostgreSQL
+The default local engines are MariaDB 12.3.3 and PostgreSQL
 18.6. Select another qualified image with:
 
 ```bash
 SAFE_MIGRATIONS_MYSQL_ENGINE=mysql \
-SAFE_MIGRATIONS_MYSQL_VERSION=8.4.11 \
-SAFE_MIGRATIONS_MYSQL_IMAGE='mysql:8.4.11@sha256:b3b90af2a6552ae30c266fdb7d5dd55f3afb72404bb78d37fe8a23eb857fd3fb' \
+SAFE_MIGRATIONS_MYSQL_VERSION=8.4.13 \
+SAFE_MIGRATIONS_MYSQL_IMAGE='mysql:8.4.13@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69' \
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj --configuration Release
 ```
 
 or:
 
 ```bash
-SAFE_MIGRATIONS_POSTGRES_IMAGE='postgres:14.24@sha256:2fdfb9b432d4a73bd3eea3d989752c1e669b68d502347e0bfd2cc6d709f3d6b4' \
+SAFE_MIGRATIONS_POSTGRES_IMAGE='postgres:14.24@sha256:8ab94f61668dc73bbab4dc13273ff2fc37e635536af62aef5306a49a9682a446' \
 SAFE_MIGRATIONS_POSTGRES_VERSION=14.24 \
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj --configuration Release
 ```
+
+### Test structure and formatting
+
+Use explicit Arrange, Act, and Assert sections once each, in that order. Each
+test exposes one independently observable contract; separate unrelated positive,
+negative, and validation cases. Keep actual execution in Act, including the
+delegate passed to an exception assertion, rather than hiding it in an assertion
+helper. Theory inputs need stable, discoverable case identities.
+
+A coherent migration, replay, recovery, mutation/snapshot, or concurrency
+scenario may contain multiple operations when their ordering is the contract.
+Do not split it into order-dependent tests. Share expensive immutable setup when
+safe, but keep database leases and mutable test state independently owned; a new
+assertion must not repeat a large seed or start another container unnecessarily.
+
+Document public APIs and internal helpers where XML documentation helps IDE
+users. Explain non-obvious safety, ownership, and performance decisions with
+focused WHY comments. Separate logical groups and AAA sections with blank lines;
+also leave a blank line after control-flow blocks, multiline initializations,
+and before returns except in tiny return-only blocks. Follow `.editorconfig`
+without running `dotnet format whitespace`; use the verify-only style/import
+checks below.
+
+Keep synchronous lifecycle tests synchronous when that is the behavior under
+test. If an IDE inspection suggests replacing that intentional path, use only a
+documented, single-use test-local inspection annotation such as
+`// ReSharper disable once UseAwaitUsing`. Do not suppress compiler/analyzer
+warnings or disable inspections across a file or test family.
 
 ## Required engineering gates
 
@@ -107,7 +135,9 @@ dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Be
 dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj --configuration Release --no-build --no-restore -- --report-only
 dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks.csproj --configuration Release --no-build --no-restore -- --report-only
 dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks.csproj --configuration Release --no-build --no-restore -- --report-only
+python3 -m unittest eng/tests/test_parallel_test_configuration.py -v
 python3 -m unittest eng/tests/test_verify_coverage.py -v
+bash eng/tests/test-ef-tooling.sh
 bash eng/tests/test-release-version.sh
 bash -e -c 'while IFS= read -r -d "" script; do bash -n "$script"; done < <(find eng -type f -name "*.sh" -print0)'
 dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style --severity warn --verify-no-changes --no-restore
@@ -120,6 +150,21 @@ and failed budget verdicts in JSON and console output without rejecting the run.
 Invalid configuration, incomplete measurements, execution exceptions, and output
 failures still fail. Omit `--report-only` for an explicitly strict local budget
 comparison; benchmark limits must not be raised merely to make a run pass.
+
+### Maintenance attribution
+
+The four provider benchmark projects also accept `--maintenance-attribution`.
+For example, after a fresh matching Release build:
+
+```bash
+SAFE_MIGRATIONS_ATTRIBUTION_SOURCE=candidate dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj --configuration Release --no-build --no-restore -- --maintenance-attribution --output artifacts/performance/maintenance-postgresql.json
+```
+
+Retain the baseline/candidate revision or diff alongside the source-labelled JSON.
+It records raw allocation, elapsed, checksum and provider-specific output/transport
+evidence for prepared client workloads. Deterministic ADO probes are not native
+engine qualification. Elapsed times are informational; invalid evidence,
+structural/output mismatches and execution failures still fail the command.
 
 Live pooled-runner p95 comparisons for server providers are also informational.
 Their 20 measured calls and `2 * clean p95 + 250 ms` comparison remain unchanged;
@@ -206,7 +251,8 @@ review or add a build dependency.
 
 ## Pull requests
 
-Target `main`, keep the change cohesive, and include exact commands and results
+Target `main`, or the exact reviewed maintenance line for an applicable port,
+keep the change cohesive, and include exact commands and results
 in the pull request. Use the PR template to distinguish executed checks from
 checks not run and explain genuinely unaffected areas. Do not claim support
 from a build-only result or treat a default MariaDB run as MySQL qualification.
@@ -217,6 +263,16 @@ Changes to engine behavior or dependencies need primary-source references and
 positive/negative regression evidence. Workflow and release changes must also
 verify their real upstream Action contracts and distinguish local tests from
 hosted execution. Do not create a release tag or publish a package to test a PR.
+For workflow edits, run `python3 eng/verify-workflow-concurrency.py --actionlint actionlint`.
+GitHub supports concurrency queue retention, but actionlint 1.7.12 does not yet
+recognize that field. The adapter first validates its exact placement/value and
+non-cancellation contract, then handles only that exact unsupported-schema
+diagnostic; unrelated lint errors remain failures. Its positive/negative tests
+run in the engineering gate. Remove the compatibility path once upstream
+actionlint supports queue; do not use a general lint ignore.
+Registered preparation lines receive the same Required Checks before activation;
+passing CI does not grant publication rights. Follow [Release lines](docs/operations/release-lines.md)
+for line preparation, dependency servicing and separate activation approval.
 
 Use [GitHub Issues](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/issues)
 for bugs, feature requests, and usage questions through the corresponding form.

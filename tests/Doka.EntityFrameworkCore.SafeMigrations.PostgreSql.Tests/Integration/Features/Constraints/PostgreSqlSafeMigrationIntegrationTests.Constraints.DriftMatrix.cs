@@ -762,222 +762,201 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         }
     }
 
+    /// <summary>Applies and replays the complete canonical constraint set without drift.</summary>
     [Fact]
-    public async Task ObservableConstraintFacetDrift_IsRejectedOneFieldAtATime()
+    public async Task ObservableConstraintFacets_ApplyAndReplayCanonicalDefinition()
+    {
+        // Arrange
+        var connectionString = await CreateConstraintMatrixTablesAsync();
+        await using var context = CreateContext(connectionString);
+        var canonical = CreateConstraintMatrixOperations(context.Database.ProviderName!);
+
+        // Act
+        await ExecuteOperationsAsync(context, canonical);
+        await ExecuteOperationsAsync(context, canonical);
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
+            context, canonical, new SafeMigrationRunOptions("constraint-matrix-canonical"));
+
+        // Assert
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.All(report.Assessments,
+            static assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
+    }
+
+    /// <summary>Reports strict matching, semantic aliases and strict definition drift independently.</summary>
+    /// <param name="caseId">The stable strict-table contract identifier.</param>
+    [Theory]
+    [InlineData("matching")]
+    [InlineData("semantic-aliases")]
+    [InlineData("delete-action-drift")]
+    public async Task ObservableConstraintFacets_StrictDefinitionContract(string caseId)
+    {
+        // Arrange
+        var connectionString = await CreateConstraintMatrixTablesAsync();
+        await using var context = CreateContext(connectionString);
+        await ApplyConstraintMatrixWithAliasesAsync(context, connectionString);
+        var expectedState = caseId == "delete-action-drift"
+            ? SafeMigrationObservedState.Different
+            : SafeMigrationObservedState.Matching;
+
+        var definition = caseId switch
+        {
+            "matching" => CreateStrictConstraintMatrixTable(ReferentialAction.SetNull),
+            "semantic-aliases" => CreateStrictConstraintMatrixTable(ReferentialAction.SetNull, useAliasNames: true),
+            "delete-action-drift" => CreateStrictConstraintMatrixTable(ReferentialAction.Cascade),
+            _ => throw new ArgumentOutOfRangeException(nameof(caseId), caseId, "Unknown strict contract."),
+        };
+
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureTable(definition, SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+
+        // Act
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
+            context, builder.Operations, new SafeMigrationRunOptions($"constraint-matrix-strict-{caseId}"));
+
+        // Assert
+        Assert.Equal(expectedState == SafeMigrationObservedState.Matching
+            ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(expectedState, Assert.Single(report.Assessments).ObservedState);
+        if (caseId == "semantic-aliases")
+        {
+            Assert.DoesNotContain(report.UnexpectedObjects,
+                static unexpected => StringComparer.Ordinal.Equals(unexpected.Table, "constraint_matrix_children")
+                    && unexpected.ObjectKind is SafeMigrationDatabaseObjectKind.UniqueConstraint
+                        or SafeMigrationDatabaseObjectKind.CheckConstraint
+                        or SafeMigrationDatabaseObjectKind.ForeignKey);
+        }
+    }
+
+    /// <summary>Rejects one independently selectable physical constraint facet mismatch.</summary>
+    /// <param name="caseId">The stable single-facet drift identifier.</param>
+    [Theory]
+    [InlineData("primary-key-order")]
+    [InlineData("unique-column-order")]
+    [InlineData("check-expression")]
+    [InlineData("dependent-column-order")]
+    [InlineData("principal-table")]
+    [InlineData("principal-column-order")]
+    [InlineData("update-action")]
+    [InlineData("delete-action")]
+    public async Task ObservableConstraintFacetDrift_IsRejected(string caseId)
+    {
+        // Arrange
+        var connectionString = await CreateConstraintMatrixTablesAsync();
+        await using var context = CreateContext(connectionString);
+        await ApplyConstraintMatrixWithAliasesAsync(context, connectionString);
+        var operations = CreateConstraintMatrixDrift(context.Database.ProviderName!, caseId);
+
+        // Act
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
+            context, operations, new SafeMigrationRunOptions($"constraint-matrix-drift-{caseId}"));
+
+        // Assert
+        var assessment = Assert.Single(report.Assessments);
+        Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+        Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
+    }
+
+    /// <summary>Owns one tiny isolated database per independent contract, without another container or seed.</summary>
+    private async Task<string> CreateConstraintMatrixTablesAsync()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(
-            connectionString,
+        await ExecuteSqlAsync(connectionString,
             "CREATE TABLE constraint_matrix_parents ("
-            + "id integer NOT NULL, alternate_id integer NOT NULL, "
-            + "PRIMARY KEY (id, alternate_id)); "
+            + "id integer NOT NULL, alternate_id integer NOT NULL, PRIMARY KEY (id, alternate_id)); "
             + "CREATE TABLE constraint_matrix_other_parents ("
-            + "id integer NOT NULL, alternate_id integer NOT NULL, "
-            + "PRIMARY KEY (id, alternate_id)); "
+            + "id integer NOT NULL, alternate_id integer NOT NULL, PRIMARY KEY (id, alternate_id)); "
             + "CREATE TABLE constraint_matrix_children ("
             + "id integer NOT NULL, alternate_id integer NOT NULL, "
             + "code character varying(30) NULL, alternate_code character varying(30) NULL, "
             + "quantity integer NOT NULL, parent_id integer NULL, alternate_parent_id integer NULL);");
-        await using var context = CreateContext(connectionString);
-        var canonical = new MigrationBuilder(context.Database.ProviderName!);
-        canonical.AddPrimaryKeyIfNotExists(
-            "pk_constraint_matrix_children",
-            "constraint_matrix_children",
+
+        return connectionString;
+    }
+
+    /// <summary>Builds the canonical constraints in their original primary/unique/check/foreign-key order.</summary>
+    private static List<MigrationOperation> CreateConstraintMatrixOperations(string providerName)
+    {
+        var builder = new MigrationBuilder(providerName);
+        builder.AddPrimaryKeyIfNotExists("pk_constraint_matrix_children", "constraint_matrix_children",
             ["id", "alternate_id"]);
-        canonical.AddUniqueConstraintIfNotExists(
-            "uq_constraint_matrix_code",
-            "constraint_matrix_children",
+        builder.AddUniqueConstraintIfNotExists("uq_constraint_matrix_code", "constraint_matrix_children",
             ["code", "alternate_code"]);
-        canonical.EnsureCheckConstraint(
-            ExpectedCheckConstraintDefinition.FromExpression(
-                "ck_constraint_matrix_quantity",
-                "constraint_matrix_children",
-                SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)),
+        builder.EnsureCheckConstraint(ExpectedCheckConstraintDefinition.FromExpression(
+            "ck_constraint_matrix_quantity", "constraint_matrix_children",
+            SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0)),
             SafeMigrationPolicy.ThrowIfDifferent);
-        canonical.AddForeignKeyIfNotExists(
-            "fk_constraint_matrix_parent",
-            "constraint_matrix_children",
-            ["parent_id", "alternate_parent_id"],
-            "constraint_matrix_parents",
-            ["id", "alternate_id"],
-            onUpdate: ReferentialAction.Cascade,
-            onDelete: ReferentialAction.SetNull);
+        builder.AddForeignKeyIfNotExists("fk_constraint_matrix_parent", "constraint_matrix_children",
+            ["parent_id", "alternate_parent_id"], "constraint_matrix_parents", ["id", "alternate_id"],
+            onUpdate: ReferentialAction.Cascade, onDelete: ReferentialAction.SetNull);
 
-        await ExecuteOperationsAsync(context, canonical.Operations);
-        await ExecuteOperationsAsync(context, canonical.Operations);
+        return builder.Operations;
+    }
 
-        var canonicalReport = await context
-            .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, canonical.Operations, new SafeMigrationRunOptions("constraint-matrix-canonical"));
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, canonicalReport.Status);
-        Assert.All(
-            canonicalReport.Assessments,
-            assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
-
-        await ExecuteSqlAsync(
-            connectionString,
+    /// <summary>Restores the same duplicate semantic aliases before each independent drift contract.</summary>
+    private static async Task ApplyConstraintMatrixWithAliasesAsync(DbContext context, string connectionString)
+    {
+        await ExecuteOperationsAsync(context, CreateConstraintMatrixOperations(context.Database.ProviderName!));
+        await ExecuteSqlAsync(connectionString,
             "ALTER TABLE constraint_matrix_children "
             + "ADD CONSTRAINT uq_constraint_matrix_duplicate UNIQUE (code, alternate_code), "
             + "ADD CONSTRAINT ck_constraint_matrix_duplicate CHECK (quantity >= 0), "
             + "ADD CONSTRAINT fk_constraint_matrix_duplicate "
             + "FOREIGN KEY (parent_id, alternate_parent_id) "
-            + "REFERENCES constraint_matrix_parents (id, alternate_id) "
-            + "ON UPDATE CASCADE ON DELETE SET NULL;");
+            + "REFERENCES constraint_matrix_parents (id, alternate_id) ON UPDATE CASCADE ON DELETE SET NULL;");
+    }
 
-        var strictDefinition = CreateStrictConstraintMatrixTable(ReferentialAction.SetNull);
-        var strict = new MigrationBuilder(context.Database.ProviderName!);
-        strict.EnsureTable(
-            strictDefinition,
-            SafeMigrationTableMode.StrictDefinition,
-            SafeMigrationPolicy.ThrowIfDifferent);
-
-        var strictReport = await context
-            .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, strict.Operations, new SafeMigrationRunOptions("constraint-matrix-strict"));
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, strictReport.Status);
-        Assert.Equal(
-            SafeMigrationObservedState.Matching,
-            Assert.Single(strictReport.Assessments)
-                .ObservedState);
-
-        var strictAliases = new MigrationBuilder(context.Database.ProviderName!);
-        strictAliases.EnsureTable(
-            CreateStrictConstraintMatrixTable(ReferentialAction.SetNull, useAliasNames: true),
-            SafeMigrationTableMode.StrictDefinition,
-            SafeMigrationPolicy.ThrowIfDifferent);
-
-        var strictAliasReport = await context
-            .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(
-                context,
-                strictAliases.Operations,
-                new SafeMigrationRunOptions("constraint-matrix-strict-aliases"));
-
-        Assert.Equal(SafeMigrationReportStatus.Ready, strictAliasReport.Status);
-        Assert.Equal(
-            SafeMigrationObservedState.Matching,
-            Assert.Single(strictAliasReport.Assessments)
-                .ObservedState);
-        Assert.DoesNotContain(
-            strictAliasReport.UnexpectedObjects,
-            static unexpected => StringComparer.Ordinal.Equals(unexpected.Table, "constraint_matrix_children")
-                && (unexpected.ObjectKind is SafeMigrationDatabaseObjectKind.UniqueConstraint
-                    or SafeMigrationDatabaseObjectKind.CheckConstraint
-                    or SafeMigrationDatabaseObjectKind.ForeignKey));
-
-        var strictDrift = new MigrationBuilder(context.Database.ProviderName!);
-        strictDrift.EnsureTable(
-            CreateStrictConstraintMatrixTable(ReferentialAction.Cascade),
-            SafeMigrationTableMode.StrictDefinition,
-            SafeMigrationPolicy.ThrowIfDifferent);
-
-        var strictDriftReport = await context
-            .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(
-                context,
-                strictDrift.Operations,
-                new SafeMigrationRunOptions("constraint-matrix-strict-drift"));
-
-        Assert.Equal(SafeMigrationReportStatus.Blocked, strictDriftReport.Status);
-        Assert.Equal(
-            SafeMigrationObservedState.Different,
-            Assert.Single(strictDriftReport.Assessments)
-                .ObservedState);
-
-        var variants = new List<IReadOnlyList<MigrationOperation>>();
-
-        var primaryKeyOrder = new MigrationBuilder(context.Database.ProviderName!);
-        primaryKeyOrder.AddPrimaryKeyIfNotExists(
-            "pk_constraint_matrix_children",
-            "constraint_matrix_children",
-            ["alternate_id", "id"]);
-        variants.Add(primaryKeyOrder.Operations);
-
-        var uniqueColumnOrder = new MigrationBuilder(context.Database.ProviderName!);
-        uniqueColumnOrder.AddUniqueConstraintIfNotExists(
-            "uq_constraint_matrix_code",
-            "constraint_matrix_children",
-            ["alternate_code", "code"]);
-        variants.Add(uniqueColumnOrder.Operations);
-
-        var checkExpression = new MigrationBuilder(context.Database.ProviderName!);
-        checkExpression.EnsureCheckConstraint(
-            ExpectedCheckConstraintDefinition.FromExpression(
-                "ck_constraint_matrix_quantity",
-                "constraint_matrix_children",
-                SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThan, 0)),
-            SafeMigrationPolicy.ThrowIfDifferent);
-        variants.Add(checkExpression.Operations);
-
-        var dependentColumnOrder = new MigrationBuilder(context.Database.ProviderName!);
-        dependentColumnOrder.AddForeignKeyIfNotExists(
-            "fk_constraint_matrix_parent",
-            "constraint_matrix_children",
-            ["alternate_parent_id", "parent_id"],
-            "constraint_matrix_parents",
-            ["id", "alternate_id"],
-            onUpdate: ReferentialAction.Cascade,
-            onDelete: ReferentialAction.SetNull);
-        variants.Add(dependentColumnOrder.Operations);
-
-        var principalTable = new MigrationBuilder(context.Database.ProviderName!);
-        principalTable.AddForeignKeyIfNotExists(
-            "fk_constraint_matrix_parent",
-            "constraint_matrix_children",
-            ["parent_id", "alternate_parent_id"],
-            "constraint_matrix_other_parents",
-            ["id", "alternate_id"],
-            onUpdate: ReferentialAction.Cascade,
-            onDelete: ReferentialAction.SetNull);
-        variants.Add(principalTable.Operations);
-
-        var principalColumnOrder = new MigrationBuilder(context.Database.ProviderName!);
-        principalColumnOrder.AddForeignKeyIfNotExists(
-            "fk_constraint_matrix_parent",
-            "constraint_matrix_children",
-            ["parent_id", "alternate_parent_id"],
-            "constraint_matrix_parents",
-            ["alternate_id", "id"],
-            onUpdate: ReferentialAction.Cascade,
-            onDelete: ReferentialAction.SetNull);
-        variants.Add(principalColumnOrder.Operations);
-
-        var updateAction = new MigrationBuilder(context.Database.ProviderName!);
-        updateAction.AddForeignKeyIfNotExists(
-            "fk_constraint_matrix_parent",
-            "constraint_matrix_children",
-            ["parent_id", "alternate_parent_id"],
-            "constraint_matrix_parents",
-            ["id", "alternate_id"],
-            onUpdate: ReferentialAction.NoAction,
-            onDelete: ReferentialAction.SetNull);
-        variants.Add(updateAction.Operations);
-
-        var deleteAction = new MigrationBuilder(context.Database.ProviderName!);
-        deleteAction.AddForeignKeyIfNotExists(
-            "fk_constraint_matrix_parent",
-            "constraint_matrix_children",
-            ["parent_id", "alternate_parent_id"],
-            "constraint_matrix_parents",
-            ["id", "alternate_id"],
-            onUpdate: ReferentialAction.Cascade,
-            onDelete: ReferentialAction.Cascade);
-        variants.Add(deleteAction.Operations);
-
-        foreach (var operations in variants)
+    /// <summary>Changes one original physical facet without sharing mutable database state between cases.</summary>
+    private static List<MigrationOperation> CreateConstraintMatrixDrift(string providerName, string caseId)
+    {
+        var builder = new MigrationBuilder(providerName);
+        switch (caseId)
         {
-            var report = await context
-                .GetService<ISafeMigrationRunner>()
-                .AnalyzeAsync(context, operations, new SafeMigrationRunOptions("constraint-matrix-drift"));
-
-            var assessment = Assert.Single(report.Assessments);
-
-            Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-            Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-            Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
+            case "primary-key-order":
+                builder.AddPrimaryKeyIfNotExists("pk_constraint_matrix_children", "constraint_matrix_children",
+                    ["alternate_id", "id"]);
+                break;
+            case "unique-column-order":
+                builder.AddUniqueConstraintIfNotExists("uq_constraint_matrix_code", "constraint_matrix_children",
+                    ["alternate_code", "code"]);
+                break;
+            case "check-expression":
+                builder.EnsureCheckConstraint(ExpectedCheckConstraintDefinition.FromExpression(
+                    "ck_constraint_matrix_quantity", "constraint_matrix_children",
+                    SqlColumnAndInt("quantity", SafeMigrationSqlBinaryOperator.GreaterThan, 0)),
+                    SafeMigrationPolicy.ThrowIfDifferent);
+                break;
+            case "dependent-column-order":
+                builder.AddForeignKeyIfNotExists("fk_constraint_matrix_parent", "constraint_matrix_children",
+                    ["alternate_parent_id", "parent_id"], "constraint_matrix_parents", ["id", "alternate_id"],
+                    onUpdate: ReferentialAction.Cascade, onDelete: ReferentialAction.SetNull);
+                break;
+            case "principal-table":
+                builder.AddForeignKeyIfNotExists("fk_constraint_matrix_parent", "constraint_matrix_children",
+                    ["parent_id", "alternate_parent_id"], "constraint_matrix_other_parents", ["id", "alternate_id"],
+                    onUpdate: ReferentialAction.Cascade, onDelete: ReferentialAction.SetNull);
+                break;
+            case "principal-column-order":
+                builder.AddForeignKeyIfNotExists("fk_constraint_matrix_parent", "constraint_matrix_children",
+                    ["parent_id", "alternate_parent_id"], "constraint_matrix_parents", ["alternate_id", "id"],
+                    onUpdate: ReferentialAction.Cascade, onDelete: ReferentialAction.SetNull);
+                break;
+            case "update-action":
+                builder.AddForeignKeyIfNotExists("fk_constraint_matrix_parent", "constraint_matrix_children",
+                    ["parent_id", "alternate_parent_id"], "constraint_matrix_parents", ["id", "alternate_id"],
+                    onUpdate: ReferentialAction.NoAction, onDelete: ReferentialAction.SetNull);
+                break;
+            case "delete-action":
+                builder.AddForeignKeyIfNotExists("fk_constraint_matrix_parent", "constraint_matrix_children",
+                    ["parent_id", "alternate_parent_id"], "constraint_matrix_parents", ["id", "alternate_id"],
+                    onUpdate: ReferentialAction.Cascade, onDelete: ReferentialAction.Cascade);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(caseId), caseId, "Unknown constraint drift case.");
         }
+
+        return builder.Operations;
     }
 
     private static ExpectedTableDefinition CreateStrictConstraintMatrixTable(

@@ -24,6 +24,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         cancellationToken.ThrowIfCancellationRequested();
 
         List<int>? ordinals = null;
+        // WHY: Select required-add plans using their matching short-circuit state ordinals.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < plans.Length; ordinal++)
         {
             if (states[ordinal] is null

@@ -16,8 +16,11 @@ internal static class SafeMigrationColumnRepairHelper
         // Unknown and non-null SQL defaults retain their native provider contract.
         return expected.IsNullable
             || (expected.DefaultValue.Kind != SafeMigrationDefaultValueKind.None
-                && !(expected.DefaultValue.Kind == SafeMigrationDefaultValueKind.Sql
-                    && expected.DefaultValue.StructuredExpression is SafeMigrationSqlLiteralExpression { Value: null }))
+                && !(expected.DefaultValue is
+                {
+                    Kind: SafeMigrationDefaultValueKind.Sql,
+                    StructuredExpression: SafeMigrationSqlLiteralExpression { Value: null }
+                }))
             || expected.ComputedColumnSql is not null
             || expected.ComputedExpression is not null;
     }
@@ -52,6 +55,7 @@ internal static class SafeMigrationColumnRepairHelper
             && oldDefinition.Scale == targetDefinition.Scale
             && Equals(oldDefinition.Collation, targetDefinition.Collation)
             && StringComparer.Ordinal.Equals(oldDefinition.ComputedColumnSql, targetDefinition.ComputedColumnSql)
+            && StringComparer.Ordinal.Equals(oldDefinition.CapturedComputedSql, targetDefinition.CapturedComputedSql)
             && SafeMigrationSqlExpressionContract.Equivalent(
                 oldDefinition.ComputedExpression,
                 targetDefinition.ComputedExpression)
@@ -64,8 +68,7 @@ internal static class SafeMigrationColumnRepairHelper
     {
         ArgumentNullException.ThrowIfNull(targetDefinition);
 
-        return HasRepairableIntrinsicShape(targetDefinition)
-            && targetDefinition.ProviderAnnotations.Count == 0;
+        return HasRepairableIntrinsicShape(targetDefinition) && targetDefinition.ProviderAnnotations.Count == 0;
     }
 
     /// <summary>
@@ -93,33 +96,112 @@ internal static class SafeMigrationColumnRepairHelper
 
     private static bool IsProvablyNonNull(
         SafeMigrationSqlExpression expression
+    )
+    {
+        var parents = default(SafeMigrationWorkStack<NonNullProofFrame>);
+        var current = expression;
+
+        try
+        {
+            while (true)
+            {
+                if (current is SafeMigrationSqlUnaryExpression unary)
+                {
+                    current = unary.Operand;
+                    continue;
+                }
+
+                if (current is SafeMigrationSqlCollateExpression collate)
+                {
+                    current = collate.Operand;
+                    continue;
+                }
+
+                var any = current is SafeMigrationSqlFunctionExpression function
+                    && StringComparer.OrdinalIgnoreCase.Equals(function.Name, "COALESCE");
+                if (current is SafeMigrationSqlBetweenExpression or SafeMigrationSqlInExpression || any)
+                {
+                    var first = NonNullProofChild(current, 0);
+                    if (first is not null)
+                    {
+                        if (NonNullProofChild(current, 1) is not null)
+                        {
+                            parents.Push(new NonNullProofFrame(current, 1, any));
+                        }
+
+                        current = first;
+                        continue;
+                    }
+                }
+
+                var result = current switch
+                {
+                    SafeMigrationSqlLiteralExpression value => value.Value is not null,
+                    // WHY: Even non-null operands can yield NULL for division by zero.
+                    SafeMigrationSqlBinaryExpression => false,
+                    SafeMigrationSqlNullTestExpression => true,
+                    // WHY: Conversion and CASE result rules are provider contracts,
+                    // not a provider-neutral proof that authorizes backfilling rows.
+                    SafeMigrationSqlCastExpression or SafeMigrationSqlCaseExpression => false,
+                    SafeMigrationSqlCurrentValueExpression => true,
+                    SafeMigrationSqlIdentifierExpression
+                        or SafeMigrationSqlFunctionExpression
+                        or SafeMigrationSqlProviderFragmentExpression
+                        or SafeMigrationSqlOpaqueExpression => false,
+                    _ => throw new UnreachableException(),
+                };
+
+                while (true)
+                {
+                    if (!parents.TryPop(out var parent))
+                    {
+                        return result;
+                    }
+
+                    // WHY: Preserve Any/All short-circuiting. A decisive child
+                    // must not inspect an unsupported or unknown later subtree.
+                    if (result == parent.Any)
+                    {
+                        continue;
+                    }
+
+                    current = NonNullProofChild(parent.Expression, parent.Ordinal)!;
+                    if (NonNullProofChild(parent.Expression, parent.Ordinal + 1) is not null)
+                    {
+                        parents.Push(parent with { Ordinal = parent.Ordinal + 1 });
+                    }
+
+                    break;
+                }
+            }
+        }
+        finally
+        {
+            parents.Dispose();
+        }
+    }
+
+    /// <summary>Identifies only the children that the existing structural proof is permitted to inspect.</summary>
+    private static SafeMigrationSqlExpression? NonNullProofChild(
+        SafeMigrationSqlExpression expression,
+        long ordinal
     ) => expression switch
     {
-        SafeMigrationSqlLiteralExpression value => value.Value is not null,
-        SafeMigrationSqlUnaryExpression value => IsProvablyNonNull(value.Operand),
-        // WHY: Even non-null operands can yield NULL for division by zero.
-        SafeMigrationSqlBinaryExpression => false,
-        SafeMigrationSqlNullTestExpression => true,
-        SafeMigrationSqlBetweenExpression value =>
-            IsProvablyNonNull(value.Operand)
-            && IsProvablyNonNull(value.Lower)
-            && IsProvablyNonNull(value.Upper),
-        SafeMigrationSqlInExpression value =>
-            IsProvablyNonNull(value.Operand) && value.Values.All(IsProvablyNonNull),
-        SafeMigrationSqlFunctionExpression value
-            when StringComparer.OrdinalIgnoreCase.Equals(value.Name, "COALESCE") =>
-                value.Arguments.Any(IsProvablyNonNull),
-        // WHY: Cast behavior depends on the provider and SQL mode. An invalid
-        // conversion must never authorize a nullability backfill.
-        SafeMigrationSqlCastExpression => false,
-        SafeMigrationSqlCollateExpression value => IsProvablyNonNull(value.Operand),
-        SafeMigrationSqlCurrentValueExpression => true,
-        SafeMigrationSqlIdentifierExpression
-            or SafeMigrationSqlFunctionExpression
-            or SafeMigrationSqlProviderFragmentExpression
-            or SafeMigrationSqlOpaqueExpression => false,
-        _ => throw new UnreachableException(),
+        SafeMigrationSqlBetweenExpression value when ordinal == 0 => value.Operand,
+        SafeMigrationSqlBetweenExpression value when ordinal == 1 => value.Lower,
+        SafeMigrationSqlBetweenExpression value when ordinal == 2 => value.Upper,
+        SafeMigrationSqlInExpression value when ordinal == 0 => value.Operand,
+        SafeMigrationSqlInExpression value when ordinal <= value.Values.Count => value.Values[(int)(ordinal - 1)],
+        SafeMigrationSqlFunctionExpression value when ordinal < value.Arguments.Count => value.Arguments[(int)ordinal],
+        _ => null,
     };
+
+    /// <summary>Resumes an ordered conjunction or disjunction without materializing all its pending siblings.</summary>
+    private readonly record struct NonNullProofFrame(
+        SafeMigrationSqlExpression Expression,
+        long Ordinal,
+        bool Any
+    );
 
     /// <summary>
     /// Determines whether provider-neutral column facets can be converged after
@@ -137,10 +219,7 @@ internal static class SafeMigrationColumnRepairHelper
         // provider can prove whether its annotations affect physical DDL.
         return targetDefinition is
         {
-            IsRowVersion: false,
-            ComputedColumnSql: null,
-            ComputedExpression: null,
-            IsStored: null,
+            IsRowVersion: false, ComputedColumnSql: null, ComputedExpression: null, IsStored: null,
         };
     }
 }

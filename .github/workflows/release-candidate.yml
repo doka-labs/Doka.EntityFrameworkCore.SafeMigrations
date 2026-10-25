@@ -8,6 +8,11 @@ on:
         description: Package version without a leading v, for example 10.0.1.
         required: true
         type: string
+      qualification-only:
+        description: Qualify the selected line without requesting publication or its environment.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -19,11 +24,18 @@ concurrency:
 jobs:
   preflight:
     name: Validate untagged candidate
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     outputs:
       package-version: ${{ steps.version.outputs.package-version }}
       release-tag: ${{ steps.version.outputs.release-tag }}
+      source-ref: ${{ steps.line.outputs.source-ref }}
+      line-artifact-name: ${{ steps.line.outputs.line-artifact-name }}
+      line-sha256: ${{ steps.line.outputs.line-sha256 }}
+      publish-allowed: ${{ steps.line.outputs.publish-allowed }}
+    permissions:
+      contents: read
+      actions: read
     steps:
       - name: Checkout candidate source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -37,26 +49,34 @@ jobs:
           PACKAGE_VERSION: ${{ inputs.version }}
         run: bash eng/validate-release-version.sh "$PACKAGE_VERSION"
 
-      - name: Verify current untagged main source
+      - name: Verify current untagged release-line source
+        id: line
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE_VERSION: ${{ steps.version.outputs.package-version }}
+          QUALIFICATION_ONLY: ${{ inputs.qualification-only }}
+        run: >-
+          python3 -m eng.release.publication preflight
+          --version "$PACKAGE_VERSION"
+          --qualification-only "$QUALIFICATION_ONLY"
+          --output artifacts/release-lines/line.json
+
+      - name: Require the candidate tag to remain absent
         env:
           RELEASE_TAG: ${{ steps.version.outputs.release-tag }}
         run: |
-          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
-            echo "Release candidates must be dispatched from main." >&2
-            exit 1
-          fi
-
-          git fetch --quiet --no-tags origin \
-            +refs/heads/main:refs/remotes/origin/main
-          if [[ "$(git rev-parse refs/remotes/origin/main)" != "$GITHUB_SHA" ]]; then
-            echo "The dispatched commit is no longer current main." >&2
-            exit 1
-          fi
-
           if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
             echo "Candidate qualification must finish before the release tag exists." >&2
             exit 1
           fi
+
+      - name: Retain exact source-line qualification identity
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.line.outputs.line-artifact-name }}
+          path: artifacts/release-lines/line.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Require an unused NuGet version
         env:
@@ -96,7 +116,7 @@ jobs:
     needs:
       - preflight
       - quality-gates
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     outputs:
       provenance_artifact_name: ${{ steps.provenance.outputs.provenance_artifact_name }}
@@ -180,12 +200,18 @@ jobs:
 
   publish:
     name: Verify tag and publish
+    # WHY: Qualification-only must skip the environment-bearing job, not merely its upload steps.
+    if: ${{ !inputs.qualification-only && needs.preflight.outputs.publish-allowed == 'true' }}
     needs:
       - preflight
       - quality-gates
       - attest
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
+    concurrency:
+      group: safe-migrations-publication
+      cancel-in-progress: false
+      queue: max
     environment:
       name: nuget
     permissions:
@@ -196,6 +222,11 @@ jobs:
     env:
       PACKAGE_VERSION: ${{ needs.preflight.outputs.package-version }}
       RELEASE_TAG: ${{ needs.preflight.outputs.release-tag }}
+      LINE_SHA256: ${{ needs.preflight.outputs.line-sha256 }}
+      QUALIFIED_ARTIFACT_NAME: ${{ needs.quality-gates.outputs.qualified-artifact-name }}
+      PROVENANCE_ARTIFACT_NAME: ${{ needs.attest.outputs.provenance_artifact_name }}
+      SAFE_MIGRATIONS_PUBLICATION_LOCK_GROUP: safe-migrations-publication
+      SAFE_MIGRATIONS_PUBLICATION_LOCK_HELD: '1'
     steps:
       - name: Checkout qualified source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -220,18 +251,24 @@ jobs:
           name: ${{ needs.attest.outputs.provenance_artifact_name }}
           path: artifacts/release-provenance
 
+      - name: Download original source-line identity
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.preflight.outputs.line-artifact-name }}
+          path: artifacts/release-lines
+
       - name: Verify source and authorized signed tag
         run: |
-          if [[ "$GITHUB_REF" != "refs/heads/main" \
+          if [[ "$GITHUB_REF" != refs/heads/* \
               || "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]]; then
-            echo "Publication must use the qualified main commit." >&2
+            echo "Publication must use the qualified release-line commit." >&2
             exit 1
           fi
 
           git fetch --quiet --no-tags origin \
-            +refs/heads/main:refs/remotes/origin/main
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
-            echo "The qualified commit is no longer on protected main history." >&2
+            "+$GITHUB_REF:refs/remotes/origin/release-source"
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/release-source; then
+            echo "The qualified commit is no longer on its protected release-line history." >&2
             exit 1
           fi
 
@@ -274,7 +311,7 @@ jobs:
             --repository "$GITHUB_REPOSITORY"
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-candidate.yml"
             --signer-digest "$GITHUB_SHA"
-            --source-ref refs/heads/main
+            --source-ref "$GITHUB_REF"
             --source-digest "$GITHUB_SHA"
           )
           for subject in "${subjects[@]}"; do
@@ -282,6 +319,40 @@ jobs:
           done
 
           bash eng/release-provenance.sh "${provenance_arguments[@]}"
+
+      - name: Admit the exact candidate under current protected-main authority
+        id: admission
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python3 -m eng.release.publication admit
+          --line-file artifacts/release-lines/line.json
+          --line-sha256 "$LINE_SHA256"
+          --qualified-artifact-name "$QUALIFIED_ARTIFACT_NAME"
+          --provenance-artifact-name "$PROVENANCE_ARTIFACT_NAME"
+          --artifact-dir artifacts
+          --output artifacts/release-lines/admission.json
+
+      - name: Retain original publication admission
+        if: steps.admission.outputs.admission-restored != 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.admission.outputs.admission-artifact-name }}
+          path: artifacts/release-lines/admission.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Recheck current permission before creating public draft state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ADMISSION_SHA256: ${{ steps.admission.outputs.admission-sha256 }}
+        run: >-
+          python3 -m eng.release.publication recheck
+          --line-file artifacts/release-lines/line.json
+          --line-sha256 "$LINE_SHA256"
+          --artifact-dir artifacts
+          --admission artifacts/release-lines/admission.json
+          --admission-sha256 "$ADMISSION_SHA256"
 
       - name: Prepare verified GitHub Release draft
         env:
@@ -346,6 +417,18 @@ jobs:
 
             echo "${output_name}_published=$published" >>"$GITHUB_OUTPUT"
           done
+
+      - name: Recheck current permission before NuGet credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ADMISSION_SHA256: ${{ steps.admission.outputs.admission-sha256 }}
+        run: >-
+          python3 -m eng.release.publication recheck
+          --line-file artifacts/release-lines/line.json
+          --line-sha256 "$LINE_SHA256"
+          --artifact-dir artifacts
+          --admission artifacts/release-lines/admission.json
+          --admission-sha256 "$ADMISSION_SHA256"
 
       - name: Request short-lived NuGet.org key
         id: nuget-login
@@ -462,7 +545,14 @@ jobs:
       - name: Publish or verify immutable GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          ADMISSION_SHA256: ${{ steps.admission.outputs.admission-sha256 }}
         run: |
+          python3 -m eng.release.publication recheck \
+            --line-file artifacts/release-lines/line.json \
+            --line-sha256 "$LINE_SHA256" \
+            --artifact-dir artifacts \
+            --admission artifacts/release-lines/admission.json \
+            --admission-sha256 "$ADMISSION_SHA256"
           bash eng/reconcile-github-release.sh \
             publish "$PACKAGE_VERSION" "$RELEASE_TAG"
           echo "SafeMigrations $PACKAGE_VERSION was published and verified." \

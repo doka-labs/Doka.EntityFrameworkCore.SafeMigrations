@@ -10,6 +10,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private string ForeignKeyDataBindingPrerequisites(ExpectedForeignKeyDefinition definition)
     {
         var pairs = new string[definition.Columns.Count];
+        // WHY: Align dependent/principal endpoint parameters and SQL predicate slots by FK key position.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < pairs.Length; index++)
         {
             pairs[index] = "(dependent_column.COLUMN_NAME = " + Literal(definition.Columns[index])
@@ -60,6 +63,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var parts = new string[definition.PrincipalColumns.Count];
         var principalColumns = new string[definition.PrincipalColumns.Count];
 
+        // WHY: Align dependent/principal endpoint parameters and SQL predicate slots by FK key position.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < parts.Length; index++)
         {
             var column = AddLivePrerequisiteParameter(command, definition.PrincipalColumns[index], ref valueBytes);
@@ -74,6 +80,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var collisionOwner = databaseScopedNames ? string.Empty
             : " AND " + BuildRequiredColumnAddOwnerMatches("rc.TABLE_NAME", dependent);
         var localColumns = new string[definition.Columns.Count];
+        // WHY: Align dependent/principal endpoint parameters and SQL predicate slots by FK key position.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < localColumns.Length; index++)
         {
             localColumns[index] = AddLivePrerequisiteParameter(command, definition.Columns[index], ref valueBytes);
@@ -145,6 +154,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     )
     {
         var parts = new string[localColumns.Length];
+        // WHY: Align dependent/principal endpoint parameters and SQL predicate slots by FK key position.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < parts.Length; index++)
         {
             parts[index] = "SUM(CASE WHEN fk_column.ORDINAL_POSITION = "

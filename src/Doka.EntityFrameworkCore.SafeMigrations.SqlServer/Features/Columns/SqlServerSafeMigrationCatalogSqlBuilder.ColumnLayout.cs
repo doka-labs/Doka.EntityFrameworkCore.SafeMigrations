@@ -3,25 +3,31 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 {
     private const string ColumnLayoutScalarFields = "SELECT COUNT_BIG(*) AS column_count, "
-        + "COALESCE(SUM(CASE WHEN ty.name IN (N'bit', N'varchar', N'nvarchar', N'varbinary') "
+        + "COALESCE(SUM(CASE WHEN (c.is_computed=1 AND computed.is_persisted=0) "
+        + "OR ty.name IN (N'bit', N'varchar', N'nvarchar', N'varbinary') "
         + "THEN CONVERT(bigint,0) ELSE CONVERT(bigint,c.max_length) END),0) AS fixed_bytes, "
-        + "COALESCE(SUM(CASE WHEN ty.name=N'bit' THEN 1 ELSE 0 END),0) AS bit_columns, ";
+        + "COALESCE(SUM(CASE WHEN ty.name=N'bit' AND (c.is_computed=0 OR computed.is_persisted=1) "
+        + "THEN 1 ELSE 0 END),0) AS bit_columns, ";
 
     private const string ColumnLayoutRowFields = "COALESCE(SUM(CASE "
-        + "WHEN ty.name IN (N'varchar',N'nvarchar',N'varbinary') THEN 1 ELSE 0 END),0) AS variable_columns, "
+        + "WHEN ty.name IN (N'varchar',N'nvarchar',N'varbinary') "
+        + "AND (c.is_computed=0 OR computed.is_persisted=1) THEN 1 ELSE 0 END),0) AS variable_columns, "
         + "COALESCE(SUM(CASE WHEN ty.name IN (N'varchar',N'nvarchar',N'varbinary') "
         + "AND clustered_key.column_id IS NOT NULL AND c.max_length>24 "
         + "THEN CONVERT(bigint,c.max_length-24) ELSE CONVERT(bigint,0) END),0) AS clustered_variable_extra, ";
 
     private const string ColumnLayoutScalarSource = "COALESCE(SUM(CASE "
         + "WHEN ty.is_user_defined=0 AND ty.is_assembly_type=0 "
-        + "AND c.is_computed=0 AND c.is_sparse=0 AND c.is_column_set=0 AND c.is_filestream=0 "
+        + "AND (c.is_computed=0 OR computed.column_id IS NOT NULL) "
+        + "AND c.is_sparse=0 AND c.is_column_set=0 AND c.is_filestream=0 "
         + "AND c.is_hidden=0 AND c.generated_always_type=0 AND c.is_rowguidcol=0 "
         + "AND ty.name IN (N'bigint',N'binary',N'bit',N'char',N'date',N'datetime',N'datetime2', "
         + "N'datetimeoffset',N'decimal',N'float',N'int',N'money',N'nchar',N'numeric',N'nvarchar', "
         + "N'real',N'smalldatetime',N'smallint',N'smallmoney',N'time',N'timestamp',N'tinyint', "
         + "N'uniqueidentifier',N'varbinary',N'varchar') THEN 0 ELSE 1 END),0) AS unknown_columns "
-        + "FROM sys.columns AS c JOIN sys.types AS ty ON ty.user_type_id=c.user_type_id ";
+        + "FROM sys.columns AS c JOIN sys.types AS ty ON ty.user_type_id=c.user_type_id "
+        + "LEFT JOIN sys.computed_columns AS computed ON computed.object_id=c.object_id "
+        + "AND computed.column_id=c.column_id ";
 
     private const string ColumnLayoutClusteredJoin = "LEFT JOIN "
         + "(SELECT ic.object_id,ic.column_id FROM sys.index_columns AS ic "
@@ -46,6 +52,15 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             layout = default;
 
             return false;
+        }
+
+        if (SqlServerComputedColumnContract.IsComputed(definition) && definition.IsStored != true)
+        {
+            // WHY: A virtual computed column occupies a column id, but not a
+            // stored field, bit slot or variable-offset entry in each row.
+            layout = new ColumnStorageLayout(0, false, false);
+
+            return true;
         }
 
         var bytes = type.Name switch
@@ -162,8 +177,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     internal static bool ColumnAdditionMaterializesRows(
         ExpectedColumnDefinition definition,
         ColumnStorageLayout layout
-    ) => !layout.IsVariable || !definition.IsNullable
-        || definition.DefaultValue.Kind != SafeMigrationDefaultValueKind.None && !definition.DefaultValue.IsNullLiteral;
+    ) => !(SqlServerComputedColumnContract.IsComputed(definition) && definition.IsStored != true)
+        && (!layout.IsVariable || !definition.IsNullable
+            || definition.DefaultValue.Kind != SafeMigrationDefaultValueKind.None
+                && !definition.DefaultValue.IsNullLiteral);
 
     /// <summary>The unavoidable scalar row-storage contribution of an authored column.</summary>
     /// <param name="FixedBytes">Fixed storage in bytes, excluding packed bit storage.</param>

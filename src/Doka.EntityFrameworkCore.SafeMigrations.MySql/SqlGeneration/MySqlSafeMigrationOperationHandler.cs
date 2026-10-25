@@ -11,13 +11,17 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
 
     private const string PreparedApplySqlPrefix =
         "SET @doka_sm_sql = CASE WHEN @doka_sm_action = 'apply' THEN CONVERT(0x";
+
     private const string PreparedRepairSqlPrefix =
         " USING utf8mb4) WHEN @doka_sm_action = 'repair' THEN CONVERT(0x";
+
     private const string PreparedSqlAssignmentSuffix = " USING utf8mb4) ELSE 'DO 0' END;";
     private const string PostconditionBodyPrefix = "SET @doka_sm_post_ok = CASE "
         + "WHEN @doka_sm_action IN ('apply', 'repair') THEN COALESCE((";
+
     private const string PostconditionAssertionSql = "INSERT INTO `__doka_sm_assert` "
         + "SELECT 4, 5, 6, 7, @doka_sm_diag WHERE NOT COALESCE(@doka_sm_post_ok, FALSE);\n";
+
     private const string PostconditionAssignmentSuffix = "), FALSE) ELSE TRUE END;\n";
     private const string PostconditionBodySuffix = PostconditionAssignmentSuffix + PostconditionAssertionSql;
     private const string DecisionAssertionSql = "INSERT INTO `__doka_sm_assert` "
@@ -52,6 +56,10 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
     private Dictionary<ModelTableKey, IReadOnlyList<ExpectedIndexDefinition>>? _modelUniqueIndexes;
     private IModel? _modelUniqueIndexSource;
     private ActionAssignmentCacheEntry? _actionAssignmentCache;
+
+    /// <summary>Retains exact generated/CHECK text bytes without relying on session quote interpretation.</summary>
+    private string RenderStructuredExpression(SafeMigrationSqlExpression expression) =>
+        MySqlCapturedExpressionContract.RenderExecutable(expression, _expressionRenderer);
 
     public MySqlSafeMigrationOperationHandler(
         IRelationalTypeMappingSource typeMappingSource,
@@ -98,6 +106,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             ? GetExpectedTableConstraints(tableIntent, context.Model)
             : null;
 
+        var hasGeneratedDependencyContract = operation.Intent is RenameColumnIntent or DropColumnIntent
+            && (_planCapture.IsActive || _planCapture.HasGenerationContract);
+
         var runtimePlan = _catalogSqlBuilder.Build(
             operation,
             context,
@@ -113,7 +124,18 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             nativeTableAlternative: operation.Intent is EnsureTableIntent nativeTable
                 ? _planCapture.GetGenerationTableAlternative(nativeTable)
                 : null,
-            nativeNullFreeBackfillCondition: _planCapture.GetGenerationNullFreeBackfillCondition(operation));
+            nativeNullFreeBackfillCondition: _planCapture.GetGenerationNullFreeBackfillCondition(operation),
+            generatedColumnDependency: hasGeneratedDependencyContract
+                ? _planCapture.GetGenerationGeneratedColumnDependencyContract(operation) : null,
+            foldedGeneratedColumnDependency: hasGeneratedDependencyContract
+                ? _planCapture.GetGenerationFoldedGeneratedColumnDependencyContract(operation) : null,
+            bindFoldedGeneratedColumnDependency: _planCapture.HasGenerationContract,
+            generatedColumnModelCandidate: hasGeneratedDependencyContract
+                ? _planCapture.GetGenerationGeneratedColumnModelCandidate(operation) : null,
+            foldedGeneratedColumnModelCandidate: hasGeneratedDependencyContract
+                ? _planCapture.GetGenerationFoldedGeneratedColumnModelCandidate(operation) : null,
+            requiresPrimaryKeyReplacementRows: _planCapture.RequiresPrimaryKeyReplacementRows(operation));
+
         if (_planCapture.IsActive)
         {
             _planCapture.Record(context.OperationOrdinal, operation, runtimePlan);
@@ -132,6 +154,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
 
         var postconditionSuffix = BuildPostconditionSuffix(diagnostic, scriptDiagnostics);
         runtimePlan = BindRuntimeBinaryDefaults(runtimePlan);
+        runtimePlan = BindRuntimeIdentifierReferences(runtimePlan);
 
         if (runtimePlan.RequiredColumnAddPlan is { } requiredAddProtocol)
         {
@@ -157,6 +180,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             ? Array.Empty<string>()
             : new string[runtimePlan.ParameterValues.Length];
 
+        // WHY: Render parameter literals into the slots consumed by their original parameter ordinals.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < renderedParameterValues.Length; index++)
         {
             renderedParameterValues[index] = RenderParameterLiteral(runtimePlan.ParameterValues[index]);
@@ -204,6 +230,11 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
                 setupCommands.Add(BuildRequiredColumnAddStatusAssignment(runtimePlan, renderedParameterValues));
                 setupCommands.Add("SET @doka_sm_state = CASE WHEN @doka_sm_add_status = 'complete' "
                     + "THEN 'matching' ELSE @doka_sm_state END;");
+            }
+
+            if (runtimePlan.IdentifierReferenceProofs.Count > 0)
+            {
+                setupCommands.Add(BuildIdentifierReferenceProofEvaluation(runtimePlan));
             }
 
             if (runtimePlan.StateEvaluationGuardFailureExpression is not null)
@@ -297,6 +328,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
             // WHY: Preserve the established single-command hot path. Only
             // genuine provider sequences need command-local preparation in the body.
             providerSetupCount = command.SetupCommands.Count;
+            // WHY: Preserve first-setup identity and provider order while capturing the native SQL-mode snapshot.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var index = 0; index < command.SetupCommands.Count; index++)
             {
                 setupCommands.Add(hasNativeSqlModeCleanup && index == 0
@@ -322,7 +356,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
 
         var cleanupCommands = BuildCleanupCommands(baseline, runtimePlan.NullabilityDataProbe is not null,
             runtimePlan.RequiredColumnAddPlan is not null, hasNativeSqlModeCleanup,
-            runtimePlan.BinaryDefaultProofs.Count);
+            runtimePlan.BinaryDefaultProofs.Count, runtimePlan.IdentifierReferenceProofs);
 
         // WHY: Reduce owned setup transport without joining opaque provider setup, the guarded
         // body or independent cleanup. Fresh checks and exact script text remain operation-local.
@@ -343,162 +377,6 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         return MySqlMigrationOperationResult.Generated([scopedCommand], "safe_guarded_operation");
     }
 
-    private IReadOnlyList<ExpectedIndexDefinition> GetExpectedUniqueIndexes(
-        EnsureTableIntent intent
-    )
-    {
-        if (_planCapture.IsActive)
-        {
-            return _planCapture.GetExpectedUniqueIndexes(
-                intent.Definition.Table,
-                intent.Definition.Schema);
-        }
-
-        if (_planCapture.HasGenerationContract)
-        {
-            return _planCapture.GetGenerationUniqueIndexes(
-                intent.Definition.Table,
-                intent.Definition.Schema);
-        }
-
-        // Direct handler use has no ordered provider-generation scope. EF's
-        // target relational model is the only authoritative fallback there.
-        if (!ReferenceEquals(_designTimeModel, _modelUniqueIndexSource))
-        {
-            _modelUniqueIndexes = BuildModelUniqueIndexes(_designTimeModel);
-            _modelUniqueIndexSource = _designTimeModel;
-        }
-
-        return _modelUniqueIndexes!.GetValueOrDefault(
-                new ModelTableKey(intent.Definition.Table, intent.Definition.Schema))
-            ?? s_emptyUniqueIndexes;
-    }
-
-    private SafeMigrationExpectedTableConstraints? GetExpectedTableConstraints(
-        EnsureTableIntent intent,
-        IModel? operationModel
-    )
-    {
-        if (_planCapture.IsActive)
-        {
-            return _planCapture.GetExpectedTableConstraints(intent);
-        }
-
-        if (_planCapture.HasGenerationContract)
-        {
-            return _planCapture.GetGenerationTableConstraints(intent);
-        }
-
-        // Direct handler use has no ordered provider-generation scope. EF's
-        // target relational model is the only authoritative fallback there.
-        return SafeMigrationExpectedTableConstraints.FromModel(
-            operationModel ?? _designTimeModel,
-            intent.Definition.Table,
-            intent.Definition.Schema,
-            intent.Definition.CheckConstraints);
-    }
-
-    private static Dictionary<ModelTableKey, IReadOnlyList<ExpectedIndexDefinition>> BuildModelUniqueIndexes(
-        IModel model
-    )
-    {
-        var result = new Dictionary<ModelTableKey, IReadOnlyList<ExpectedIndexDefinition>>();
-        foreach (var table in model.GetRelationalModel().Tables)
-        {
-            var indexes = table
-                .Indexes
-                .Where(static index => index.IsUnique)
-                .Select(index => CreateModelIndexDefinition(table, index))
-                .OrderBy(static index => index.Name, StringComparer.Ordinal)
-                .ToArray();
-
-            if (indexes.Length > 0)
-            {
-                result.Add(new ModelTableKey(table.Name, table.Schema), indexes);
-            }
-        }
-
-        return result;
-    }
-
-    private static ExpectedIndexDefinition CreateModelIndexDefinition(
-        ITable table,
-        ITableIndex index
-    )
-    {
-        IReadOnlyList<int>? prefixLengths = null;
-        foreach (var mappedIndex in index.MappedIndexes)
-        {
-            // Doka's migration contract exposes prefix lengths through this
-            // stable provider annotation. Reading the relational model avoids
-            // coupling SafeMigrations to Doka's internal metadata extensions.
-            var mappedPrefixLengths = mappedIndex
-                .FindAnnotation(IndexPrefixLengthAnnotation)
-                ?.Value as IReadOnlyList<int>;
-
-            if (mappedPrefixLengths is null)
-            {
-                continue;
-            }
-
-            if (prefixLengths is not null
-                && !prefixLengths.SequenceEqual(mappedPrefixLengths))
-            {
-                throw new InvalidOperationException(
-                    $"Mapped indexes for '{table.Name}.{index.Name}' have conflicting prefix lengths.");
-            }
-
-            prefixLengths = mappedPrefixLengths;
-        }
-
-        if (prefixLengths is not null
-            && prefixLengths.Count != index.Columns.Count)
-        {
-            throw new InvalidOperationException(
-                $"Index '{table.Name}.{index.Name}' has an invalid prefix-length vector.");
-        }
-
-        if (index.IsDescending is { Count: > 0 } sortOrders
-            && sortOrders.Count != index.Columns.Count)
-        {
-            throw new InvalidOperationException(
-                $"Index '{table.Name}.{index.Name}' has an invalid sort-order vector.");
-        }
-
-        var keys = index.Columns
-            .Select((column, ordinal) => new ExpectedIndexKeyDefinition(
-                column: column.Name,
-                sortOrder: ModelSortOrder(index.IsDescending, ordinal),
-                prefixLength: prefixLengths?[ordinal] is > 0 ? prefixLengths[ordinal] : null))
-            .ToArray();
-
-        return new ExpectedIndexDefinition(
-            index.Name,
-            table.Name,
-            keys,
-            table.Schema,
-            index.IsUnique,
-            index.Filter);
-    }
-
-    private static SafeMigrationIndexSortOrder ModelSortOrder(
-        IReadOnlyList<bool>? sortOrders,
-        int ordinal
-    ) => sortOrders switch
-    {
-        null => SafeMigrationIndexSortOrder.ProviderDefault,
-        // EF represents IsDescending() without arguments as an empty vector,
-        // meaning every key is descending rather than no key being descending.
-        { Count: 0 } => SafeMigrationIndexSortOrder.Descending,
-        _ when sortOrders[ordinal] => SafeMigrationIndexSortOrder.Descending,
-        _ => SafeMigrationIndexSortOrder.Ascending,
-    };
-
-    private readonly record struct ModelTableKey(
-        string Table,
-        string? Schema
-    );
-
     /// <summary>Retains one pure decision assignment without retaining an operation or live evidence.</summary>
     /// <param name="Kind">The canonical planner operation kind.</param>
     /// <param name="Policy">The canonical planner policy.</param>
@@ -512,620 +390,6 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         string Sql,
         string UnterminatedSql
     );
-
-    /// <summary>Classifies state and repair eligibility using the same operation-local row proofs.</summary>
-    private static MySqlSafeMigrationSetupFragment BuildStateEvaluationAssignment(
-        MySqlSafeMigrationRuntimePlan runtimePlan,
-        IReadOnlyList<string> renderedParameterValues,
-        string? matchingPrecondition
-    )
-    {
-        var stateExpression = runtimePlan.DataProbe is null
-            ? runtimePlan.RenderPreparedStateExpression(renderedParameterValues)
-            : runtimePlan.RenderPreparedStateExpression(
-                renderedParameterValues,
-                "@doka_sm_data_blocked",
-                "@doka_sm_transition_eligible");
-
-        var repairPrecondition = runtimePlan.DataProbe is null
-            ? runtimePlan.RenderPreparedRepairPrecondition(renderedParameterValues)
-            : runtimePlan.RenderPreparedRepairPrecondition(
-                renderedParameterValues,
-                "@doka_sm_data_blocked",
-                "@doka_sm_transition_eligible");
-
-        var canRepair = runtimePlan.RepairCapability == SafeMigrationRepairCapability.Safe;
-        var statement = canRepair
-            ? "SELECT (" + stateExpression + ") INTO @doka_sm_state"
-            : "SELECT (" + stateExpression + "), COALESCE((" + repairPrecondition
-                + "), FALSE) INTO @doka_sm_state, @doka_sm_repair_ok";
-
-        // WHY: Only Different consumes repair eligibility. A separate SET uses the completed
-        // classification without undefined same-statement variable ordering. Runtime repair
-        // predicates contain catalog reads and already materialized proofs, never target-row SQL.
-        return BuildHexAssignment(
-            "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x",
-            statement,
-            " USING utf8mb4) ELSE 'DO 0' END;" + EvaluatePreparedStatementSql,
-            repairPrecondition: canRepair ? repairPrecondition : null,
-            matchingPrecondition: matchingPrecondition);
-    }
-
-    /// <summary>Classifies an exact column match before considering a data-dependent transition.</summary>
-    private static MySqlSafeMigrationSetupFragment BuildTransitionEligibilityAssignment(
-        MySqlSafeMigrationRuntimePlan runtimePlan,
-        IReadOnlyList<string> renderedParameterValues,
-        string? matchingPrecondition
-    )
-    {
-        const string prefix = "SET @doka_sm_transition_eligible = CASE WHEN @doka_sm_state IS NULL THEN COALESCE((";
-        const string suffix = "), FALSE) ELSE FALSE END;";
-        var transition = runtimePlan.RenderPreparedTransitionInvariantExpression(renderedParameterValues);
-        // WHY: Keep constituent strings until grouping so classification and transition are
-        // copied directly into the final transport string, not an intermediate assignment.
-        return MySqlSafeMigrationSetupFragment.Compose(
-            matchingPrecondition is null ? string.Empty : MatchingStatePrefix,
-            matchingPrecondition ?? string.Empty,
-            matchingPrecondition is null ? string.Empty : MatchingStateSuffix,
-            prefix,
-            transition,
-            suffix);
-    }
-
-    private static MySqlSafeMigrationSetupFragment BuildDataProbeRequiredAssignment(
-        MySqlSafeMigrationRuntimePlan runtimePlan,
-        IReadOnlyList<string> renderedParameterValues
-    ) => MySqlSafeMigrationSetupFragment.Compose(
-        "SET @doka_sm_data_probe_required = CASE WHEN @doka_sm_transition_eligible THEN COALESCE((",
-        runtimePlan.RenderPreparedDataProbeRequiredExpression(renderedParameterValues),
-        "), FALSE) ELSE FALSE END, @doka_sm_data_blocked = FALSE;");
-
-    private static MySqlSafeMigrationSetupFragment BuildDataProbeEvaluationAssignment(
-        MySqlSafeMigrationRuntimePlan runtimePlan,
-        IReadOnlyList<string> renderedParameterValues
-    )
-    {
-        var statement = "SELECT COALESCE(("
-            + runtimePlan.RenderPreparedDataProbeBlockedExpression(renderedParameterValues)
-            + "), FALSE) INTO @doka_sm_data_blocked";
-
-        // WHY: PREPARE resolves target identifiers before execution. Materialize
-        // the bounded row query only after the catalog proved this is a varchar
-        // narrowing transition on an existing column.
-        return BuildHexAssignment(
-            "SET @doka_sm_sql = CASE WHEN @doka_sm_data_probe_required THEN CONVERT(0x",
-            statement,
-            " USING utf8mb4) ELSE 'DO 0' END;" + EvaluatePreparedStatementSql);
-    }
-
-    /// <summary>Materializes the shared NULL proof only for a physically eligible nullable column.</summary>
-    private static MySqlSafeMigrationSetupFragment BuildNullabilityDataProbeEvaluationAssignment(
-        MySqlSafeMigrationRuntimePlan runtimePlan,
-        IReadOnlyList<string> renderedParameterValues,
-        string? matchingPrecondition
-    )
-    {
-        var statement = "SELECT COALESCE(("
-            + runtimePlan.RenderPreparedNullabilityDataProbeBlockedExpression(renderedParameterValues)
-            + "), FALSE) INTO @doka_sm_nullability_blocked";
-
-        const string prefix = "SET @doka_sm_column_repair_eligible = CASE WHEN @doka_sm_state IS NULL "
-            + "THEN COALESCE((";
-
-        // WHY: Separate materialization avoids undefined user-variable evaluation
-        // order within SELECT. Nested CASE keeps identifier-dependent SQL behind
-        // the existing database, table, column and physical-eligibility guards.
-        return BuildHexAssignment(
-            prefix,
-            statement,
-            " USING utf8mb4) ELSE 'DO 0' END ELSE 'DO 0' END;" + EvaluatePreparedStatementSql,
-            (
-                runtimePlan.RenderPreparedNullabilityColumnExpression(renderedParameterValues),
-                runtimePlan.RenderPreparedNullabilityRepairInvariantExpression(renderedParameterValues)),
-            matchingPrecondition: matchingPrecondition);
-    }
-
-    private static MySqlSafeMigrationSetupFragment BuildGuardEvaluationAssignment(
-        MySqlSafeMigrationRuntimePlan runtimePlan,
-        IReadOnlyList<string> renderedParameterValues
-    )
-    {
-        var statement = "SELECT CASE WHEN NOT COALESCE(("
-            + runtimePlan.RenderPreparedStateEvaluationGuardExpression(renderedParameterValues)
-            + "), FALSE) THEN ("
-            + runtimePlan.RenderPreparedStateEvaluationGuardFailureExpression(renderedParameterValues)
-            + ") ELSE NULL END INTO @doka_sm_state";
-
-        // PREPARE performs identifier resolution. Materialize the data-reading
-        // guard only after the catalog-only prerequisite has succeeded.
-        return BuildHexAssignment(
-            "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x",
-            statement,
-            " USING utf8mb4) ELSE 'DO 0' END;" + EvaluatePreparedStatementSql);
-    }
-
-    private static string BuildInitialLazyStateAssignment(
-        bool preserveExistingState
-    ) => preserveExistingState
-        ? "SET @doka_sm_state = CASE WHEN @doka_sm_state IS NOT NULL THEN @doka_sm_state "
-            + "WHEN NOT @doka_sm_prerequisite_ok THEN 'prerequisite_missing' "
-            + "ELSE NULL END, @doka_sm_repair_ok = FALSE;"
-        : "SET @doka_sm_state = CASE WHEN NOT @doka_sm_prerequisite_ok THEN 'prerequisite_missing' "
-            + "ELSE NULL END, @doka_sm_repair_ok = FALSE;";
-
-    /// <summary>Defers body encoding until the final setup group is written.</summary>
-    /// <param name="applyDdl">The provider-rendered apply statement.</param>
-    /// <param name="repairDdl">The separately guarded safe repair statement, when available.</param>
-    /// <param name="prepareInSetup">Whether the immediate PREPARE belongs to this owned setup assignment.</param>
-    /// <returns>The exact assignment and optional control suffix, never the guarded body execution.</returns>
-    private static MySqlSafeMigrationSetupFragment BuildPreparedSqlAssignment(
-        string applyDdl,
-        string? repairDdl,
-        bool prepareInSetup = false
-    )
-    {
-        var suffix = prepareInSetup
-            ? PreparedSqlAssignmentSuffix + PrepareStatementSql
-            : PreparedSqlAssignmentSuffix;
-
-        // WHY: PREPARE still receives one SQL string. Retaining the source values lets the
-        // compactor encode into that final string without an intermediate hexadecimal assignment.
-        return MySqlSafeMigrationSetupFragment.Compose(
-            PreparedApplySqlPrefix,
-            MySqlSafeMigrationSetupFragment.Part.Hex(applyDdl),
-            repairDdl is null ? string.Empty : PreparedRepairSqlPrefix,
-            MySqlSafeMigrationSetupFragment.Part.Hex(repairDdl ?? string.Empty),
-            suffix);
-    }
-
-    /// <summary>Defers a prepared assignment with optional operation-local NULL-proof eligibility.</summary>
-    /// <param name="prefix">The literal assignment prefix.</param>
-    /// <param name="statement">The statement encoded as hexadecimal UTF-8.</param>
-    /// <param name="suffix">The assignment suffix and immediate prepared controls.</param>
-    /// <param name="nullabilityEligibility">The separately rendered physical predicates, when required.</param>
-    /// <param name="repairPrecondition">The catalog-only repair predicate evaluated after classification.</param>
-    /// <param name="matchingPrecondition">The exact match classified before the remaining evaluation.</param>
-    /// <returns>The immutable SQL pieces without concatenated predicate intermediates.</returns>
-    private static MySqlSafeMigrationSetupFragment BuildHexAssignment(
-        string prefix,
-        string statement,
-        string suffix,
-        (string NullableColumn, string RepairInvariant)? nullabilityEligibility = null,
-        string? repairPrecondition = null,
-        string? matchingPrecondition = null
-    )
-    {
-        const string nullabilityPrefix = "), FALSE) ELSE FALSE END, @doka_sm_nullability_blocked = FALSE;"
-            + "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CASE WHEN COALESCE((";
-
-        const string eligibilitySuffix = ") AND @doka_sm_column_repair_eligible, FALSE) THEN CONVERT(0x";
-        const string repairPrefix = "SET @doka_sm_repair_ok = CASE WHEN @doka_sm_state = 'different' "
-            + "THEN COALESCE((";
-
-        const string repairSuffix = "), FALSE) ELSE FALSE END;";
-
-        // WHY: The physical predicates, matching classification and dependent repair statement
-        // retain their exact order. Only their storage changes; no row proof or catalog result
-        // escapes this operation, and the original logical fragment count still gates admission.
-        return MySqlSafeMigrationSetupFragment.Compose(
-            matchingPrecondition is null ? string.Empty : MatchingStatePrefix,
-            matchingPrecondition ?? string.Empty,
-            matchingPrecondition is null ? string.Empty : MatchingStateSuffix,
-            prefix,
-            nullabilityEligibility?.RepairInvariant ?? string.Empty,
-            nullabilityEligibility is null ? string.Empty : nullabilityPrefix,
-            nullabilityEligibility?.NullableColumn ?? string.Empty,
-            nullabilityEligibility is null ? string.Empty : eligibilitySuffix,
-            MySqlSafeMigrationSetupFragment.Part.Hex(statement),
-            suffix,
-            repairPrecondition is null ? string.Empty : repairPrefix,
-            repairPrecondition ?? string.Empty,
-            repairPrecondition is null ? string.Empty : repairSuffix);
-    }
-
-    internal static void ValidateMultiCommandCleanup(
-        IReadOnlyList<MySqlMigrationCommandSpec> commands
-    )
-    {
-        ArgumentNullException.ThrowIfNull(commands);
-
-        if (commands.Count < 2)
-        {
-            return;
-        }
-
-        // WHY: Per-command cleanup is needed before a later provider command,
-        // while scope cleanup is needed after failure. Until the provider
-        // supplies a once-only cleanup contract, executing both is unsafe.
-        if (commands.Any(static command => command.Fragments.Any(static fragment =>
-                fragment.Kind == MySqlMigrationCommandFragmentKind.Cleanup)))
-        {
-            throw new InvalidOperationException(
-                "A multi-command MySQL baseline with provider cleanup cannot be guarded safely.");
-        }
-    }
-
-    private static BaselineBatch GetBaselineBatch(
-        IReadOnlyList<MySqlMigrationCommandSpec> baseline
-    )
-    {
-        if (baseline.Count == 0)
-        {
-            throw new InvalidOperationException(
-                "A SafeMigrations operation must render at least one MySQL baseline command boundary.");
-        }
-
-        ValidateMultiCommandCleanup(baseline);
-
-        var transactionSuppressed = baseline[0].TransactionSuppressed;
-        var commands = new BaselineFragments[baseline.Count];
-
-        for (var index = 0; index < baseline.Count; index++)
-        {
-            var command = baseline[index];
-            if (command.TransactionSuppressed != transactionSuppressed)
-            {
-                throw new InvalidOperationException(
-                    "A multi-command SafeMigrations operation requires uniform MySQL transaction suppression.");
-            }
-
-            commands[index] = GetBaselineFragments(command);
-        }
-
-        return new BaselineBatch(commands, transactionSuppressed);
-    }
-
-    private static BaselineFragments GetBaselineFragments(
-        MySqlMigrationCommandSpec command
-    )
-    {
-        if (command.Fragments.Count == 0)
-        {
-            return new BaselineFragments([], NormalizePreparedBody(command.CommandText), []);
-        }
-
-        // WHY: Most provider baselines contain only a body; empty setup/cleanup
-        // roles must not allocate a list and backing array for every column.
-        List<string>? setupCommands = null;
-        List<string>? cleanupCommands = null;
-        string? bodyCommand = null;
-
-        foreach (var fragment in command.Fragments)
-        {
-            var commandText = fragment.CommandText.ToString();
-            switch (fragment.Kind)
-            {
-                case MySqlMigrationCommandFragmentKind.Setup:
-                    (setupCommands ??= []).Add(commandText);
-                    break;
-                case MySqlMigrationCommandFragmentKind.Body when bodyCommand is null:
-                    bodyCommand = NormalizePreparedBody(commandText);
-                    break;
-                case MySqlMigrationCommandFragmentKind.Body:
-                    throw new InvalidOperationException(
-                        "A provider-rendered MySQL baseline contains more than one body fragment.");
-                case MySqlMigrationCommandFragmentKind.Cleanup:
-                    (cleanupCommands ??= []).Add(commandText);
-                    break;
-                default:
-                    throw new InvalidOperationException(
-                        $"A provider-rendered MySQL baseline contains the unsupported fragment kind "
-                        + $"'{fragment.Kind}'.");
-            }
-        }
-
-        if (bodyCommand is null)
-        {
-            throw new InvalidOperationException("A provider-rendered MySQL baseline does not contain a body fragment.");
-        }
-
-        // WHY: Coalesce through the immutable interface; a List-typed [] fallback would allocate empty lists.
-        return new BaselineFragments(
-            (IReadOnlyList<string>?)setupCommands ?? Array.Empty<string>(),
-            bodyCommand,
-            (IReadOnlyList<string>?)cleanupCommands ?? Array.Empty<string>());
-    }
-
-    private static string NormalizePreparedBody(
-        string commandText
-    )
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(commandText);
-
-        var body = commandText
-            .AsSpan()
-            .Trim();
-
-        if (body[^1] == ';')
-        {
-            body = body[..^1]
-                .TrimEnd();
-        }
-
-        return body.IsEmpty
-            ? throw new InvalidOperationException("The MySQL baseline body is empty.")
-            : body.ToString();
-    }
-
-    private static string BuildPreparedStatementCleanupSql() => $"PREPARE {PreparedStatementName} FROM 'DO 0'; "
-        + $"DEALLOCATE PREPARE {PreparedStatementName};";
-
-    private static string BuildGuardedBaselineBody(
-        SafeMigrationOperation operation,
-        MySqlSafeMigrationRuntimePlan runtimePlan,
-        BaselineBatch baseline,
-        BaselineBatch? repair,
-        IReadOnlyList<string> renderedParameterValues,
-        bool preparedInSetup,
-        string postconditionSuffix
-    )
-    {
-        if (preparedInSetup)
-        {
-            // WHY: The common single-command path does not need incremental
-            // composition. Direct concatenation allocates the final command
-            // once instead of growing a StringBuilder for every operation.
-            if (runtimePlan.BinaryDefaultProofs.Count == 0)
-            {
-                return $"EXECUTE {PreparedStatementName};\n"
-                    + PostconditionBodyPrefix
-                    + runtimePlan.RenderPreparedExecutionPostcondition(renderedParameterValues)
-                    + postconditionSuffix;
-            }
-
-            return $"EXECUTE {PreparedStatementName};\n"
-                + BuildPostconditionBody(runtimePlan, renderedParameterValues, postconditionSuffix);
-        }
-
-        var builder = new StringBuilder();
-        for (var index = 0; index < baseline.Commands.Count; index++)
-        {
-            var command = baseline.Commands[index];
-            foreach (var setupCommand in command.SetupCommands)
-            {
-                AppendCommand(builder, setupCommand);
-            }
-
-            // WHY: One EF migration operation can legitimately render an
-            // ordered provider sequence, for example a data backfill followed
-            // by ALTER TABLE. Keep every command behind the same decision and
-            // verify the final state after the full sequence.
-            AppendCommand(
-                builder,
-                BuildPreparedSqlAssignment(
-                    command.BodyCommand,
-                    GetRepairBody(operation, runtimePlan, repair, command, index)).ToSql());
-            AppendCommand(builder, $"PREPARE {PreparedStatementName} FROM @doka_sm_sql;");
-            AppendCommand(builder, $"EXECUTE {PreparedStatementName};");
-            AppendCommand(builder, $"DEALLOCATE PREPARE {PreparedStatementName};");
-        }
-
-        builder.Append(BuildPostconditionBody(runtimePlan, renderedParameterValues, postconditionSuffix));
-
-        return builder.ToString();
-    }
-
-    private static string BuildPostconditionBody(
-        MySqlSafeMigrationRuntimePlan runtimePlan,
-        IReadOnlyList<string> renderedParameterValues,
-        string postconditionSuffix
-    ) => BuildBinaryDefaultProofEvaluation(
-            runtimePlan, renderedParameterValues, "@doka_sm_action IN ('apply', 'repair')")
-        + PostconditionBodyPrefix
-        + runtimePlan.RenderPreparedExecutionPostcondition(renderedParameterValues)
-        + postconditionSuffix;
-
-    private static string? GetRepairBody(
-        SafeMigrationOperation operation,
-        MySqlSafeMigrationRuntimePlan runtimePlan,
-        BaselineBatch? repair,
-        BaselineFragments applyCommand,
-        int commandOrdinal
-    ) => repair?.Commands[commandOrdinal].BodyCommand
-        ?? (operation is { Policy: SafeMigrationPolicy.RepairIfSafe, Intent: AlterColumnIntent }
-            && runtimePlan.RepairCapability == SafeMigrationRepairCapability.Safe
-                ? applyCommand.BodyCommand
-                : null);
-
-    /// <summary>Preserves cleanup order without allocating containers for the common owned-only path.</summary>
-    /// <param name="baseline">The admitted original native resource scope.</param>
-    /// <param name="hasNullabilityProof">Whether the operation owns a materialized NULL-proof variable.</param>
-    /// <param name="hasRequiredColumnAdd">Whether the operation owns catalog-status and resume variables.</param>
-    /// <param name="hasNativeSqlModeCleanup">Whether the scope has a certified native acquisition snapshot.</param>
-    /// <param name="binaryDefaultProofCount">The number of operation-owned exact-default variables to clear.</param>
-    private static IReadOnlyList<string> BuildCleanupCommands(
-        BaselineBatch baseline,
-        bool hasNullabilityProof,
-        bool hasRequiredColumnAdd = false,
-        bool hasNativeSqlModeCleanup = false,
-        int binaryDefaultProofCount = 0
-    )
-    {
-        var cleanupCommandCount = 0;
-        foreach (var command in baseline.Commands)
-        {
-            cleanupCommandCount += command.CleanupCommands.Count;
-        }
-
-        if (cleanupCommandCount == 0 && !hasRequiredColumnAdd && binaryDefaultProofCount == 0)
-        {
-            // WHY: These immutable SQL templates contain no operation or database state.
-            // CreateScoped snapshots and reverses its own copy; it never mutates this input.
-            return hasNullabilityProof ? s_nullabilityGuardCleanupCommands : s_guardCleanupCommands;
-        }
-
-        var commands = new List<string>(2 + cleanupCommandCount)
-        {
-            BuildGuardCleanupSql(hasNullabilityProof, hasRequiredColumnAdd, hasNativeSqlModeCleanup)
-                + MySqlSafeMigrationBinaryDefaultProof.BuildResetSql(binaryDefaultProofCount, 0, clear: true),
-        };
-
-        // WHY: CreateScoped reverses cleanup input. Add provider cleanup in
-        // reverse scope order and reverse execution order so failure in any
-        // command unwinds every acquired provider resource before guard state is reset.
-        foreach (var command in baseline.Commands)
-        {
-            for (var index = command.CleanupCommands.Count - 1; index >= 0; index--)
-            {
-                commands.Add(hasNativeSqlModeCleanup
-                    ? BuildConditionalNativeSqlModeRestore(command.CleanupCommands[index])
-                    : command.CleanupCommands[index]);
-            }
-        }
-
-        commands.Add(BuildPreparedStatementCleanupSql());
-
-        return commands;
-    }
-
-    private static void AppendCommand(
-        StringBuilder builder,
-        string command
-    )
-    {
-        ArgumentNullException.ThrowIfNull(builder);
-        ArgumentException.ThrowIfNullOrWhiteSpace(command);
-
-        builder.AppendLine(command);
-    }
-
-    /// <summary>Clears only proof resources owned by the operation, preserving other SQL paths byte-for-byte.</summary>
-    /// <param name="hasNullabilityProof">Whether the operation owns the nullable-column proof variables.</param>
-    /// <param name="hasRequiredColumnAdd">Whether the operation owns catalog-status and resume variables.</param>
-    /// <param name="hasNativeSqlModeCleanup">Whether final cleanup must clear the native acquisition flag.</param>
-    private static string BuildGuardCleanupSql(
-        bool hasNullabilityProof,
-        bool hasRequiredColumnAdd = false,
-        bool hasNativeSqlModeCleanup = false
-    )
-    {
-        const string prefix = "SET @doka_sm_state = NULL, @doka_sm_action = NULL, "
-            + "@doka_sm_repair_ok = NULL, @doka_sm_prerequisite_ok = NULL, @doka_sm_sql = NULL, "
-            + "@doka_sm_post_ok = NULL, @doka_sm_data_probe_required = NULL, @doka_sm_data_blocked = NULL, "
-            + "@doka_sm_diag = NULL; ";
-
-        const string suffix = "DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`;";
-        var requiredColumnAddCleanup = hasRequiredColumnAdd
-            ? "SET @doka_sm_required_add_resume = NULL, @doka_sm_add_status = NULL; "
-            : string.Empty;
-        var nativeScopeCleanup = hasNativeSqlModeCleanup ? ProviderSetupEnteredCleanup : string.Empty;
-
-        return hasNullabilityProof
-            ? prefix + "SET @doka_sm_transition_eligible = NULL, @doka_sm_nullability_blocked = NULL, "
-                + "@doka_sm_column_repair_eligible = NULL; " + requiredColumnAddCleanup + nativeScopeCleanup + suffix
-            : prefix + "SET @doka_sm_transition_eligible = NULL; "
-                + requiredColumnAddCleanup + nativeScopeCleanup + suffix;
-    }
-
-    private IReadOnlyList<MySqlMigrationCommandSpec> RenderBaseline(
-        SafeMigrationOperation operation,
-        MySqlSafeMigrationRuntimePlan runtimePlan,
-        MySqlMigrationOperationContext context
-    )
-    {
-        if (runtimePlan.IsStaticallyUnsupported)
-        {
-            return [Command("DO 0;", transactionSuppressed: true)];
-        }
-
-        if (operation.Intent is ModelManagedDataIntent modelManagedData)
-        {
-            return
-            [
-                Command(
-                    runtimePlan.RenderPreparedMutationSql(
-                        runtimePlan.ParameterValues.Select(RenderParameterLiteral).ToArray()),
-                    transactionSuppressed: false),
-            ];
-        }
-
-        if (operation.Intent is EnsureIndexIntent index
-            && (index.Definition.Keys.Any(static key =>
-                    key.Expression is not null || key.StructuredExpression is not null || key.PrefixLength is not null)
-                || index.Definition.Method is not null))
-        {
-            return [Command(BuildCustomCreateIndexSql(index.Definition), transactionSuppressed: true)];
-        }
-
-        var standardOperation = SafeMigrationStandardOperationFactory.Create(
-            operation.Intent,
-            _expressionRenderer.Render,
-            static collation => collation.Schema is null ? collation.Name : null);
-
-        if (standardOperation is AddColumnOperation addColumn
-            && operation.Intent is EnsureColumnIntent ensureIntent
-            && MySqlSafeMigrationCatalogSqlBuilder.RequiresUnsupportedMissingRequiredAdd(ensureIntent.Definition))
-        {
-            // WHY: Excluded unsafe Missing shapes are rejected by catalog state,
-            // but exact Matching and ordinary repair still need a renderable
-            // native scope. This unused ADD stays nullable and retains metadata;
-            // only the separately certified protocol can apply a required ADD.
-            addColumn.IsNullable = true;
-        }
-
-        if (runtimePlan.NullabilityDataProbe is not null
-            && standardOperation is AlterColumnOperation alterColumn
-            && operation.Intent is AlterColumnIntent alterIntent
-            && !SafeMigrationColumnRepairHelper.HasProvablyNonNullDefault(alterIntent.Definition.DefaultValue))
-        {
-            // WHY: The guarded NULL proof rejects every row requiring a
-            // backfill. Suppress provider backfill generation only on this
-            // path; explicit non-null defaults retain their existing UPDATE.
-            alterColumn.OldColumn.IsNullable = alterColumn.IsNullable;
-        }
-
-        return RenderNativeOperation(context, standardOperation, operation.Intent);
-    }
-
-    private BaselineBatch? RenderRepairBaseline(
-        SafeMigrationOperation operation,
-        MySqlSafeMigrationRuntimePlan runtimePlan,
-        MySqlMigrationOperationContext context,
-        BaselineBatch apply
-    )
-    {
-        if (operation.Policy != SafeMigrationPolicy.RepairIfSafe
-            || runtimePlan.RepairCapability != SafeMigrationRepairCapability.Safe
-            || operation.Intent is not EnsureColumnIntent intent)
-        {
-            return null;
-        }
-
-        // MySQL and MariaDB MODIFY COLUMN replace the complete column
-        // definition. Keeping old nullability equal avoids Doka's data-backfill
-        // command; the catalog guard has already proved that no backfill is
-        // required before the complete target definition is applied.
-        var repairOperation = SafeMigrationStandardOperationFactory.CreateFullDefinitionRepair(
-            intent,
-            _expressionRenderer.Render,
-            static collation => collation.Schema is null ? collation.Name : null,
-            MySqlSafeMigrationColumnMetadata.CanSafelyConverge);
-
-        var repair = GetBaselineBatch(RenderNativeOperation(context, repairOperation, intent));
-        if (repair.TransactionSuppressed != apply.TransactionSuppressed
-            || repair.Commands.Count != apply.Commands.Count)
-        {
-            throw new InvalidOperationException(
-                "Provider-rendered apply and repair commands require incompatible MySQL command scopes.");
-        }
-
-        for (var index = 0; index < apply.Commands.Count; index++)
-        {
-            var applyCommand = apply.Commands[index];
-            var repairCommand = repair.Commands[index];
-
-            if (!applyCommand.SetupCommands.SequenceEqual(repairCommand.SetupCommands, StringComparer.Ordinal)
-                || !applyCommand.CleanupCommands.SequenceEqual(
-                    repairCommand.CleanupCommands,
-                    StringComparer.Ordinal))
-            {
-                throw new InvalidOperationException(
-                    "Provider-rendered apply and repair commands require incompatible MySQL command scopes.");
-            }
-        }
-
-        return repair;
-    }
 
     /// <summary>Renders the canonical decision table, reusing only an exact pure-input assignment.</summary>
     /// <param name="kind">The canonical planner operation family.</param>
@@ -1293,15 +557,4 @@ internal sealed partial class MySqlSafeMigrationOperationHandler : IMySqlMigrati
         string sql,
         bool transactionSuppressed
     ) => MySqlMigrationCommandSpec.Create(sql, transactionSuppressed);
-
-    private sealed record BaselineFragments(
-        IReadOnlyList<string> SetupCommands,
-        string BodyCommand,
-        IReadOnlyList<string> CleanupCommands
-    );
-
-    private sealed record BaselineBatch(
-        IReadOnlyList<BaselineFragments> Commands,
-        bool TransactionSuppressed
-    );
 }

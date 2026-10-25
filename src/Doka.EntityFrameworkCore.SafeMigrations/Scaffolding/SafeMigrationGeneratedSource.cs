@@ -24,6 +24,9 @@ internal static class SafeMigrationGeneratedSource
         ArgumentNullException.ThrowIfNull(source);
 
         string? newline = null;
+        // WHY: Inspect UTF-16 offsets so CRLF is consumed as one newline without skipping source boundaries.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < source.Length; index++)
         {
             string current;

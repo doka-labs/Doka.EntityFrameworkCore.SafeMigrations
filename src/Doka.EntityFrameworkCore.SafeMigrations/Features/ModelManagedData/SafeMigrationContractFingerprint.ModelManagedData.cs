@@ -73,8 +73,14 @@ public static partial class SafeMigrationContractFingerprint
         writer.Add(values.RowCount);
         writer.Add(values.ColumnCount);
 
+        // WHY: Preserve authored row-major order in the canonical matrix fingerprint.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var row = 0; row < values.RowCount; row++)
         {
+            // WHY: Hash each cell in row-major column order without flattening or copying the matrix.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var column = 0; column < values.ColumnCount; column++)
             {
                 SafeMigrationModelManagedValue.Write(writer, values.GetUnsafeValue(row, column));

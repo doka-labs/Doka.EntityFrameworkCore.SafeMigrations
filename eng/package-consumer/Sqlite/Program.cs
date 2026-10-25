@@ -6,9 +6,9 @@ const string designTimeServicesTypeName = "Doka.EntityFrameworkCore.SafeMigratio
 
 const string providerName = "Microsoft.EntityFrameworkCore.Sqlite";
 
-if (args is ["--verify-database", var databasePath, var migrationId])
+if (args is ["--verify-database", var databasePath, var migrationId, var transitionMigrationId])
 {
-    return VerifyDatabase(databasePath, migrationId);
+    return VerifyDatabase(databasePath, migrationId, transitionMigrationId);
 }
 
 var expectsDesignTimeReference = args switch
@@ -17,6 +17,8 @@ var expectsDesignTimeReference = args switch
     ["--expect-design-reference"] => true,
     _ => throw new ArgumentException("Usage: PackageConsumer [--expect-design-reference]"),
 };
+
+GeneratedExpressionConsumerContract.Verify();
 
 var migrationBuilder = new MigrationBuilder(providerName);
 migrationBuilder.CreateTableIfNotExists(
@@ -69,54 +71,39 @@ return 0;
 
 static int VerifyDatabase(
     string databasePath,
-    string migrationId
+    string migrationId,
+    string transitionMigrationId
 )
 {
     ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
-    ArgumentException.ThrowIfNullOrWhiteSpace(migrationId);
 
-    using var connection = new SqliteConnection($"Data Source={databasePath};Foreign Keys=True");
-    connection.Open();
-
-    var expectedState = ExecuteScalarInt(
-        connection,
-        "SELECT "
-        + "(SELECT COUNT(*) FROM \"__EFMigrationsHistory\" WHERE \"MigrationId\" = $migration) + "
-        + "(SELECT COUNT(*) FROM \"tooling_entities\" WHERE \"Id\" = 1 AND \"Code\" = 'baseline') + "
-        + "(SELECT COUNT(*) FROM pragma_table_info('tooling_entities') WHERE name IN ('Id', 'Code')) + "
-        + "(SELECT COUNT(*) FROM pragma_index_list('tooling_entities') WHERE \"unique\" = 1);",
-        migrationId);
-
-    var foreignKeyViolations = ExecuteScalarInt(
-        connection,
-        "SELECT COUNT(*) FROM pragma_foreign_key_check;");
-
-    if (expectedState != 5 || foreignKeyViolations != 0)
+    // WHY: A missing target must fail verification rather than silently creating
+    // an empty database. The builder also preserves paths containing delimiters.
+    var settings = new SqliteConnectionStringBuilder
     {
-        Console.Error.WriteLine("SQLite tooling database verification failed.");
+        DataSource = databasePath,
+        Mode = SqliteOpenMode.ReadWrite,
+        ForeignKeys = true,
+    };
+
+    try
+    {
+        using var connection = new SqliteConnection(settings.ConnectionString);
+        connection.Open();
+        Doka.EntityFrameworkCore.SafeMigrations.Sqlite.PackageConsumer.ToolingDatabaseVerifier.Verify(
+            connection, migrationId, transitionMigrationId);
+    }
+    catch (Exception exception) when (exception is InvalidOperationException or SqliteException)
+    {
+        Console.Error.WriteLine("SQLite tooling database verification failed: " + exception.Message);
 
         return 3;
     }
 
-    Console.WriteLine("SQLite tooling database history, schema, data, and integrity verified.");
+    Console.WriteLine(
+        "SQLite tooling database history, target schema, generated expressions, data, and integrity verified.");
 
     return 0;
-}
-
-static int ExecuteScalarInt(
-    SqliteConnection connection,
-    string commandText,
-    string? migrationId = null
-)
-{
-    using var command = connection.CreateCommand();
-    command.CommandText = commandText;
-    if (migrationId is not null)
-    {
-        _ = command.Parameters.AddWithValue("$migration", migrationId);
-    }
-
-    return Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture);
 }
 
 internal sealed class PackageScaffoldingDbContext : DbContext

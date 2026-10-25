@@ -33,7 +33,8 @@ public sealed class PostgreSqlModelManagedDataSqlTests
         var command = Assert.Single(
             context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
 
-        Assert.Contains("WHEN 'transition_ready' THEN 'apply'", command.CommandText, StringComparison.Ordinal);
+        Assert.Contains("WHEN doka_state OPERATOR(pg_catalog.=) 'transition_ready' THEN 'apply'", command.CommandText,
+            StringComparison.Ordinal);
         Assert.Contains(
             "DELETE FROM app.roles AS doka_actual",
             command.CommandText,

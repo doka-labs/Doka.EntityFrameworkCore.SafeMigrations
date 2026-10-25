@@ -9,14 +9,18 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var exists = IndexExists(definition.Name, definition.Table, definition.Schema);
         var matching = IndexMatches(definition);
         var width = IndexKeysWithinLimit(definition.Table, definition.Schema,
-            definition.Keys.Select(static key => key.Column!).ToArray(), 1700);
+            definition.Keys.Select(static key => key.Column!).ToArray(), 1700, allowComputed: true);
+
+        var includes = IncludedIndexColumnsAreEligible(definition);
+        var settings = ComputedIndexSettingsAreSupported(definition);
+        var supported = $"({width}) AND ({includes}) AND ({settings})";
 
         var duplicate = definition.Unique ? DuplicateIndexKeyExists(definition) : "1 = 0";
 
         return Plan(
             $"CASE WHEN NOT {table} THEN N'prerequisite_missing' "
             + $"WHEN {matching} THEN N'matching' WHEN {exists} THEN N'different' "
-            + $"WHEN NOT ({width}) THEN N'unsupported' "
+            + $"WHEN NOT ({supported}) THEN N'unsupported' "
             + $"WHEN {duplicate} THEN N'data_blocked' ELSE N'missing' END",
             Bit(matching)) with
         {
@@ -28,7 +32,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     + $"CASE WHEN {duplicate} THEN N'index_replacement_data_blocked' "
                     + "ELSE N'key_replacement_data_safe' END ELSE NULL END"
                 : null,
-            StateEvaluationGuardExpression = Bit(width),
+            StateEvaluationGuardExpression = Bit(supported),
             StateEvaluationGuardFailureExpression = "N'unsupported'",
             IndexFilterSupportExpression = BuildIndexFilterSupportExpression(definition),
             PostApplySql = HasIndexFilter(definition) ? BuildIndexStampSql(definition) : null,
@@ -45,7 +49,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         return Plan(
             $"CASE WHEN NOT {exists} THEN N'missing' WHEN {independent} AND NOT {referenced} "
             + "THEN N'matching' ELSE N'different' END",
-            Bit($"NOT {exists}"));
+            Bit($"NOT {exists}")) with
+        {
+            // WHY: Ordered projection distinguishes a removed native physical
+            // name from an unbound semantic alias without another catalog read.
+            MatchedObjectNameExpression = $"(SELECT i.name FROM sys.indexes i "
+                + $"WHERE i.object_id={TableId(intent.Table, intent.Schema)} AND i.name={Literal(intent.Name)})",
+        };
     }
 
     private SqlServerSafeMigrationRuntimePlan BuildRenameIndex(RenameIndexIntent intent)
@@ -106,7 +116,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         string table,
         string? schema,
         IReadOnlyList<string> columns,
-        int maximumBytes
+        int maximumBytes,
+        bool allowComputed = false
     )
     {
         var values = string.Join(", ", columns.Select((column, ordinal) =>
@@ -125,9 +136,59 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             + "N'nchar', N'numeric', N'nvarchar', N'real', N'smalldatetime', N'smallint', "
             + "N'smallmoney', N'time', N'timestamp', N'tinyint', N'uniqueidentifier', "
             + "N'varbinary', N'varchar') "
-            + $"HAVING COUNT(*) = {columns.Count} AND MAX(CONVERT(int, c.is_computed)) = 0 "
+            + "AND " + (allowComputed ? ComputedIndexColumnEligibility("c") : "c.is_computed = 0") + " "
+            + $"HAVING COUNT(*) = {columns.Count} "
             + "AND MIN(CONVERT(int, c.max_length)) > 0 "
             + $"AND SUM(CONVERT(bigint, c.max_length)) <= {maximumBytes})";
+    }
+
+    /// <summary>Preserves the effective indexed-computed SET contract and SqlClient's implicit ARITHABORT.</summary>
+    internal const string ComputedIndexSessionPredicate =
+        "SESSIONPROPERTY(N'ANSI_NULLS')=1 AND SESSIONPROPERTY(N'ANSI_PADDING')=1 "
+        + "AND SESSIONPROPERTY(N'ANSI_WARNINGS')=1 AND SESSIONPROPERTY(N'CONCAT_NULL_YIELDS_NULL')=1 "
+        + "AND SESSIONPROPERTY(N'QUOTED_IDENTIFIER')=1 AND SESSIONPROPERTY(N'NUMERIC_ROUNDABORT')=0 "
+        + "AND (SESSIONPROPERTY(N'ARITHABORT')=1 OR (SESSIONPROPERTY(N'ANSI_WARNINGS')=1 "
+        + "AND (SELECT compatibility_level FROM sys.databases WHERE database_id=DB_ID())>=90))";
+
+    /// <summary>Qualifies native key and INCLUDE admission without confusing their precision requirements.</summary>
+    internal static string ComputedIndexColumnEligibility(string alias, bool included = false)
+        => $"({alias}.is_computed=0 OR (COLUMNPROPERTY({alias}.object_id,{alias}.name,N'IsDeterministic')=1 "
+            // WHY: Deterministic imprecise values may be included without
+            // persistence. Keys additionally need native indexability and a
+            // precise expression or the engine's persisted-value contract.
+            + (included ? string.Empty
+                : $"AND COLUMNPROPERTY({alias}.object_id,{alias}.name,N'IsIndexable')=1 "
+                    + $"AND (COLUMNPROPERTY({alias}.object_id,{alias}.name,N'IsPrecise')=1 "
+                    + $"OR EXISTS(SELECT 1 FROM sys.computed_columns cc WHERE cc.object_id={alias}.object_id "
+                    + $"AND cc.column_id={alias}.column_id AND cc.is_persisted=1)) ")
+            + "AND (" + ComputedIndexSessionPredicate + ")))";
+
+    private string IncludedIndexColumnsAreEligible(ExpectedIndexDefinition definition)
+    {
+        if (definition.IncludedColumns.Count == 0)
+        {
+            return "1 = 1";
+        }
+
+        return "(SELECT COUNT(*) FROM sys.columns c JOIN sys.types ty ON ty.user_type_id=c.user_type_id "
+            + $"WHERE c.object_id={TableId(definition.Table, definition.Schema)} AND c.name IN ("
+            + string.Join(", ", definition.IncludedColumns.Select(Literal))
+            + ") AND ty.is_user_defined=0 AND ty.is_assembly_type=0 "
+            + "AND ty.name NOT IN (N'text',N'ntext',N'image') AND "
+            + ComputedIndexColumnEligibility("c", included: true)
+            + $")={definition.IncludedColumns.Count}";
+    }
+
+    private string ComputedIndexSettingsAreSupported(ExpectedIndexDefinition definition)
+    {
+        var columns = definition.Keys.Select(static key => key.Column!).Concat(definition.IncludedColumns);
+
+        // WHY: Ordinary indexes keep their existing session contract. A computed
+        // key or INCLUDE requires all native settings, without changing the caller's
+        // session. ANSI_WARNINGS supplies effective ARITHABORT at compatibility 90+.
+        return "(NOT EXISTS(SELECT 1 FROM sys.columns c WHERE c.object_id="
+            + TableId(definition.Table, definition.Schema) + " AND c.is_computed=1 AND c.name IN ("
+            + string.Join(", ", columns.Select(Literal)) + ")) OR (" + ComputedIndexSessionPredicate + "))";
     }
 
     private string DuplicateIndexKeyExists(ExpectedIndexDefinition definition)
@@ -155,17 +216,37 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     private string BuildIndexStampSql(ExpectedIndexDefinition definition)
     {
         var index = IndependentIndexExists(definition.Name, definition.Table, definition.Schema);
+        var fingerprint = IndexFilterFingerprint(definition);
+        var contractValue = Literal(fingerprint);
+        var schemaName = EffectiveSchema(definition.Schema);
+        var variable = SqlServerSqlStringLiteral.RequiresExpression(schemaName.AsSpan())
+            || SqlServerSqlStringLiteral.RequiresExpression(definition.Table.AsSpan())
+            || SqlServerSqlStringLiteral.RequiresExpression(definition.Name.AsSpan())
+                ? "@doka_index_stamp_" + fingerprint : string.Empty;
+
+        var schemaArgument = SqlServerSqlStringLiteral.ProcedureArgument(
+            schemaName, Literal(schemaName), variable.Length == 0 ? string.Empty : variable + "_schema",
+            out var schemaDeclaration);
+        var tableArgument = SqlServerSqlStringLiteral.ProcedureArgument(
+            definition.Table, Literal(definition.Table), variable.Length == 0 ? string.Empty : variable + "_table",
+            out var tableDeclaration);
+        var nameArgument = SqlServerSqlStringLiteral.ProcedureArgument(
+            definition.Name, Literal(definition.Name), variable.Length == 0 ? string.Empty : variable + "_name",
+            out var nameDeclaration);
 
         return $"IF NOT {index} THROW 51004, N'SafeMigrations index contract was not created', 1; "
+            // WHY: Bind expression-rendered names before EXEC, without
+            // changing ordinary literal arguments or their parameter order.
+            + schemaDeclaration + tableDeclaration + nameDeclaration
             + "EXEC sys.sp_addextendedproperty "
             + "@name = N'Doka:SafeMigrations:Contract', "
-            + $"@value = {Literal(IndexFilterFingerprint(definition))}, "
+            + $"@value = {contractValue}, "
             + "@level0type = N'SCHEMA', "
-            + $"@level0name = {Literal(EffectiveSchema(definition.Schema))}, "
+            + $"@level0name = {schemaArgument}, "
             + "@level1type = N'TABLE', "
-            + $"@level1name = {Literal(definition.Table)}, "
+            + $"@level1name = {tableArgument}, "
             + "@level2type = N'INDEX', "
-            + $"@level2name = {Literal(definition.Name)}";
+            + $"@level2name = {nameArgument}";
     }
 
     private string IndexExists(

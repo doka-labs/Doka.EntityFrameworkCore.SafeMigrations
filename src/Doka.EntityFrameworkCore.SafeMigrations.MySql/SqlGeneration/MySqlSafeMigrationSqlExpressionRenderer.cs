@@ -97,7 +97,10 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
                 (ReadOnlySpan<byte>)bytes,
                 static (destination, source) =>
                 {
-                    DefaultHexPrefix.AsSpan().CopyTo(destination);
+                    DefaultHexPrefix
+                        .AsSpan()
+                        .CopyTo(destination);
+
                     var hex = destination.Slice(DefaultHexPrefix.Length, source.Length * 2);
                     if (!Convert.TryToHexStringLower(source, hex, out var written)
                         || written != hex.Length)
@@ -105,7 +108,9 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
                         throw new InvalidOperationException("A default string could not be encoded as UTF-8 hex.");
                     }
 
-                    DefaultStringSuffix.AsSpan().CopyTo(destination[(DefaultHexPrefix.Length + hex.Length)..]);
+                    DefaultStringSuffix
+                        .AsSpan()
+                        .CopyTo(destination[(DefaultHexPrefix.Length + hex.Length)..]);
                 });
         }
         finally
@@ -139,7 +144,10 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
             value,
             static (destination, source) =>
             {
-                DefaultHexPrefix.AsSpan().CopyTo(destination);
+                DefaultHexPrefix
+                    .AsSpan()
+                    .CopyTo(destination);
+
                 var hex = destination.Slice(DefaultHexPrefix.Length, source.Length * 2);
                 if (!Convert.TryToHexStringLower(source, hex, out var written)
                     || written != hex.Length)
@@ -147,7 +155,9 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
                     throw new InvalidOperationException("A binary default could not be encoded as hexadecimal.");
                 }
 
-                DefaultBinarySuffix.AsSpan().CopyTo(destination[(DefaultHexPrefix.Length + hex.Length)..]);
+                DefaultBinarySuffix
+                    .AsSpan()
+                    .CopyTo(destination[(DefaultHexPrefix.Length + hex.Length)..]);
             });
     }
 
@@ -160,43 +170,109 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
     {
         ArgumentNullException.ThrowIfNull(expression);
 
-        return expression switch
+        var traversal = new MySqlExpressionTraversal(expression);
+        try
         {
-            SafeMigrationSqlIdentifierExpression => null,
-            SafeMigrationSqlLiteralExpression value => GetUnsupportedLiteralFeature(value),
-            SafeMigrationSqlUnaryExpression value => GetUnsupportedFeature(value.Operand),
-            SafeMigrationSqlBinaryExpression value =>
-                GetUnsupportedFeature(value.Left) ?? GetUnsupportedFeature(value.Right),
-            SafeMigrationSqlNullTestExpression value => GetUnsupportedFeature(value.Operand),
-            SafeMigrationSqlBetweenExpression value =>
-                GetUnsupportedFeature(value.Operand)
-                ?? GetUnsupportedFeature(value.Lower)
-                ?? GetUnsupportedFeature(value.Upper),
-            SafeMigrationSqlInExpression value =>
-                GetUnsupportedFeature(value.Operand)
-                ?? value.Values.Select(GetUnsupportedFeature).FirstOrDefault(static feature => feature is not null),
-            SafeMigrationSqlFunctionExpression value =>
-                value.Arguments.Select(GetUnsupportedFeature).FirstOrDefault(static feature => feature is not null),
-            SafeMigrationSqlCastExpression value =>
-                MySqlSafeMigrationCastTypeRenderer.TryRender(value.StoreType, out _)
-                    ? GetUnsupportedFeature(value.Operand)
-                    : "structured_cast_type",
-            SafeMigrationSqlCollateExpression { Schema: not null } => "schema_qualified_expression_collation",
-            SafeMigrationSqlCollateExpression value => GetUnsupportedFeature(value.Operand),
-            SafeMigrationSqlCurrentValueExpression => null,
-            SafeMigrationSqlProviderFragmentExpression value =>
-                StringComparer.Ordinal.Equals(value.ProviderId, ProviderId)
-                    ? null
-                    : "provider_fragment_mismatch",
-            SafeMigrationSqlOpaqueExpression => null,
-            _ => throw new UnreachableException(),
-        };
+            while (traversal.TryMoveNext(out var current))
+            {
+                var feature = current switch
+                {
+                    SafeMigrationSqlIdentifierExpression
+                        or SafeMigrationSqlUnaryExpression
+                        or SafeMigrationSqlBinaryExpression
+                        or SafeMigrationSqlNullTestExpression
+                        or SafeMigrationSqlBetweenExpression
+                        or SafeMigrationSqlInExpression
+                        or SafeMigrationSqlFunctionExpression
+                        or SafeMigrationSqlCaseExpression
+                        or SafeMigrationSqlCurrentValueExpression
+                        or SafeMigrationSqlOpaqueExpression => null,
+                    SafeMigrationSqlLiteralExpression value => GetUnsupportedLiteralFeature(value),
+                    SafeMigrationSqlCastExpression { UsesSqlServerConvert: true } => "structured_convert_dialect",
+                    SafeMigrationSqlCastExpression value =>
+                        MySqlSafeMigrationCastTypeRenderer.TryRender(value.StoreType, out _)
+                            ? null
+                            : "structured_cast_type",
+                    SafeMigrationSqlCollateExpression { Schema: not null } => "schema_qualified_expression_collation",
+                    SafeMigrationSqlCollateExpression => null,
+                    SafeMigrationSqlProviderFragmentExpression value => StringComparer.Ordinal.Equals(
+                        value.ProviderId,
+                        ProviderId)
+                        ? null
+                        : "provider_fragment_mismatch",
+                    _ => throw new UnreachableException(),
+                };
+
+                if (feature is not null)
+                {
+                    return feature;
+                }
+            }
+
+            return null;
+        }
+        finally
+        {
+            traversal.Dispose();
+        }
     }
 
+    /// <summary>Retains prefix, ordered child and suffix execution without consuming the process call stack.</summary>
     private void Append(
         StringBuilder builder,
         SafeMigrationSqlExpression expression,
         bool defaultContext = false
+    )
+    {
+        var pending = new SafeMigrationWorkStack<MySqlExpressionChildCursor>();
+        try
+        {
+            while (true)
+            {
+                AppendStart(builder, expression, defaultContext);
+                var children = new MySqlExpressionChildCursor(expression);
+                if (children.TryMoveNext(out var child))
+                {
+                    AppendBeforeChild(builder, expression, 0, defaultContext);
+                    pending.Push(children);
+                    expression = child;
+
+                    continue;
+                }
+
+                AppendEnd(builder, expression);
+                while (true)
+                {
+                    if (!pending.TryPop(out children))
+                    {
+                        return;
+                    }
+
+                    var index = children.NextIndex;
+                    if (children.TryMoveNext(out child))
+                    {
+                        AppendBeforeChild(builder, children.Expression, index, defaultContext);
+                        pending.Push(children);
+                        expression = child;
+
+                        break;
+                    }
+
+                    AppendEnd(builder, children.Expression);
+                }
+            }
+        }
+        finally
+        {
+            pending.Dispose();
+        }
+    }
+
+    /// <summary>Performs only work that preceded the first child in the recursive renderer.</summary>
+    private void AppendStart(
+        StringBuilder builder,
+        SafeMigrationSqlExpression expression,
+        bool defaultContext
     )
     {
         switch (expression)
@@ -205,58 +281,42 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
                 builder.AppendJoin('.', value.Parts.Select(_sqlGenerationHelper.DelimitIdentifier));
                 break;
             case SafeMigrationSqlLiteralExpression value:
-                AppendLiteral(builder, value.Value, value.StoreType, defaultContext);
+                if (!value.NumericSourceToken.IsEmpty)
+                {
+                    builder.Append(value.NumericSourceToken.Span);
+                }
+                else
+                {
+                    AppendLiteral(builder, value.Value, value.StoreType, defaultContext);
+                }
+
                 break;
             case SafeMigrationSqlUnaryExpression value:
                 builder.Append(value.Operator == SafeMigrationSqlUnaryOperator.Not ? "(NOT " : "(-");
-                Append(builder, value.Operand, defaultContext);
-                builder.Append(')');
                 break;
-            case SafeMigrationSqlBinaryExpression value:
+            case SafeMigrationSqlBinaryExpression
+                or SafeMigrationSqlNullTestExpression
+                or SafeMigrationSqlBetweenExpression
+                or SafeMigrationSqlInExpression:
                 builder.Append('(');
-                Append(builder, value.Left, defaultContext);
-                builder
-                    .Append(' ')
-                    .Append(BinaryOperator(value.Operator))
-                    .Append(' ');
-                Append(builder, value.Right, defaultContext);
-                builder.Append(')');
-                break;
-            case SafeMigrationSqlNullTestExpression value:
-                builder.Append('(');
-                Append(builder, value.Operand, defaultContext);
-                builder.Append(value.Negated ? " IS NOT NULL)" : " IS NULL)");
-                break;
-            case SafeMigrationSqlBetweenExpression value:
-                builder.Append('(');
-                Append(builder, value.Operand, defaultContext);
-                builder.Append(value.Negated ? " NOT BETWEEN " : " BETWEEN ");
-                Append(builder, value.Lower, defaultContext);
-                builder.Append(" AND ");
-                Append(builder, value.Upper, defaultContext);
-                builder.Append(')');
-                break;
-            case SafeMigrationSqlInExpression value:
-                builder.Append('(');
-                Append(builder, value.Operand, defaultContext);
-                builder.Append(value.Negated ? " NOT IN (" : " IN (");
-                AppendList(builder, value.Values, defaultContext);
-                builder.Append("))");
                 break;
             case SafeMigrationSqlFunctionExpression value:
                 builder
                     .Append(value.Name.ToLowerInvariant())
                     .Append('(');
-                AppendList(builder, value.Arguments, defaultContext);
-                builder.Append(')');
+                break;
+            case SafeMigrationSqlCaseExpression:
+                builder.Append("CASE");
                 break;
             case SafeMigrationSqlCastExpression value:
+                if (value.UsesSqlServerConvert)
+                {
+                    // WHY: MySQL CONVERT(expr,type) reverses SQL Server's
+                    // roles. A shared parser must never reinterpret it as DDL.
+                    throw new NotSupportedException("Type-first CONVERT syntax requires SQL Server.");
+                }
+
                 builder.Append("CAST(");
-                Append(builder, value.Operand, defaultContext);
-                builder
-                    .Append(" AS ")
-                    .Append(MySqlSafeMigrationCastTypeRenderer.Render(value.StoreType))
-                    .Append(')');
                 break;
             case SafeMigrationSqlCollateExpression value:
                 if (value.Schema is not null)
@@ -265,11 +325,6 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
                 }
 
                 builder.Append('(');
-                Append(builder, value.Operand, defaultContext);
-                builder
-                    .Append(" COLLATE ")
-                    .Append(_sqlGenerationHelper.DelimitIdentifier(value.Name))
-                    .Append(')');
                 break;
             case SafeMigrationSqlCurrentValueExpression value:
                 builder.Append(CurrentValue(value.Value));
@@ -289,6 +344,86 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
                 break;
             default:
                 throw new UnreachableException();
+        }
+    }
+
+    /// <summary>Writes delimiters only after the preceding child has completed successfully.</summary>
+    private static void AppendBeforeChild(
+        StringBuilder builder,
+        SafeMigrationSqlExpression expression,
+        int index,
+        bool defaultContext
+    )
+    {
+        switch (expression)
+        {
+            case SafeMigrationSqlBinaryExpression value when index == 1:
+                builder
+                    .Append(' ')
+                    .Append(BinaryOperator(value.Operator))
+                    .Append(' ');
+                break;
+            case SafeMigrationSqlBetweenExpression value when index == 1:
+                builder.Append(value.Negated ? " NOT BETWEEN " : " BETWEEN ");
+                break;
+            case SafeMigrationSqlBetweenExpression when index == 2:
+                builder.Append(" AND ");
+                break;
+            case SafeMigrationSqlInExpression value when index == 1:
+                builder.Append(value.Negated ? " NOT IN (" : " IN (");
+                break;
+            case SafeMigrationSqlInExpression when index > 1:
+            case SafeMigrationSqlFunctionExpression when index > 0:
+                // WHY: The default context retains compact native metadata
+                // spelling; ordinary executable SQL keeps its existing spaces.
+                builder.Append(defaultContext ? "," : ", ");
+                break;
+            case SafeMigrationSqlCaseExpression value:
+                builder.Append(
+                    index == value.WhenClauses.Count * 2
+                        ? " ELSE "
+                        : index % 2 == 0
+                            ? " WHEN "
+                            : " THEN ");
+                break;
+        }
+    }
+
+    /// <summary>Defers suffix mapping and validation until children have rendered in their original order.</summary>
+    private void AppendEnd(
+        StringBuilder builder,
+        SafeMigrationSqlExpression expression
+    )
+    {
+        switch (expression)
+        {
+            case SafeMigrationSqlUnaryExpression
+                or SafeMigrationSqlBinaryExpression
+                or SafeMigrationSqlBetweenExpression
+                or SafeMigrationSqlFunctionExpression:
+                builder.Append(')');
+                break;
+            case SafeMigrationSqlNullTestExpression value:
+                builder.Append(value.Negated ? " IS NOT NULL)" : " IS NULL)");
+                break;
+            case SafeMigrationSqlInExpression:
+                builder.Append("))");
+                break;
+            case SafeMigrationSqlCaseExpression:
+                builder.Append(" END");
+                break;
+            case SafeMigrationSqlCastExpression value:
+                builder
+                    .Append(" AS ")
+                    .Append(MySqlSafeMigrationCastTypeRenderer.Render(value.StoreType))
+                    .Append(')');
+                break;
+            case SafeMigrationSqlCollateExpression value:
+                builder
+                    .Append(" COLLATE ")
+                    .Append(_sqlGenerationHelper.DelimitIdentifier(value.Name))
+                    .Append(')');
+                break;
         }
     }
 
@@ -368,25 +503,6 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
         }
 
         return null;
-    }
-
-    private void AppendList(
-        StringBuilder builder,
-        IReadOnlyList<SafeMigrationSqlExpression> values,
-        bool defaultContext
-    )
-    {
-        for (var index = 0; index < values.Count; index++)
-        {
-            if (index > 0)
-            {
-                // WHY: Server DEFAULT expression metadata uses compact argument
-                // lists. Ordinary expression output retains its established form.
-                builder.Append(defaultContext ? "," : ", ");
-            }
-
-            Append(builder, values[index], defaultContext);
-        }
     }
 
     private static string BinaryOperator(

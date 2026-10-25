@@ -154,50 +154,12 @@ public sealed class MySqlNativeUuidScaffoldingTests : IDisposable
             }
             """;
 
-        var compilation = Microsoft.CodeAnalysis.CSharp.CSharpCompilation.Create(
-            "NativeUuidMigration_" + Guid.NewGuid().ToString("N"),
-            [Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(source)],
-            CreateReferences(),
-            new Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions(
-                Microsoft.CodeAnalysis.OutputKind.DynamicallyLinkedLibrary));
-
-        using var output = new MemoryStream();
-        var emitted = compilation.Emit(output);
-        if (!emitted.Success)
-        {
-            throw new InvalidOperationException(
-                "Generated native UUID migration did not compile: "
-                + string.Join(Environment.NewLine, emitted.Diagnostics));
-        }
-
-        var assembly = Assembly.Load(output.ToArray());
+        var assembly = MySqlGeneratedMigrationCompiler.Compile(source);
         var method = assembly.GetType("GeneratedNativeUuidMigration", throwOnError: true)!.GetMethod("Up")!;
         var migrationBuilder = new MigrationBuilder(context.Database.ProviderName!);
         method.CreateDelegate<Action<MigrationBuilder>>()(migrationBuilder);
 
         return new GeneratedResult(operationSource, migrationBuilder.Operations);
-    }
-
-    /// <summary>References the active runtime and the exact published assemblies used by the test consumer.</summary>
-    private static IEnumerable<Microsoft.CodeAnalysis.MetadataReference> CreateReferences()
-    {
-        var platformPaths = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
-            .Split(Path.PathSeparator);
-
-        // WHY: Test hosts differ in which non-framework assemblies they add to
-        // their platform set. Explicit consumer references keep compilation
-        // equivalent in Rider and dotnet test without loading local Doka code.
-        var paths = platformPaths.Concat(
-        [
-            typeof(MigrationBuilder).Assembly.Location,
-            typeof(DbContext).Assembly.Location,
-            typeof(IInfrastructure<>).Assembly.Location,
-            typeof(SafeMigrationOperation).Assembly.Location,
-            typeof(DokaMySqlGuidFormat).Assembly.Location,
-        ]);
-
-        return paths.Distinct(StringComparer.Ordinal)
-            .Select(static path => Microsoft.CodeAnalysis.MetadataReference.CreateFromFile(path));
     }
 
     /// <summary>Creates a fully registered offline consumer against a UUID-capable MariaDB profile.</summary>

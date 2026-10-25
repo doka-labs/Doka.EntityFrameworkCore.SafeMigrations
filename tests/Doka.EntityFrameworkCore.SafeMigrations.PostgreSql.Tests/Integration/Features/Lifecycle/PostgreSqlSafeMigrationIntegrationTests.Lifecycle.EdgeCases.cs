@@ -442,7 +442,10 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
         await ExecuteSqlAsync(connectionString, "CREATE TABLE opaque_expression (value integer NULL);");
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AddCheckConstraintIfNotExists("ck_opaque_expression", "opaque_expression", "value >= 0");
+        // WHY: The public SQL helper now parses supported CHECK grammar.
+        // This negative case intentionally exercises an explicitly opaque definition.
+        builder.EnsureCheckConstraint(new ExpectedCheckConstraintDefinition(
+            "ck_opaque_expression", "opaque_expression", "value >= 0"), SafeMigrationPolicy.ThrowIfDifferent);
 
         var report = await context
             .GetService<ISafeMigrationRunner>()

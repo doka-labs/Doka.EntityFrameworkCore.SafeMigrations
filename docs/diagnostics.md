@@ -3,8 +3,10 @@
 SafeMigrations diagnostics identify the authored operation, affected owner and
 established reason without changing the migration decision. No automatic
 preflight, data scan, new privilege or external logging service is required.
-Prepared stable 10.5.0 introduces this diagnostic contract relative to
-10.4.11. Preparation does not establish public package availability.
+Stable 10.5.0 introduced this diagnostic contract relative to 10.4.11.
+Version 10.6.0 retains its report schemas and exception transport;
+its separate [expression upgrade](support-and-qualification.md#upgrade-to-1060)
+does not advance them again.
 
 ## Read a rejected operation
 

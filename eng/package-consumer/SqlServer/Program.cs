@@ -14,6 +14,8 @@ var expectsDesignTimeReference = args switch
     _ => throw new ArgumentException("Usage: PackageConsumer [--expect-design-reference]"),
 };
 
+GeneratedExpressionConsumerContract.Verify();
+
 var migrationBuilder = new MigrationBuilder("PackageConsumer");
 migrationBuilder.EnsureSchemaExists("consumer_schema");
 

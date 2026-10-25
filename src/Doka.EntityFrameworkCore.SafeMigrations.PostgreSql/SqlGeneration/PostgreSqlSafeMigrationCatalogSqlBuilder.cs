@@ -35,30 +35,35 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <param name="includeAnalysisEvidence">Whether to retain analysis-only diagnostic facts.</param>
     /// <param name="includeTransitionEvidence">Whether to retain analysis-only column-transition facts.</param>
     /// <param name="includeRuntimeIndexInputGuard">Whether native execution must fence index input/data planning.</param>
+    /// <param name="includeIndexDropColumnProof">
+    /// Whether visible optional catalogs may certify index-only effects.
+    /// </param>
     /// <returns>The finite native plan with its actual independent prerequisites and postconditions.</returns>
     public PostgreSqlSafeMigrationRuntimePlan Build(
         SafeMigrationOperation operation,
         SafeMigrationExpectedTableConstraints? expectedTableConstraints = null,
         bool includeAnalysisEvidence = false,
         bool includeTransitionEvidence = false,
-        bool includeRuntimeIndexInputGuard = true
+        bool includeRuntimeIndexInputGuard = true,
+        bool includeIndexDropColumnProof = false
     )
     {
         ArgumentNullException.ThrowIfNull(operation);
 
+        var intent = SafeMigrationCapturedExpressionNormalization.NormalizeIntent(operation.Intent, true);
         var unsupported = operation.GetAnnotations().Any()
             ? "operation_annotation"
-            : GetUnsupportedFeature(operation.Intent);
+            : GetUnsupportedNativeFeature(intent);
 
         if (unsupported is not null)
         {
             return Unsupported(unsupported) with
             {
-                ObjectIdentityGuardExpression = BuildObjectIdentityGuard(operation.Intent),
+                ObjectIdentityGuardExpression = BuildObjectIdentityGuard(intent),
             };
         }
 
-        var plan = operation.Intent switch
+        var plan = intent switch
         {
             EnsureSchemaIntent value => BuildEnsureSchema(value),
             DropSchemaIntent value => BuildDropSchema(value),
@@ -78,7 +83,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 includeAnalysisEvidence,
                 includeTransitionEvidence),
             EnsureIndexIntent value => BuildEnsureIndex(value, includeRuntimeIndexInputGuard),
-            DropIndexIntent value => BuildDropIndex(value),
+            DropIndexIntent value => BuildDropIndex(value, includeIndexDropColumnProof),
             RenameIndexIntent value => BuildRenameIndex(value),
             EnsurePrimaryKeyIntent value => BuildEnsurePrimaryKey(value),
             DropPrimaryKeyIntent value => BuildDropPrimaryKey(value),
@@ -98,14 +103,16 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 "Unknown SafeMigrations intent type."),
         };
 
-        var identityGuard = BuildObjectIdentityGuard(operation.Intent);
+        var identityGuard = BuildObjectIdentityGuard(intent);
+        plan = QualifyGeneratedCaseBinding(plan, intent);
+        plan = QualifyCapturedSourceBindings(plan, intent);
 
         return plan with
         {
-            PrerequisiteExpression = BuildPrerequisiteExpression(operation),
+            PrerequisiteExpression = BuildNativePrerequisiteExpression(intent),
             ObjectIdentityGuardExpression = identityGuard,
             PostExecutionObjectIdentityGuardExpression = BuildPostExecutionObjectIdentityGuard(
-                operation.Intent, identityGuard),
+                intent, identityGuard),
         };
     }
 
@@ -131,13 +138,25 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     {
         ArgumentNullException.ThrowIfNull(intent);
 
-        if (GetUnsupportedFeature(intent) is not null)
+        return BuildNativePrerequisiteExpression(
+            SafeMigrationCapturedExpressionNormalization.NormalizeIntent(intent, true));
+    }
+
+    /// <summary>Uses native captured prerequisites without changing immutable capture-key references.</summary>
+    private string BuildNativePrerequisiteExpression(SafeMigrationIntent intent)
+    {
+        if (GetUnsupportedNativeFeature(intent) is not null)
         {
             return "TRUE";
         }
 
         return intent switch
         {
+            // WHY: The finite state classifier proves each builtin operand
+            // independently. Initial source absence must remain a requalifiable
+            // type refusal, not erase accepted sparse ADD evidence before it.
+            EnsureColumnIntent value when RequiresCapturedOperandBinding(value.Definition)
+                => TableExists(value.Table, value.Schema),
             EnsureColumnIntent value => TableAndColumnsExist(
                 value.Table,
                 value.Schema,
@@ -200,8 +219,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <returns>The existing stable unsupported code, or null for a provider-supported definition.</returns>
     internal string? GetUnsupportedFeature(
         SafeMigrationIntent intent
-    ) => GetUnsupportedSqlExpressionFeature(intent)
-        ?? GetUnsupportedColumnFeature(intent) ?? GetUnsupportedIndexFeature(intent);
+    ) => GetUnsupportedNativeFeature(SafeMigrationCapturedExpressionNormalization.NormalizeIntent(intent, true));
+
+    /// <summary>Checks only the local native view, preserving caller-owned definitions as evidence keys.</summary>
+    private string? GetUnsupportedNativeFeature(SafeMigrationIntent intent)
+        => GetUnsupportedSqlExpressionFeature(intent)
+        ?? GetUnsupportedColumnFeature(intent) ?? GetUnsupportedIndexFeature(intent)
+        ?? GetUnsupportedGeneratedCaseCheckFeature(intent);
 
     public string RenderExpression(
         SafeMigrationSqlExpression expression

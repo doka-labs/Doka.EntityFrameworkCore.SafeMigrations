@@ -45,6 +45,9 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         var commands = new List<MigrationCommand>();
         var identityContract = PostgreSqlSafeMigrationGenerationIdentityContract.Create(operations);
 
+        // WHY: Preserve authored operation ordinals in guard generation and diagnostics.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             var operation = operations[ordinal];
@@ -91,7 +94,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             }
 
             var guardedSql = BuildGuardedSqlAtOrdinal(safeOperation, runtimePlan, baseline, effectiveRepairBaseline,
-                ordinal);
+                ordinal, (options & MigrationsSqlGenerationOptions.Idempotent) != 0);
             var sqlOperation = new SqlOperation { Sql = guardedSql };
             commands.AddRange(_baselineGenerator.Generate([sqlOperation], model, options));
         }
@@ -252,7 +255,8 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         PostgreSqlSafeMigrationRuntimePlan runtimePlan,
         IReadOnlyList<MigrationCommand> baseline,
         IReadOnlyList<MigrationCommand> repairBaseline,
-        int? ordinal
+        int? ordinal,
+        bool escapeAnonymousBody = false
     )
     {
         const string dataBlockedExpression = "doka_data_blocked";
@@ -266,7 +270,9 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         // immutable SQL text. Build it once without reusing observed evidence.
         var blockedExpression = runtimePlan.DataProbe?.BuildBlockedExpression() ?? string.Empty;
         var proofTable = runtimePlan.DataProbe?.QualifiedTable ?? runtimePlan.NullabilityDataProbe?.QualifiedTable;
-        var requiresLockedRecheck = proofTable is not null || runtimePlan.ModelManagedDeleteLockTable is not null;
+        var requiresLockedRecheck = proofTable is not null || runtimePlan.ModelManagedDeleteLockTable is not null
+            || runtimePlan.GeneratedDropLockSqlExpression is not null
+            || runtimePlan.ColumnTransitionLockSqlExpression is not null;
         var hasObjectIdentityGuard = !StringComparer.Ordinal.Equals(runtimePlan.ObjectIdentityGuardExpression, "TRUE");
         var evaluationIndentation = requiresLockedRecheck ? "        " : "    ";
         var evaluationBodyIndentation = evaluationIndentation + "    ";
@@ -275,7 +281,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             : evaluationBodyIndentation + "    ";
 
         var diagnostic = new PostgreSqlSafeMigrationRuntimeDiagnostic(operation, ordinal);
-        var tag = SelectDollarTag(
+        var tag = escapeAnonymousBody ? string.Empty : SelectDollarTag(
             baseline,
             repairBaseline,
             diagnostic.DelimiterContent,
@@ -283,6 +289,11 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             runtimePlan.PostExecutionObjectIdentityGuardExpression,
             runtimePlan.ObjectIdentityGuardFailureCodeExpression,
             runtimePlan.ModelManagedDeleteLockTable ?? string.Empty,
+            runtimePlan.GeneratedDropLockSqlExpression ?? string.Empty,
+            runtimePlan.GeneratedDropRuntimeGuardExpression ?? string.Empty,
+            runtimePlan.ColumnTransitionLockSqlExpression ?? string.Empty,
+            runtimePlan.ColumnTransitionRuntimeGuardExpression ?? string.Empty,
+            runtimePlan.ColumnTransitionTargetCatalogGuardExpression ?? string.Empty,
             runtimePlan.PrerequisiteExpression,
             runtimePlan.StateEvaluationGuardExpression,
             runtimePlan.StateEvaluationGuardFailureExpression ?? string.Empty,
@@ -305,7 +316,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         // in the first buffer instead of growing several initial chunks;
         // the variable SQL body still grows normally without a size guess.
         var builder = new StringBuilder(checked("DO ".Length + tag.Length + declarations.Length))
-            .Append("DO ")
+            .Append(escapeAnonymousBody ? string.Empty : "DO ")
             .Append(tag)
             .Append(declarations)
             .Append(hasObjectIdentityGuard
@@ -329,7 +340,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
 
         if (requiresLockedRecheck)
         {
-            // WHY: Only a planned repair or source-frozen delete acquires its
+            // WHY: Only an applicable repair, source-frozen delete, or DROP acquires its
             // operation-owned fence. The second pass reruns every prerequisite,
             // identity, source, and dependency predicate; no live verdict from
             // before the acquisition can authorize a mutation afterwards.
@@ -359,13 +370,33 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             builder
                 .Append(evaluationIndentation)
                 .Append("ELSIF NOT COALESCE((")
-                .Append(runtimePlan.StateEvaluationGuardExpression)
-                .Append("), FALSE) THEN\n")
-                .Append(evaluationBodyIndentation)
+                .Append(runtimePlan.ColumnTransitionRuntimeGuardExpression
+                    ?? runtimePlan.GeneratedDropRuntimeGuardExpression ?? runtimePlan.StateEvaluationGuardExpression)
+                .Append("), FALSE) THEN\n");
+
+            if (runtimePlan.ColumnTransitionTargetCatalogGuardExpression is not null)
+            {
+                // WHY: PostgreSQL checks relation privileges before CASE arms.
+                // Admit equality metadata before binding the target fallback;
+                // repair-only missing catalogs can still permit an exact no-op.
+                builder.Append(evaluationBodyIndentation).Append("IF NOT COALESCE((")
+                    .Append(runtimePlan.ColumnTransitionTargetCatalogGuardExpression)
+                    .Append("), FALSE) THEN\n").Append(evaluationBodyIndentation)
+                    .Append("    doka_state := 'unsupported';\n")
+                    .Append(evaluationBodyIndentation).Append("ELSE\n");
+            }
+
+            builder.Append(evaluationBodyIndentation)
                 .Append("doka_state := (")
                 .Append(runtimePlan.StateEvaluationGuardFailureExpression)
-                .Append(");\n")
-                .Append(evaluationBodyIndentation)
+                .Append(");\n");
+
+            if (runtimePlan.ColumnTransitionTargetCatalogGuardExpression is not null)
+            {
+                builder.Append(evaluationBodyIndentation).Append("END IF;\n");
+            }
+
+            builder.Append(evaluationBodyIndentation)
                 .Append("doka_repair_ok := FALSE;\n");
         }
 
@@ -461,7 +492,8 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         {
             builder
                 .Append(evaluationIndentation)
-                .Append("EXIT WHEN doka_action <> 'repair' OR doka_evaluation_pass = 2;\n");
+                .Append("EXIT WHEN doka_action OPERATOR(pg_catalog.<>) 'repair' ")
+                .Append("OR doka_evaluation_pass OPERATOR(pg_catalog.=) 2;\n");
 
             if (hasObjectIdentityGuard)
             {
@@ -485,7 +517,8 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             // on newly committed children; we never change the caller's level.
             builder
                 .Append(evaluationIndentation)
-                .Append("EXIT WHEN doka_action <> 'apply' OR doka_evaluation_pass = 2;\n");
+                .Append("EXIT WHEN doka_action OPERATOR(pg_catalog.<>) 'apply' ")
+                .Append("OR doka_evaluation_pass OPERATOR(pg_catalog.=) 2;\n");
 
             if (hasObjectIdentityGuard)
             {
@@ -499,23 +532,67 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 .Append(" IN EXCLUSIVE MODE;\n")
                 .Append("    END LOOP;\n");
         }
+        else if (runtimePlan.ColumnTransitionLockSqlExpression is not null)
+        {
+            // WHY: A lossless integer value range does not freeze the source's
+            // default, dependencies or owner epoch. Lock only an actual repair,
+            // then repeat every source/identity check under a fresh snapshot.
+            builder
+                .Append(evaluationIndentation)
+                .Append("EXIT WHEN doka_action OPERATOR(pg_catalog.<>) 'repair' ")
+                .Append("OR doka_evaluation_pass OPERATOR(pg_catalog.=) 2;\n");
+
+            if (hasObjectIdentityGuard)
+            {
+                AppendObjectIdentityGuardSql(builder, runtimePlan, diagnostic, evaluationIndentation);
+            }
+
+            builder
+                .Append(evaluationIndentation)
+                .Append("EXECUTE ")
+                .Append(runtimePlan.ColumnTransitionLockSqlExpression)
+                .Append(";\n    END LOOP;\n");
+        }
+        else if (runtimePlan.GeneratedDropLockSqlExpression is not null)
+        {
+            // WHY: PostgreSQL14 can silently remove a concurrently added
+            // generated dependent. Reclassify under the same exclusive owner
+            // lock required by DROP, using READ COMMITTED's fresh catalog view.
+            // Missing/no-op or rejected operations never acquire this lock.
+            builder
+                .Append(evaluationIndentation)
+                .Append("EXIT WHEN doka_action OPERATOR(pg_catalog.<>) 'apply' ")
+                .Append("OR doka_evaluation_pass OPERATOR(pg_catalog.=) 2;\n");
+
+            if (hasObjectIdentityGuard)
+            {
+                AppendObjectIdentityGuardSql(builder, runtimePlan, diagnostic, evaluationIndentation);
+            }
+
+            builder
+                .Append(evaluationIndentation)
+                .Append("EXECUTE ")
+                .Append(runtimePlan.GeneratedDropLockSqlExpression)
+                .Append(";\n    END LOOP;\n");
+        }
 
         builder
-            .Append("    IF doka_action = 'reject_different' THEN\n")
+            .Append("    IF doka_action OPERATOR(pg_catalog.=) 'reject_different' THEN\n")
             .Append("        RAISE EXCEPTION USING ERRCODE = 'P1001', MESSAGE = ");
 
         diagnostic.AppendMessage(builder, "doka_sm_different");
-        builder.Append(";\n    ELSIF doka_action = 'reject_unsupported' THEN\n")
+        builder.Append(";\n    ELSIF doka_action OPERATOR(pg_catalog.=) 'reject_unsupported' THEN\n")
             .Append("        RAISE EXCEPTION USING ERRCODE = 'P1002', MESSAGE = ");
         diagnostic.AppendMessage(builder, "doka_sm_unsupported", runtimePlan.UnsupportedCode);
-        builder.Append(";\n    ELSIF doka_action = 'reject_data_blocked' THEN\n")
+        builder.Append(";\n    ELSIF doka_action OPERATOR(pg_catalog.=) 'reject_data_blocked' THEN\n")
             .Append("        RAISE EXCEPTION USING ERRCODE = 'P1003', MESSAGE = ");
         diagnostic.AppendMessage(builder, "doka_sm_data_blocked");
-        builder.Append(";\n    ELSIF doka_action = 'reject_prerequisite_missing' THEN\n")
+        builder.Append(";\n    ELSIF doka_action OPERATOR(pg_catalog.=) 'reject_prerequisite_missing' THEN\n")
             .Append("        RAISE EXCEPTION USING ERRCODE = 'P1004', MESSAGE = ");
         diagnostic.AppendMessage(builder, "doka_sm_prerequisite_missing");
-        builder.Append(";\n    ELSIF doka_action IN ('apply', 'repair') THEN\n")
-            .Append("        IF doka_action = 'apply' THEN\n");
+        builder.Append(";\n    ELSIF doka_action OPERATOR(pg_catalog.=) 'apply' ")
+            .Append("OR doka_action OPERATOR(pg_catalog.=) 'repair' THEN\n")
+            .Append("        IF doka_action OPERATOR(pg_catalog.=) 'apply' THEN\n");
 
         AppendActionSql(builder, baseline, indentation: "            ");
 
@@ -552,11 +629,83 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         diagnostic.AppendMessage(builder, "doka_sm_postcondition");
         builder.Append(";\n        END IF;\n")
             .Append("    END IF;\n")
-            .Append("END\n")
-            .Append(tag)
-            .Append(';');
+            .Append("END\n");
+
+        if (escapeAnonymousBody)
+        {
+            // WHY: EF's relational idempotent script writer indents every
+            // physical command line, including lines inside SQL literals.
+            // Encode this same anonymous body as one E literal so CASE catalog
+            // text, defaults, comments and captured payloads remain byte exact.
+            return RenderEscapedAnonymousBlock(builder);
+        }
+
+        builder.Append(tag).Append(';');
 
         return builder.ToString();
+    }
+
+    /// <summary>Encodes one unchanged anonymous body without physical newlines or outer dollar delimiters.</summary>
+    /// <param name="body">The complete PL/pgSQL body, without a surrounding DO literal.</param>
+    /// <returns>A single-line DO command whose decoded body retains every original character.</returns>
+    private static string RenderEscapedAnonymousBlock(StringBuilder body)
+    {
+        var length = checked("DO E'".Length + body.Length + "';".Length);
+        foreach (var chunk in body.GetChunks())
+        {
+            foreach (var character in chunk.Span)
+            {
+                length = checked(length + (character switch
+                {
+                    '\\' or '\'' or '\r' or '\n' => 1,
+                    '$' => 3,
+                    _ => 0,
+                }));
+            }
+        }
+
+        // WHY: A two-pass chunk walk writes one final string without copying
+        // the large body first. Doubling quotes works with backslash_quote=off;
+        // octal dollars cannot terminate EF's enclosing dollar-quoted block.
+        return string.Create(length, body, static (destination, source) =>
+        {
+            "DO E'".AsSpan().CopyTo(destination);
+            var offset = "DO E'".Length;
+            foreach (var chunk in source.GetChunks())
+            {
+                foreach (var character in chunk.Span)
+                {
+                    switch (character)
+                    {
+                        case '\\':
+                            destination[offset++] = '\\';
+                            destination[offset++] = '\\';
+                            break;
+                        case '\'':
+                            destination[offset++] = '\'';
+                            destination[offset++] = '\'';
+                            break;
+                        case '\r':
+                        case '\n':
+                            destination[offset++] = '\\';
+                            destination[offset++] = character == '\r' ? 'r' : 'n';
+                            break;
+                        case '$':
+                            destination[offset++] = '\\';
+                            destination[offset++] = '0';
+                            destination[offset++] = '4';
+                            destination[offset++] = '4';
+                            break;
+                        default:
+                            destination[offset++] = character;
+                            break;
+                    }
+                }
+            }
+
+            destination[offset++] = '\'';
+            destination[offset] = ';';
+        });
     }
 
     /// <summary>Reproves the frozen command-local owner before classification or stateful acquisition.</summary>
@@ -671,10 +820,10 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             .Append("END IF;\n");
     }
 
-    /// <summary>Appends provider baselines with the existing termination and indentation contract.</summary>
+    /// <summary>Appends terminated provider baselines without rewriting quoted multiline content.</summary>
     /// <param name="builder">The operation-owned final guard buffer.</param>
     /// <param name="commands">The ordered provider commands for one action branch.</param>
-    /// <param name="indentation">The unchanged indentation for every rendered command line.</param>
+    /// <param name="indentation">The first-line and safe ordinary-line indentation.</param>
     private static void AppendActionSql(
         StringBuilder builder,
         IReadOnlyList<MigrationCommand> commands,
@@ -691,8 +840,10 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         }
 
         // WHY: Flattening both baseline lists creates two chunk chains and
-        // complete SQL strings. Each command can preserve the same bytes
-        // directly: trim trailing whitespace, terminate, then indent lines.
+        // complete SQL strings. Preserve each command directly: trim trailing
+        // whitespace, terminate, and indent only where literal bytes stay intact.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < commands.Count; index++)
         {
             AppendIndentedLines(builder, commands[index].CommandText.AsSpan().TrimEnd(), indentation);
@@ -709,7 +860,10 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         SafeMigrationRepairCapability repairCapability
     )
     {
-        builder.Append("CASE doka_state ");
+        // WHY: Policy dispatch must not invoke an application TEXT equality
+        // overload while rejecting that same unsupported source binding.
+        // Searched CASE permits explicit native operators; simple CASE does not.
+        builder.Append("CASE ");
         foreach (var state in Enum.GetValues<SafeMigrationObservedState>())
         {
             var action = SafeMigrationDecisionPlanner.PlanAction(
@@ -719,7 +873,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 repairCapability);
 
             builder
-                .Append("WHEN '")
+                .Append("WHEN doka_state OPERATOR(pg_catalog.=) '")
                 .Append(StateCode(state))
                 .Append("' THEN ");
 
@@ -789,6 +943,9 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         params ReadOnlySpan<string> sqlParts
     )
     {
+        // WHY: Try deterministic suffixes until the whole SQL scope has no tag collision.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var suffix = 0; ; suffix++)
         {
             var tag = suffix == 0 ? "$doka_safe_migration$" : $"$doka_safe_migration_{suffix}$";
@@ -824,6 +981,9 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         string tag
     )
     {
+        // WHY: Scan completed command snapshots without an interface enumerator.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < commands.Count; index++)
         {
             if (commands[index].CommandText.Contains(tag, StringComparison.Ordinal))
@@ -838,13 +998,29 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
     /// <summary>Appends one trimmed command while retaining interior CRLF and existing terminators.</summary>
     /// <param name="builder">The operation-owned final guard buffer.</param>
     /// <param name="sql">The provider command with trailing whitespace already removed.</param>
-    /// <param name="indentation">The indentation appended before every original line.</param>
+    /// <param name="indentation">The prefix, repeated only when no quoted multiline content exists.</param>
     private static void AppendIndentedLines(
         StringBuilder builder,
         ReadOnlySpan<char> sql,
         string indentation
     )
     {
+        if (sql.IndexOf('\n') >= 0 && sql.IndexOfAny('\'', '"', '$') >= 0)
+        {
+            // WHY: Indentation is not whitespace outside a multiline literal
+            // or quoted identifier. Keep provider SQL intact rather than parse
+            // it or silently change defaults, comments or authored payloads.
+            builder.Append(indentation).Append(sql);
+            if (sql[^1] != ';')
+            {
+                builder.Append(';');
+            }
+
+            builder.Append('\n');
+
+            return;
+        }
+
         var start = 0;
         while (start <= sql.Length)
         {

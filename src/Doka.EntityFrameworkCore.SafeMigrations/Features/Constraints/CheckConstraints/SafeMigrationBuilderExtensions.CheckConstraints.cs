@@ -21,6 +21,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="schema">The schema name, or null for the provider default.</param>
     /// <param name="policy">The conflict policy for the operation.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
+    /// <remarks>
+    /// Supported SQL is captured structurally, preserving the scaffolder's validation.
+    /// Unrecognized syntax remains opaque and cannot prove catalog equivalence.
+    /// </remarks>
     public static OperationBuilder<SafeMigrationOperation> AddCheckConstraintIfNotExists(
         this MigrationBuilder migrationBuilder,
         string name,
@@ -29,7 +33,7 @@ public static partial class SafeMigrationBuilderExtensions
         string? schema = null,
         SafeMigrationPolicy policy = SafeMigrationPolicy.ThrowIfDifferent
     ) => migrationBuilder.EnsureCheckConstraint(
-        new ExpectedCheckConstraintDefinition(name, table, sql, schema),
+        SafeMigrationExpectedDefinitionFactory.CheckConstraint(name, table, sql, schema),
         policy);
 
     /// <summary>Drops a check constraint when it exists.</summary>

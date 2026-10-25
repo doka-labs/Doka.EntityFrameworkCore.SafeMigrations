@@ -28,6 +28,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
     /// <returns>Whether the scope owns the exact native SQL-mode snapshot and restoration.</returns>
     private static bool HasCertifiedNativeSqlModeCleanup(BaselineBatch baseline)
     {
+        // WHY: Inspect the existing provider-command list without introducing an interface enumerator.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < baseline.Commands.Count; index++)
         {
             var command = baseline.Commands[index];

@@ -26,6 +26,9 @@ internal static class SafeMigrationModelManagedDataContractValidator
 
         var identities = new HashSet<string>(StringComparer.Ordinal);
         string? previousMigrationId = null;
+        // WHY: Keep operation and migration-ID streams aligned at their original ordinals.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             if (migrationIds is not null)
@@ -50,6 +53,9 @@ internal static class SafeMigrationModelManagedDataContractValidator
             var columns = SafeMigrationModelManagedKeyIdentity.CanonicalizeColumns(
                 intent.KeyColumns, normalizer: null, out var keyOrdinals);
 
+            // WHY: Validate one typed key identity per authored row without materializing row copies.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
             for (var row = 0; row < intent.RowCount; row++)
             {
                 if (!identities.Add(Identity(intent, row, columns, keyOrdinals)))
@@ -77,6 +83,9 @@ internal static class SafeMigrationModelManagedDataContractValidator
         writer.Add(intent.Schema);
         writer.Add(intent.Table);
         writer.Add(columns.Count);
+        // WHY: Pair canonical key labels and values through the same ordinal permutation.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var column = 0; column < columns.Count; column++)
         {
             var ordinal = canonicalOrdinals?[column] ?? column;

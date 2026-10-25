@@ -6,6 +6,68 @@ public sealed class SqlServerTableColumnSetSqlTests
     private const string ConnectionString = "Server=127.0.0.1,1433;Database=table_column_set;"
         + "User ID=sa;Password=unused;TrustServerCertificate=True";
 
+    /// <summary>Unneeded identity and default catalog views do not expand ordinary matcher compilation.</summary>
+    [Fact]
+    public void PlainColumnSet_RejectsActualIdentityAndDefaultDriftWithoutOptionalJoins()
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var operation = TableOperation([new ExpectedColumnDefinition("Value", typeof(int), true, "int")]);
+
+        // Act
+        var plan = CreateCatalog(context).Build(operation);
+
+        // Assert
+        foreach (var predicate in new[] { plan.StateExpression, plan.Postcondition, plan.ExecutionPostcondition! })
+        {
+            Assert.DoesNotContain("LEFT JOIN sys.identity_columns", predicate, StringComparison.Ordinal);
+            Assert.DoesNotContain("LEFT JOIN sys.default_constraints", predicate, StringComparison.Ordinal);
+            Assert.DoesNotContain("LEFT JOIN sys.extended_properties", predicate, StringComparison.Ordinal);
+            Assert.Contains("c.is_identity = expected.is_identity", predicate, StringComparison.Ordinal);
+            Assert.Contains("c.default_object_id = 0", predicate, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>Retains identity and default joins exactly when an authored member independently needs them.</summary>
+    /// <param name="identity">Whether the first member has an authored identity contract.</param>
+    /// <param name="defaults">Whether another member has an authored default contract.</param>
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void OptionalColumnMetadata_RetainsEveryAuthoredProof(bool identity, bool defaults)
+    {
+        // Arrange
+        using var context = new SafeMigrationDbContext(ConnectionString);
+        var annotations = new AddColumnOperation();
+        if (identity)
+        {
+            annotations["SqlServer:Identity"] = "1, 1";
+        }
+
+        var id = new ExpectedColumnDefinition("Id", typeof(int), false, "int")
+        {
+            ProviderAnnotations = SafeMigrationProviderAnnotation.Capture(annotations),
+        };
+
+        var value = new ExpectedColumnDefinition("Value", typeof(int), true, "int",
+            defaultValue: defaults ? SafeMigrationDefaultValue.Literal(7) : SafeMigrationDefaultValue.None);
+
+        // Act
+        var plan = CreateCatalog(context).Build(TableOperation([id, value]));
+
+        // Assert
+        foreach (var predicate in new[] { plan.StateExpression, plan.Postcondition, plan.ExecutionPostcondition! })
+        {
+            Assert.Equal(identity, predicate.Contains("LEFT JOIN sys.identity_columns", StringComparison.Ordinal));
+            Assert.Equal(defaults, predicate.Contains("LEFT JOIN sys.default_constraints", StringComparison.Ordinal));
+            Assert.Equal(defaults, predicate.Contains("LEFT JOIN sys.extended_properties", StringComparison.Ordinal));
+            Assert.Contains("c.is_identity = expected.is_identity", predicate, StringComparison.Ordinal);
+            Assert.Contains("c.default_object_id = 0", predicate, StringComparison.Ordinal);
+        }
+    }
+
     /// <summary>Renders all 1,024 column contracts with one catalog join per matching predicate.</summary>
     [Fact]
     public void MaximumOrdinaryTable_UsesOneSetBasedColumnMatch()
@@ -288,7 +350,15 @@ public sealed class SqlServerTableColumnSetSqlTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var operation = TableOperation([new ExpectedColumnDefinition("Value", typeof(int), true, "int")]);
+        var annotations = new AddColumnOperation();
+        annotations["SqlServer:Identity"] = "1, 1";
+        var identity = new ExpectedColumnDefinition("Id", typeof(int), false, "int")
+        {
+            ProviderAnnotations = SafeMigrationProviderAnnotation.Capture(annotations),
+        };
+
+        var operation = TableOperation([identity, new ExpectedColumnDefinition("Value", typeof(int), true, "int",
+            defaultValue: SafeMigrationDefaultValue.Literal(7))]);
 
         // Act
         var plan = CreateCatalog(context).Build(operation);

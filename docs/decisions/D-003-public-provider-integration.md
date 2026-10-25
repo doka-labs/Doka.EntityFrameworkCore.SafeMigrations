@@ -103,7 +103,7 @@ Its first release requires independent x64 Linux qualification on all three
 declared SQL Server majors; local ARM64 test skips are not qualification.
 
 The current MySQL/MariaDB adapter consumes Doka through the bounded
-`[10.5.0,10.6.0)` NuGet dependency range. Doka 10.3.0 introduced typed
+`[10.6.2,10.7.0)` NuGet dependency range. Doka 10.3.0 introduced typed
 read-only migration metadata for Guid storage, value generation, and index
 prefixes. Doka 10.4.0 adds an explicit commandless consumed result, which the
 internal design-time-services guard uses without emitting synthetic SQL.
@@ -114,8 +114,8 @@ while development overlaps, but it cannot satisfy the release gate.
 
 The upper bound is the next Doka minor rather than the next major because the
 operation-handler SPI is both a binary and behavioral dependency. Patch
-releases within the qualified 10.5 line remain consumable without creating a
-diamond conflict through an exact transitive pin. A Doka 10.6 or later line
+releases within the reviewed 10.6 line remain consumable without creating a
+diamond conflict through an exact transitive pin. A Doka 10.7 or later line
 requires a reviewed range change and fresh SafeMigrations qualification.
 
 Doka 10.5.0 adds opt-in native MariaDB `uuid` without changing its default
@@ -257,6 +257,24 @@ being accepted through broad string normalization.
   verified signed release tag. Qualify explicit native UUID metadata and
   16-byte physical proofs while retaining storage-format boundaries. Document
   the separate implicit `byte[16]` -> `varbinary(17)` model-diff consequence.
+- 2026-10-20: Raise the Doka range to `[10.6.0,10.7.0)` and restore published
+  10.6.0, commit `d1e40a7b211c10b354e5aa6df80d9fea710d8f58`, matching its
+  verified signed release tag and NuGet catalog. Retain the public migration
+  SPI; verify complete physical index-budget model conventions, existing
+  packed-DECIMAL accounting and native migration/tooling follow-effects.
+  Keep prior release qualification separate from new 10.6 evidence.
+- 2026-10-22: Advance the Doka floor to `[10.6.1,10.7.0)` and restore the
+  published 10.6.1 package, commit
+  `53c8fbd7ae8987b5c376250fe4d6296d729669cf`, matching its verified signed
+  release tag and NuGet catalog. Preserve explicit GUID SQL defaults through
+  real model differences and compiled scaffolding; retain explicit client
+  generation choices, native engine restrictions and consumer isolation.
+- 2026-10-25: Advance the Doka floor to `[10.6.2,10.7.0)` and restore the
+  published 10.6.2 package, commit
+  `6e2618140d821bd6befdf46181fcb82dca323c4f`, matching its verified signed
+  release tag and NuGet catalog. Retain the public migration SPI and existing
+  dependency ranges. Include secondary Entity Splitting and shared GUID-default
+  metadata corrections without changing storage defaults or migration history.
 
 ### 2026-09-22 Compatibility Amendment
 
@@ -267,6 +285,7 @@ where it is created instead of rejecting published migrations later.
 ### Implementation References
 
 - [Native UUID contract regressions](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Unit/MySqlNativeUuidContractTests.cs)
+- [Doka 10.6 model and physical-key integration regressions](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Unit/MySqlProvider106ContractTests.cs)
 - [Native UUID live regressions](../../tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Integration/MySqlNativeUuidIntegrationTests.cs)
 - [Exact Doka handler](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/SqlGeneration/MySqlSafeMigrationOperationHandler.cs)
 - [Typed plan capture](../../src/Doka.EntityFrameworkCore.SafeMigrations.MySql/Analysis/MySqlSafeMigrationPlanCapture.cs)
@@ -320,3 +339,18 @@ where it is created instead of rejecting published migrations later.
   and [typed UUID contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/27a8d3cce3ce2bc64f6efd1e9034b1cd66eb1ff0/src/Doka.EntityFrameworkCore.MySql/Migrations/MySqlMigrationOperationMetadata.cs)
   (primary sources; retrieved 2026-10-15)
 - [Npgsql EF Core provider and configuration](https://www.npgsql.org/efcore/) (primary source; retrieved 2026-08-26)
+- [Doka 10.6.0 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.6.0),
+  [NuGet catalog provenance](https://api.nuget.org/v3/catalog0/data/2026.10.20.06.45.24/doka.entityframeworkcore.mysql.10.6.0.json),
+  [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.6.0),
+  and [physical index-budget contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/d1e40a7b211c10b354e5aa6df80d9fea710d8f58/docs/provider-configuration.md#index-key-byte-fidelity)
+  (primary sources; retrieved 2026-10-20)
+- [Doka 10.6.1 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.6.1),
+  [NuGet catalog provenance](https://api.nuget.org/v3/catalog0/data/2026.10.22.06.05.55/doka.entityframeworkcore.mysql.10.6.1.json),
+  [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.6.1),
+  and [GUID SQL-default contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/53c8fbd7ae8987b5c376250fe4d6296d729669cf/docs/operations/migrations.md#guid-sql-defaults)
+  (primary sources; retrieved 2026-10-22)
+- [Doka 10.6.2 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.6.2),
+  [NuGet catalog provenance](https://api.nuget.org/v3/catalog0/data/2026.10.25.00.38.58/doka.entityframeworkcore.mysql.10.6.2.json),
+  [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.6.2),
+  and [GUID SQL-default contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/6e2618140d821bd6befdf46181fcb82dca323c4f/docs/operations/migrations.md#guid-sql-defaults)
+  (primary sources; retrieved 2026-10-25)

@@ -128,6 +128,14 @@ public sealed class SafeMigrationProviderAnalysis
     /// <remarks>Semantic table matching alone cannot certify authored constraint symbols as physical names.</remarks>
     internal IReadOnlyList<SafeMigrationConstraintIdentityBinding>? TableConstraintIdentities { get; init; }
 
+    /// <summary>Gets whether a fresh native DROP snapshot proves no surviving generated member.</summary>
+    /// <remarks>
+    /// The complete native count excludes only the exact dropped member. Core may consume this proof
+    /// only after an accepted removal whose original owner lifetime has not been structurally changed.
+    /// It proves neither row safety, table layout nor absence of ordinary columns.
+    /// </remarks>
+    internal bool DropLeavesNoGeneratedColumns { get; init; }
+
     /// <summary>Gets whether preceding operations cannot repair this unsupported contract.</summary>
     internal bool IsInvariantUnsupported { get; init; }
 
@@ -258,7 +266,7 @@ public sealed class SafeMigrationProviderAnalysis
 
     /// <summary>Attaches independently captured destination presence without changing the source analysis.</summary>
     /// <param name="exists">Whether the immutable catalog contains the rename destination.</param>
-    /// <param name="intermediateExists">Whether a staged cross-schema rename's intermediate name is occupied.</param>
+    /// <param name="intermediateExists">Whether a staged cross-schema renames intermediate name is occupied.</param>
     /// <param name="applyUnsupportedCode">The capability rejection when a source must actually be renamed.</param>
     /// <returns>A separate analysis preserving every other captured observation.</returns>
     internal SafeMigrationProviderAnalysis WithRenameTargetExists(

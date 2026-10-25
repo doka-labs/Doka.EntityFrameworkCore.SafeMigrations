@@ -351,7 +351,7 @@ public sealed class PostgreSqlServiceCompositionTests
         Assert.Contains(
             RecordingNpgsqlMigrationsSqlGenerator.ObservedOperationTypes,
             type => type == typeof(AlterColumnOperation));
-        Assert.Contains("IF doka_action = 'apply'", command.CommandText, StringComparison.Ordinal);
+        Assert.Contains("IF doka_action OPERATOR(pg_catalog.=) 'apply'", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("-- custom baseline: AddColumnOperation", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("-- custom baseline: AlterColumnOperation", command.CommandText, StringComparison.Ordinal);
     }
@@ -382,10 +382,11 @@ public sealed class PostgreSqlServiceCompositionTests
 
         const string loop = "FOR doka_evaluation_pass IN 1..2 LOOP";
         const string classifier = "doka_transition_eligible := COALESCE((";
-        const string action = "doka_action := CASE doka_state";
-        const string exit = "EXIT WHEN doka_action <> 'repair' OR doka_evaluation_pass = 2;";
+        const string action = "doka_action := CASE WHEN doka_state OPERATOR(pg_catalog.=)";
+        const string exit = "EXIT WHEN doka_action OPERATOR(pg_catalog.<>) 'repair' "
+            + "OR doka_evaluation_pass OPERATOR(pg_catalog.=) 2;";
         const string tableLock = " IN ACCESS EXCLUSIVE MODE;";
-        const string mutationBranch = "IF doka_action = 'reject_different' THEN";
+        const string mutationBranch = "IF doka_action OPERATOR(pg_catalog.=) 'reject_different' THEN";
 
         var loopIndex = command.CommandText.IndexOf(loop, StringComparison.Ordinal);
         var classifierIndex = command.CommandText.IndexOf(classifier, StringComparison.Ordinal);

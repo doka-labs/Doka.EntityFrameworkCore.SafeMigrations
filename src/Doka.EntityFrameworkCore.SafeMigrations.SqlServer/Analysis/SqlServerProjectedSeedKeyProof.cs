@@ -32,6 +32,9 @@ internal sealed record SqlServerProjectedSeedKeyProof(
             return false;
         }
 
+        // WHY: Compare seed references at the same ordinal to preserve exact lineage.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < accepted.Seeds.Count; ordinal++)
         {
             if (!ReferenceEquals(Seeds[ordinal], accepted.Seeds[ordinal]))
@@ -172,6 +175,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         var rows = new Dictionary<EnsureModelManagedDataIntent, List<SqlServerProjectedSeedKeyProof>>();
         var caches = new Dictionary<SqlServerProjectedSeedLineage, SqlServerProjectedSeedProofCache>();
         var buffers = PrepareSeedBuffers(operations, cancellationToken);
+        // WHY: Evaluate seed proofs against the authored prefix at each operation ordinal.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -258,6 +264,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     {
         var lineages = new Dictionary<(string Schema, string Table), SqlServerProjectedSeedLineage>();
         var tables = new Dictionary<int, SqlServerProjectedSeedLineage>();
+        // WHY: Retain table-creation ordinals while advancing seed lineage in order.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < operations.Count; ordinal++)
         {
             cancellationToken.ThrowIfCancellationRequested();

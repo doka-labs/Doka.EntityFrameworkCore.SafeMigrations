@@ -122,7 +122,7 @@ internal static partial class SafeMigrationStandardOperationFactory
             Collation = Render(target.Collation, renderCollation),
             Comment = target.Comment,
             ComputedColumnSql =
-                target.ComputedColumnSql
+                target.CapturedComputedSql ?? target.ComputedColumnSql
                 ?? (target.ComputedExpression is null ? null : Render(target.ComputedExpression, renderExpression)),
             IsStored = target.IsStored,
             OldColumn = oldColumn,
@@ -158,7 +158,7 @@ internal static partial class SafeMigrationStandardOperationFactory
             Scale = definition.Scale,
             Collation = Render(definition.Collation, renderCollation),
             Comment = definition.Comment,
-            ComputedColumnSql = definition.ComputedColumnSql
+            ComputedColumnSql = definition.CapturedComputedSql ?? definition.ComputedColumnSql
                 ?? (definition.ComputedExpression is null
                     ? null
                     : Render(definition.ComputedExpression, renderExpression)),
