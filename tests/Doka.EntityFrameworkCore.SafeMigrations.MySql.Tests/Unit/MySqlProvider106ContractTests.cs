@@ -146,10 +146,16 @@ public sealed class MySqlProvider106ContractTests
     public void ExplicitOversizedKeyFailsBeforeSafeOperationPublication()
     {
         // Arrange
+        // WHY: Even uncached EF builds inspect the global provider count before validating the model.
+        // The negative case must reach the physical-key validator independently of other test profiles.
+        using var services = new ServiceCollection()
+            .AddEntityFrameworkDokaMySql()
+            .BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+
         var options = new DbContextOptionsBuilder<ImpossibleBudgetContext>()
             .UseMySql("Server=127.0.0.1;Port=1;User ID=test;Database=provider_106",
                 MySqlServerVersion.MySql(new Version(8, 4, 11)))
-            .EnableServiceProviderCaching(false).Options;
+            .UseInternalServiceProvider(services).Options;
 
         using var context = new ImpossibleBudgetContext(options);
 
@@ -242,17 +248,39 @@ public sealed class MySqlProvider106ContractTests
         }
     }
 
-    /// <summary>Builds published-provider options without opening a database or retaining variant caches.</summary>
+    /// <summary>
+    /// Builds a context-owned provider profile without opening a database or using global variant caches.
+    /// </summary>
+    /// <param name="connectionString">The native lease, or null for the offline profile.</param>
+    /// <param name="version">The native version, or null for the fixed MySQL contract profile.</param>
+    /// <returns>The context that the caller must dispose to release both its EF scope and its service root.</returns>
     internal static DbContext CreateContext(string? connectionString = null, MySqlServerVersion? version = null)
     {
-        var options = new DbContextOptionsBuilder<BudgetContext>()
-            .UseMySql(connectionString ?? "Server=127.0.0.1;Port=1;User ID=test;Database=provider_106",
-                version ?? MySqlServerVersion.MySql(new Version(8, 4, 11)))
-            .EnableServiceProviderCaching(false);
+        // WHY: DbContext(options) consults EF's process-wide cache before OnConfiguring.
+        // An explicit root must already be present in the constructor options, even for uncached profiles.
+        var services = new ServiceCollection()
+            .AddEntityFrameworkDokaMySql()
+            .AddEntityFrameworkDokaMySqlSafeMigrations()
+            .BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
 
-        options.UseMySqlSafeMigrations();
+        try
+        {
+            var options = new DbContextOptionsBuilder<BudgetContext>()
+                .UseMySql(connectionString ?? "Server=127.0.0.1;Port=1;User ID=test;Database=provider_106",
+                    version ?? MySqlServerVersion.MySql(new Version(8, 4, 11)))
+                .UseInternalServiceProvider(services);
 
-        return new BudgetContext(options.Options);
+            options.UseMySqlSafeMigrations();
+
+            return new BudgetContext(options.Options, services);
+        }
+        catch
+        {
+            // WHY: Ownership transfers only after successful context construction.
+            services.Dispose();
+
+            throw;
+        }
     }
 
     /// <summary>Captures exactly the finalized model that SafeMigrations' design-time pipeline consumes.</summary>
@@ -261,10 +289,45 @@ public sealed class MySqlProvider106ContractTests
             context.GetService<IDesignTimeModel>().Model.GetRelationalModel());
 
     /// <summary>Combines implicit, explicit, fixed, overlapping and principal-derived facets.</summary>
+    /// <param name="options">The complete profile, including its explicit root before EF construction.</param>
+    /// <param name="services">The root whose lifetime transfers to this context.</param>
     private sealed class BudgetContext(
-        DbContextOptions<BudgetContext> options
+        DbContextOptions<BudgetContext> options,
+        ServiceProvider services
     ) : DbContext(options)
     {
+        private ServiceProvider? _ownedServices = services;
+
+        /// <inheritdoc />
+        public override void Dispose()
+        {
+            try
+            {
+                base.Dispose();
+            }
+            finally
+            {
+                // WHY: Scoped EF services must release their resources before their root is torn down.
+                Interlocked.Exchange(ref _ownedServices, null)?.Dispose();
+            }
+        }
+
+        /// <inheritdoc />
+        public override async ValueTask DisposeAsync()
+        {
+            try
+            {
+                await base.DisposeAsync();
+            }
+            finally
+            {
+                if (Interlocked.Exchange(ref _ownedServices, null) is { } ownedServices)
+                {
+                    await ownedServices.DisposeAsync();
+                }
+            }
+        }
+
         /// <inheritdoc />
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

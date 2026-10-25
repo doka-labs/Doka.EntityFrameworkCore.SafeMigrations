@@ -26,6 +26,10 @@ the shared release identity described in [Release process](docs/release-process.
 
 ### Fixed
 
+- Isolate the provider-budget test contexts from EF's global service-provider
+  cache. Preserve physical-key rejection and native replay checks when other
+  parallel tests use many legitimate provider profiles, with explicit root
+  ownership and synchronous/asynchronous cleanup instead of warning suppression.
 - Retain independently qualified column-source evidence across accepted index
   removals and safe sibling transitions. Support interrupted upgrade prefixes
   and idempotent replay without restoring invalidated index/key evidence or
