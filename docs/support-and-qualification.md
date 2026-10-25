@@ -3,7 +3,9 @@
 ## Support contract
 
 Version 10.6.0 adds public CASE expressions, certified generated-column
-and CHECK support, independent DROP corrections and stack-safe traversal.
+and CHECK support, lossless signed-integer upgrades, ordered projection/DROP
+corrections and stack-safe traversal. Measured allocation reductions do not
+change migration safety or make hardware-dependent timing a qualification gate.
 It retains the 10.5.0 diagnostics with canonical report schema 4, selected
 view schema 3 and contextual owned runtime errors. Older schema
 files remain packaged; update validators and rebuild references to the compiled
@@ -21,6 +23,17 @@ Keep every installed SafeMigrations package on the same 10.6.0 version; install
 only the provider adapters the application needs. Account for the dependency
 floors below and review newly scaffolded implicit index-length changes without
 rewriting historical migrations.
+
+MySQL/MariaDB and PostgreSQL now qualify explicit lossless signed-integer
+widening under `RepairIfSafe` when exact source, ancillary facets and native
+storage/dependency requirements are proven. Accepted index removals and safe
+sibling transitions preserve independently certified column facts, including
+interrupted upgrade prefixes and replay; removed key/index or row proofs are
+not restored. SQLite retains exact physical `INTEGER` matches without admitting
+a store-type conversion. Runtime guards remain mandatory; unsupported
+dependencies and unproven conversions do not become safe through this upgrade.
+See the [MySQL/MariaDB](mysql-mariadb-ddl-behavior.md#lossless-signed-integer-alterations)
+and [PostgreSQL](postgresql-behavior.md#lossless-signed-integer-alterations) boundaries.
 
 The 10.6.0 generated-expression support conditionally changes approved
 contract fingerprints: successfully parsed EF computed-column and CHECK SQL
@@ -48,6 +61,11 @@ Report schema 4 and view schema 3 are inherited from 10.5.0, not advanced again.
 The complete hosted/native matrix and package/readback gates remain mandatory;
 see the [publication runbook](operations/release-publication.md) for release
 status and evidence requirements.
+
+Repository release-line automation retains the same five packages, signed-tag
+publisher and .NET 10 identity. Only main/10 is active; maintenance/10.x remains
+inactive. This is not .NET 11 support or an application migration requirement;
+see [release lines](operations/release-lines.md).
 
 ### Dependencies and package identity
 

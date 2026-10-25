@@ -6,7 +6,7 @@ below; release changes and consumer upgrade notes belong in the
 [changelog](../CHANGELOG.md). The [diagnostics guide](diagnostics.md) explains
 readable errors, affected owners, text summaries and report-schema compatibility;
 [support and qualification](support-and-qualification.md) owns dependency and
-native UUID boundaries, including the
+native UUID and lossless signed-integer upgrade boundaries, including the
 [10.6.0 upgrade](support-and-qualification.md#upgrade-to-1060).
 Existing ordered proofs, concurrency guards and verified
 schema/session recovery remain. Deferred preflight states require runtime
@@ -62,6 +62,8 @@ OpenSSF status is established by its linked external registry.
   qualification, protected wait, signed tag, approval, readback, and recovery.
 - [Release process](release-process.md): package/version identity, qualification
   scope, integrity requirements, and acceptance contract.
+- [Release lines](operations/release-lines.md): explicit line policy, own-source
+  qualification, exact-artifact recovery and branch-native maintenance.
 - [Repository settings](runbooks/repository-settings.md): operator-owned
   post-publication controls and read-only confirmation commands.
 - [OpenSSF Best Practices evidence](openssf-best-practices.md):

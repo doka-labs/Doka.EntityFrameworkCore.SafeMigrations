@@ -317,6 +317,10 @@ owns independent consumer readback.
   Retain five packages, twelve provenance subjects, thirteen public assets and
   existing operator protections; additional lines remain inactive and .NET 11
   adoption is excluded.
+  Consolidate this contract, lossless signed-integer upgrades, ordered projection
+  fixes, measured allocation reductions and the final Doka 10.6.2/tooling baseline
+  under the shared 10.6.0 release notes dated 2026-10-25. Keep one section per
+  change category, prior decision dates and historical releases unchanged.
 
 ### Implementation References
 

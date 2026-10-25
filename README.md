@@ -57,9 +57,9 @@ evidence. See [Support and qualification](docs/support-and-qualification.md).
 Install one provider package. The core package is included transitively. The
 examples target version 10.6.0 and select that version exactly, so
 restore does not move to another version implicitly. Release changes and
-compatibility notes belong in the [changelog](CHANGELOG.md). Review the
+compatibility notes belong in the [10.6.0 changelog](CHANGELOG.md#1060---2026-10-25). Review the
 [10.6.0 upgrade notes](docs/support-and-qualification.md#upgrade-to-1060)
-before adopting the new expression contracts.
+before updating an application.
 
 ```bash
 package_version='10.6.0'
