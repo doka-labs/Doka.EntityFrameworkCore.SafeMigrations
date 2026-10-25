@@ -2,6 +2,82 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 public sealed partial class SqlServerSafeMigrationsSqlGenerator
 {
+    /// <summary>Protects a complete command from EF's line and history transformations.</summary>
+    /// <param name="sql">The completed isolated command, including nested literals and expressions.</param>
+    /// <param name="options">The caller's actual EF generation mode.</param>
+    /// <returns>The same command when safe; otherwise a single-line private transport scope.</returns>
+    /// <exception cref="ArgumentNullException">The completed command is null.</exception>
+    internal static string ProtectCommandSql(
+        string sql,
+        MigrationsSqlGenerationOptions options
+    )
+    {
+        ArgumentNullException.ThrowIfNull(sql);
+
+        if ((options & MigrationsSqlGenerationOptions.Idempotent) == 0 && !ContainsLineSensitiveText(sql.AsSpan()))
+        {
+            return sql;
+        }
+
+        // WHY: EF indents idempotent commands and also normalizes SqlOperation
+        // lines and removes backslash continuations in runtime/normal commands.
+        // Reconstruct the complete UTF-16 payload on one physical line, not
+        // only its DDL, so defaults and catalog comparisons remain identical.
+        // The private scope prevents variable collisions across migrations;
+        // MAX must be the first operand to avoid 4000-character truncation.
+        var builder = new StringBuilder(sql.Length);
+        builder.Append("DECLARE @doka_script_payload nvarchar(max) = CAST(N'' AS nvarchar(max)) + N'");
+        var remaining = sql.AsSpan();
+        int newlineOffset;
+        while ((newlineOffset = remaining.IndexOfAny('\r', '\n')) >= 0)
+        {
+            AppendEscapedSqlLiteral(builder, remaining.Slice(0, newlineOffset));
+            builder.Append(remaining[newlineOffset] == '\r' ? "' + NCHAR(13) + N'" : "' + NCHAR(10) + N'");
+            remaining = remaining.Slice(newlineOffset + 1);
+        }
+
+        AppendEscapedSqlLiteral(builder, remaining);
+        builder.Append("'; EXEC sys.sp_executesql @doka_script_payload;");
+
+        return BuildIsolatedGuardSql(builder);
+    }
+
+    /// <summary>Finds line shapes EF or a script client can transform without interpreting authored SQL.</summary>
+    /// <param name="sql">The completed command whose unchanged reference is preferred when safe.</param>
+    /// <returns>Whether a conservative lossless transport is necessary before provider command generation.</returns>
+    private static bool ContainsLineSensitiveText(ReadOnlySpan<char> sql)
+    {
+        // WHY: EF splits CRLF/LF and joins with the platform newline. Preserve
+        // every CR conservatively, and any LF on a CRLF platform. The bounded
+        // span scan allocates nothing and deliberately does not grow a second
+        // SQL lexer merely to identify safe transport, not SQL admissibility.
+        if (sql.Contains('\r') || (Environment.NewLine != "\n" && sql.Contains('\n')))
+        {
+            return true;
+        }
+
+        while (!sql.IsEmpty)
+        {
+            var newline = sql.IndexOf('\n');
+            var line = (newline < 0 ? sql : sql.Slice(0, newline)).TrimStart();
+            if ((newline > 0 && sql[newline - 1] == '\\')
+                || (line.StartsWith("GO", StringComparison.OrdinalIgnoreCase)
+                    && (line.Length == 2 || (line.Length > 2 && char.IsWhiteSpace(line[2])))))
+            {
+                return true;
+            }
+
+            if (newline < 0)
+            {
+                break;
+            }
+
+            sql = sql.Slice(newline + 1);
+        }
+
+        return false;
+    }
+
     /// <summary>Renders one prepared operation inside its private dynamic scope.</summary>
     /// <param name="operation">The safe intent and policy whose action is guarded.</param>
     /// <param name="plan">The prepared catalog and execution expressions.</param>

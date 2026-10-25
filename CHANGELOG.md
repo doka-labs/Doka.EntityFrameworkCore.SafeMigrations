@@ -136,6 +136,15 @@ Timing evidence is informational.
 
 ### Fixed
 
+- Preserve SQL Server guarded payloads through EF's line normalization,
+  continuations, GO handling and idempotent indentation. Cover exact authored
+  long CRLF defaults, quoted identities, managed-data mutation and replay while
+  retaining private scopes, strict drift checks and the ordinary fast path.
+- Preserve exact PostgreSQL multiline literals through guarded baseline SQL
+  and EF's idempotent history framing. Keep generated CASE catalog comparisons,
+  defaults, comments, backslashes and dollar-delimiter payloads unchanged across
+  real script execution and replay, without normalizing expressions or relaxing
+  mismatch rejection.
 - Isolate the provider-budget test contexts from EF's global service-provider
   cache. Preserve physical-key rejection and native replay checks when other
   parallel tests use many legitimate provider profiles, with explicit root

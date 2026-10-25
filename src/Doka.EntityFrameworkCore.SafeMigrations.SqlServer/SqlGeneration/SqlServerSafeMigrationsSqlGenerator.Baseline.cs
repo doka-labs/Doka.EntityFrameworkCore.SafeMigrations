@@ -21,13 +21,19 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
                 [
                     new SqlOperation
                     {
-                        Sql = _catalogSqlBuilder.BuildModelManagedDataMutationSql(
-                            data,
-                            scriptIdentityScope: (options & MigrationsSqlGenerationOptions.Script) != 0,
-                            scopeInUseMessage: SafeMigrationDiagnosticMessages.FormatRuntime(
-                                operation,
-                                "doka_sm_identity_scope_in_use",
-                                ordinal)),
+                        // WHY: This early SqlOperation pass also consumes
+                        // physical identifiers. Protect its line-sensitive
+                        // text before EF can remove a continuation; the final
+                        // guard separately owns idempotent history framing.
+                        Sql = ProtectCommandSql(
+                            _catalogSqlBuilder.BuildModelManagedDataMutationSql(
+                                data,
+                                scriptIdentityScope: (options & MigrationsSqlGenerationOptions.Script) != 0,
+                                scopeInUseMessage: SafeMigrationDiagnosticMessages.FormatRuntime(
+                                    operation,
+                                    "doka_sm_identity_scope_in_use",
+                                    ordinal)),
+                            MigrationsSqlGenerationOptions.Default),
                     },
                 ],
                 model,

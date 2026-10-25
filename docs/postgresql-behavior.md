@@ -539,9 +539,23 @@ not client roundtrips or the necessary scans for a genuine narrowing.
 
 Guard rendering appends action cases, state-guard branches and canonical
 baseline commands directly into the final operation-owned buffer. Original
-command text still determines a collision-free dollar tag. This removes
-intermediate SQL copies without changing decision order, terminators,
-indentation, locking or the independent execution postcondition.
+command text determines a collision-free dollar tag for ordinary execution.
+Multiline quoted provider SQL retains its original interior bytes; adding
+indentation there could otherwise change defaults, comments or identifiers.
+Decision order, terminators, locking and the independent postcondition remain
+unchanged.
+
+For idempotent scripts, EF's outer history block indents every physical command
+line, including lines inside string literals. SafeMigrations therefore encodes
+the same anonymous body as one single-line PostgreSQL `E` literal. Quotes,
+backslashes, line endings and dollar delimiters decode to their original
+characters without a new execution wrapper or relaxed expression comparison.
+Normal and no-transactions script paths retain their authored transaction
+boundaries. This does not change session settings or repair an already altered
+default/comment value; existing differences still require a reviewed transition.
+See [EF's script writer](https://github.com/dotnet/efcore/blob/v10.0.13/src/EFCore.Relational/Migrations/Internal/Migrator.cs#L608-L615)
+and [PostgreSQL escape literals](https://www.postgresql.org/docs/18/sql-syntax-lexical.html#SQL-SYNTAX-STRINGS-ESCAPE)
+(primary sources; retrieved 2026-10-25).
 
 When no transaction is supplied, analysis creates a read-only
 `RepeatableRead` transaction and holds a transaction-scoped advisory analysis

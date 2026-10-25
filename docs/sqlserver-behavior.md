@@ -582,6 +582,18 @@ and source-binding gates remain independent. See Microsoft's
 and [index requirements](https://learn.microsoft.com/en-us/sql/relational-databases/indexes/indexes-on-computed-columns)
 (primary sources; retrieved 2026-10-20).
 
+SafeMigrations also protects its own SQL payloads from EF's line-based
+`SqlOperation` processing and idempotent history indentation. Idempotent
+commands, and runtime/normal commands containing vulnerable CRLF, continuation
+or GO-line shapes, travel as one physical line. A private `nvarchar(max)` scope
+reconstructs their exact UTF-16 contents with `NCHAR`, without changing
+comparison predicates, caller variables, transaction ownership or SET options.
+The MAX operand precedes concatenation to prevent 4000-character truncation.
+Protected commands add one server-local dynamic execution scope, not a client
+roundtrip; ordinary non-vulnerable commands retain their original SQL reference.
+This applies to guarded operations, identifier guards and the provider-owned
+managed-data mutation stage, not unrelated consumer-authored raw EF scripts.
+
 [cc]: https://learn.microsoft.com/en-us/sql/relational-databases/system-catalog-views/sys-computed-columns-transact-sql
 [ic]: https://learn.microsoft.com/sql/relational-databases/indexes/create-indexes-with-included-columns
 

@@ -10,6 +10,106 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
     /// <param name="fixture">The shared PostgreSQL fixture.</param>
     public PostgreSqlGeneratedCaseIntegrationTests(PostgreSqlContainerFixture fixture) : base(fixture) { }
 
+    /// <summary>Preserves CASE catalog text and authored literal contents through EF's real script framing.</summary>
+    /// <param name="options">The actual EF script-generation transport contract.</param>
+    [Theory]
+    [InlineData(MigrationsSqlGenerationOptions.Default)]
+    [InlineData(MigrationsSqlGenerationOptions.Idempotent)]
+    [InlineData(MigrationsSqlGenerationOptions.Idempotent | MigrationsSqlGenerationOptions.NoTransactions)]
+    public async Task GeneratedScriptsPreserveMultilineLiteralsAndReplay(
+        MigrationsSqlGenerationOptions options)
+    {
+        // Arrange
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
+        await using var context = new GeneratedScriptDbContext(connectionString);
+        const string settings = "SET standard_conforming_strings = on; SET backslash_quote = off; ";
+
+        // Act
+        var script = context.GetService<IMigrator>().GenerateScript(options: options);
+        await ExecuteSqlAsync(connectionString, settings + script);
+        await ExecuteSqlAsync(connectionString, "INSERT INTO scripted_generated_nodes (id, left_bound, right_bound) "
+            + "VALUES (1, 1, 4), (2, 1, 2);");
+        if ((options & MigrationsSqlGenerationOptions.Idempotent) != 0)
+        {
+            await ExecuteSqlAsync(connectionString, settings + script);
+        }
+
+        var values = await ScalarStringAsync(connectionString,
+            "SELECT string_agg(has_descendants::text, ',' ORDER BY id) FROM scripted_generated_nodes;");
+        var payload = await ScalarStringAsync(connectionString,
+            "SELECT payload FROM scripted_generated_nodes WHERE id = 1;");
+        var comment = await ScalarStringAsync(connectionString,
+            "SELECT obj_description('scripted_generated_nodes'::regclass);");
+        var history = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM \"__GeneratedScriptHistory\";");
+
+        // Assert
+        Assert.Equal("true,false", values);
+        Assert.Equal(GeneratedScriptMigration.Payload, payload);
+        Assert.Equal(GeneratedScriptMigration.Payload, comment);
+        Assert.Equal(1, history);
+    }
+
+    /// <summary>The anonymous-body encoder is independent of native string settings and outer dollar tags.</summary>
+    /// <param name="standardStrings">Whether ordinary PostgreSQL strings process backslash escapes.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AnonymousBodyEncodingPreservesExactCodeAndOuterDelimiter(bool standardStrings)
+    {
+        // Arrange
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
+        var encoder = typeof(PostgreSqlSafeMigrationsSqlGenerator).GetMethod("RenderEscapedAnonymousBlock",
+            BindingFlags.Static | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("The production anonymous-body encoder was not found.");
+        var body = new StringBuilder("BEGIN\nCREATE TABLE encoded_payload (value text);\n"
+            + "INSERT INTO encoded_payload VALUES (E'row ''quoted'' \\\\path\\r\\n$EF$$doka_safe_migration$');\nEND\n");
+
+        // Act
+        var encoded = encoder.Invoke(null, [body]) as string
+            ?? throw new InvalidOperationException("The production anonymous-body encoder returned no SQL.");
+        var script = "SET standard_conforming_strings = " + (standardStrings ? "on" : "off")
+            + "; SET backslash_quote = off; DO $EF$\nBEGIN\n    " + encoded + "\nEND $EF$;";
+
+        await ExecuteSqlAsync(connectionString, script);
+        var payload = await ScalarStringAsync(connectionString, "SELECT value FROM encoded_payload;");
+
+        // Assert
+        Assert.DoesNotContain('\n', encoded);
+        Assert.DoesNotContain('\r', encoded);
+        Assert.DoesNotContain('$', encoded);
+        Assert.Equal(GeneratedScriptMigration.Payload, payload);
+    }
+
+    /// <summary>Script framing never turns a genuinely different generated expression into equality.</summary>
+    /// <param name="noTransactions">Whether the idempotent script omits EF's transaction statements.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GeneratedScriptsRejectActualExpressionDrift(bool noTransactions)
+    {
+        // Arrange
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
+        await using var context = new GeneratedScriptDbContext(connectionString);
+        await context.Database.MigrateAsync(CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "ALTER TABLE scripted_generated_nodes DROP COLUMN has_descendants; "
+            + "ALTER TABLE scripted_generated_nodes ADD has_descendants boolean "
+            + "GENERATED ALWAYS AS (right_bound > left_bound + 2) STORED NOT NULL; "
+            + "DELETE FROM \"__GeneratedScriptHistory\";");
+        var options = MigrationsSqlGenerationOptions.Idempotent
+            | (noTransactions ? MigrationsSqlGenerationOptions.NoTransactions : 0);
+        var script = context.GetService<IMigrator>().GenerateScript(options: options);
+
+        // Act
+        var exception = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, script));
+        var history = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM \"__GeneratedScriptHistory\";");
+
+        // Assert
+        Assert.Equal("P1001", Assert.IsType<PostgresException>(exception).SqlState);
+        Assert.Equal(0, history);
+    }
+
     /// <summary>Two source operands require compatible native families rather than a guessed literal type.</summary>
     /// <param name="leftType">The physical first operand type.</param>
     /// <param name="rightType">The physical second operand type.</param>
@@ -636,5 +736,53 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         builder.AddCheckConstraintIfNotExists("ck_generated_position", "generated_nodes", "\"position\" >= 0");
 
         return builder;
+    }
+
+    /// <summary>Owns only the model-free migration contract for the real generated-script regression.</summary>
+    public sealed class GeneratedScriptDbContext(string connectionString) : DbContext
+    {
+        /// <inheritdoc />
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+            => optionsBuilder.UseNpgsql(connectionString,
+                    options => options.MigrationsHistoryTable("__GeneratedScriptHistory"))
+                .UsePostgreSqlSafeMigrations<GeneratedScriptDbContext>();
+    }
+
+    /// <summary>Prevents unrelated model discovery from changing the authored fixture's script contract.</summary>
+    [DbContext(typeof(GeneratedScriptDbContext))]
+    public sealed class GeneratedScriptSnapshot : ModelSnapshot
+    {
+        /// <inheritdoc />
+        protected override void BuildModel(ModelBuilder modelBuilder)
+            => ArgumentNullException.ThrowIfNull(modelBuilder);
+    }
+
+    /// <summary>Combines native CASE deparsing with multiline defaults, comments and delimiter-like data.</summary>
+    [DbContext(typeof(GeneratedScriptDbContext))]
+    [Migration("20261025010100_GeneratedScript")]
+    public sealed class GeneratedScriptMigration : Migration
+    {
+        /// <summary>Retains every character that is significant to the two nested SQL literal layers.</summary>
+        public const string Payload = "row 'quoted' \\path\r\n$EF$$doka_safe_migration$";
+
+        /// <inheritdoc />
+        protected override void Up(MigrationBuilder migrationBuilder)
+            => migrationBuilder.CreateTableIfNotExists("scripted_generated_nodes", table => new
+            {
+                id = table.Column<int>("integer", nullable: false),
+                left_bound = table.Column<long>("bigint", nullable: false),
+                right_bound = table.Column<long>("bigint", nullable: false),
+                has_descendants = table.Column<bool>("boolean", nullable: false,
+                    computedColumnSql: Expression, stored: true),
+                payload = table.Column<string>("text", nullable: false, defaultValue: Payload),
+            }, constraints: table =>
+            {
+                table.PrimaryKey("pk_scripted_generated_nodes", item => item.id);
+                table.CheckConstraint("ck_scripted_generated_bounds", "right_bound > left_bound");
+            }, comment: Payload);
+
+        /// <inheritdoc />
+        protected override void Down(MigrationBuilder migrationBuilder)
+            => migrationBuilder.DropTableIfExists("scripted_generated_nodes");
     }
 }

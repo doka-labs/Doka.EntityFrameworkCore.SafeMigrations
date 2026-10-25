@@ -9,15 +9,132 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
         SqlServerContainerFixture fixture
     ) : base(fixture) { }
 
-    /// <summary>Concatenated guard batches preserve caller variables and safely bind earlier-created objects.</summary>
+    /// <summary>Real scripts preserve long multiline defaults across migrations and idempotent replay.</summary>
+    /// <param name="idempotent">Whether to qualify script replay as well as initial application.</param>
+    /// <param name="noTransactions">Whether the client requests the supported transaction-free script form.</param>
     [SqlServerLiveTheory]
     [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
+    public async Task HistoryScriptsPreserveMultilineDefaultsAndIdempotentReplay(
+        bool idempotent,
+        bool noTransactions
+    )
+    {
+        // Arrange
+        var connectionString = await CreateDatabaseAsync();
+        await using var context = new SqlServerMultilineScriptContext(connectionString);
+        var options = (idempotent ? MigrationsSqlGenerationOptions.Idempotent : MigrationsSqlGenerationOptions.Default)
+            | (noTransactions ? MigrationsSqlGenerationOptions.NoTransactions : MigrationsSqlGenerationOptions.Default);
+
+        var script = context.GetService<IMigrator>().GenerateScript(
+            Migration.InitialDatabase, SqlServerMultilineUpgradeMigration.MigrationIdentifier, options);
+
+        // Act
+        await ExecuteGeneratedScriptAsync(connectionString, script);
+        if (idempotent)
+        {
+            await ExecuteGeneratedScriptAsync(connectionString, script);
+        }
+
+        await ExecuteSqlAsync(connectionString, "INSERT dbo.multiline_payload_items (Id) VALUES (7);");
+        var actual = await ReadMultilineScriptStateAsync(connectionString);
+
+        // Assert
+        Assert.Equal(SqlServerMultilineInitialMigration.Payload, actual.Initial);
+        Assert.Equal(SqlServerMultilineUpgradeMigration.Payload, actual.Later);
+        Assert.Equal(2, actual.History);
+    }
+
+    /// <summary>The actual EF runtime migrator and replay preserve the same authored defaults and identifier.</summary>
+    [SqlServerLiveFact]
+    public async Task RuntimeMigrationPreservesMultilineDefaultsAndReplay()
+    {
+        // Arrange
+        var connectionString = await CreateDatabaseAsync();
+        await using var context = new SqlServerMultilineScriptContext(connectionString);
+        var migrator = context.GetService<IMigrator>();
+
+        // Act
+        await migrator.MigrateAsync(SqlServerMultilineUpgradeMigration.MigrationIdentifier);
+        await migrator.MigrateAsync(SqlServerMultilineUpgradeMigration.MigrationIdentifier);
+        await ExecuteSqlAsync(connectionString, "INSERT dbo.multiline_payload_items (Id) VALUES (7);");
+        var actual = await ReadMultilineScriptStateAsync(connectionString);
+
+        // Assert
+        Assert.Equal(SqlServerMultilineInitialMigration.Payload, actual.Initial);
+        Assert.Equal(SqlServerMultilineUpgradeMigration.Payload, actual.Later);
+        Assert.Equal(2, actual.History);
+    }
+
+    /// <summary>Lossless framing cannot turn an actual raw-default difference into an accepted match.</summary>
+    [SqlServerLiveFact]
+    public async Task IdempotentHistoryScriptRetainsDefaultDriftRejection()
+    {
+        // Arrange
+        var connectionString = await CreateDatabaseAsync();
+        await using var context = new SqlServerMultilineScriptContext(connectionString);
+        var initial = context.GetService<IMigrator>().GenerateScript(
+            Migration.InitialDatabase, SqlServerMultilineInitialMigration.MigrationIdentifier,
+            MigrationsSqlGenerationOptions.Idempotent);
+        await ExecuteGeneratedScriptAsync(connectionString, initial);
+        await ExecuteSqlAsync(connectionString,
+            "ALTER TABLE dbo.multiline_payload_items ADD [" + SqlServerMultilineUpgradeMigration.ColumnName
+            + "] nvarchar(80) NULL DEFAULT 'wrong';");
+        var script = context.GetService<IMigrator>().GenerateScript(
+            SqlServerMultilineInitialMigration.MigrationIdentifier,
+            SqlServerMultilineUpgradeMigration.MigrationIdentifier,
+            MigrationsSqlGenerationOptions.Idempotent);
+
+        // Act
+        var failure = await Record.ExceptionAsync(() => ExecuteGeneratedScriptAsync(connectionString, script));
+
+        // Assert
+        var actual = Assert.IsType<SqlException>(failure);
+
+        Assert.Equal(51001, actual.Number);
+        Assert.Contains("doka_sm_different", actual.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>Observes exact authored values and both actual migration identities from one synthetic row.</summary>
+    /// <param name="connectionString">The independently owned fixture database.</param>
+    /// <returns>The persisted default results and matching migration-history count.</returns>
+    private static async Task<(string? Initial, string? Later, int History)> ReadMultilineScriptStateAsync(
+        string connectionString
+    )
+    {
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandTimeout = SafeMigrationDbContext.CommandTimeoutSeconds;
+        command.CommandText = "SELECT Payload, [" + SqlServerMultilineUpgradeMigration.ColumnName
+            + "], (SELECT COUNT(*) FROM dbo.__EFMigrationsHistory WHERE MigrationId IN (N'"
+            + SqlServerMultilineInitialMigration.MigrationIdentifier + "', N'"
+            + SqlServerMultilineUpgradeMigration.MigrationIdentifier + "')) "
+            + "FROM dbo.multiline_payload_items WHERE Id = 7;";
+        await using var reader = await command.ExecuteReaderAsync();
+
+        return await reader.ReadAsync() ? (reader.GetString(0), reader.GetString(1), reader.GetInt32(2)) : default;
+    }
+
+    /// <summary>Concatenated guard batches preserve caller variables and safely bind earlier-created objects.</summary>
+    /// <param name="separateGeneration">Whether each operation comes from an independent generator invocation.</param>
+    /// <param name="callerTransaction">Whether the caller owns the transaction rolled back after observation.</param>
+    /// <param name="idempotent">Whether complete commands use the private single-line script transport.</param>
+    [SqlServerLiveTheory]
+    [InlineData(false, false, false)]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, false)]
+    [InlineData(false, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    [InlineData(true, true, true)]
     public async Task GuardedBatch_CombinedGenerationPreservesPrivateScopesAndCallerTransaction(
         bool separateGeneration,
-        bool callerTransaction
+        bool callerTransaction,
+        bool idempotent
     )
     {
         // Arrange
@@ -34,14 +151,19 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
         builder.EnsureModelManagedDataFromModel("scope'items", ["Id"], ["int"], ["Id", "Caption"],
             ["int", "varchar(80)"], new object?[,] { { 7, "O'Brien" } });
         var generator = context.GetService<IMigrationsSqlGenerator>();
+        var options = idempotent
+            ? MigrationsSqlGenerationOptions.Script | MigrationsSqlGenerationOptions.Idempotent
+            : MigrationsSqlGenerationOptions.Default;
+
         await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync();
         await using var transaction = callerTransaction ? connection.BeginTransaction() : null;
 
         // Act
         var commands = separateGeneration
-            ? builder.Operations.SelectMany(operation => generator.Generate([operation], context.Model)).ToArray()
-            : generator.Generate(builder.Operations, context.Model).ToArray();
+            ? builder.Operations.SelectMany(operation => generator.Generate([operation], context.Model, options))
+                .ToArray()
+            : generator.Generate(builder.Operations, context.Model, options).ToArray();
 
         await using var batch = connection.CreateCommand();
         batch.Transaction = transaction;
@@ -50,9 +172,11 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
             + "DECLARE @doka_repair_ok int = 41;\n"
             + "DECLARE @doka_postcondition int = 42;\n"
             + "DECLARE @doka_default_supported int = 43;\n"
+            + "DECLARE @doka_script_payload nvarchar(max) = N'caller';\n"
             + string.Join("\n", commands.Select(static command => command.CommandText))
             + "\nIF @doka_state <> N'caller' OR @doka_action <> N'caller' "
             + "OR @doka_repair_ok <> 41 OR @doka_postcondition <> 42 OR @doka_default_supported <> 43 "
+            + "OR @doka_script_payload <> N'caller' "
             + "THROW 51011, N'Caller guard variables changed', 1;";
 
         await batch.ExecuteNonQueryAsync();
@@ -155,7 +279,7 @@ public sealed class SqlServerSafeMigrationScriptScopesIntegrationTests : SqlServ
         Assert.Equal(0, historyCount);
     }
 
-    /// <summary>Executes generated fixture scripts using GO boundaries on one session, like an EF script consumer.</summary>
+    /// <summary>Executes generated fixture scripts with GO batch boundaries on one client session.</summary>
     private static async Task ExecuteGeneratedScriptAsync(
         string connectionString,
         string script

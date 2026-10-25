@@ -212,9 +212,11 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator : IMigrationsSql
 
             var guarded = new SqlOperation
             {
-                Sql = BuildGuardedSql(safeOperation, plan, baseline, effectiveRepairBaseline,
-                    scriptIdentityScope: (options & MigrationsSqlGenerationOptions.Script) != 0,
-                    operationOrdinal: ordinal),
+                Sql = ProtectCommandSql(
+                    BuildGuardedSql(safeOperation, plan, baseline, effectiveRepairBaseline,
+                        scriptIdentityScope: (options & MigrationsSqlGenerationOptions.Script) != 0,
+                        operationOrdinal: ordinal),
+                    options),
             };
 
             var guardedCommands = _baselineGenerator.Generate([guarded], model, options);
@@ -260,7 +262,7 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator : IMigrationsSql
 
             var identifierGuard = new SqlOperation
             {
-                Sql = BuildIsolatedIdentifierGuardSql(identifierStatements),
+                Sql = ProtectCommandSql(BuildIsolatedIdentifierGuardSql(identifierStatements), options),
             };
 
             var identifierCommands = _baselineGenerator.Generate([identifierGuard], model, options);

@@ -94,7 +94,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             }
 
             var guardedSql = BuildGuardedSqlAtOrdinal(safeOperation, runtimePlan, baseline, effectiveRepairBaseline,
-                ordinal);
+                ordinal, (options & MigrationsSqlGenerationOptions.Idempotent) != 0);
             var sqlOperation = new SqlOperation { Sql = guardedSql };
             commands.AddRange(_baselineGenerator.Generate([sqlOperation], model, options));
         }
@@ -255,7 +255,8 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         PostgreSqlSafeMigrationRuntimePlan runtimePlan,
         IReadOnlyList<MigrationCommand> baseline,
         IReadOnlyList<MigrationCommand> repairBaseline,
-        int? ordinal
+        int? ordinal,
+        bool escapeAnonymousBody = false
     )
     {
         const string dataBlockedExpression = "doka_data_blocked";
@@ -280,7 +281,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             : evaluationBodyIndentation + "    ";
 
         var diagnostic = new PostgreSqlSafeMigrationRuntimeDiagnostic(operation, ordinal);
-        var tag = SelectDollarTag(
+        var tag = escapeAnonymousBody ? string.Empty : SelectDollarTag(
             baseline,
             repairBaseline,
             diagnostic.DelimiterContent,
@@ -315,7 +316,7 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         // in the first buffer instead of growing several initial chunks;
         // the variable SQL body still grows normally without a size guess.
         var builder = new StringBuilder(checked("DO ".Length + tag.Length + declarations.Length))
-            .Append("DO ")
+            .Append(escapeAnonymousBody ? string.Empty : "DO ")
             .Append(tag)
             .Append(declarations)
             .Append(hasObjectIdentityGuard
@@ -628,11 +629,83 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         diagnostic.AppendMessage(builder, "doka_sm_postcondition");
         builder.Append(";\n        END IF;\n")
             .Append("    END IF;\n")
-            .Append("END\n")
-            .Append(tag)
-            .Append(';');
+            .Append("END\n");
+
+        if (escapeAnonymousBody)
+        {
+            // WHY: EF's relational idempotent script writer indents every
+            // physical command line, including lines inside SQL literals.
+            // Encode this same anonymous body as one E literal so CASE catalog
+            // text, defaults, comments and captured payloads remain byte exact.
+            return RenderEscapedAnonymousBlock(builder);
+        }
+
+        builder.Append(tag).Append(';');
 
         return builder.ToString();
+    }
+
+    /// <summary>Encodes one unchanged anonymous body without physical newlines or outer dollar delimiters.</summary>
+    /// <param name="body">The complete PL/pgSQL body, without a surrounding DO literal.</param>
+    /// <returns>A single-line DO command whose decoded body retains every original character.</returns>
+    private static string RenderEscapedAnonymousBlock(StringBuilder body)
+    {
+        var length = checked("DO E'".Length + body.Length + "';".Length);
+        foreach (var chunk in body.GetChunks())
+        {
+            foreach (var character in chunk.Span)
+            {
+                length = checked(length + (character switch
+                {
+                    '\\' or '\'' or '\r' or '\n' => 1,
+                    '$' => 3,
+                    _ => 0,
+                }));
+            }
+        }
+
+        // WHY: A two-pass chunk walk writes one final string without copying
+        // the large body first. Doubling quotes works with backslash_quote=off;
+        // octal dollars cannot terminate EF's enclosing dollar-quoted block.
+        return string.Create(length, body, static (destination, source) =>
+        {
+            "DO E'".AsSpan().CopyTo(destination);
+            var offset = "DO E'".Length;
+            foreach (var chunk in source.GetChunks())
+            {
+                foreach (var character in chunk.Span)
+                {
+                    switch (character)
+                    {
+                        case '\\':
+                            destination[offset++] = '\\';
+                            destination[offset++] = '\\';
+                            break;
+                        case '\'':
+                            destination[offset++] = '\'';
+                            destination[offset++] = '\'';
+                            break;
+                        case '\r':
+                        case '\n':
+                            destination[offset++] = '\\';
+                            destination[offset++] = character == '\r' ? 'r' : 'n';
+                            break;
+                        case '$':
+                            destination[offset++] = '\\';
+                            destination[offset++] = '0';
+                            destination[offset++] = '4';
+                            destination[offset++] = '4';
+                            break;
+                        default:
+                            destination[offset++] = character;
+                            break;
+                    }
+                }
+            }
+
+            destination[offset++] = '\'';
+            destination[offset] = ';';
+        });
     }
 
     /// <summary>Reproves the frozen command-local owner before classification or stateful acquisition.</summary>
@@ -747,10 +820,10 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             .Append("END IF;\n");
     }
 
-    /// <summary>Appends provider baselines with the existing termination and indentation contract.</summary>
+    /// <summary>Appends terminated provider baselines without rewriting quoted multiline content.</summary>
     /// <param name="builder">The operation-owned final guard buffer.</param>
     /// <param name="commands">The ordered provider commands for one action branch.</param>
-    /// <param name="indentation">The unchanged indentation for every rendered command line.</param>
+    /// <param name="indentation">The first-line and safe ordinary-line indentation.</param>
     private static void AppendActionSql(
         StringBuilder builder,
         IReadOnlyList<MigrationCommand> commands,
@@ -767,8 +840,8 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         }
 
         // WHY: Flattening both baseline lists creates two chunk chains and
-        // complete SQL strings. Each command can preserve the same bytes
-        // directly: trim trailing whitespace, terminate, then indent lines.
+        // complete SQL strings. Preserve each command directly: trim trailing
+        // whitespace, terminate, and indent only where literal bytes stay intact.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < commands.Count; index++)
@@ -925,13 +998,29 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
     /// <summary>Appends one trimmed command while retaining interior CRLF and existing terminators.</summary>
     /// <param name="builder">The operation-owned final guard buffer.</param>
     /// <param name="sql">The provider command with trailing whitespace already removed.</param>
-    /// <param name="indentation">The indentation appended before every original line.</param>
+    /// <param name="indentation">The prefix, repeated only when no quoted multiline content exists.</param>
     private static void AppendIndentedLines(
         StringBuilder builder,
         ReadOnlySpan<char> sql,
         string indentation
     )
     {
+        if (sql.IndexOf('\n') >= 0 && sql.IndexOfAny('\'', '"', '$') >= 0)
+        {
+            // WHY: Indentation is not whitespace outside a multiline literal
+            // or quoted identifier. Keep provider SQL intact rather than parse
+            // it or silently change defaults, comments or authored payloads.
+            builder.Append(indentation).Append(sql);
+            if (sql[^1] != ';')
+            {
+                builder.Append(';');
+            }
+
+            builder.Append('\n');
+
+            return;
+        }
+
         var start = 0;
         while (start <= sql.Length)
         {
