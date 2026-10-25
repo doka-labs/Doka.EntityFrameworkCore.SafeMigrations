@@ -137,6 +137,7 @@ dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.B
 dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks.csproj --configuration Release --no-build --no-restore -- --report-only
 python3 -m unittest eng/tests/test_parallel_test_configuration.py -v
 python3 -m unittest eng/tests/test_verify_coverage.py -v
+bash eng/tests/test-ef-tooling.sh
 bash eng/tests/test-release-version.sh
 bash -e -c 'while IFS= read -r -d "" script; do bash -n "$script"; done < <(find eng -type f -name "*.sh" -print0)'
 dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style --severity warn --verify-no-changes --no-restore

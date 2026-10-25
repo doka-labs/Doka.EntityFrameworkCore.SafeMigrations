@@ -582,6 +582,15 @@ and source-binding gates remain independent. See Microsoft's
 and [index requirements](https://learn.microsoft.com/en-us/sql/relational-databases/indexes/indexes-on-computed-columns)
 (primary sources; retrieved 2026-10-20).
 
+For generated migration scripts, the ODBC `sqlcmd` clients supplied by
+`mssql-tools` and `mssql-tools18` require `-I` to enable `QUOTED_IDENTIFIER`;
+their default is OFF. The repository tooling supplies that option for every
+Strict/LegacyConvergence normal/idempotent script connection, including replay.
+The other native SET requirements above still apply. This configures the
+script caller, not SafeMigrations session mutation or a policy bypass.
+See Microsoft's [ODBC sqlcmd option](https://learn.microsoft.com/en-us/sql/tools/sqlcmd/sqlcmd-utility#-i-1)
+(primary source; retrieved 2026-10-25).
+
 SafeMigrations also protects its own SQL payloads from EF's line-based
 `SqlOperation` processing and idempotent history indentation. Idempotent
 commands, and runtime/normal commands containing vulnerable CRLF, continuation
@@ -919,7 +928,10 @@ migration source; without design assets, scaffolding must fail closed.
 The release gate scaffolds Strict and LegacyConvergence migrations separately,
 generates normal and idempotent SQL scripts for both, applies each migration
 twice, builds a migration bundle for each context, applies each bundle twice
-to another database, and checks both model-managed rows and migration history.
+to another database, and independently checks exact migration history,
+model-managed rows, generated-column metadata and CASE results, computed-index
+keys and enabled/trusted CHECK enforcement on every target. Synthetic DML
+probes roll back; unrelated errors cannot satisfy the expected CHECK rejection.
 The three engine cells, package-content checks, locked restore, merged
 coverage, SBOM, and public NuGet readback are all
 blocking. A successful build or a skipped ARM64 live test is not a substitute
@@ -933,6 +945,11 @@ bootstrap, use `ConnectTimeout`; changing EF's command timeout alone does not
 cover this path. These are test-harness settings, not product defaults or
 performance thresholds. Failed execution still rejects qualification without
 automatic retry or a higher CI job limit.
+
+Native `sqlcmd` execution and readback also use explicit 120-second login/query
+budgets; readiness and failure diagnostics use separate five-second budgets.
+Every native connection retains `-I` and error abort. Cleanup-only errors fail
+the gate, while a cleanup failure cannot replace the original execution error.
 
 Before failed tooling-container cleanup, the harness retains `server.log` and,
 when sqlcmd is available, `server-waits.log` under the existing tooling artifact

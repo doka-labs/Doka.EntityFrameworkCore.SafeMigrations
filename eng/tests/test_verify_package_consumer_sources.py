@@ -39,6 +39,37 @@ def stage_sources(script_directory: Path, workspace: Path) -> subprocess.Complet
 class VerifyPackageConsumerSourcesTests(unittest.TestCase):
     """Keep linked consumer sources present across all isolated tooling profiles."""
 
+    def test_both_isolated_profile_paths_copy_all_provider_sources(self) -> None:
+        """The real consumer and incremental-registration paths need the same complete source set."""
+        # Arrange
+        source = (REPOSITORY_ROOT / "eng/verify-package-consumer.sh").read_text(encoding="ascii")
+        blocks = re.findall(
+            r'^    mkdir -p "\$consumer_dir"\n.*?(?=^\n)',
+            source, flags=re.MULTILINE | re.DOTALL,
+        )
+        self.assertEqual(2, len(blocks))
+        with tempfile.TemporaryDirectory() as temporary_root:
+            for index, block in enumerate(blocks):
+                for provider in PROVIDERS:
+                    with self.subTest(path=index, provider=provider):
+                        project = next((CONSUMER_ROOT / provider).glob("*.csproj"))
+                        destination = Path(temporary_root) / str(index) / provider
+
+                        # Act
+                        result = subprocess.run(
+                            ["bash", "-eu", "-c", block], capture_output=True, text=True, check=False,
+                            env={**os.environ, "script_dir": str(REPOSITORY_ROOT / "eng"),
+                                 "consumer_name": provider, "consumer_dir": str(destination),
+                                 "source_project": project.name, "consumer_project": str(destination / project.name)},
+                        )
+
+                        # Assert
+                        self.assertEqual(0, result.returncode, result.stderr)
+                        for original in (CONSUMER_ROOT / provider).glob("*.cs"):
+                            staged = destination / original.name
+                            self.assertTrue(staged.is_file(), f"Missing {provider} source: {original.name}")
+                            self.assertEqual(original.read_bytes(), staged.read_bytes())
+
     def test_stages_every_shared_compile_link_for_all_providers(self) -> None:
         """Compile links must resolve from the staged provider/profile directory."""
         # Arrange

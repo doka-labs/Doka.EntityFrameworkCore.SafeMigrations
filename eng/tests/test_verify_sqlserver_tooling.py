@@ -12,33 +12,56 @@ SCRIPT = Path(__file__).resolve().parents[1] / "verify-sqlserver-ef-tooling.sh"
 MOCK_COMMAND = r'''#!/usr/bin/env python3
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
 name = Path(sys.argv[0]).name
 args = sys.argv[1:]
-with Path(os.environ["MOCK_RUN_LOG"]).open("a", encoding="utf-8") as output:
-    output.write(json.dumps({
-        "name": name,
-        "args": args,
-        "connection": os.environ.get("SAFE_MIGRATIONS_CONNECTION_STRING", ""),
-    }) + "\n")
+if name != "rm" or os.environ.get("MOCK_DIRECTORY_CLEANUP_EXIT"):
+    with Path(os.environ["MOCK_RUN_LOG"]).open("a", encoding="utf-8") as output:
+        output.write(json.dumps({
+            "name": name,
+            "args": args,
+            "connection": os.environ.get("SAFE_MIGRATIONS_CONNECTION_STRING", ""),
+        }) + "\n")
 
 if name == "uname":
     print(os.environ.get("MOCK_ARCHITECTURE", "x86_64"))
 elif name == "docker":
+    if args[0] == "exec" and ("-Q" in args or "-i" in args):
+        if os.environ.get("MOCK_ENFORCE_NATIVE_BUDGETS") == "1":
+            if any(option not in args or int(args[args.index(option) + 1]) <= 0 for option in ("-l", "-t")):
+                print("Native sqlcmd request has no finite budget", file=sys.stderr)
+                sys.exit(61)
+
     if args[0] == "run":
         print("owned-tooling-container")
+    elif args[0] == "rm":
+        sys.exit(int(os.environ.get("MOCK_CONTAINER_CLEANUP_EXIT", "0")))
     elif args[0] == "port":
         print("127.0.0.1:51433")
     elif args[0] == "logs":
         print("Mock SQL Server diagnostic output")
         sys.exit(int(os.environ.get("MOCK_DIAGNOSTICS_EXIT", "0")))
+    elif args[0] == "exec" and args[2:4] == ["test", "-x"]:
+        expected = os.environ.get("MOCK_SQLCMD_PATH", "/opt/mssql-tools18/bin/sqlcmd")
+        sys.exit(0 if args[4] == expected else 1)
+    elif args[0] == "exec" and "-i" in args:
+        # ODBC sqlcmd defaults QUOTED_IDENTIFIER to OFF, unlike SqlClient.
+        if "-I" not in args:
+            print("QUOTED_IDENTIFIER is OFF for computed-index script execution", file=sys.stderr)
+            sys.exit(41)
+        sys.exit(int(os.environ.get("MOCK_SCRIPT_EXIT", "0")))
     elif args[0] == "exec" and "-Q" in args:
         query = args[args.index("-Q") + 1]
         if "sys.dm_exec_requests" in query:
             print("Mock SQL Server wait metadata")
             sys.exit(int(os.environ.get("MOCK_DIAGNOSTICS_EXIT", "0")))
+        failure = os.environ.get("MOCK_READBACK_FAILURE", "")
+        if failure and "doka_tooling_" + failure in query:
+            print("Synthetic database defect: " + failure, file=sys.stderr)
+            sys.exit(57)
         print("1")
 elif name == "dotnet":
     if args[:3] == ["ef", "migrations", "add"]:
@@ -70,14 +93,21 @@ elif name == "dotnet":
         if "Legacy" in args[args.index("--context") + 1]:
             sys.exit(int(os.environ.get("MOCK_LEGACY_UPDATE_EXIT", "0")))
 elif name != "rsync" and not name.startswith("sqlserver-"):
-    raise AssertionError("Unexpected mocked command: " + name)
+    if name != "rm":
+        raise AssertionError("Unexpected mocked command: " + name)
+    target = Path(args[-1])
+    if not target.name.startswith("safemigrations-sqlserver-tooling."):
+        raise AssertionError("Unexpected cleanup target: " + str(target))
+    shutil.rmtree(target)
+    sys.exit(int(os.environ.get("MOCK_DIRECTORY_CLEANUP_EXIT", "0")))
 '''
 
 
 class VerifySqlServerToolingTests(unittest.TestCase):
     """Preserve finite waits, fatal failures and owned diagnostic cleanup."""
 
-    def run_harness(self, **settings: str) -> tuple[subprocess.CompletedProcess, list[dict], Path]:
+    def run_harness(self, *, version: str = "2025", script_source: str | None = None,
+                    **settings: str) -> tuple[subprocess.CompletedProcess, list[dict], Path]:
         """Run the actual shell script with isolated executable dependencies."""
 
         directory = tempfile.TemporaryDirectory(prefix="sm-tooling-contract-")
@@ -86,14 +116,14 @@ class VerifySqlServerToolingTests(unittest.TestCase):
         source = root / "source" / "eng"
         source.mkdir(parents=True)
         script = source / SCRIPT.name
-        script.write_bytes(SCRIPT.read_bytes())
+        script.write_bytes(SCRIPT.read_bytes() if script_source is None else script_source.encode("ascii"))
         binary_directory = root / "bin"
         binary_directory.mkdir()
         mock = binary_directory / "mock"
         mock.write_text(MOCK_COMMAND, encoding="utf-8")
         mock.chmod(0o755)
 
-        for command in ("dotnet", "docker", "uname", "rsync"):
+        for command in ("dotnet", "docker", "uname", "rsync", "rm"):
             (binary_directory / command).symlink_to(mock)
 
         work = root / "work"
@@ -111,13 +141,216 @@ class VerifySqlServerToolingTests(unittest.TestCase):
         # WHY: Execute the real control flow, not substring assertions that can
         # pass while an actual CLI or bundle connection loses its timeout.
         result = subprocess.run(
-            ["bash", str(script), "mock-sqlserver-image", "2025"],
+            ["bash", str(script), "mock-sqlserver-image", version],
             env=environment, capture_output=True, text=True, timeout=30,
         )
 
         invocations = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
 
         return result, invocations, root
+
+    def test_all_native_requests_have_finite_connect_and_query_budgets(self) -> None:
+        """Readiness, DDL, scripts, readback and diagnostics cannot wait without a native budget."""
+        # Arrange
+        expected_requests = {"readiness": 1, "script": 6, "create": 4, "readback": 8}
+
+        # Act
+        result, invocations, _ = self.run_harness()
+
+        # Assert
+        self.assertEqual(0, result.returncode, result.stderr)
+        observed = dict.fromkeys(expected_requests, 0)
+        for call in invocations:
+            args = call["args"]
+            if call["name"] != "docker" or args[0] != "exec" or not ("-Q" in args or "-i" in args):
+                continue
+
+            self.assertIn("-l", args)
+            self.assertIn("-t", args)
+            query = args[args.index("-Q") + 1] if "-Q" in args else ""
+            request = ("script" if "-i" in args else "readiness" if query == "SELECT 1"
+                       else "create" if query.startswith("CREATE DATABASE") else "readback")
+            observed[request] += 1
+            expected_budget = "5" if request == "readiness" else "120"
+            self.assertEqual(expected_budget, args[args.index("-l") + 1])
+            self.assertEqual(expected_budget, args[args.index("-t") + 1])
+
+        self.assertEqual(expected_requests, observed)
+
+    def test_removed_native_query_timeout_is_rejected_at_the_process_boundary(self) -> None:
+        """The timeout oracle detects an actual command mutation rather than a copied helper."""
+        # Arrange
+        original = SCRIPT.read_text(encoding="ascii")
+        mutated = original.replace("-t 120", "")
+
+        # Act
+        result, invocations, root = self.run_harness(
+            script_source=mutated, MOCK_ENFORCE_NATIVE_BUDGETS="1")
+
+        # Assert
+        self.assertNotEqual(original, mutated)
+        self.assertEqual(61, result.returncode, result.stderr)
+        self.assertIn("Native sqlcmd request has no finite budget", result.stderr)
+        self.assertTrue(any(call["args"][0] == "rm" for call in invocations if call["name"] == "docker"))
+        self.assertEqual([], list((root / "work").iterdir()))
+
+    def test_every_transport_checks_generated_metadata_and_behavior(self) -> None:
+        """All eight independent targets must observe the complete generated contract after replay."""
+        # Arrange
+        expected_databases = {f"tooling_{mode}_{transport}" for mode in ("strict", "legacy")
+                              for transport in ("cli", "bundle", "normal_script", "idempotent_script")}
+        expected_guards = ("seed", "history", "included_index", "generated_columns", "computed_index",
+                           "check_constraint", "generated_values", "check_enforcement")
+
+        # Act
+        result, invocations, _ = self.run_harness()
+
+        # Assert
+        self.assertEqual(0, result.returncode, result.stderr)
+        readbacks = [call["args"] for call in invocations if call["name"] == "docker"
+                     and "-Q" in call["args"] and "doka_tooling_generated_columns" in " ".join(call["args"])]
+        self.assertEqual(8, len(readbacks))
+        self.assertEqual(expected_databases, {args[args.index("-d") + 1] for args in readbacks})
+        for args in readbacks:
+            self.assertIn("-I", args)
+            self.assertIn("-b", args)
+            query = args[args.index("-Q") + 1]
+            for guard in expected_guards:
+                self.assertIn("doka_tooling_" + guard, query)
+
+            self.assertIn("is_not_trusted = 0", query)
+            self.assertIn("key_ordinal = 3", query)
+            self.assertIn("9223372036854775806", query)
+            self.assertIn("ERROR_NUMBER() <> 547", query)
+            self.assertIn("ROLLBACK TRANSACTION", query)
+
+    def test_generated_readback_defects_are_fatal_and_cleanup_still_runs(self) -> None:
+        """Every independent guard rejects its corresponding synthetic database defect."""
+        for guard in ("seed", "history", "included_index", "generated_columns", "computed_index",
+                      "check_constraint", "generated_values", "check_enforcement"):
+            with self.subTest(guard=guard):
+                # Arrange
+                expected_failure = 57
+
+                # Act
+                result, invocations, root = self.run_harness(MOCK_READBACK_FAILURE=guard)
+
+                # Assert
+                self.assertEqual(expected_failure, result.returncode, result.stderr)
+                self.assertIn("Synthetic database defect: " + guard, result.stderr)
+                self.assertEqual("rm", invocations[-1]["args"][0])
+                self.assertEqual([], list((root / "work").iterdir()))
+
+    def test_cleanup_only_container_failure_is_fatal(self) -> None:
+        """Successful qualification cannot silently leak an owned container."""
+        # Arrange
+        cleanup_failure = 79
+
+        # Act
+        result, invocations, root = self.run_harness(MOCK_CONTAINER_CLEANUP_EXIT=str(cleanup_failure))
+
+        # Assert
+        self.assertEqual(cleanup_failure, result.returncode, result.stderr)
+        self.assertIn("Failed to remove owned SQL Server tooling container", result.stderr)
+        self.assertEqual("rm", invocations[-1]["args"][0])
+        self.assertEqual([], list((root / "work").iterdir()))
+
+    def test_cleanup_failures_preserve_original_failure_and_attempt_both_resources(self) -> None:
+        """An original update failure survives simultaneous container and directory cleanup failures."""
+        # Arrange
+        original_failure = 23
+
+        # Act
+        result, invocations, root = self.run_harness(
+            MOCK_LEGACY_UPDATE_EXIT=str(original_failure), MOCK_CONTAINER_CLEANUP_EXIT="79",
+            MOCK_DIRECTORY_CLEANUP_EXIT="31")
+
+        # Assert
+        self.assertEqual(original_failure, result.returncode, result.stderr)
+        self.assertIn("Failed to remove owned SQL Server tooling container", result.stderr)
+        self.assertIn("Failed to remove SQL Server tooling directory", result.stderr)
+        self.assertEqual("rm", invocations[-2]["args"][0])
+        self.assertEqual("rm", invocations[-1]["name"])
+        self.assertEqual([], list((root / "work").iterdir()))
+
+    def test_cleanup_only_directory_failure_is_fatal_after_container_cleanup(self) -> None:
+        """A directory cleanup error remains visible after successful container removal."""
+        # Arrange
+        cleanup_failure = 31
+
+        # Act
+        result, invocations, root = self.run_harness(MOCK_DIRECTORY_CLEANUP_EXIT=str(cleanup_failure))
+
+        # Assert
+        self.assertEqual(cleanup_failure, result.returncode, result.stderr)
+        self.assertIn("Failed to remove SQL Server tooling directory", result.stderr)
+        self.assertEqual("rm", invocations[-2]["args"][0])
+        self.assertEqual("rm", invocations[-1]["name"])
+        self.assertEqual([], list((root / "work").iterdir()))
+
+    def test_every_script_connection_enables_quoted_identifiers(self) -> None:
+        """Both clients and all engine profiles execute strict/legacy scripts under the native contract."""
+        for version in ("2019", "2022", "2025"):
+            for client in ("/opt/mssql-tools18/bin/sqlcmd", "/opt/mssql-tools/bin/sqlcmd"):
+                with self.subTest(version=version, client=client):
+                    # Arrange
+                    expected = {"tooling_strict_normal_script": 1, "tooling_strict_idempotent_script": 2,
+                                "tooling_legacy_normal_script": 1, "tooling_legacy_idempotent_script": 2}
+
+                    # Act
+                    result, invocations, _ = self.run_harness(version=version, MOCK_SQLCMD_PATH=client)
+
+                    # Assert
+                    self.assertEqual(0, result.returncode, result.stderr)
+                    executions = [call["args"] for call in invocations
+                                  if call["name"] == "docker" and "-i" in call["args"]]
+                    self.assertEqual(6, len(executions))
+                    observed = {}
+                    for args in executions:
+                        self.assertEqual(client, args[2])
+                        self.assertIn("-I", args)
+                        self.assertIn("-b", args)
+                        database = args[args.index("-d") + 1]
+                        observed[database] = observed.get(database, 0) + 1
+
+                    self.assertEqual(expected, observed)
+
+    def test_removed_quoted_identifier_flag_fails_and_preserves_cleanup(self) -> None:
+        """The negative control mutates the real command rather than asserting a copied predicate."""
+        # Arrange
+        original = SCRIPT.read_text(encoding="ascii")
+        mutated = original.replace(" -C -b -I \\\n", " -C -b \\\n")
+
+        # Act
+        result, invocations, root = self.run_harness(script_source=mutated)
+
+        # Assert
+        self.assertNotEqual(original, mutated)
+        self.assertEqual(41, result.returncode, result.stderr)
+        self.assertIn("QUOTED_IDENTIFIER is OFF", result.stderr)
+        scripts = [call for call in invocations if call["name"] == "docker" and "-i" in call["args"]]
+        self.assertEqual(1, len(scripts))
+        self.assertNotIn("-I", scripts[0]["args"])
+        self.assertEqual("rm", invocations[-1]["args"][0])
+        self.assertEqual([], list((root / "work").iterdir()))
+
+    def test_script_error_is_not_masked_by_quoted_identifiers_or_diagnostics(self) -> None:
+        """Correct connection options neither bypass a SQL error nor replace its original exit code."""
+        # Arrange
+        failure_exit = 53
+
+        # Act
+        result, invocations, root = self.run_harness(MOCK_SCRIPT_EXIT=str(failure_exit),
+                                                    MOCK_DIAGNOSTICS_EXIT="31")
+
+        # Assert
+        self.assertEqual(failure_exit, result.returncode, result.stderr)
+        scripts = [call for call in invocations if call["name"] == "docker" and "-i" in call["args"]]
+        self.assertEqual(1, len(scripts))
+        self.assertIn("-I", scripts[0]["args"])
+        self.assertIn("-b", scripts[0]["args"])
+        self.assertEqual("rm", invocations[-1]["args"][0])
+        self.assertEqual([], list((root / "work").iterdir()))
 
     def test_every_cli_and_bundle_connection_has_both_finite_budgets(self) -> None:
         # Arrange

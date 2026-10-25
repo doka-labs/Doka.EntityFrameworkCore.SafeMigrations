@@ -381,10 +381,13 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
     /// <summary>Recognizes effective ARITHABORT and rejects incompatible options without session changes.</summary>
     /// <param name="roundAbort">Whether the independently forbidden rounding option is enabled.</param>
+    /// <param name="quotedIdentifier">Whether the independently required quoted-identifier option is enabled.</param>
     [SqlServerLiveTheory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ComputedIndexAdmissionPreservesCallerSetOptions(bool roundAbort)
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    public async Task ComputedIndexAdmissionPreservesCallerSetOptions(bool roundAbort, bool quotedIdentifier)
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync();
@@ -396,7 +399,9 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         await context.Database.OpenConnectionAsync();
         await using var settings = context.Database.GetDbConnection().CreateCommand();
         settings.CommandText = "SET ARITHABORT OFF; SET ANSI_WARNINGS ON; "
-            + (roundAbort ? "SET NUMERIC_ROUNDABORT ON;" : "SET NUMERIC_ROUNDABORT OFF;");
+            + (roundAbort ? "SET NUMERIC_ROUNDABORT ON;" : "SET NUMERIC_ROUNDABORT OFF;")
+            + (quotedIdentifier ? " SET QUOTED_IDENTIFIER ON;" : " SET QUOTED_IDENTIFIER OFF;");
+
         await settings.ExecuteNonQueryAsync();
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexIfNotExists("IX_generated_ancestor", "generated_nodes", ["HasChildren", "R"]);
@@ -407,14 +412,17 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
         await using var options = context.Database.GetDbConnection().CreateCommand();
-        options.CommandText = "SELECT CONVERT(int,SESSIONPROPERTY(N'NUMERIC_ROUNDABORT'))*10 "
+        options.CommandText = "SELECT CONVERT(int,SESSIONPROPERTY(N'NUMERIC_ROUNDABORT'))*100 "
+            + "+CONVERT(int,SESSIONPROPERTY(N'QUOTED_IDENTIFIER'))*10 "
             + "+CONVERT(int,SESSIONPROPERTY(N'ARITHABORT'));";
+
         var after = Convert.ToInt32(await options.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
 
         // Assert
-        Assert.Equal(roundAbort ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Equal(roundAbort ? 10 : 0, after);
-        if (roundAbort)
+        var blocked = roundAbort || !quotedIdentifier;
+        Assert.Equal(blocked ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready, report.Status);
+        Assert.Equal((roundAbort ? 100 : 0) + (quotedIdentifier ? 10 : 0), after);
+        if (blocked)
         {
             Assert.Equal(51002, Assert.IsType<SqlException>(failure).Number);
         }

@@ -145,6 +145,17 @@ Timing evidence is informational.
   defaults, comments, backslashes and dollar-delimiter payloads unchanged across
   real script execution and replay, without normalizing expressions or relaxing
   mismatch rejection.
+- Close provider tooling qualification gaps between direct operation tests and
+  actual CLI, native-script and Migration Bundle execution. Execute the shared
+  server SQL artifacts, qualify freshly scaffolded strict/legacy contracts and
+  independently read back their schema, history, generated behavior and CHECKs.
+  Reject unrelated SQLite script errors and incomplete consumer databases;
+  bound native SQL Server requests and surface owned cleanup failures without
+  replacing the original execution error. Keep product safety policies intact.
+- Execute SQL Server tooling scripts with ODBC sqlcmd quoted identifiers
+  explicitly enabled. Cover both client paths, all three engine profiles and
+  Strict/LegacyConvergence normal/idempotent script replay without weakening
+  computed-index SET guards, failure propagation or owned cleanup.
 - Isolate the provider-budget test contexts from EF's global service-provider
   cache. Preserve physical-key rejection and native replay checks when other
   parallel tests use many legitimate provider profiles, with explicit root

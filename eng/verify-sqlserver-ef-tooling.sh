@@ -21,12 +21,18 @@ case "$work_dir" in
 esac
 
 container_name="safe-migrations-sqlserver-tooling-${RANDOM}-$$"
+container_requested=false
 container_started=false
 sqlcmd_path=""
 artifacts_dir="$source_root/artifacts/ef-tooling/sqlserver/$version"
 
 cleanup() {
     local exit_code="$1"
+    local cleanup_code=0
+
+    # WHY: Cleanup must attempt both owned resources and preserve the first
+    # failure, including a cleanup-only failure after otherwise successful work.
+    trap - EXIT
 
     if [[ "$container_name" == safe-migrations-sqlserver-tooling-* ]]; then
         if [[ "$exit_code" != 0 && "$container_started" == true ]]; then
@@ -36,7 +42,7 @@ cleanup() {
 
             if [[ -n "$sqlcmd_path" ]]; then
                 docker exec "$container_name" "$sqlcmd_path" \
-                    -S localhost -U sa -P 'SafeMigrationsTooling123!' -C -b -l 5 -t 5 \
+                    -S localhost -U sa -P 'SafeMigrationsTooling123!' -C -b -I -l 5 -t 5 \
                     -Q "SELECT session_id, status, command, wait_type, wait_time, blocking_session_id
                         FROM sys.dm_exec_requests WHERE session_id <> @@SPID;
                         SELECT wait_type, waiting_tasks_count, wait_time_ms
@@ -49,11 +55,31 @@ cleanup() {
             echo "SQL Server $version tooling failed (exit $exit_code); diagnostics: $artifacts_dir" >&2
         fi
 
-        docker rm -f "$container_name" >/dev/null 2>&1 || true
+        if [[ "$container_requested" == true ]]; then
+            if docker rm -f "$container_name" >/dev/null; then
+                container_started=false
+            else
+                cleanup_code="$?"
+                echo "Failed to remove owned SQL Server tooling container: $container_name" >&2
+
+                if [[ "$exit_code" == 0 ]]; then
+                    exit_code="$cleanup_code"
+                fi
+            fi
+        fi
     fi
 
     if [[ "$work_dir" == "$temporary_root"/safemigrations-sqlserver-tooling.* ]]; then
-        rm -rf -- "$work_dir"
+        if rm -rf -- "$work_dir"; then
+            :
+        else
+            cleanup_code="$?"
+            echo "Failed to remove SQL Server tooling directory: $work_dir" >&2
+
+            if [[ "$exit_code" == 0 ]]; then
+                exit_code="$cleanup_code"
+            fi
+        fi
     fi
 
     exit "$exit_code"
@@ -73,6 +99,7 @@ rsync -a \
 
 # A Docker-assigned loopback port avoids collisions between qualification
 # cells without exposing this test database on public runner interfaces.
+container_requested=true
 docker run -d --name "$container_name" \
     --platform linux/amd64 \
     -e ACCEPT_EULA=Y \
@@ -96,7 +123,7 @@ fi
 ready=false
 for _ in {1..120}; do
     if docker exec "$container_name" "$sqlcmd_path" \
-        -S localhost -U sa -P 'SafeMigrationsTooling123!' -C \
+        -S localhost -U sa -P 'SafeMigrationsTooling123!' -C -b -I -l 5 -t 5 \
         -Q 'SELECT 1' >/dev/null 2>&1; then
         ready=true
         break
@@ -200,12 +227,18 @@ for mode in strict legacy; do
         strict)
             context=SqlServerSafeMigrationScaffoldingDbContext
             history_table=__SqlServerSafeMigrationsHistory
+            migration_name=SqlServerStrictScaffoldingProbe
             ;;
         legacy)
             context=SqlServerLegacySafeMigrationScaffoldingDbContext
             history_table=__SqlServerLegacySafeMigrationsHistory
+            migration_name=SqlServerLegacyScaffoldingProbe
             ;;
     esac
+
+    migration_file="$(find "$project_directory/ScaffoldingProbe/$mode" \
+        -type f -name "*_${migration_name}.cs" -print -quit)"
+    migration_id="$(basename "$migration_file" .cs)"
 
     export SAFE_MIGRATIONS_CONNECTION_STRING="$tooling_endpoint;Database=tooling_${mode}_cli;$tooling_connection_settings"
     dotnet ef migrations script \
@@ -262,13 +295,17 @@ for mode in strict legacy; do
 
         container_script="/tmp/safemigrations-$mode-$script_kind.sql"
         docker exec "$container_name" "$sqlcmd_path" \
-            -S localhost -U sa -P 'SafeMigrationsTooling123!' -C -b \
+            -S localhost -U sa -P 'SafeMigrationsTooling123!' -C -b -I \
+            -l 120 -t 120 \
             -Q "CREATE DATABASE [$script_database];"
         docker cp "$script_file" "$container_name:$container_script"
 
+        # WHY: ODBC sqlcmd defaults QUOTED_IDENTIFIER to OFF, unlike SqlClient.
+        # Computed indexes require ON; set the caller option without weakening runtime guards.
         for ((script_run = 0; script_run < script_repetitions; script_run++)); do
             docker exec "$container_name" "$sqlcmd_path" \
-                -S localhost -U sa -P 'SafeMigrationsTooling123!' -C -b \
+                -S localhost -U sa -P 'SafeMigrationsTooling123!' -C -b -I \
+                -l 120 -t 120 \
                 -d "$script_database" -i "$container_script"
         done
     done
@@ -278,21 +315,25 @@ for mode in strict legacy; do
         "tooling_${mode}_bundle" \
         "tooling_${mode}_normal_script" \
         "tooling_${mode}_idempotent_script"; do
-        row_count="$(docker exec "$container_name" "$sqlcmd_path" \
-            -S localhost -U sa -P 'SafeMigrationsTooling123!' -C -b \
-            -d "$database" -h -1 -W \
-            -Q 'SET NOCOUNT ON; SELECT COUNT_BIG(*) FROM dbo.scaffolding_users WHERE Email = '\''administrator@example.test'\'';' \
-            | tr -d '[:space:]')"
-        history_count="$(docker exec "$container_name" "$sqlcmd_path" \
-            -S localhost -U sa -P 'SafeMigrationsTooling123!' -C -b \
-            -d "$database" -h -1 -W \
-            -Q "SET NOCOUNT ON; SELECT COUNT_BIG(*) FROM dbo.[$history_table];" \
-            | tr -d '[:space:]')"
-        included_index_count="$(docker exec "$container_name" "$sqlcmd_path" \
-            -S localhost -U sa -P 'SafeMigrationsTooling123!' -C -b \
-            -d "$database" -h -1 -W \
+        # WHY: History alone can pass after an incomplete or wrong migration.
+        # Keep facts independent so extra objects cannot compensate for omissions.
+        # All probe rows are synthetic and rolled back, preserving replay state.
+        docker exec "$container_name" "$sqlcmd_path" \
+            -S localhost -U sa -P 'SafeMigrationsTooling123!' -C -b -I \
+            -l 120 -t 120 -d "$database" \
             -Q "SET NOCOUNT ON;
-                SELECT COUNT_BIG(*)
+                SET XACT_ABORT ON;
+                IF (SELECT COUNT_BIG(*) FROM dbo.scaffolding_users
+                    WHERE Id = 1 AND Email = N'administrator@example.test'
+                        AND DisplayName = N'Administrator') <> 1
+                    THROW 51080, N'doka_tooling_seed', 1;
+
+                IF (SELECT COUNT_BIG(*) FROM dbo.[$history_table]) <> 1
+                    OR (SELECT COUNT_BIG(*) FROM dbo.[$history_table]
+                        WHERE MigrationId = N'$migration_id') <> 1
+                    THROW 51080, N'doka_tooling_history', 1;
+
+                IF (SELECT COUNT_BIG(*)
                 FROM sys.indexes AS i
                 JOIN sys.index_columns AS ic
                     ON ic.object_id = i.object_id AND ic.index_id = i.index_id
@@ -301,13 +342,79 @@ for mode in strict legacy; do
                 WHERE i.object_id = OBJECT_ID(N'dbo.scaffolding_users')
                     AND i.name = N'IX_scaffolding_users_Email'
                     AND c.name = N'DisplayName'
-                    AND ic.is_included_column = 1;" \
-            | tr -d '[:space:]')"
+                    AND ic.is_included_column = 1 AND i.is_unique = 1 AND i.is_disabled = 0) <> 1
+                    THROW 51080, N'doka_tooling_included_index', 1;
 
-        if [[ "$row_count" != 1 || "$history_count" != 1 || "$included_index_count" != 1 ]]; then
-            echo "SQL Server $version $database did not retain the model-managed row, history entry, and included index column after replay." >&2
-            exit 1
-        fi
+                DECLARE @generated_object int = OBJECT_ID(N'dbo.scaffolding_generated_nodes', N'U');
+                IF @generated_object IS NULL
+                    OR (SELECT COUNT_BIG(*) FROM sys.columns WHERE object_id = @generated_object) <> 4
+                    OR (SELECT COUNT_BIG(*) FROM sys.columns WHERE object_id = @generated_object
+                        AND name = N'Id' AND system_type_id = TYPE_ID(N'int')
+                        AND is_nullable = 0 AND is_computed = 0) <> 1
+                    OR (SELECT COUNT_BIG(*) FROM sys.columns WHERE object_id = @generated_object
+                        AND name IN (N'LeftBound', N'RightBound') AND system_type_id = TYPE_ID(N'bigint')
+                        AND is_nullable = 0 AND is_computed = 0) <> 2
+                    OR (SELECT COUNT_BIG(*) FROM sys.computed_columns WHERE object_id = @generated_object
+                        AND name = N'HasDescendants' AND system_type_id = TYPE_ID(N'bit')
+                        AND is_persisted = 0 AND CHARINDEX(N'CASE', UPPER(definition)) > 0
+                        AND COLUMNPROPERTY(object_id, name, N'IsDeterministic') = 1) <> 1
+                    THROW 51080, N'doka_tooling_generated_columns', 1;
+
+                IF (SELECT COUNT_BIG(*) FROM sys.indexes AS i
+                    WHERE i.object_id = @generated_object
+                        AND i.name = N'IX_scaffolding_generated_nodes_HasDescendants_LeftBound_RightBound'
+                        AND i.type = 2 AND i.is_unique = 0 AND i.is_disabled = 0 AND i.has_filter = 0
+                        AND (SELECT COUNT_BIG(*) FROM sys.index_columns AS k
+                            WHERE k.object_id = i.object_id AND k.index_id = i.index_id
+                                AND k.key_ordinal > 0) = 3
+                        AND EXISTS (SELECT 1 FROM sys.index_columns AS k JOIN sys.columns AS c
+                            ON c.object_id = k.object_id AND c.column_id = k.column_id
+                            WHERE k.object_id = i.object_id AND k.index_id = i.index_id
+                                AND k.key_ordinal = 1 AND k.is_descending_key = 0
+                                AND c.name = N'HasDescendants')
+                        AND EXISTS (SELECT 1 FROM sys.index_columns AS k JOIN sys.columns AS c
+                            ON c.object_id = k.object_id AND c.column_id = k.column_id
+                            WHERE k.object_id = i.object_id AND k.index_id = i.index_id
+                                AND k.key_ordinal = 2 AND k.is_descending_key = 0 AND c.name = N'LeftBound')
+                        AND EXISTS (SELECT 1 FROM sys.index_columns AS k JOIN sys.columns AS c
+                            ON c.object_id = k.object_id AND c.column_id = k.column_id
+                            WHERE k.object_id = i.object_id AND k.index_id = i.index_id
+                                AND k.key_ordinal = 3 AND k.is_descending_key = 0 AND c.name = N'RightBound')) <> 1
+                    THROW 51080, N'doka_tooling_computed_index', 1;
+
+                IF (SELECT COUNT_BIG(*) FROM sys.check_constraints
+                    WHERE parent_object_id = @generated_object AND name = N'ck_scaffolding_generated_bounds'
+                        AND is_disabled = 0 AND is_not_trusted = 0) <> 1
+                    THROW 51080, N'doka_tooling_check_constraint', 1;
+
+                BEGIN TRANSACTION;
+                INSERT INTO dbo.scaffolding_generated_nodes (Id, LeftBound, RightBound)
+                    VALUES (-2147483001, 10, 11), (-2147483002, 20, 24),
+                        (-2147483003, 9223372036854775806, 9223372036854775807);
+                IF (SELECT COUNT_BIG(*) FROM dbo.scaffolding_generated_nodes
+                    WHERE Id IN (-2147483001, -2147483003) AND HasDescendants = 0) <> 2
+                    OR (SELECT COUNT_BIG(*) FROM dbo.scaffolding_generated_nodes
+                        WHERE Id = -2147483002 AND HasDescendants = 1) <> 1
+                    THROW 51080, N'doka_tooling_generated_values', 1;
+
+                DECLARE @check_rejected bit = 0;
+                BEGIN TRY
+                    INSERT INTO dbo.scaffolding_generated_nodes (Id, LeftBound, RightBound)
+                        VALUES (-2147483004, 30, 30);
+                END TRY
+                BEGIN CATCH
+                    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+                    IF ERROR_NUMBER() <> 547
+                        OR CHARINDEX(N'ck_scaffolding_generated_bounds', ERROR_MESSAGE()) = 0
+                        THROW;
+                    SET @check_rejected = 1;
+                END CATCH;
+
+                IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+                IF @check_rejected <> 1
+                    THROW 51080, N'doka_tooling_check_enforcement', 1;
+
+                PRINT N'SQL Server $database schema, generated behavior, data and history verified.';"
     done
 done
 

@@ -2,6 +2,9 @@
   <ItemGroup>
     <Compile Include="..\Shared\ModelManagedDataLargeExecutionContract.cs"
              Link="Infrastructure\ModelManagedDataLargeExecutionContract.cs" />
+    <!-- WHY: Execute the actual CLI/bundle readback contract, not a copied SQL predicate. -->
+    <Compile Include="..\..\eng\package-consumer\Sqlite\ToolingDatabaseVerifier.cs"
+             Link="Infrastructure\ToolingDatabaseVerifier.cs" />
     <ProjectReference
       Include="..\..\src\Doka.EntityFrameworkCore.SafeMigrations\Doka.EntityFrameworkCore.SafeMigrations.csproj" />
     <ProjectReference

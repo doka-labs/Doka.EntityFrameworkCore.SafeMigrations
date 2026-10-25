@@ -471,18 +471,38 @@ tests verify command order, timeout propagation, and cancellation. Coverage
 jobs exclude the large-scale test because every supported engine matrix cell
 already executes it against a live server.
 
-Every engine matrix cell also runs:
+The MySQL, MariaDB and PostgreSQL tooling gates execute freshly scaffolded
+Strict and LegacyConvergence contracts through real `dotnet ef database update`,
+Migration Bundles and native SQL clients. Normal scripts execute once;
+idempotent scripts, including the no-transactions variant, execute twice.
+The existing small mixed-operation fixture and derived ownership script also
+execute. Generation or a nonempty artifact alone is not execution evidence.
 
-- `dotnet ef database update` twice;
-- normal migration script;
-- idempotent script;
-- idempotent no-transaction script;
-- Migration Bundle twice against a separate database;
-- exact Core history verification.
+Each transport uses a fresh owned database lifetime and independently verifies
+physical schema, exact history, model-managed data, generated CASE results,
+the computed-column index and CHECK enforcement. MySQL's authored default
+schema is a database qualifier: fresh lifetimes retain that database identity
+instead of rewriting SQL. PostgreSQL uses `psql -X` with `ON_ERROR_STOP=1`;
+MySQL/MariaDB use explicit UTF-8 batch input without `--force`. Clients retain
+the script's own transaction boundaries.
 
-SQLite runs the corresponding database update and Migration Bundle paths twice.
-Safe-operation SQL scripts are a qualified negative boundary because SQLite has
-no procedural language for the required catalog-dependent decisions.
+SQL Server qualifies Strict/LegacyConvergence CLI, bundle, normal-script and
+idempotent-script targets with exact native schema/history and generated-value
+readback. ODBC callers explicitly enable quoted identifiers and use finite
+login/query budgets; these caller settings do not relax product guards.
+
+SQLite runs both database-update and bundle paths twice. Its readback checks
+both initial and transition history identities, final column/index shape,
+generated behavior, CHECK enforcement and integrity independently. Safe-operation
+SQL scripts remain a qualified negative boundary: normal/idempotent attempts
+must fail for the intended provider reason without partial output, not merely
+with an arbitrary CLI error. Existing xUnit tests cover incomplete and
+compensating database fixtures against the actual consumer verifier.
+
+Tooling cleanup attempts all owned resources. Cleanup-only failures reject the
+gate; cleanup cannot replace an earlier execution failure. Shell counterprobes
+and the existing SQL Server process tests verify these orchestration contracts;
+they do not replace the required native engine matrix.
 
 ## Qualified capability boundaries
 
