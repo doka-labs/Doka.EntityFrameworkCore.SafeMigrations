@@ -76,6 +76,14 @@ jobs:
           python3 -m unittest eng/tests/test_verify_coverage.py -v
           python3 -m unittest eng/tests/test_verify_sqlserver_trx.py -v
           python3 -m unittest eng/tests/test_verify_sqlserver_tooling.py -v
+          python3 -m unittest \
+            eng/tests/test_release_lines.py eng/tests/test_release_publication.py \
+            eng/tests/test_release_latest.py eng/tests/test_release_line_maintenance.py \
+            eng/tests/test_release_line_workflow.py eng/tests/test_release_line_flow.py \
+            eng/tests/test_release_line_recovery.py eng/tests/test_release_line_matrix.py \
+            eng/tests/test_release_line_dependency_bounds.py -v
+          python3 eng/verify-workflow-concurrency.py
+          python3 -m eng.release.maintenance check-dependencies
 
       - name: Restore repository dependency graph
         run: >-

@@ -1,10 +1,13 @@
 """Exercise the trusted handoff without tokens, network or external writes."""
 
+import base64
 import copy
+import hashlib
 import importlib.util
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -26,6 +29,142 @@ def load_helper():
 
 class HandoffTests(unittest.TestCase):
     """Pin automatic bot/fork handling and fail-closed authoritative identities."""
+
+    def test_registered_inactive_maintenance_base_accepts_fork_preparation(self):
+        """A preparation PR needs Required Checks before its line is activated."""
+        # Arrange
+        helper = load_helper()
+        environment, event, api = fixture()
+        set_base(api, "maintenance/10.x")
+
+        # Act
+        context = helper.begin(api, environment, event)
+
+        # Assert
+        self.assertTrue(context["ready"])
+        self.assertEqual("refs/heads/maintenance/10.x", context["base_ref"])
+        self.assertEqual("a" * 40, context["base_sha"])
+
+    def test_registered_maintenance_base_uses_its_own_current_head(self):
+        """Main metadata must not stand in for an independently maintained base."""
+        # Arrange
+        helper = load_helper()
+        environment, event, api = fixture()
+        set_base(api, "maintenance/10.x")
+        api.responses["repos/owner/repository/git/ref/heads/maintenance%2F10.x"]["object"]["sha"] = "c" * 40
+
+        # Act / Assert
+        with self.assertRaises(ValueError):
+            helper.begin(api, environment, event)
+
+        self.assertEqual([], api.writes)
+
+    def test_preparation_base_uses_independent_protected_main_authority(self):
+        """A reviewed PR checkout cannot authorize another privileged target."""
+        # Arrange
+        helper = load_helper()
+        environment, event, api = fixture()
+        api.responses["repos/owner/repository/branches/main"]["protected"] = False
+
+        # Act / Assert
+        with self.assertRaises(ValueError):
+            helper.begin(api, environment, event)
+
+        self.assertEqual([], api.writes)
+
+    def test_initial_main_startup_retains_exact_legacy_pr_contract(self):
+        """The feature's first main PR can use reviewed-head startup before policy exists."""
+        # Arrange
+        helper = load_helper()
+        environment, event, api = legacy_fixture(helper, manual_fixture)
+
+        # Act
+        context = helper.begin(api, environment, event)
+
+        # Assert
+        self.assertTrue(context["ready"])
+        self.assertEqual("refs/heads/main", context["base_ref"])
+        self.assertEqual("a" * 40, context["base_sha"])
+        self.assertEqual(1, len(api.writes))
+
+    def test_legacy_bridge_never_admits_maintenance_without_protected_policy(self):
+        """Absence preserves only old main PR checks, not any new line permission."""
+        # Arrange
+        helper = load_helper()
+        environment, event, api = legacy_fixture(helper, manual_fixture)
+        set_base(api, "maintenance/10.x")
+
+        # Act / Assert
+        with self.assertRaises(ValueError):
+            helper.begin(api, environment, event)
+
+        self.assertEqual([], api.writes)
+
+    def test_legacy_bridge_rejects_failed_malformed_stale_and_unprotected_authority(self):
+        """Only authenticated 404 at the exact current protected main is absence."""
+        for mutation in ("forbidden", "malformed", "stale", "unprotected", "foreign404"):
+            with self.subTest(mutation=mutation):
+                # Arrange
+                helper = load_helper()
+                environment, event, api = legacy_fixture(helper, manual_fixture)
+                route = "repos/owner/repository/contents/eng/release/lines-policy.json?ref=" + "a" * 40
+                if mutation == "forbidden":
+                    api.responses[route] = ValueError("HTTP 403 is not policy absence")
+                elif mutation == "malformed":
+                    api.responses[route] = {"type": "file", "encoding": "base64", "content": "invalid"}
+                elif mutation == "stale":
+                    api.responses["repos/owner/repository/git/ref/heads/main"]["object"]["sha"] = "c" * 40
+                elif mutation == "unprotected":
+                    api.responses["repos/owner/repository/branches/main"]["protected"] = False
+                else:
+                    api.responses[route] = helper.PolicyNotFound(route.replace("a" * 40, "c" * 40))
+
+                # Act / Assert
+                with self.assertRaises(ValueError):
+                    helper.begin(api, environment, event)
+
+                self.assertEqual([], api.writes)
+
+    def test_http_status_bridge_recognizes_only_a_policy_get_404(self):
+        """A textual error or unrelated API absence cannot enable legacy startup."""
+        # Arrange
+        helper = load_helper()
+        route = "repos/owner/repository/contents/eng/release/lines-policy.json?ref=" + "a" * 40
+        response = subprocess.CompletedProcess(
+            [], 1, "HTTP/2.0 404 Not Found\nContent-Type: application/json\n\n{}", "")
+        with mock.patch.object(helper.subprocess, "run", return_value=response) as run:
+            # Act / Assert
+            with self.assertRaises(helper.PolicyNotFound):
+                helper.GitHub().request(route)
+
+        self.assertIn("--include", run.call_args.args[0])
+
+    def test_http_forbidden_body_cannot_spoof_policy_not_found(self):
+        """The actual response header, not JSON/error prose, chooses the bridge."""
+        # Arrange
+        helper = load_helper()
+        route = "repos/owner/repository/contents/eng/release/lines-policy.json?ref=" + "a" * 40
+        response = subprocess.CompletedProcess([], 1, 'HTTP/2.0 403 Forbidden\n\n{"message":"HTTP 404"}', "")
+        with mock.patch.object(helper.subprocess, "run", return_value=response):
+            # Act / Assert
+            with self.assertRaises(ValueError) as failure:
+                helper.GitHub().request(route)
+
+        self.assertNotIsInstance(failure.exception, helper.PolicyNotFound)
+
+    def test_registered_maintenance_base_accepts_reviewed_manual_startup(self):
+        """Reviewed same-repository startup retains the same exact-base path as forks."""
+        # Arrange
+        helper = load_helper()
+        environment, event, api = manual_fixture()
+        set_base(api, "maintenance/10.x")
+
+        # Act
+        context = helper.begin(api, environment, event)
+
+        # Assert
+        self.assertEqual("refs/heads/maintenance/10.x", context["base_ref"])
+        self.assertTrue(context["ready"])
 
     def test_fork_capture_creates_check_on_exact_pr_head(self):
         """A fork needs no write token: the trusted receiver owns its head check."""
@@ -1260,7 +1399,44 @@ def fixture():
         + "b" * 40 + "&per_page=100": {"total_count": 1, "workflow_runs": [run]},
     }
 
+    policy = {
+        "schemaVersion": 1, "revision": "2026-10-25.1", "repository": "owner/repository",
+        "authorityRef": "refs/heads/main", "lines": [
+            {"sourceRef": "refs/heads/main", "role": "main", "packageMajor": 10,
+             "channel": "stable-and-prerelease", "upstreamStage": "ga", "state": "active",
+             "workflowPath": ".github/workflows/release-candidate.yml", "publisherEnvironment": "nuget"},
+            {"sourceRef": "refs/heads/maintenance/10.x", "role": "maintenance", "packageMajor": 10,
+             "channel": "stable-and-prerelease", "upstreamStage": "ga", "state": "inactive",
+             "workflowPath": ".github/workflows/release-candidate.yml", "publisherEnvironment": "nuget"},
+        ],
+    }
+    raw = json.dumps(policy).encode("ascii")
+    responses["repos/owner/repository/branches/main"] = {
+        "name": "main", "protected": True, "commit": {"sha": "d" * 40}}
+    responses["repos/owner/repository/contents/eng/release/lines-policy.json?ref=" + "d" * 40] = {
+        "type": "file", "path": "eng/release/lines-policy.json", "encoding": "base64",
+        "content": base64.b64encode(raw).decode("ascii"),
+        "sha": hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw).hexdigest(),
+    }
+
     return environment, event, FakeApi(responses)
+
+
+def set_base(api, branch):
+    """Point shared authoritative PR fixtures at one exact registered base."""
+    api.responses["repos/owner/repository/pulls/59"]["base"]["ref"] = branch
+    api.responses["repos/owner/repository/git/ref/heads/" + branch.replace("/", "%2F")] = {
+        "object": {"sha": "a" * 40}}
+
+
+def legacy_fixture(helper, make_fixture=fixture):
+    """Represent authenticated pre-policy main without consulting candidate source."""
+    environment, event, api = make_fixture()
+    api.responses["repos/owner/repository/branches/main"]["commit"]["sha"] = "a" * 40
+    route = "repos/owner/repository/contents/eng/release/lines-policy.json?ref=" + "a" * 40
+    api.responses[route] = helper.PolicyNotFound(route)
+
+    return environment, event, api
 
 
 def manual_fixture():
@@ -1371,7 +1547,11 @@ class FakeApi:
 
             return {"id": 700}
 
-        return copy.deepcopy(self.responses[route])
+        value = self.responses[route]
+        if isinstance(value, Exception):
+            raise value
+
+        return copy.deepcopy(value)
 
 
 if __name__ == "__main__":

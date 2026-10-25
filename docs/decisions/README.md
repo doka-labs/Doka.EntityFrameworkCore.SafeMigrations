@@ -38,6 +38,7 @@ record the implemented ownership and lossless-repair contracts selected on
 | [D-015](D-015-owned-atomic-required-column-additions.md) | Owned atomic MySQL/MariaDB required-column staging and forward recovery |
 | [D-016](D-016-actionable-diagnostics-and-operation-identity.md) | Shared structural diagnostic identity and provider-owned error transport |
 | [D-017](D-017-generated-expression-and-dependency-contracts.md) | Bounded generated expressions, native identity and ordered source dependencies |
+| [D-018](D-018-release-lines-and-monotonic-publication.md) | Exact release lines, current publication authority and monotonic Latest |
 
 ## Authoring and review
 

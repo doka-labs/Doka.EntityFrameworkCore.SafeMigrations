@@ -86,10 +86,8 @@ done
 
 expected_prerelease=false
 expected_release_title="SafeMigrations $package_version"
-publication_arguments=(--latest)
 if [[ "$package_version" == *-* ]]; then
     expected_prerelease=true
-    publication_arguments=(--prerelease --latest=false)
 fi
 
 expected_assets="$({
@@ -395,6 +393,7 @@ stage_release() {
             release create "$release_tag"
             --draft
             --verify-tag
+            --latest=false
             --title "$expected_release_title"
             --notes-file "$release_notes_file"
         )
@@ -445,6 +444,23 @@ publish_release() {
 
     if [[ "$(jq -r '.isDraft' <<<"$release_json")" == true ]]; then
         wait_for_release_state "complete GitHub Release draft" true false
+
+        # WHY: Qualification can overlap across lines and finish out of order.
+        # Compare current Latest only inside the shared publisher lock, directly
+        # before this irreversible edit. Historical immutable retries never edit.
+        local promote_latest
+        local repo_root
+        local publication_arguments
+
+        repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+        promote_latest="$(
+            PYTHONPATH="$repo_root" python3 -m eng.release.latest --version "$package_version"
+        )"
+        publication_arguments=("--latest=$promote_latest")
+        if [[ "$expected_prerelease" == true ]]; then
+            publication_arguments+=(--prerelease)
+        fi
+
         gh release edit "$release_tag" \
             --draft=false \
             "${publication_arguments[@]}"

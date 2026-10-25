@@ -66,6 +66,12 @@ through the private security process.
 
 ## Supported Scope and Ownership
 
+Release-line capability does not activate additional framework support. Only
+main/10 is active; the registered maintenance/10.x line is inactive. A maintained
+line requires separately reviewed activation, branch-native security servicing
+and its own complete qualification. There is no .NET 11 support claim. See
+[Release lines](docs/operations/release-lines.md).
+
 The authoritative package, runtime, engine, and capability matrix is maintained
 in [Support and qualification](docs/support-and-qualification.md). This policy
 does not extend that matrix or promise a release date. Use published packages

@@ -9,7 +9,7 @@ scope: "Candidate qualification, signed release identity, and protected publicat
 supersedes: []
 superseded-by: []
 amends: []
-amended-by: []
+amended-by: [D-018]
 madr-version: "4.0.0"
 doka-profile-version: "1.0"
 ---
@@ -50,7 +50,9 @@ without a repository-owned release orchestration framework.
 Chosen option: "Manual untagged qualification with a protected publication
 wait" using platform-native publication primitives.
 
-The operator dispatches `release-candidate.yml` from `main` with a version.
+The operator dispatches `release-candidate.yml` from an explicitly authorized
+release line with a version. [D-018](D-018-release-lines-and-monotonic-publication.md)
+extends the original main-only process without replacing its publisher.
 Preflight validates the source release line, changelog, current SHA, tag
 absence, and unused NuGet identities. The shared quality workflow performs all
 build, test, provider, tooling, coverage, performance, package, consumer, and
@@ -83,6 +85,19 @@ then supply the release association and digest checks. Because GitHub generates
 the Release attestation asynchronously, verification uses a bounded readback
 window and fails closed after exhaustion. The focused adapter persists no
 parallel release state and does not parse the symbol server.
+
+### Release-line authority
+
+Qualification freezes its own source/toolchain and exact candidate artifacts.
+It does not grant perpetual publication rights. The existing protected publisher
+independently checks current protected-main policy, selected branch protection
+and the existing nuget environment. Prepared/qualification-only runs skip that
+environment-bearing job. All lines share one non-cancelling publication queue;
+same-run retries retain their original admission and bytes. Stable Latest is
+monotonic by canonical SemVer; historical verification does not require a release
+to remain Latest. Only main/10 is active; additional lines remain inactive and
+.NET 11 adoption is outside this change. Separate immutable workflow receipts do
+not expand the twelve provenance subjects or thirteen public Release assets.
 
 ### Repository dependency lock scope
 
@@ -297,7 +312,17 @@ owns independent consumer readback.
   readback requirements; record release status in the publication runbook and
   release evidence.
 
+- 2026-10-25: D-018 extends the existing publisher to exact release lines,
+  branch-native checks, current protected-main admission and monotonic Latest.
+  Retain five packages, twelve provenance subjects, thirteen public assets and
+  existing operator protections; additional lines remain inactive and .NET 11
+  adoption is excluded.
+
 ### Implementation References
+
+- [Release-line decision](D-018-release-lines-and-monotonic-publication.md)
+- [Release-line policy](../../eng/release/lines-policy.json)
+- [Release-line operations](../operations/release-lines.md)
 
 - [Release candidate workflow](../../.github/workflows/release-candidate.yml)
 - [Shared quality workflow](../../.github/workflows/quality-gates.yml)

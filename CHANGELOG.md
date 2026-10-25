@@ -15,6 +15,14 @@ the shared release identity described in [Release process](docs/release-process.
 
 ### Changed
 
+- Support explicitly authorized release lines through the existing five-package
+  pipeline, with branch-owned qualification, qualification-only execution,
+  current protected-main publication authority and exact same-run recovery.
+  Serialize publishers across lines and retain monotonic stable Latest,
+  historical provenance and the existing thirteen public release assets.
+  Extend registered-line PR checks and active-line scheduled qualification,
+  dependency targeting and transitive vulnerability audits. Keep only main/10
+  active, maintenance/10.x inactive and the .NET 10 toolchain unchanged.
 - Raise the MySQL/MariaDB provider's published Doka dependency to
   `[10.6.2,10.7.0)` and restore the official 10.6.2 package. Retain the public
   migration SPI and dependency isolation while taking its GUID-default metadata

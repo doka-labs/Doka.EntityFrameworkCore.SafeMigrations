@@ -250,7 +250,8 @@ review or add a build dependency.
 
 ## Pull requests
 
-Target `main`, keep the change cohesive, and include exact commands and results
+Target `main`, or the exact reviewed maintenance line for an applicable port,
+keep the change cohesive, and include exact commands and results
 in the pull request. Use the PR template to distinguish executed checks from
 checks not run and explain genuinely unaffected areas. Do not claim support
 from a build-only result or treat a default MariaDB run as MySQL qualification.
@@ -261,6 +262,16 @@ Changes to engine behavior or dependencies need primary-source references and
 positive/negative regression evidence. Workflow and release changes must also
 verify their real upstream Action contracts and distinguish local tests from
 hosted execution. Do not create a release tag or publish a package to test a PR.
+For workflow edits, run `python3 eng/verify-workflow-concurrency.py --actionlint actionlint`.
+GitHub supports concurrency queue retention, but actionlint 1.7.12 does not yet
+recognize that field. The adapter first validates its exact placement/value and
+non-cancellation contract, then handles only that exact unsupported-schema
+diagnostic; unrelated lint errors remain failures. Its positive/negative tests
+run in the engineering gate. Remove the compatibility path once upstream
+actionlint supports queue; do not use a general lint ignore.
+Registered preparation lines receive the same Required Checks before activation;
+passing CI does not grant publication rights. Follow [Release lines](docs/operations/release-lines.md)
+for line preparation, dependency servicing and separate activation approval.
 
 Use [GitHub Issues](https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/issues)
 for bugs, feature requests, and usage questions through the corresponding form.

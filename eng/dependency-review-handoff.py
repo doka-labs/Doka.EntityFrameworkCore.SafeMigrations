@@ -7,6 +7,12 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import quote
+
+
+if not __package__:
+    # WHY: The trusted receiver executes this file from an isolated engineering checkout.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 WORKFLOW_PATH = ".github/workflows/dependency-review.yml"
@@ -15,6 +21,14 @@ CI_WORKFLOW_PATH = ".github/workflows/ci.yml"
 CHECK_NAME = "dependency-review"
 MAX_JSON_BYTES = 16 * 1024 * 1024
 REQUIRED_RESULTS = {"context", "prepare-base", "prepare-head", "submit-nuget"}
+
+
+class PolicyNotFound(ValueError):
+    """A genuine HTTP 404 for policy bytes, never an authorization or JSON failure."""
+
+    def __init__(self, route: str):
+        super().__init__("protected-main policy does not exist at this exact revision")
+        self.route = route
 
 
 def number(value: object) -> int:
@@ -59,17 +73,56 @@ class GitHub:
     """Use the installed official CLI and fixed API host for bounded context responses."""
 
     def request(self, route: str, method: str = "GET", payload: dict | None = None):
-        command = ["gh", "api", "--hostname", "github.com", "--method", method,
+        command = ["gh", "api", "--include", "--hostname", "github.com", "--method", method,
                    "-H", "Accept: application/vnd.github+json", route]
         if payload is not None:
             command.extend(["--input", "-"])
 
         result = subprocess.run(command, input=json.dumps(payload) if payload is not None else None,
                                 capture_output=True, text=True, timeout=60, check=False)
-        if result.returncode or len(result.stdout) > MAX_JSON_BYTES:
+        if len(result.stdout) > MAX_JSON_BYTES:
             raise ValueError("GitHub API request failed or exceeded its bound")
 
-        return json.loads(result.stdout)
+        headers, separator, body = result.stdout.replace("\r\n", "\n").partition("\n\n")
+        status = re.match(r"HTTP/[0-9.]+ ([0-9]{3})(?: |\n)", headers)
+        if not separator or status is None:
+            raise ValueError("GitHub API response did not expose its actual HTTP status")
+
+        if (status[1] == "404" and method == "GET" and re.fullmatch(
+                r"repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/contents/eng/release/lines-policy\.json\?ref=[0-9a-f]{40}",
+                route)):
+            raise PolicyNotFound(route)
+
+        if result.returncode or not 200 <= int(status[1]) < 300:
+            raise ValueError("GitHub API request failed")
+
+        return json.loads(body)
+
+
+def registered_bases(api, name: str) -> tuple[set[str], str | None]:
+    """Read current policy, with an authenticated PR-only bridge for its first main merge.
+
+    WHY: A reviewed-head startup must work before this feature is on main.
+    Only actual policy absence on independently protected main retains the old
+    main-only PR contract. Publication never consumes this bridge.
+    """
+    from eng.release.publication import observe_authority
+
+    try:
+        authority = observe_authority(name, api)
+    except PolicyNotFound as absent:
+        branch = api.request(f"repos/{name}/branches/main")
+        commit = sha(branch.get("commit", {}).get("sha")) if isinstance(branch, dict) else None
+        if (not isinstance(branch, dict) or branch.get("name") != "main"
+                or branch.get("protected") is not True
+                or absent.route != f"repos/{name}/contents/eng/release/lines-policy.json?ref={commit}"):
+            raise ValueError("legacy PR startup cannot prove exact protected-main policy absence")
+
+        return {"refs/heads/main"}, commit
+    except (RuntimeError, ValueError) as error:
+        raise ValueError("current release-line authority could not be verified") from error
+
+    return {line["sourceRef"] for line in authority["policy"]["lines"]}, None
 
 
 def repository(environment: dict) -> tuple[str, int]:
@@ -181,6 +234,9 @@ def resolve(api, environment: dict, event: dict) -> dict:
         raise ValueError("unexpected receiving event repository")
 
     prefix = f"repos/{name}"
+    # WHY: A startup checkout may be the reviewed PR head. Only independently
+    # observed protected-main policy can authorize the privileged target base.
+    registered_refs, legacy_main_commit = registered_bases(api, name)
     workflow = api.request(f"{prefix}/actions/workflows/dependency-review.yml")
     if workflow.get("path") != WORKFLOW_PATH or workflow.get("state") != "active":
         raise ValueError("unexpected source workflow")
@@ -228,7 +284,7 @@ def resolve(api, environment: dict, event: dict) -> dict:
                   and item.get("head", {}).get("ref") == head_branch
                   and item.get("head", {}).get("repo", {}).get("id") == head_repository_id
                   and item.get("base", {}).get("repo", {}).get("id") == repository_id
-                  and item.get("base", {}).get("ref") == "main"]
+                  and f"refs/heads/{item.get('base', {}).get('ref')}" in registered_refs]
     if len(associated) != 1:
         raise ValueError("expected one current pull request for the source head")
 
@@ -239,12 +295,17 @@ def resolve(api, environment: dict, event: dict) -> dict:
             or pr.get("head", {}).get("ref") != head_branch
             or pr.get("head", {}).get("repo", {}).get("id") != head_repository_id
             or pr.get("base", {}).get("repo", {}).get("id") != repository_id
-            or pr.get("base", {}).get("ref") != "main"):
+            or f"refs/heads/{pr.get('base', {}).get('ref')}" not in registered_refs):
         raise ValueError("pull request no longer matches the source head")
 
     base_sha = sha(pr["base"].get("sha"))
-    if api.request(f"{prefix}/git/ref/heads/main").get("object", {}).get("sha") != base_sha:
-        raise ValueError("pull request base differs from current main")
+    if legacy_main_commit is not None and base_sha != legacy_main_commit:
+        raise ValueError("legacy PR startup must target the exact independently observed main revision")
+
+    base_branch = pr["base"]["ref"]
+    base_route = quote(base_branch, safe="")
+    if api.request(f"{prefix}/git/ref/heads/{base_route}").get("object", {}).get("sha") != base_sha:
+        raise ValueError("pull request base differs from its current registered branch")
 
     latest = latest_source_run(api, prefix, workflow_id, head_sha, head_repository_id, head_branch)
     if number(latest.get("id")) != run_id:
@@ -261,7 +322,7 @@ def resolve(api, environment: dict, event: dict) -> dict:
         "source_run_id": run_id, "source_attempt": attempt, "source_workflow_id": workflow_id,
         "head_repository_id": head_repository_id, "head_branch": head_branch,
         "pr": pr_number, "head_sha": head_sha, "base_sha": base_sha,
-        "base_ref": "refs/heads/main", "head_ref": f"refs/pull/{pr_number}/head",
+        "base_ref": f"refs/heads/{base_branch}", "head_ref": f"refs/pull/{pr_number}/head",
         "receiver_run_id": number(environment.get("GITHUB_RUN_ID")),
         "receiver_attempt": number(environment.get("GITHUB_RUN_ATTEMPT")),
         "receiver_event": receiver_event, "receiver_workflow_path": receiver_path,

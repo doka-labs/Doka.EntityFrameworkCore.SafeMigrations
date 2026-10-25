@@ -1,7 +1,7 @@
 ## Summary
 
 <!-- Describe the consumer problem, root cause, and observable result. Link the
-issue or reviewed design. Keep this PR cohesive and target main. Do not disclose
+issue or reviewed design. Keep this PR cohesive and target the applicable protected release line. Do not disclose
 vulnerabilities here: follow SECURITY.md and use private coordination. -->
 
 ## Type of change

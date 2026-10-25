@@ -1055,7 +1055,7 @@ timing overruns retain a false JSON budget verdict without failing qualification
 Invalid measurements, execution and artifact-write failures remain blocking.
 
 Release candidates and stable releases use the same manually dispatched path.
-The workflow qualifies and attests exact bytes from current `main` before it
+The workflow qualifies and attests exact bytes from the selected authorized line before it
 waits at the protected NuGet environment. Only then does the operator create a
 signed annotated tag on that qualified commit and approve publication. The
 write-capable job validates and cryptographically verifies the portable SLSA
@@ -1064,6 +1064,9 @@ signatures and package content, and creates or verifies an immutable GitHub
 Release with the exact ten package files, checksums, SPDX manifest, and
 `release-provenance.intoto.jsonl`. Candidates are marked prerelease and never
 replace the latest stable release.
+Maintained lines share the existing publisher, retain their own qualification
+and cannot move Latest backwards. Only main/10 is active; additional lines stay
+inactive and no .NET 11 adoption is implied. See [Release lines](docs/operations/release-lines.md).
 See [Publication operations](docs/operations/release-publication.md) for the
 step-by-step maintainer guide and current readiness, and
 [Release process](docs/release-process.md) for the qualification contract.

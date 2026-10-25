@@ -4,8 +4,8 @@ name: dependency-review
 # and Dependabot. It supplies no code or dependency graph to the write workflow.
 on:
   pull_request:
-    branches:
-      - main
+    # WHY: Registered inactive lines need preparation PR checks before activation.
+    # The trusted receiver independently rejects unregistered target bases.
 
 permissions: {}
 

@@ -1,11 +1,25 @@
 name: CI
+run-name: ${{ inputs.maintenance && format('maintenance {0}', inputs.schedule-correlation) || github.event.pull_request.title || github.event.head_commit.message || 'CI' }}
 
 on:
   pull_request:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
+      maintenance:
+        description: Execute this active line's scheduled qualification with exact source binding.
+        required: false
+        default: false
+        type: boolean
+      schedule-correlation:
+        description: Identity issued by the release-line maintenance coordinator.
+        required: false
+        default: ''
+        type: string
+      schedule-source-sha:
+        description: Exact branch head frozen by the maintenance coordinator.
+        required: false
+        default: ''
+        type: string
       capture-sqlserver-baseline:
         description: Retain measurement-only SQL Server baseline evidence on the qualification runner.
         required: false
@@ -21,12 +35,34 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.maintenance && inputs.schedule-correlation || 'normal' }}
   cancel-in-progress: true
 
 jobs:
+  schedule-identity:
+    name: schedule-identity
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Ordinary feature and PR checks remain nonpublishing
+        if: ${{ !inputs.maintenance }}
+        run: 'true'
+      - name: Checkout the branch-native maintenance guard
+        if: inputs.maintenance
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify exact active scheduled source
+        if: inputs.maintenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_MAINTENANCE: ${{ inputs.maintenance }}
+          INPUT_CORRELATION: ${{ inputs.schedule-correlation }}
+          INPUT_SOURCE_SHA: ${{ inputs.schedule-source-sha }}
+        run: python3 -m eng.release.maintenance guard --workflow ci.yml
+
   quality-gates:
     name: Full qualification
+    needs: schedule-identity
     uses: ./.github/workflows/quality-gates.yml
     permissions:
       contents: read
