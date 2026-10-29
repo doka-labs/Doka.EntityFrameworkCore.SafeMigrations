@@ -1,10 +1,13 @@
 <Project>
-  <PropertyGroup>
+  <PropertyGroup Label="Target framework and build outputs">
     <TargetFramework>net10.0</TargetFramework>
     <UseArtifactsOutput>true</UseArtifactsOutput>
     <ArtifactsPath>$(MSBuildThisFileDirectory)artifacts</ArtifactsPath>
     <IncludeProjectNameInArtifactsPaths>true</IncludeProjectNameInArtifactsPaths>
     <UseArtifactsIntermediateOutput>true</UseArtifactsIntermediateOutput>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Compiler and analysis">
     <LangVersion>latestMajor</LangVersion>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -12,11 +15,28 @@
     <Deterministic>true</Deterministic>
     <AnalysisLevel>latest-Recommended</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Dependency restore and audit">
     <NuGetAudit>true</NuGetAudit>
     <NuGetAuditMode>all</NuGetAuditMode>
     <NuGetAuditLevel>low</NuGetAuditLevel>
-    <IsPackable>false</IsPackable>
+    <!-- WHY: Local development retains advisory warnings without promoting newly
+         published findings to build errors. CI/release evaluation clears
+         developer exceptions; failed advisory retrieval remains fatal. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
+  </PropertyGroup>
+
+  <PropertyGroup Label="CI and release isolation">
     <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <!-- WHY: Evaluate after the GitHub CI flag so inherited developer exceptions
+         cannot silently weaken workflow or explicit release qualification. -->
+    <WarningsNotAsErrors Condition="'$(ContinuousIntegrationBuild)' == 'true'" />
+  </PropertyGroup>
+
+  <PropertyGroup Label="Project defaults">
+    <IsPackable>false</IsPackable>
+    <!-- WHY: Publishable source projects enable their public XML documentation separately. -->
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 </Project>

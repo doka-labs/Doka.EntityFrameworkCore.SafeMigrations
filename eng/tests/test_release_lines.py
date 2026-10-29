@@ -149,7 +149,7 @@ class ReleaseLineTests(unittest.TestCase):
 
         # Assert
         self.assertEqual("net10.0", result["targetFramework"])
-        self.assertEqual("10.0.402", result["approvedDotnetSdk"])
+        self.assertEqual("10.0.403", result["approvedDotnetSdk"])
 
     def test_foreign_toolchain_major_is_rejected(self):
         # Arrange
@@ -166,8 +166,8 @@ class ReleaseLineTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         frozen = lines.freeze_line(policy(), "refs/heads/main", "10.6.0")
         toolchain = lines.inspect_toolchain(root, frozen)
-        graph = {"Microsoft.EntityFrameworkCore.Design": "10.0.13",
-                 "Microsoft.EntityFrameworkCore.Relational": "10.0.12"}
+        graph = {"Microsoft.EntityFrameworkCore.Design": "10.0.14",
+                 "Microsoft.EntityFrameworkCore.Relational": "10.0.13"}
 
         # Act / Assert
         with self.assertRaises(lines.LinePolicyError):
@@ -178,8 +178,8 @@ class ReleaseLineTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         frozen = lines.freeze_line(policy(), "refs/heads/main", "10.6.0")
         toolchain = lines.inspect_toolchain(root, frozen)
-        graph = {"Microsoft.EntityFrameworkCore.Design": "10.0.13",
-                 "Microsoft.EntityFrameworkCore.Relational": "10.0.13"}
+        graph = {"Microsoft.EntityFrameworkCore.Design": "10.0.14",
+                 "Microsoft.EntityFrameworkCore.Relational": "10.0.14"}
 
         # Act
         observed = lines.validate_toolchain(toolchain, frozen, resolved_packages=graph)

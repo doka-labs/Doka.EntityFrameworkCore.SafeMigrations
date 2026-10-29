@@ -213,9 +213,9 @@ grep -Fq '<dependency id="Doka.EntityFrameworkCore.SafeMigrations"' <<<"$sqlserv
 
 # The published minimum must protect an isolated consumer that cannot see our
 # central pin or lockfile. Do not replace the minimum with an exact package lock.
-if ! grep -Fq '<dependency id="System.Security.Cryptography.Pkcs" version="9.0.21"' \
+if ! grep -Fq '<dependency id="System.Security.Cryptography.Pkcs" version="9.0.22"' \
     <<<"$sqlserver_nuspec"; then
-    echo "SQL Server package does not publish the patched PKCS minimum 9.0.21." >&2
+    echo "SQL Server package does not publish the patched PKCS minimum 9.0.22." >&2
     exit 1
 fi
 

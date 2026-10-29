@@ -135,12 +135,30 @@ The bounded native matrix reader recognizes every declared include row before
 accepting an inventory. Mapping key order is irrelevant; incomplete or unsupported
 matrix forms fail instead of silently removing a required producer.
 
+The coordinator follows only the immutable run ID returned by dispatch. Its
+initial API visibility and explicitly unfinished queued identity may settle for
+at most two minutes within the existing workload deadline. Contradictory source
+metadata, authorization failures and completed mismatched identities fail
+immediately. Every successful completion still requires the exact source,
+workflow, correlation title and complete producer inventory. Retained reports
+include bounded failure codes, HTTP status or identity-field categories, never
+raw API error bodies or command diagnostics. The older failed coordinators did
+not retain the first-response details; their precise transient cause cannot be
+reconstructed from those artifacts.
+
 The three existing Dependabot ecosystems retain their groups and cooldowns.
 Maintained-line version-update targets follow reviewed active policy. Security
 updates still use GitHub's default branch, so explicit branch-native audits are
 mandatory. Audit command success alone is insufficient: vulnerability JSON and
 advisory/restore errors must be checked. Scorecard remains repository-default
 evidence rather than being duplicated for each line.
+
+Fresh advisory HTTP caches use unique disposable directories beside, not
+inside, the retained audit directory. This keeps NuGet's colon-bearing cache
+filenames out of GitHub artifact uploads, including when `TMPDIR` points into
+the evidence directory. Success and failure release only the run-owned cache;
+restore/audit logs and validated summaries remain retained. Cache cleanup must
+succeed before a clean summary is written.
 
 Ordinary feature/manual CI remains nonpublishing and does not inherit release
 version-major or activation requirements. Extra-line activation, real hosted

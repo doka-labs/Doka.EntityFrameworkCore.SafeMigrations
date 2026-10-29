@@ -1,35 +1,53 @@
 <Project>
   <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
 
-  <PropertyGroup>
+  <PropertyGroup Label="Package versioning">
     <VersionPrefix>10.6.0</VersionPrefix>
     <PackageVersion Condition="'$(PackageVersion)' == ''">$(VersionPrefix)-dev</PackageVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Dependency restore">
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <!-- The committed locks record the platform-neutral graph. EF Migration
          Bundles publish for the runner RID, which such a lock cannot validate. -->
     <RestoreLockedMode
       Condition="'$(ContinuousIntegrationBuild)' == 'true'
                  And '$(RuntimeIdentifier)' == ''">true</RestoreLockedMode>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Package metadata">
     <Authors>Dominic Kalkbrenner</Authors>
     <Company>Doka Labs</Company>
     <Copyright>Copyright (c) 2026 Dominic Kalkbrenner</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Package validation">
     <EnablePackageValidation>true</EnablePackageValidation>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Repository metadata">
     <RepositoryUrl>https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Symbols and source linkage">
     <DeterministicTimestamp>946684800</DeterministicTimestamp>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <DebugType>portable</DebugType>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <PropertyGroup Label="XML documentation">
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
-  <ItemGroup>
+  <ItemGroup Label="Production analyzers">
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
   </ItemGroup>
 </Project>

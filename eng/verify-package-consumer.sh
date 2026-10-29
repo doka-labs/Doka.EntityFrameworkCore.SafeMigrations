@@ -36,6 +36,10 @@ if [[ -z "$package_dir" || -z "$package_version" || -z "$doka_source" ]]; then
     exit 2
 fi
 
+# WHY: Standalone consumer qualification is a release gate even outside GitHub.
+# Propagate its strict audit policy without impersonating a hosted workflow.
+export ContinuousIntegrationBuild=true
+
 package_dir="$(cd "$package_dir" && pwd -P)"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 core_nuspec="$(unzip -p \
@@ -329,7 +333,7 @@ verify_consumer() {
 
             # This consumer has no repository central pin; the package itself
             # must select the patched dependency in every tooling profile.
-            jq -e '.libraries["System.Security.Cryptography.Pkcs/9.0.21"].type == "package"' \
+            jq -e '.libraries["System.Security.Cryptography.Pkcs/9.0.22"].type == "package"' \
                 "$assets_file" >/dev/null
 
             if grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.MySql/' "$assets_file" \

@@ -6,6 +6,39 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+### Security
+
+- Raise the MySQL/MariaDB provider's Doka dependency to `[10.6.3,10.7.0)`.
+  Its published MySqlConnector minimum is 2.6.1, addressing
+  [GHSA-473q-m89c-ghf8](https://github.com/advisories/GHSA-473q-m89c-ghf8),
+  and its System.IO.Hashing minimum is 10.0.14. Preserve provider isolation,
+  GUID storage and historical migrations; no direct connector pin is added.
+
+### Changed
+
+- Group shared build/package properties by responsibility without changing
+  package versions, compatibility ranges, overrides or provider isolation.
+  Keep NU1901-NU1904 visible as warnings for local development; GitHub workflows
+  and explicit local release, consumer and SBOM qualification retain fatal
+  audited restores. Failed advisory retrieval and unrelated warnings remain
+  errors; no advisory is suppressed or declared fixed by this exception.
+- Update the .NET 10 SDK to 10.0.403, EF Core/dependency-injection minimums and
+  dotnet-ef to 10.0.14, and the SQL Server-only PKCS minimum to 9.0.22. Refresh
+  MySQL/MariaDB and PostgreSQL image digests within the existing engine matrix;
+  retain current Action, SQL Server image, SBOM and test-framework pins. Keep
+  .NET 11 and additional release-line activation outside this update.
+
+### Fixed
+
+- Keep disposable NuGet HTTP-cache files outside retained maintenance audit
+  artifacts and clean them after successful or failed scans. Preserve fatal
+  advisory/restore checks and raw diagnostic reports instead of failing a
+  clean audit while uploading colon-bearing cache filenames.
+- Bound initial visibility of the exact dispatched maintenance run without
+  weakening completed source, correlation or producer checks. Retain safe
+  HTTP/identity failure categories so coordinator failures no longer discard
+  the evidence needed to distinguish API visibility from a failed workload.
+
 ## [10.6.0] - 2026-10-25
 
 Version 10.6.0 updates all five packages. This minor release adds public

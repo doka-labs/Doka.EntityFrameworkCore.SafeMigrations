@@ -91,11 +91,13 @@ Explicit client-generation choices and historical snapshot annotations remain
 authoritative; this update does not rewrite them. Review unpublished model and
 scaffolding differences rather than editing deployed migration history.
 
-The current 10.6.2 minimum retains that correction and fixes metadata lookup
+Doka 10.6.2 retains that correction and fixes metadata lookup
 when a GUID property belongs only to a secondary Entity Splitting table. Shared
 SQL, computed and literal defaults are resolved through actual property mappings;
 explicit generation choices remain authoritative. This is a model-metadata
 correction, not a schema migration or a change to GUID storage defaults.
+The current 10.6.3 minimum retains those fixes and raises the MySqlConnector
+minimum to 2.6.1; direct consumer pins must satisfy the new driver floor.
 
 MariaDB supports readback of unknown server-generated GUID keys. MySQL rejects
 unsupported unknown generated-key inserts before execution. Separately, native

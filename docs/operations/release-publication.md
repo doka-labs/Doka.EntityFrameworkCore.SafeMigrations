@@ -11,7 +11,7 @@ inventory introduced in 10.4.6. Review the
 [upgrade procedure](../support-and-qualification.md#upgrade-to-1060), including
 captured computed/CHECK contract-fingerprint reapproval, exact expression
 identity, lossless integer upgrades, ordered projection corrections,
-conservative dependency proofs and the current Doka 10.6.2/EF patch floors.
+conservative dependency proofs and the current Doka 10.6.3/EF patch floors.
 Historical migration source, policies, report schemas, relational model-
 fingerprint format, history, concurrency and recovery guards remain. Timing
 evidence is informational; functional and
