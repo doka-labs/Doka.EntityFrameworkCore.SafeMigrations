@@ -26,9 +26,10 @@ skips and offline SQL-shape tests are not substitutes for its x64 cells.
 Keep every installed SafeMigrations package on the same 10.6.1 version; install
 only the provider adapters the application needs. The EF Core and dependency-
 injection floors advance to 10.0.14. MySQL/MariaDB requires Doka
-`[10.6.3,10.7.0)`, which requires MySqlConnector `[2.6.1,3.0.0)` and
-System.IO.Hashing 10.0.14 or later. SQL Server retains its separate PKCS 9.x
-servicing line with a 9.0.22 minimum; selecting another adapter does not add it.
+`[10.6.3,10.7.0)` and promotes MySqlConnector to a 2.6.2 minimum. Doka retains
+its `<3.0.0` connector bound and System.IO.Hashing minimum of 10.0.14.
+SQL Server promotes SqlClient to minimum 6.1.8 and retains its separate PKCS
+9.x servicing line with minimum 9.0.22; selecting another adapter adds neither.
 Review direct consumer pins against the [dependency contracts](#dependencies-and-package-identity).
 
 The SDK 10.0.403 and dotnet-ef 10.0.14 pins qualify repository builds/tooling;
@@ -108,16 +109,17 @@ with roll-forward disabled. SafeMigrations supports EF Core 10 only.
 | Package | Runtime dependency contract |
 | --- | --- |
 | Core | `Microsoft.EntityFrameworkCore.Relational` `[10.0.14,10.1.0)` |
-| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.6.3,10.7.0)` |
+| MySQL/MariaDB | `Doka.EntityFrameworkCore.MySql` `[10.6.3,10.7.0)`; `MySqlConnector` minimum `2.6.2` |
 | PostgreSQL | `Npgsql.EntityFrameworkCore.PostgreSQL` `[10.0.3,11.0.0)` |
 | SQLite | EF Core SQLite Core `[10.0.14,10.1.0)`; application-owned native bundle |
-| SQL Server (available since 10.4.6) | `Microsoft.EntityFrameworkCore.SqlServer` `[10.0.14,10.1.0)`; `System.Security.Cryptography.Pkcs` minimum `9.0.22` |
+| SQL Server (available since 10.4.6) | `Microsoft.EntityFrameworkCore.SqlServer` `[10.0.14,10.1.0)`; `Microsoft.Data.SqlClient` minimum `6.1.8`; `System.Security.Cryptography.Pkcs` minimum `9.0.22` |
 
 The EF Core and dependency-injection abstraction minimums are 10.0.14. These
 are published package dependency floors, not CI-only updates; consumers on an
 older 10.0 patch must update their resolved stack. EF Core SQL Server 10.0.14
-retains its transitive SqlClient minimum of 6.1.7, which resolves SNI
-6.0.3. Its exact development/testing license exception is documented in
+retains its upstream SqlClient minimum of 6.1.7; SafeMigrations promotes it to
+6.1.8 in the published SQL Server package. SNI remains 6.0.3. Its exact
+development/testing license exception is documented in
 [secure development](security/secure-development.md#sql-server-dependency-license-exceptions).
 The target framework and independently bounded Npgsql range remain unchanged.
 The separately reviewed Doka minor-line update is described below.
@@ -130,7 +132,7 @@ the package versions identified by Microsoft's published
 [PKCS decode advisory](https://github.com/dotnet/announcements/issues/454) and
 [signature-check advisory](https://github.com/dotnet/announcements/issues/468),
 verified on 2026-10-14. The original patched floor was 9.0.21; the current
-10.0.14 / SqlClient 6.1.7 baseline advances its servicing patch to 9.0.22
+10.0.14 / SqlClient 6.1.8 baseline retains the servicing patch at 9.0.22
 without introducing a separate PKCS major-version upgrade.
 The consumer owns runtime/SDK servicing and redeployment; a NuGet dependency
 update does not update an installed or self-contained .NET runtime.
@@ -164,9 +166,19 @@ Doka 10.6.3 retains those metadata corrections and raises its published
 MySqlConnector range to `[2.6.1,3.0.0)` for
 [GHSA-473q-m89c-ghf8](https://github.com/advisories/GHSA-473q-m89c-ghf8).
 Review direct consumer connector pins: older versions no longer satisfy the
-provider contract. Its System.IO.Hashing minimum is 10.0.14. The other four
+provider contract. SafeMigrations additionally promotes the connector minimum
+to 2.6.2 through central transitive pinning, so that floor reaches isolated
+consumers without the repository's lockfile or central configuration.
+Its System.IO.Hashing minimum is 10.0.14. The other four
 SafeMigrations packages do not acquire Doka or MySqlConnector. No schema
 migration, GUID storage change or historical migration rewrite is required.
+
+SqlClient 6.1.8 corrects managed-SNI enforcement of an explicit
+`HostNameInCertificate`; a certificate matching another name can now reject.
+Review the [transport upgrade boundary](efcore-provider-upgrade-risk.md#sql-server-boundary)
+before rollout. SafeMigrations does not enable certificate-validation or
+revocation bypasses. SNI 6.0.3 and NativeInterop 0.20.6 remain the only existing
+exact license exceptions; this servicing change does not broaden them.
 
 SafeMigrations 10.6.0 raises its Doka dependency floor to the 10.6 line.
 Doka now budgets implicit indexed string/binary

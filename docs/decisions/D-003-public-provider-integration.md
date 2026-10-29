@@ -281,6 +281,12 @@ being accepted through broad string normalization.
   release tag and NuGet catalog. Inherit MySqlConnector `[2.6.1,3.0.0)` and
   System.IO.Hashing minimum 10.0.14 without a direct connector pin. Retain
   provider isolation, public migration SPI, storage and historical migrations.
+- 2026-10-29: Promote the MySQL/MariaDB adapter's existing MySqlConnector
+  dependency to published minimum 2.6.2. This supersedes the same-day
+  no-additional-pin choice after the explicit transport-patch request; Doka
+  remains `[10.6.3,10.7.0)`. SQL Server independently promotes its existing
+  SqlClient minimum to 6.1.8. Keep Core/sibling transport isolation, PKCS
+  9.0.22 and existing exact native-license exceptions unchanged.
 
 ### 2026-09-22 Compatibility Amendment
 

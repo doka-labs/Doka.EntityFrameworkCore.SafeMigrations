@@ -98,6 +98,10 @@ explicit generation choices remain authoritative. This is a model-metadata
 correction, not a schema migration or a change to GUID storage defaults.
 The current 10.6.3 minimum retains those fixes and raises the MySqlConnector
 minimum to 2.6.1; direct consumer pins must satisfy the new driver floor.
+SafeMigrations 10.6.1 additionally promotes the existing connector to minimum
+2.6.2 in its own MySQL/MariaDB package. The Doka upper bound remains in effect;
+other providers do not acquire this transport. The new connector revocation-
+skip option remains at its default false; SafeMigrations does not enable it.
 
 MariaDB supports readback of unknown server-generated GUID keys. MySQL rejects
 unsupported unknown generated-key inserts before execution. Separately, native
@@ -181,6 +185,16 @@ not sufficient. Unqualified safe operations require a `dbo` caller default
 schema. SQL Server services outside the container matrix remain unqualified.
 
 See [SQL Server behavior](sqlserver-behavior.md) for the operational contract.
+
+SafeMigrations 10.6.1 promotes its existing SqlClient dependency to minimum
+6.1.8, retaining PKCS minimum 9.0.22, SNI 6.0.3 and NativeInterop 0.20.6.
+These minimums are published, not merely repository lockfile choices.
+SqlClient's managed-SNI path now enforces an explicit `HostNameInCertificate`
+as the certificate name instead of ignoring it. Deployments relying on a
+different name can now reject: correct the configured identity/certificate,
+not `TrustServerCertificate` or other validation bypasses. SafeMigrations
+does not change TLS settings, connection ownership or authentication choices.
+See the [SqlClient 6.1.8 release notes](https://github.com/dotnet/SqlClient/releases/tag/v6.1.8).
 
 ## Design-time C# generation boundary
 

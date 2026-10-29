@@ -9,7 +9,10 @@ The release target is stable 10.6.1 for all five package IDs, retaining the
 inventory introduced in 10.4.6. Review the
 [10.6.1 compatibility notes](../../CHANGELOG.md#1061---2026-10-29) and
 [upgrade procedure](../support-and-qualification.md#upgrade-to-1061), including
-the Doka 10.6.3/EF 10.0.14/PKCS 9.0.22 floors and retained strict release audits.
+the Doka 10.6.3, MySqlConnector 2.6.2, EF 10.0.14, SqlClient 6.1.8 and PKCS
+9.0.22 floors and retained strict release audits. Review the
+[transport rollout boundaries](../efcore-provider-upgrade-risk.md#sql-server-boundary),
+including corrected explicit certificate-name validation.
 Applications upgrading from before 10.6.0 must also review its
 [computed/CHECK approval requirements](../support-and-qualification.md#upgrade-to-1060).
 Historical migration source, policies, report schemas, relational model-

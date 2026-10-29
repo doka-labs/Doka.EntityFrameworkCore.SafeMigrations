@@ -21,10 +21,16 @@ consumer-visible dependency minimums. No database schema migration is required.
   Its published MySqlConnector minimum is 2.6.1, addressing
   [GHSA-473q-m89c-ghf8](https://github.com/advisories/GHSA-473q-m89c-ghf8),
   and its System.IO.Hashing minimum is 10.0.14. Preserve provider isolation,
-  GUID storage and historical migrations; no direct connector pin is added.
+  GUID storage and historical migrations.
 
 ### Changed
 
+- Promote the existing provider transports to published minimums:
+  MySqlConnector 2.6.2 for MySQL/MariaDB and SqlClient 6.1.8 for SQL Server.
+  Keep PKCS 9.0.22 and exact SNI/NativeInterop license exceptions unchanged;
+  no transport is introduced into Core or another provider. SqlClient now
+  enforces an explicit `HostNameInCertificate` on its managed-SNI path;
+  correct mismatched certificates rather than bypassing validation.
 - Group shared build/package properties by responsibility without changing
   package versions, compatibility ranges, overrides or provider isolation.
   Keep NU1901-NU1904 visible as warnings for local development; GitHub workflows

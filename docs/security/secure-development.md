@@ -165,6 +165,10 @@ Only the exact SNI version changes; the exception's use and package-shape
 boundaries below remain unchanged. The earlier version is not retained as a
 second allowed version.
 
+The 10.6.1 SafeMigrations servicing baseline promotes SqlClient to 6.1.8.
+SNI.runtime remains 6.0.3 and Broker still resolves NativeInterop 0.20.6;
+neither exact exception nor the use/package-shape boundary is expanded.
+
 These transitive dependencies belong to the EF Core SQL Server / SqlClient
 stack, not Core or the other providers. Their vendor terms allow the
 repository's development and testing use. SafeMigrations publishes its own

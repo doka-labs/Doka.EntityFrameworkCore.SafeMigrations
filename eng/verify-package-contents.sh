@@ -114,6 +114,18 @@ for package_id in "${package_ids[@]}"; do
         exit 1
     fi
 
+    if [[ "$package_id" != Doka.EntityFrameworkCore.SafeMigrations.MySql ]] \
+        && grep -Fq '<dependency id="MySqlConnector"' <<<"$nuspec_content"; then
+        echo "MySQL/MariaDB provider-only transport dependency leaked into $nupkg." >&2
+        exit 1
+    fi
+
+    if [[ "$package_id" != Doka.EntityFrameworkCore.SafeMigrations.SqlServer ]] \
+        && grep -Fq '<dependency id="Microsoft.Data.SqlClient"' <<<"$nuspec_content"; then
+        echo "SQL Server provider-only transport dependency leaked into $nupkg." >&2
+        exit 1
+    fi
+
     if ! cmp -s "$script_dir/../README.md" <(unzip -p "$nupkg" README.md); then
         echo "Packaged README.md differs from the repository contract in $nupkg." >&2
         exit 1
@@ -154,6 +166,11 @@ mysql_entries="$(unzip -Z1 \
 grep -Fxq 'buildTransitive/Doka.EntityFrameworkCore.SafeMigrations.MySql.props' <<<"$mysql_entries"
 grep -Fq '<dependency id="Doka.EntityFrameworkCore.MySql"' <<<"$mysql_nuspec"
 grep -Fq '<dependency id="Doka.EntityFrameworkCore.SafeMigrations"' <<<"$mysql_nuspec"
+if ! grep -Fq '<dependency id="MySqlConnector" version="2.6.2"' <<<"$mysql_nuspec"; then
+    echo "MySQL/MariaDB package does not publish the MySqlConnector minimum 2.6.2." >&2
+    exit 1
+fi
+
 if grep -Eq '<dependency id="(Npgsql\.EntityFrameworkCore\.PostgreSQL|Microsoft\.EntityFrameworkCore\.Sqlite(\.Core)?|Microsoft\.EntityFrameworkCore\.SqlServer|Doka\.EntityFrameworkCore\.SafeMigrations\.(PostgreSql|Sqlite|SqlServer))"' \
     <<<"$mysql_nuspec"; then
     echo "MySQL/MariaDB package resolved another provider dependency." >&2
@@ -210,6 +227,11 @@ sqlserver_entries="$(unzip -Z1 \
 grep -Fxq 'buildTransitive/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.props' <<<"$sqlserver_entries"
 grep -Fq '<dependency id="Microsoft.EntityFrameworkCore.SqlServer"' <<<"$sqlserver_nuspec"
 grep -Fq '<dependency id="Doka.EntityFrameworkCore.SafeMigrations"' <<<"$sqlserver_nuspec"
+
+if ! grep -Fq '<dependency id="Microsoft.Data.SqlClient" version="6.1.8"' <<<"$sqlserver_nuspec"; then
+    echo "SQL Server package does not publish the SqlClient minimum 6.1.8." >&2
+    exit 1
+fi
 
 # The published minimum must protect an isolated consumer that cannot see our
 # central pin or lockfile. Do not replace the minimum with an exact package lock.

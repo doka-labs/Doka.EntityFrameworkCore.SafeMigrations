@@ -37,6 +37,14 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="$(EfCorePackageVersion)" />
   </ItemGroup>
 
+  <ItemGroup Label="Provider transport minimums">
+    <!-- WHY: CPM promotes only dependencies already present in each project's
+         graph. These minimums reach the owning provider's nuspec without
+         introducing a transport dependency into Core or sibling providers. -->
+    <PackageVersion Include="MySqlConnector" Version="2.6.2" />
+    <PackageVersion Include="Microsoft.Data.SqlClient" Version="6.1.8" />
+  </ItemGroup>
+
   <ItemGroup Label="SQL Server transitive security floor">
     <!-- Transitive pinning promotes the patched SqlClient dependency into the
          published nuspec; a lockfile-only update would not protect consumers. -->
