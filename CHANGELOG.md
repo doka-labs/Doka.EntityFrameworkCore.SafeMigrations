@@ -47,6 +47,10 @@ consumer-visible dependency minimums. No database schema migration is required.
 
 ### Fixed
 
+- Keep historical Dependency Review base snapshots capturable when an update
+  fixes their existing dependency advisories. Preserve visible advisory warnings
+  on base only; retain audited locked restore, fatal retrieval/restore failures,
+  strict PR-head capture and the independent final review gates.
 - Keep disposable NuGet HTTP-cache files outside retained maintenance audit
   artifacts and clean them after successful or failed scans. Preserve fatal
   advisory/restore checks and raw diagnostic reports instead of failing a

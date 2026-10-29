@@ -49,6 +49,11 @@ from trusted data validation and publication:
   Fork and Dependabot PRs use the same path. Native `cache-mode: none` denies
   cache reads/writes independently of the read-only repository token; MSBuild
   hooks never execute in the privileged receiver or manual dispatch context.
+- Only historical base capture keeps NU1901-NU1904 as visible warnings, allowing
+  a corrective PR to compare against an already affected dependency graph.
+  Both captures retain audited locked restore; advisory retrieval and unrelated
+  restore failures remain fatal. Head capture keeps all advisory severities
+  fatal. No warning is hidden and no final review policy is waived.
 - The default-branch `workflow_run` receiver validates the source run, attempt,
   workflow, repository, current PR, completed source producer jobs and the two
   unique, nonexpired artifact identities. The five committed product locks remain

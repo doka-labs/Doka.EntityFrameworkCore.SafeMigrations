@@ -37,8 +37,16 @@ or waive the dependency update.
 GitHub workflows set `ContinuousIntegrationBuild` and clear the local warning
 exception. Local package qualification, isolated consumer verification and SBOM
 generation also propagate that strict policy to their child commands. Maintenance
-audits independently enforce fatal audited restore properties. To reproduce the
-strict workflow behavior locally, use:
+audits independently enforce fatal audited restore properties.
+
+Dependency Review's historical base snapshot is the sole CI exception:
+NU1901-NU1904 remain visible warnings so an update can compare against the old,
+affected graph. Auditing and locked restore stay enabled; retrieval and other
+restore failures remain fatal. The PR-head snapshot and final review retain
+their normal blocking policies. This comparison-only exception cannot qualify
+a build, package or release.
+
+To reproduce strict workflow behavior locally, use:
 
 ```bash
 dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx \

@@ -51,7 +51,23 @@ jobs:
       # or cache authority; fresh receiver code independently validates its data.
       - name: Restore complete dependency graph
         working-directory: snapshot-source
-        run: dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx --locked-mode --disable-build-servers
+        env:
+          SNAPSHOT_REVISION: ${{ inputs.revision }}
+        run: |
+          # WHY: The historical graph must remain capturable when this PR fixes
+          # its advisories. Keep them visible on base only, not on the new head.
+          case "$SNAPSHOT_REVISION" in
+            base) advisory_exceptions='NU1901%3BNU1902%3BNU1903%3BNU1904' ;;
+            head) advisory_exceptions='' ;;
+            *) echo 'Unsupported dependency snapshot revision.' >&2; exit 1 ;;
+          esac
+
+          # WHY: Global properties override inherited suppression/CI settings;
+          # %3B preserves the exception list as one MSBuild property argument.
+          dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx --locked-mode --disable-build-servers \
+            -p:ContinuousIntegrationBuild=true -p:TreatWarningsAsErrors=true \
+            -p:NuGetAudit=true -p:NuGetAuditMode=all -p:NuGetAuditLevel=low \
+            -p:NoWarn= -p:WarningsAsErrors= "-p:WarningsNotAsErrors=$advisory_exceptions"
 
       - name: Stage data-only dependency inputs
         run: python3 engineering/eng/prepare-dependency-snapshot-inputs.py snapshot-source snapshot-inputs

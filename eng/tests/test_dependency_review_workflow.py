@@ -34,8 +34,8 @@ def build_policy_environment(**values):
 def evaluate_build_policy(project=BUILD_POLICY_PROJECT, *, environment=None, properties=()):
     """Read real MSBuild evaluation without restoring packages or simulating warning tasks."""
     command = ["dotnet", "msbuild", str(project), "-nologo",
-               "-getProperty:TreatWarningsAsErrors,WarningsNotAsErrors,NoWarn,NuGetAudit,NuGetAuditMode,"
-               "NuGetAuditLevel,ContinuousIntegrationBuild,RestoreLockedMode,EfCorePackageVersion",
+               "-getProperty:TreatWarningsAsErrors,WarningsAsErrors,WarningsNotAsErrors,NoWarn,NuGetAudit,"
+               "NuGetAuditMode,NuGetAuditLevel,ContinuousIntegrationBuild,RestoreLockedMode,EfCorePackageVersion",
                *properties]
     result = subprocess.run(command, cwd=ROOT, env=build_policy_environment(**(environment or {})),
                             capture_output=True, text=True, check=False, timeout=60)
@@ -73,6 +73,27 @@ def execute(command, directory, **values):
     return subprocess.run(
         ["bash", "-euo", "pipefail", "-c", command], cwd=directory,
         env={**os.environ, **values}, capture_output=True, text=True, check=False)
+
+
+def capture_snapshot_restore(revision: str, returncode: int = 0):
+    """Execute the real workflow shell with a non-restoring argument/exit-code recorder."""
+    command = step_command(job_blocks(RESOLVER)["restore"], "Restore complete dependency graph")
+
+    with tempfile.TemporaryDirectory() as temporary_root:
+        root = Path(temporary_root)
+        recorder = root / "dotnet"
+        arguments_file = root / "arguments.txt"
+        recorder.write_text(
+            '#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "$RESTORE_ARGUMENTS"\n'
+            'exit "$RESTORE_EXIT_CODE"\n', encoding="ascii")
+        recorder.chmod(0o700)
+
+        result = execute(command, root, SNAPSHOT_REVISION=revision,
+                         PATH=str(root) + os.pathsep + os.environ["PATH"],
+                         RESTORE_ARGUMENTS=str(arguments_file), RESTORE_EXIT_CODE=str(returncode))
+        arguments = arguments_file.read_text(encoding="ascii").splitlines() if arguments_file.exists() else []
+
+        return result, arguments
 
 
 def sdk_guard_command():
@@ -354,6 +375,94 @@ class DependencySdkSourceTests(unittest.TestCase):
             # Assert
             self.assertNotEqual(0, result.returncode)
             self.assertIn("Workflow SDK versions must come from global.json.", result.stderr)
+
+
+class DependencySnapshotRestorePolicyTests(unittest.TestCase):
+    """Historical comparison capture must not become a release or PR-head audit waiver."""
+
+    def test_revision_binding_is_data_not_interpolated_shell(self):
+        # Arrange
+        source = RESOLVER.read_text(encoding="ascii")
+
+        # Act
+        step = source.split("- name: Restore complete dependency graph\n", 1)[1].split("\n      - name:", 1)[0]
+        command = step_command(job_blocks(RESOLVER)["restore"], "Restore complete dependency graph")
+
+        # Assert
+        self.assertIn("SNAPSHOT_REVISION: ${{ inputs.revision }}", step)
+        self.assertNotIn("${{", command)
+
+    def test_base_advisories_remain_visible_with_no_other_warning_exceptions(self):
+        # Arrange
+        environment = {"GITHUB_ACTIONS": "true", "NoWarn": "NU1902;NU1900",
+                       "WarningsAsErrors": "NU1902", "WarningsNotAsErrors": "CS0618;NU1900"}
+
+        # Act
+        result, arguments = capture_snapshot_restore("base")
+        properties = tuple(argument for argument in arguments if argument.startswith("-p:"))
+        observed = evaluate_build_policy(environment=environment, properties=properties)
+
+        # Assert
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(AUDIT_WARNINGS, set(filter(None, observed["WarningsNotAsErrors"].split(";"))))
+        self.assertEqual("", observed["NoWarn"])
+        self.assertEqual("", observed["WarningsAsErrors"])
+        self.assertEqual("true", observed["TreatWarningsAsErrors"])
+        self.assertEqual("true", observed["NuGetAudit"])
+        self.assertEqual("all", observed["NuGetAuditMode"])
+        self.assertEqual("low", observed["NuGetAuditLevel"])
+        self.assertEqual(1, arguments.count("--locked-mode"))
+        self.assertEqual(1, arguments.count("restore"))
+
+    def test_head_restore_cannot_inherit_local_or_disabled_audit_policy(self):
+        # Arrange
+        environment = {"GITHUB_ACTIONS": "true", "NoWarn": "NU1901;NU1902;NU1903;NU1904",
+                       "WarningsNotAsErrors": "NU1902;CS0618", "TreatWarningsAsErrors": "false",
+                       "NuGetAudit": "false", "NuGetAuditMode": "direct", "NuGetAuditLevel": "critical"}
+
+        # Act
+        result, arguments = capture_snapshot_restore("head")
+        properties = tuple(argument for argument in arguments if argument.startswith("-p:"))
+        observed = evaluate_build_policy(environment=environment, properties=properties)
+
+        # Assert
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("", observed["WarningsNotAsErrors"])
+        self.assertEqual("", observed["NoWarn"])
+        self.assertEqual("true", observed["TreatWarningsAsErrors"])
+        self.assertEqual("true", observed["NuGetAudit"])
+        self.assertEqual("all", observed["NuGetAuditMode"])
+        self.assertEqual("low", observed["NuGetAuditLevel"])
+        self.assertEqual(1, arguments.count("--locked-mode"))
+        self.assertEqual(1, arguments.count("restore"))
+
+    def test_unknown_revision_cannot_execute_a_restore(self):
+        for revision in ("", "Base", "HEAD", "other", "base;head"):
+            with self.subTest(revision=revision):
+                # Arrange
+                invalid_revision = revision
+
+                # Act
+                result, arguments = capture_snapshot_restore(invalid_revision)
+
+                # Assert
+                self.assertNotEqual(0, result.returncode)
+                self.assertEqual([], arguments)
+                self.assertIn("Unsupported dependency snapshot revision.", result.stderr)
+
+    def test_failed_base_or_head_restore_is_never_accepted(self):
+        for revision in ("base", "head"):
+            for failure in (1, 42):
+                with self.subTest(revision=revision, failure=failure):
+                    # Arrange
+                    failed_exit_code = failure
+
+                    # Act
+                    result, arguments = capture_snapshot_restore(revision, failed_exit_code)
+
+                    # Assert
+                    self.assertEqual(failed_exit_code, result.returncode)
+                    self.assertEqual(1, arguments.count("restore"))
 
 
 class LocalAdvisoryPolicyTests(unittest.TestCase):
