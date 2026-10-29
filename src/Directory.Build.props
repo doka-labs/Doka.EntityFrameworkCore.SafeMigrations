@@ -2,7 +2,7 @@
   <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
 
   <PropertyGroup Label="Package versioning">
-    <VersionPrefix>10.6.0</VersionPrefix>
+    <VersionPrefix>10.6.1</VersionPrefix>
     <PackageVersion Condition="'$(PackageVersion)' == ''">$(VersionPrefix)-dev</PackageVersion>
   </PropertyGroup>
 

@@ -1,9 +1,11 @@
 # PostgreSQL behavior
 
-Version 10.6.0 adds certified generated/CHECK contracts and native
-generated-source DROP guards. Review the
-[upgrade notes](support-and-qualification.md#upgrade-to-1060) for conditional
-contract-fingerprint changes, dependency floors and conservative boundaries.
+Version 10.6.1 retains the certified generated/CHECK contracts and native
+generated-source DROP guards introduced in 10.6.0. Review the
+[current upgrade notes](support-and-qualification.md#upgrade-to-1061) for serviced
+dependency floors and the earlier
+[10.6.0 contract changes](support-and-qualification.md#upgrade-to-1060) for
+conditional fingerprint approvals and conservative boundaries.
 
 Runtime diagnostics introduced in 10.5.0 put essential owner/reason context
 into native guard messages without enabling error-detail disclosure or changing SQLSTATE.

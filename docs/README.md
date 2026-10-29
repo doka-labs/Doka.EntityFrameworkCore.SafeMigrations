@@ -1,13 +1,13 @@
 # Documentation
 
-This is the task-oriented entry point for SafeMigrations 10.6.0 documentation
+This is the task-oriented entry point for SafeMigrations 10.6.1 documentation
 covering all five packages. Start with the task table
 below; release changes and consumer upgrade notes belong in the
 [changelog](../CHANGELOG.md). The [diagnostics guide](diagnostics.md) explains
 readable errors, affected owners, text summaries and report-schema compatibility;
 [support and qualification](support-and-qualification.md) owns dependency and
 native UUID and lossless signed-integer upgrade boundaries, including the
-[10.6.0 upgrade](support-and-qualification.md#upgrade-to-1060).
+[10.6.1 upgrade](support-and-qualification.md#upgrade-to-1061).
 Existing ordered proofs, concurrency guards and verified
 schema/session recovery remain. Deferred preflight states require runtime
 validation; unproved lossy conversions and independent permission refusals

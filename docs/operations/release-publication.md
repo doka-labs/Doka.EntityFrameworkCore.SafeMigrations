@@ -5,13 +5,13 @@ untagged authorized source-line commit first, then waits at the protected `nuget
 Only after that wait begins does the operator create the signed tag and approve
 publication. Run every command separately and stop on the first failure.
 
-The release target is stable 10.6.0 for all five package IDs, retaining the
+The release target is stable 10.6.1 for all five package IDs, retaining the
 inventory introduced in 10.4.6. Review the
-[10.6.0 compatibility notes](../../CHANGELOG.md#1060---2026-10-25) and
-[upgrade procedure](../support-and-qualification.md#upgrade-to-1060), including
-captured computed/CHECK contract-fingerprint reapproval, exact expression
-identity, lossless integer upgrades, ordered projection corrections,
-conservative dependency proofs and the current Doka 10.6.3/EF patch floors.
+[10.6.1 compatibility notes](../../CHANGELOG.md#1061---2026-10-29) and
+[upgrade procedure](../support-and-qualification.md#upgrade-to-1061), including
+the Doka 10.6.3/EF 10.0.14/PKCS 9.0.22 floors and retained strict release audits.
+Applications upgrading from before 10.6.0 must also review its
+[computed/CHECK approval requirements](../support-and-qualification.md#upgrade-to-1060).
 Historical migration source, policies, report schemas, relational model-
 fingerprint format, history, concurrency and recovery guards remain. Timing
 evidence is informational; functional and
@@ -19,8 +19,10 @@ evidence failures remain blocking. Do not publish a subset or treat preparation,
 earlier engine runs or native ARM skips as proof that this candidate's complete
 qualification or public readback has succeeded.
 
-As of 2026-10-25, 10.6.0 has not been published. The changelog date identifies
-the consolidated release notes, not completed publication. Record actual
+As of 2026-10-29, all five public packages have stable 10.6.0 available and
+10.6.1 is not published. The changelog date identifies release notes, not
+completed qualification or publication. Recheck unused version/tag identity at
+admission; this observation does not reserve a release. Record actual
 qualification and publication status in the candidate run's
 release evidence, including the source commit, exact package identities,
 completed checks and public readback. Product version references describe the

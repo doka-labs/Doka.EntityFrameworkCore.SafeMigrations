@@ -120,6 +120,10 @@ Successfully parsed EF computed/CHECK definitions can change approved contract
 fingerprints; see the [upgrade notes](support-and-qualification.md#upgrade-to-1060).
 Historical migration source is not regenerated or rewritten.
 
+Version 10.6.1 retains that public surface, report schemas and fingerprint
+formats. Its serviced dependency floors and upgrade requirements are listed
+in the [10.6.1 upgrade notes](support-and-qualification.md#upgrade-to-1061).
+
 The current MySQL/MariaDB adapter requires Doka `[10.6.3,10.7.0)`; EF Core and
 dependency-injection minimums are 10.0.14. The current SQL Server PKCS minimum
 is 9.0.22. Review implicit indexed-length model

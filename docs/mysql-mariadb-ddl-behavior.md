@@ -1,9 +1,11 @@
 # MySQL and MariaDB DDL behavior
 
-Version 10.6.0 adds certified generated/CHECK contracts and native
-independent DROP proofs. Review the
-[upgrade notes](support-and-qualification.md#upgrade-to-1060) for conditional
-contract-fingerprint changes, dependency floors and conservative boundaries.
+Version 10.6.1 retains the certified generated/CHECK contracts and native
+independent DROP proofs introduced in 10.6.0. Review the
+[current upgrade notes](support-and-qualification.md#upgrade-to-1061) for serviced
+dependency floors and the earlier
+[10.6.0 contract changes](support-and-qualification.md#upgrade-to-1060) for
+conditional fingerprint approvals and conservative boundaries.
 
 Owned runtime diagnostics introduced in 10.5.0 identify the authored owner
 and established rejection reason after native cleanup. Their managed outer exception and script

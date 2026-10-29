@@ -2,7 +2,11 @@
 
 ## Support contract
 
-Version 10.6.0 adds public CASE expressions, certified generated-column
+Version 10.6.1 services dependency minimums and release-line maintenance while
+retaining the public API, migration-policy, report and fingerprint formats
+from 10.6.0. It introduces no additional schema migration requirement.
+
+Version 10.6.0 introduced public CASE expressions, certified generated-column
 and CHECK support, lossless signed-integer upgrades, ordered projection/DROP
 corrections and stack-safe traversal. Measured allocation reductions do not
 change migration safety or make hardware-dependent timing a qualification gate.
@@ -17,12 +21,41 @@ see [diagnostic compatibility](diagnostics.md#runtime-provider-differences).
 Native qualification still requires the complete blocking matrix; ARM SQL Server
 skips and offline SQL-shape tests are not substitutes for its x64 cells.
 
+## Upgrade to 10.6.1
+
+Keep every installed SafeMigrations package on the same 10.6.1 version; install
+only the provider adapters the application needs. The EF Core and dependency-
+injection floors advance to 10.0.14. MySQL/MariaDB requires Doka
+`[10.6.3,10.7.0)`, which requires MySqlConnector `[2.6.1,3.0.0)` and
+System.IO.Hashing 10.0.14 or later. SQL Server retains its separate PKCS 9.x
+servicing line with a 9.0.22 minimum; selecting another adapter does not add it.
+Review direct consumer pins against the [dependency contracts](#dependencies-and-package-identity).
+
+The SDK 10.0.403 and dotnet-ef 10.0.14 pins qualify repository builds/tooling;
+they do not introduce a .NET 11 runtime or a new provider dependency.
+Public signatures, migration policies, report schemas, fingerprint formats and
+historical migration source are unchanged relative to 10.6.0. No additional
+approval renewal or database schema migration is required solely for this patch.
+Upstream dependency servicing still requires application qualification; it is
+not evidence that every newly scaffolded model difference can be ignored.
+
+Repository development keeps NU1901-NU1904 visible as warnings, while CI and
+explicit release/consumer/SBOM qualification continue treating advisories as
+errors. Auditing remains enabled; this is not a consumer warning-policy
+override, vulnerability suppression or substitute for upgrading dependencies.
+See [contributor checks](../CONTRIBUTING.md#local-advisory-warnings-and-strict-qualification).
+
+Applications upgrading from before 10.6.0 must also review the earlier
+[10.6.0 contract changes](#upgrade-to-1060), especially existing computed/CHECK
+fingerprint approvals. The complete native matrix and package/public-readback
+gates remain mandatory; see the [publication runbook](operations/release-publication.md).
+
 ## Upgrade to 10.6.0
 
-Keep every installed SafeMigrations package on the same 10.6.0 version; install
-only the provider adapters the application needs. Account for the dependency
-floors below and review newly scaffolded implicit index-length changes without
-rewriting historical migrations.
+The 10.6.0 minor release introduced the following boundaries. They also apply
+when upgrading an older application directly to 10.6.1. Keep all installed
+SafeMigrations packages on the selected shared version and review newly
+scaffolded implicit index-length changes without rewriting historical migrations.
 
 MySQL/MariaDB and PostgreSQL now qualify explicit lossless signed-integer
 widening under `RepairIfSafe` when exact source, ancillary facets and native
@@ -67,7 +100,7 @@ publisher and .NET 10 identity. Only main/10 is active; maintenance/10.x remains
 inactive. This is not .NET 11 support or an application migration requirement;
 see [release lines](operations/release-lines.md).
 
-### Dependencies and package identity
+## Dependencies and package identity
 
 All publishable projects target `net10.0`. The repository pins SDK 10.0.403
 with roll-forward disabled. SafeMigrations supports EF Core 10 only.
@@ -171,9 +204,10 @@ The SQL Server project supplies the fifth lockfile. Releases 10.4.2 through
 10.4.5 contain four package artifacts; their inventory remains unchanged.
 
 The five-package set began with stable 10.4.6, including the optional SQL Server
-provider. Version 10.6.0 retains that inventory and the SQL Server PKCS
-minimum of 9.0.21. The Core API baseline promotes the additive CASE surface;
-the existing diagnostic surface was introduced in 10.5.0. The current Doka
+provider. Version 10.6.1 retains that inventory and the SQL Server-only PKCS
+contract, now at minimum 9.0.22. The Core API baseline includes the additive
+CASE surface introduced in 10.6.0; the diagnostic surface began in 10.5.0.
+This patch adds no API-baseline declarations. The current Doka
 dependency contract is the 10.6 line above. Qualification requires the blocking
 workflow, including all three native x86-64 SQL Server cells. The
 [publication runbook](operations/release-publication.md) owns the five-package
