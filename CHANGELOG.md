@@ -6,6 +6,18 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+### Fixed
+
+- Refresh the explicit dependency graph from protected main after merges.
+  Keep read-only restore separate from snapshot publication and serialize
+  writers with live-tip revalidation so stale PR baselines cannot replace a
+  newer main graph. The capture restore reports existing advisories as
+  warnings instead of failing, so a main revision that still carries one can
+  publish the accurate graph that supersedes its stale snapshot; advisory
+  retrieval failure, restore failure and every other warning remain fatal,
+  and the maintenance audit keeps reporting the advisory itself. This is
+  workflow-only; published packages are unchanged.
+
 ## [10.6.1] - 2026-10-29
 
 Version 10.6.1 updates all five packages with serviced dependency floors and
