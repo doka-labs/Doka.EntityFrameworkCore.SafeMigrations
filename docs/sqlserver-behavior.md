@@ -1,9 +1,11 @@
 # SQL Server behavior
 
-Version 10.6.0 adds certified computed/CHECK contracts and retains
-native DROP blockers across ordered source confirmations. Review the
-[upgrade notes](support-and-qualification.md#upgrade-to-1060) for conditional
-contract-fingerprint changes, dependency floors and conservative boundaries.
+Version 10.6.1 retains the certified computed/CHECK contracts and ordered
+native DROP blockers introduced in 10.6.0. Review the
+[current upgrade notes](support-and-qualification.md#upgrade-to-1061) for serviced
+dependency floors and the earlier
+[10.6.0 contract changes](support-and-qualification.md#upgrade-to-1060) for
+conditional fingerprint approvals and conservative boundaries.
 
 Runtime diagnostics introduced in 10.5.0 retain the native guard error
 number/state while adding bounded owner/reason text. Identity-scope recovery and ordinary native

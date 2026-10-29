@@ -1,9 +1,11 @@
 # SQLite behavior
 
-Version 10.6.0 preserves generated-column facets during safe creation
-and owned rebuilds, and corrects independent DROP/identifier proofs. Review the
-[upgrade notes](support-and-qualification.md#upgrade-to-1060) for conditional
-computed/CHECK contract-fingerprint changes and conservative boundaries.
+Version 10.6.1 retains the generated-column creation/rebuild facets and
+independent DROP/identifier proofs introduced in 10.6.0. Review the
+[current upgrade notes](support-and-qualification.md#upgrade-to-1061) for serviced
+dependency floors and the earlier
+[10.6.0 contract changes](support-and-qualification.md#upgrade-to-1060) for
+conditional computed/CHECK fingerprint approvals and conservative boundaries.
 
 Managed diagnostics introduced in 10.5.0 identify the affected owner and
 proven cause without exposing `foreign_key_check` row identifiers or changing rollback.

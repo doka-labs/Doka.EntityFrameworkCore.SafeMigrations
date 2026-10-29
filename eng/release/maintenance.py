@@ -33,12 +33,44 @@ MAINTENANCE_WORKFLOW = "release-line-maintenance.yml"
 CORRELATION = re.compile(r"schedule-[1-9][0-9]{0,17}-[1-9][0-9]{0,8}\Z")
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 MAX_JSON_BYTES = 16 * 1024 * 1024
+FAILURE_CODES = frozenset(("maintenance_failed", "github_http_error", "github_request_failed",
+                           "github_invalid_response", "github_response_limit", "child_identity_mismatch",
+                           "child_visibility_timeout", "child_wait_timeout", "child_failed",
+                           "child_state_invalid", "producer_evidence_invalid", "producer_unsuccessful"))
+IDENTITY_FIELDS = frozenset(("id", "event", "head_sha", "head_branch", "path", "display_title"))
 QUALIFICATION_JOBS = frozenset(("package-and-core", "coverage", "mysql-engine",
                                 "postgresql-engine", "sqlite-engine", "sqlserver-engine", "required"))
 
 
 class MaintenanceError(ValueError):
     """An exact native producer, complete audit or active-line contract is unproven."""
+
+    def __init__(self, message: str, *, code: str = "maintenance_failed",
+                 http_status: int | None = None, identity_field: str | None = None):
+        """Keep report diagnostics bounded independently of an exception's private message."""
+        super().__init__(message)
+        self.code = code if code in FAILURE_CODES else "maintenance_failed"
+        self.http_status = http_status if type(http_status) is int and 100 <= http_status <= 599 else None
+        self.identity_field = identity_field if identity_field in IDENTITY_FIELDS else None
+
+
+def failure_observation(error: Exception) -> dict:
+    """Retain only authored categories, never an API body, command output or token."""
+    result = {"verificationStatus": "failed", "failureCode": "maintenance_failed"}
+    if isinstance(error, MaintenanceError):
+        result["failureCode"] = error.code
+        if error.http_status is not None:
+            result["httpStatus"] = error.http_status
+
+        if error.identity_field is not None:
+            result["identityField"] = error.identity_field
+
+    elif isinstance(error, subprocess.SubprocessError):
+        result["failureCode"] = "maintenance_process_failed"
+    elif isinstance(error, OSError):
+        result["failureCode"] = "maintenance_io_failed"
+
+    return result
 
 
 def positive_number(value: object) -> int:
@@ -78,7 +110,7 @@ class GitHub:
 
     def request(self, route: str, method: str = "GET", payload: dict | None = None):
         """Request bounded JSON while keeping failed API response bodies out of logs."""
-        command = ["gh", "api", "--hostname", "github.com", "--method", method,
+        command = ["gh", "api", "--include", "--hostname", "github.com", "--method", method,
                    "-H", "Accept: application/vnd.github+json",
                    "-H", "X-GitHub-Api-Version: 2026-03-10", route]
         if payload is not None:
@@ -86,10 +118,39 @@ class GitHub:
 
         completed = subprocess.run(command, input=json.dumps(payload) if payload is not None else None,
                                    capture_output=True, text=True, timeout=60, check=False)
-        if completed.returncode or len(completed.stdout) > MAX_JSON_BYTES:
-            raise MaintenanceError("GitHub request failed or exceeded its response bound.")
+        if len(completed.stdout) > MAX_JSON_BYTES + 65536:
+            raise MaintenanceError("GitHub response exceeded its bound.", code="github_response_limit")
 
-        return json.loads(completed.stdout, object_pairs_hook=unique_object)
+        # WHY: gh exposes response status through --include. Stderr and JSON
+        # messages are untrusted payloads, not a reliable or safe status parser.
+        headers, separator, body = completed.stdout.partition("\r\n\r\n")
+        if not separator:
+            headers, separator, body = completed.stdout.partition("\n\n")
+
+        first = headers.splitlines()[0] if headers else ""
+        status = re.fullmatch(r"HTTP/[0-9.]+ ([1-5][0-9]{2})(?: [^\r\n]*)?", first)
+        if not separator or len(headers) > 65536 or status is None:
+            code = "github_request_failed" if completed.returncode else "github_invalid_response"
+            raise MaintenanceError("GitHub did not return a bounded HTTP response.", code=code)
+
+        http_status = int(status[1])
+        if not 200 <= http_status <= 299:
+            raise MaintenanceError("GitHub request returned an unsuccessful HTTP status.",
+                                   code="github_http_error", http_status=http_status)
+
+        if completed.returncode:
+            raise MaintenanceError("GitHub request did not complete successfully.", code="github_request_failed")
+
+        if len(body) > MAX_JSON_BYTES:
+            raise MaintenanceError("GitHub JSON exceeded its bound.", code="github_response_limit")
+
+        if http_status == 204 and not body.strip():
+            return None
+
+        try:
+            return json.loads(body, object_pairs_hook=unique_object)
+        except ValueError as error:
+            raise MaintenanceError("GitHub response JSON is invalid.", code="github_invalid_response") from error
 
 
 def active_lines(policy: dict) -> list[dict]:
@@ -370,65 +431,148 @@ def verify_jobs(api, repository: str, run_id: int, expected: list[str]) -> None:
         count = response.get("total_count") if isinstance(response, dict) else None
         if (type(count) is not int or count < 1 or count > 10000 or not isinstance(entries, list)
                 or len(entries) > 100 or (total is not None and total != count)):
-            raise MaintenanceError("Scheduled producer inventory is incomplete or changed during pagination.")
+            raise MaintenanceError("Scheduled producer inventory is incomplete or changed during pagination.",
+                                   code="producer_evidence_invalid")
 
         total = count
         for item in entries:
             identity = positive_number(item.get("id")) if isinstance(item, dict) else None
             if identity is None or identity in seen:
-                raise MaintenanceError("Scheduled producer inventory repeats a job identity.")
+                raise MaintenanceError("Scheduled producer inventory repeats a job identity.",
+                                       code="producer_evidence_invalid")
 
             seen.add(identity)
             jobs.append(item)
 
         if len(jobs) > total:
-            raise MaintenanceError("Scheduled producer pagination ended before complete evidence.")
+            raise MaintenanceError("Scheduled producer pagination ended before complete evidence.",
+                                   code="producer_evidence_invalid")
 
         # WHY: A full page can coincide with a stale total. Require the actual
         # terminating short/empty page instead of hiding a later hundred jobs.
         if len(entries) < 100:
             if len(jobs) != total:
-                raise MaintenanceError("Scheduled producer pagination ended before complete evidence.")
+                raise MaintenanceError("Scheduled producer pagination ended before complete evidence.",
+                                       code="producer_evidence_invalid")
 
             break
     else:
-        raise MaintenanceError("Scheduled producer inventory exceeded its bounded page count.")
+        raise MaintenanceError("Scheduled producer inventory exceeded its bounded page count.",
+                               code="producer_evidence_invalid")
 
     for name in expected:
         matches = [job for job in jobs if job.get("name") == name]
         if len(matches) != 1 or matches[0].get("status") != "completed" or matches[0].get("conclusion") != "success":
-            raise MaintenanceError("A required branch-native producer is missing, duplicated, skipped or unsuccessful.")
+            raise MaintenanceError("A required branch-native producer is missing, duplicated, skipped or unsuccessful.",
+                                   code="producer_unsuccessful")
 
 
 def wait_for_child(api, repository: str, run_id: int, workflow: str, ref: str,
                    commit: str, correlation: str, expected: list[str], *,
                    timeout: int = 14400, poll_interval: int = 15, record=lambda update: None) -> dict:
     """Bound execution and queue waits while verifying every observation's source identity."""
-    deadline = time.monotonic() + timeout
+    started = time.monotonic()
+    deadline = started + timeout
+    # WHY: Dispatch creation and readable run metadata are separate API
+    # observations. Initial visibility gets two minutes, not the four-hour run
+    # budget, and never authorizes substituting a similarly named run.
+    visibility_deadline = min(deadline, started + 120)
+    initialized = False
+    identities = {"event": "workflow_dispatch", "head_sha": commit,
+                  "head_branch": ref.removeprefix("refs/heads/"),
+                  "path": f".github/workflows/{workflow}"}
+    placeholder_title = "CI" if workflow == "ci.yml" else "Release-line maintenance coordinator"
+    pre_execution = ("queued", "pending", "requested", "waiting")
     while True:
-        run = api.request(f"repos/{repository}/actions/runs/{run_id}")
-        if (not isinstance(run, dict) or run.get("id") != run_id
-                or run.get("event") != "workflow_dispatch" or run.get("head_sha") != commit
-                or run.get("head_branch") != ref.removeprefix("refs/heads/")
-                or run.get("path", "").split("@", 1)[0] != f".github/workflows/{workflow}"
-                or run.get("display_title") != f"maintenance {correlation}"):
-            raise MaintenanceError("Scheduled child does not match its exact dispatch identity.")
+        try:
+            run = api.request(f"repos/{repository}/actions/runs/{run_id}")
+        except MaintenanceError as error:
+            if initialized or error.code != "github_http_error" or error.http_status != 404:
+                raise
 
-        record({"status": run.get("status"), "conclusion": run.get("conclusion")})
-        if run.get("status") == "completed":
-            if run.get("conclusion") != "success":
-                raise MaintenanceError("Scheduled child failed or was cancelled; it is not qualification evidence.")
+            record({"observationCode": "child_not_visible", "lastTransientHttpStatus": 404})
+            if time.monotonic() >= visibility_deadline:
+                raise MaintenanceError("Newly dispatched child did not become visible before its bound.",
+                                       code="child_visibility_timeout", http_status=404) from error
+
+            time.sleep(min(poll_interval, max(0, visibility_deadline - time.monotonic())))
+            continue
+
+        if not isinstance(run, dict) or type(run.get("id")) is not int or run["id"] != run_id:
+            raise MaintenanceError("Scheduled child has a different run identity.",
+                                   code="child_identity_mismatch", identity_field="id")
+
+        status, conclusion = run.get("status"), run.get("conclusion")
+        if status not in (*pre_execution, "in_progress", "completed"):
+            raise MaintenanceError("Scheduled child has an unrecognized execution state.", code="child_state_invalid")
+
+        if conclusion not in (None, "success", "failure", "cancelled", "skipped", "timed_out", "neutral",
+                               "action_required", "stale", "startup_failure"):
+            raise MaintenanceError("Scheduled child has an unrecognized conclusion.", code="child_state_invalid")
+
+        if status != "completed" and conclusion is not None:
+            raise MaintenanceError("Scheduled child reports a conclusion before completion.",
+                                   code="child_state_invalid")
+
+        missing = []
+        for field, target in identities.items():
+            value = run.get(field)
+            if value is None or value == "":
+                missing.append(field)
+                continue
+
+            actual = value.split("@", 1)[0] if field == "path" and isinstance(value, str) else value
+            if actual != target:
+                raise MaintenanceError("Scheduled child contradicts its dispatched source identity.",
+                                       code="child_identity_mismatch", identity_field=field)
+
+        title = run.get("display_title")
+        if title != f"maintenance {correlation}":
+            if title not in (None, "", placeholder_title):
+                raise MaintenanceError("Scheduled child has a different correlation title.",
+                                       code="child_identity_mismatch", identity_field="display_title")
+
+            missing.append("display_title")
+
+        if missing:
+            if initialized or status not in pre_execution:
+                raise MaintenanceError("Scheduled child lacks its required exact execution identity.",
+                                       code="child_identity_mismatch", identity_field=missing[0])
+
+            record({"status": status, "conclusion": conclusion, "observationCode": "child_identity_pending"})
+            if time.monotonic() >= visibility_deadline:
+                raise MaintenanceError("Initial child metadata did not become complete before its bound.",
+                                       code="child_visibility_timeout")
+
+            time.sleep(min(poll_interval, max(0, visibility_deadline - time.monotonic())))
+            continue
+
+        record({"status": status, "conclusion": conclusion, "observationCode": "child_observed"})
+        # WHY: A late scheduler wakeup or slow response must not bypass the
+        # bound merely because the next observation is already completed.
+        observed_at = time.monotonic()
+        if not initialized and observed_at >= visibility_deadline:
+            raise MaintenanceError("Initial child identity became visible after its bound.",
+                                   code="child_visibility_timeout")
+
+        if observed_at >= deadline:
+            raise MaintenanceError("Scheduled child exceeded its queue/execution wait; no success is recorded.",
+                                   code="child_wait_timeout")
+
+        initialized = True
+        if status == "completed":
+            if conclusion != "success":
+                raise MaintenanceError("Scheduled child failed or was cancelled; it is not qualification evidence.",
+                                       code="child_failed")
 
             verify_jobs(api, repository, run_id, expected)
 
             return {"sourceRef": ref, "sourceCommit": commit, "runId": run_id,
                     "workflow": workflow, "conclusion": "success", "verificationStatus": "success"}
 
-        if run.get("status") not in ("queued", "in_progress", "waiting", "pending", "requested"):
-            raise MaintenanceError("Scheduled child has an unrecognized execution state.")
-
         if time.monotonic() >= deadline:
-            raise MaintenanceError("Scheduled child exceeded its queue/execution wait; no success is recorded.")
+            raise MaintenanceError("Scheduled child exceeded its queue/execution wait; no success is recorded.",
+                                   code="child_wait_timeout")
 
         time.sleep(min(poll_interval, max(0, deadline - time.monotonic())))
 
@@ -509,8 +653,8 @@ def coordinate_lines(api, authority: dict, workload: str, environment: dict,
         for index, future in futures:
             try:
                 record(index, future.result())
-            except (MaintenanceError, ValueError, OSError, subprocess.SubprocessError):
-                record(index, {"verificationStatus": "failed"})
+            except (MaintenanceError, ValueError, OSError, subprocess.SubprocessError) as error:
+                record(index, failure_observation(error))
 
     report["conclusion"] = ("success" if all(child["verificationStatus"] == "success"
                                              for child in report["children"]) else "failure")
@@ -610,33 +754,37 @@ def validate_audit(report: dict, expected_projects: list[str]) -> dict:
 def run_audit(root: Path, output: Path) -> dict:
     """Refresh audited restore metadata and retain raw branch-native vulnerability evidence."""
     expected = solution_projects(root)
+    output = output.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    environment = dict(os.environ)
-    # WHY: A cached HTTP advisory response must not stand in for a fresh scan.
-    environment["NUGET_HTTP_CACHE_PATH"] = str((output / "http-cache").resolve())
-    restore = ["dotnet", "restore", str(root / "Doka.EntityFrameworkCore.SafeMigrations.slnx"),
-               "--locked-mode", "--force", "--no-http-cache", "--disable-build-servers",
-               "-p:NuGetAudit=true", "-p:NuGetAuditMode=all", "-p:NuGetAuditLevel=low",
-               "-p:TreatWarningsAsErrors=true", "-p:NoWarn=", "-p:WarningsNotAsErrors="]
-    with (output / "restore.log").open("w", encoding="utf-8") as log:
-        result = subprocess.run(restore, cwd=root, env=environment, stdout=log, stderr=subprocess.STDOUT,
-                                check=False, timeout=1200)
+    # WHY: NuGet HTTP-cache names contain ':' and cannot be uploaded as GitHub
+    # artifacts. An explicit sibling directory stays outside evidence even if
+    # TMPDIR points inside it; context cleanup also runs on failed/aborted scans.
+    with tempfile.TemporaryDirectory(prefix=".nuget-audit-http-", dir=output.parent) as cache:
+        environment = {**os.environ, "NUGET_HTTP_CACHE_PATH": cache}
+        restore = ["dotnet", "restore", str(root / "Doka.EntityFrameworkCore.SafeMigrations.slnx"),
+                   "--locked-mode", "--force", "--no-http-cache", "--disable-build-servers",
+                   "-p:NuGetAudit=true", "-p:NuGetAuditMode=all", "-p:NuGetAuditLevel=low",
+                   "-p:TreatWarningsAsErrors=true", "-p:NoWarn=", "-p:WarningsNotAsErrors="]
+        with (output / "restore.log").open("w", encoding="utf-8") as log:
+            result = subprocess.run(restore, cwd=root, env=environment, stdout=log, stderr=subprocess.STDOUT,
+                                    check=False, timeout=1200)
 
-    if result.returncode:
-        raise MaintenanceError("Fresh audited restore failed; retained log is not clean audit evidence.")
+        if result.returncode:
+            raise MaintenanceError("Fresh audited restore failed; retained log is not clean audit evidence.")
 
-    command = ["dotnet", "package", "list", "--project", str(root / "Doka.EntityFrameworkCore.SafeMigrations.slnx"),
-               "--no-restore", "--vulnerable", "--include-transitive", "--format", "json", "--output-version", "1",
-               "--source", "https://api.nuget.org/v3/index.json"]
-    with (output / "audit.json").open("w", encoding="utf-8") as report, \
-            (output / "audit.log").open("w", encoding="utf-8") as errors:
-        result = subprocess.run(command, cwd=root, env=environment, stdout=report, stderr=errors,
-                                check=False, timeout=1200)
+        command = ["dotnet", "package", "list", "--project", str(root / "Doka.EntityFrameworkCore.SafeMigrations.slnx"),
+                   "--no-restore", "--vulnerable", "--include-transitive", "--format", "json", "--output-version", "1",
+                   "--source", "https://api.nuget.org/v3/index.json"]
+        with (output / "audit.json").open("w", encoding="utf-8") as report, \
+                (output / "audit.log").open("w", encoding="utf-8") as errors:
+            result = subprocess.run(command, cwd=root, env=environment, stdout=report, stderr=errors,
+                                    check=False, timeout=1200)
 
-    if result.returncode or (output / "audit.log").read_text(encoding="utf-8").strip():
-        raise MaintenanceError("Vulnerability listing failed or emitted a warning; inspect retained evidence.")
+        if result.returncode or (output / "audit.log").read_text(encoding="utf-8").strip():
+            raise MaintenanceError("Vulnerability listing failed or emitted a warning; inspect retained evidence.")
 
-    summary = validate_audit(read_json(output / "audit.json"), expected)
+        summary = validate_audit(read_json(output / "audit.json"), expected)
+
     persist_report(output / "summary.json", summary)
 
     return summary

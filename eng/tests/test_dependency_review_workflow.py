@@ -1,5 +1,6 @@
 """Exercise actual admission commands and pin independent dependency handoff jobs."""
 
+import json
 import os
 import re
 import subprocess
@@ -15,6 +16,33 @@ CAPTURE = ROOT / ".github/workflows/dependency-review.yml"
 RECEIVER = ROOT / ".github/workflows/dependency-review-results.yml"
 RESOLVER = ROOT / ".github/workflows/dependency-snapshot.yml"
 MAINTENANCE = ROOT / "eng/tests/test-dependency-maintenance.sh"
+AUDIT_WARNINGS = frozenset(("NU1901", "NU1902", "NU1903", "NU1904"))
+BUILD_POLICY_PROJECT = (ROOT / "src/Doka.EntityFrameworkCore.SafeMigrations"
+                        / "Doka.EntityFrameworkCore.SafeMigrations.csproj")
+
+
+def build_policy_environment(**values):
+    """Keep a local/CI probe independent of the runner executing the test itself."""
+    environment = {**os.environ, "GITHUB_ACTIONS": "false", "ContinuousIntegrationBuild": "false",
+                   "WarningsNotAsErrors": "", "WarningsAsErrors": "", "NoWarn": "",
+                   "DOTNET_NOLOGO": "1", "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1"}
+    environment.update(values)
+
+    return environment
+
+
+def evaluate_build_policy(project=BUILD_POLICY_PROJECT, *, environment=None, properties=()):
+    """Read real MSBuild evaluation without restoring packages or simulating warning tasks."""
+    command = ["dotnet", "msbuild", str(project), "-nologo",
+               "-getProperty:TreatWarningsAsErrors,WarningsAsErrors,WarningsNotAsErrors,NoWarn,NuGetAudit,"
+               "NuGetAuditMode,NuGetAuditLevel,ContinuousIntegrationBuild,RestoreLockedMode,EfCorePackageVersion",
+               *properties]
+    result = subprocess.run(command, cwd=ROOT, env=build_policy_environment(**(environment or {})),
+                            capture_output=True, text=True, check=False, timeout=60)
+    if result.returncode:
+        raise AssertionError("MSBuild policy evaluation failed: " + result.stderr)
+
+    return json.loads(result.stdout)["Properties"]
 
 
 def job_blocks(path=RECEIVER):
@@ -45,6 +73,27 @@ def execute(command, directory, **values):
     return subprocess.run(
         ["bash", "-euo", "pipefail", "-c", command], cwd=directory,
         env={**os.environ, **values}, capture_output=True, text=True, check=False)
+
+
+def capture_snapshot_restore(revision: str, returncode: int = 0):
+    """Execute the real workflow shell with a non-restoring argument/exit-code recorder."""
+    command = step_command(job_blocks(RESOLVER)["restore"], "Restore complete dependency graph")
+
+    with tempfile.TemporaryDirectory() as temporary_root:
+        root = Path(temporary_root)
+        recorder = root / "dotnet"
+        arguments_file = root / "arguments.txt"
+        recorder.write_text(
+            '#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "$RESTORE_ARGUMENTS"\n'
+            'exit "$RESTORE_EXIT_CODE"\n', encoding="ascii")
+        recorder.chmod(0o700)
+
+        result = execute(command, root, SNAPSHOT_REVISION=revision,
+                         PATH=str(root) + os.pathsep + os.environ["PATH"],
+                         RESTORE_ARGUMENTS=str(arguments_file), RESTORE_EXIT_CODE=str(returncode))
+        arguments = arguments_file.read_text(encoding="ascii").splitlines() if arguments_file.exists() else []
+
+        return result, arguments
 
 
 def sdk_guard_command():
@@ -326,6 +375,207 @@ class DependencySdkSourceTests(unittest.TestCase):
             # Assert
             self.assertNotEqual(0, result.returncode)
             self.assertIn("Workflow SDK versions must come from global.json.", result.stderr)
+
+
+class DependencySnapshotRestorePolicyTests(unittest.TestCase):
+    """Historical comparison capture must not become a release or PR-head audit waiver."""
+
+    def test_revision_binding_is_data_not_interpolated_shell(self):
+        # Arrange
+        source = RESOLVER.read_text(encoding="ascii")
+
+        # Act
+        step = source.split("- name: Restore complete dependency graph\n", 1)[1].split("\n      - name:", 1)[0]
+        command = step_command(job_blocks(RESOLVER)["restore"], "Restore complete dependency graph")
+
+        # Assert
+        self.assertIn("SNAPSHOT_REVISION: ${{ inputs.revision }}", step)
+        self.assertNotIn("${{", command)
+
+    def test_base_advisories_remain_visible_with_no_other_warning_exceptions(self):
+        # Arrange
+        environment = {"GITHUB_ACTIONS": "true", "NoWarn": "NU1902;NU1900",
+                       "WarningsAsErrors": "NU1902", "WarningsNotAsErrors": "CS0618;NU1900"}
+
+        # Act
+        result, arguments = capture_snapshot_restore("base")
+        properties = tuple(argument for argument in arguments if argument.startswith("-p:"))
+        observed = evaluate_build_policy(environment=environment, properties=properties)
+
+        # Assert
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(AUDIT_WARNINGS, set(filter(None, observed["WarningsNotAsErrors"].split(";"))))
+        self.assertEqual("", observed["NoWarn"])
+        self.assertEqual("", observed["WarningsAsErrors"])
+        self.assertEqual("true", observed["TreatWarningsAsErrors"])
+        self.assertEqual("true", observed["NuGetAudit"])
+        self.assertEqual("all", observed["NuGetAuditMode"])
+        self.assertEqual("low", observed["NuGetAuditLevel"])
+        self.assertEqual(1, arguments.count("--locked-mode"))
+        self.assertEqual(1, arguments.count("restore"))
+
+    def test_head_restore_cannot_inherit_local_or_disabled_audit_policy(self):
+        # Arrange
+        environment = {"GITHUB_ACTIONS": "true", "NoWarn": "NU1901;NU1902;NU1903;NU1904",
+                       "WarningsNotAsErrors": "NU1902;CS0618", "TreatWarningsAsErrors": "false",
+                       "NuGetAudit": "false", "NuGetAuditMode": "direct", "NuGetAuditLevel": "critical"}
+
+        # Act
+        result, arguments = capture_snapshot_restore("head")
+        properties = tuple(argument for argument in arguments if argument.startswith("-p:"))
+        observed = evaluate_build_policy(environment=environment, properties=properties)
+
+        # Assert
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("", observed["WarningsNotAsErrors"])
+        self.assertEqual("", observed["NoWarn"])
+        self.assertEqual("true", observed["TreatWarningsAsErrors"])
+        self.assertEqual("true", observed["NuGetAudit"])
+        self.assertEqual("all", observed["NuGetAuditMode"])
+        self.assertEqual("low", observed["NuGetAuditLevel"])
+        self.assertEqual(1, arguments.count("--locked-mode"))
+        self.assertEqual(1, arguments.count("restore"))
+
+    def test_unknown_revision_cannot_execute_a_restore(self):
+        for revision in ("", "Base", "HEAD", "other", "base;head"):
+            with self.subTest(revision=revision):
+                # Arrange
+                invalid_revision = revision
+
+                # Act
+                result, arguments = capture_snapshot_restore(invalid_revision)
+
+                # Assert
+                self.assertNotEqual(0, result.returncode)
+                self.assertEqual([], arguments)
+                self.assertIn("Unsupported dependency snapshot revision.", result.stderr)
+
+    def test_failed_base_or_head_restore_is_never_accepted(self):
+        for revision in ("base", "head"):
+            for failure in (1, 42):
+                with self.subTest(revision=revision, failure=failure):
+                    # Arrange
+                    failed_exit_code = failure
+
+                    # Act
+                    result, arguments = capture_snapshot_restore(revision, failed_exit_code)
+
+                    # Assert
+                    self.assertEqual(failed_exit_code, result.returncode)
+                    self.assertEqual(1, arguments.count("restore"))
+
+
+class LocalAdvisoryPolicyTests(unittest.TestCase):
+    """Keep local advisory visibility separate from mandatory CI/release rejection."""
+
+    def test_local_advisories_remain_warnings_without_disabling_audit(self):
+        # Arrange
+        environment = build_policy_environment()
+
+        # Act
+        observed = evaluate_build_policy(environment=environment)
+
+        # Assert
+        exceptions = set(filter(None, observed["WarningsNotAsErrors"].split(";")))
+        self.assertEqual(AUDIT_WARNINGS, exceptions)
+        self.assertEqual("true", observed["TreatWarningsAsErrors"])
+        self.assertEqual("true", observed["NuGetAudit"])
+        self.assertEqual("all", observed["NuGetAuditMode"])
+        self.assertEqual("low", observed["NuGetAuditLevel"])
+        self.assertTrue(AUDIT_WARNINGS.isdisjoint(observed["NoWarn"].split(";")))
+        self.assertTrue({"NU1900", "NU1905", "CS0123"}.isdisjoint(exceptions))
+
+    def test_local_exception_preserves_existing_caller_warning_choices(self):
+        # Arrange
+        environment = {"WarningsNotAsErrors": "CS0618"}
+
+        # Act
+        observed = evaluate_build_policy(environment=environment)
+
+        # Assert
+        self.assertEqual(AUDIT_WARNINGS | {"CS0618"},
+                         set(filter(None, observed["WarningsNotAsErrors"].split(";"))))
+
+    def test_github_and_explicit_ci_override_inherited_warning_exceptions(self):
+        for context in ({"GITHUB_ACTIONS": "true"}, {"ContinuousIntegrationBuild": "true"},
+                        {"GITHUB_ACTIONS": "true", "ContinuousIntegrationBuild": "false"}):
+            with self.subTest(context=context):
+                # Arrange
+                environment = {"WarningsNotAsErrors": "CS0618;NU1902", **context}
+
+                # Act
+                observed = evaluate_build_policy(environment=environment)
+
+                # Assert
+                self.assertEqual("", observed["WarningsNotAsErrors"])
+                self.assertEqual("true", observed["TreatWarningsAsErrors"])
+                self.assertEqual("true", observed["NuGetAudit"])
+                self.assertEqual("all", observed["NuGetAuditMode"])
+                self.assertEqual("low", observed["NuGetAuditLevel"])
+
+    def test_strict_global_cli_override_remains_authoritative_locally(self):
+        # Arrange
+        properties = ("-p:WarningsNotAsErrors=",)
+
+        # Act
+        observed = evaluate_build_policy(properties=properties)
+
+        # Assert
+        self.assertEqual("", observed["WarningsNotAsErrors"])
+        self.assertEqual("true", observed["TreatWarningsAsErrors"])
+
+    def test_ci_preserves_product_consumer_and_bundle_lock_boundaries(self):
+        consumer = (ROOT / "eng/package-consumer/MySql"
+                    / "Doka.EntityFrameworkCore.SafeMigrations.MySql.PackageConsumer.csproj")
+
+        cases = ((BUILD_POLICY_PROJECT, (), "true"),
+                 (consumer, ("-p:SafeMigrationsPackageConsumerMode=Package",), ""),
+                 (BUILD_POLICY_PROJECT, ("-p:RuntimeIdentifier=linux-x64",), ""))
+
+        for project, properties, expected_lock in cases:
+            with self.subTest(project=project.name, properties=properties):
+                # Arrange
+                environment = {"ContinuousIntegrationBuild": "true"}
+
+                # Act
+                observed = evaluate_build_policy(project, environment=environment, properties=properties)
+
+                # Assert
+                self.assertEqual(expected_lock, observed["RestoreLockedMode"])
+                self.assertEqual("", observed["WarningsNotAsErrors"])
+
+    def test_shared_version_override_survives_configuration_regrouping(self):
+        # Arrange
+        properties = ("-p:EfCorePackageVersion=10.0.14",)
+
+        # Act
+        observed = evaluate_build_policy(properties=properties)
+
+        # Assert
+        self.assertEqual("10.0.14", observed["EfCorePackageVersion"])
+
+    def test_local_release_entrypoints_export_strict_policy_to_child_evaluation(self):
+        for script in ("qualify-packages.sh", "verify-package-consumer.sh", "generate-sbom.sh"):
+            with self.subTest(script=script):
+                # Arrange
+                source = (ROOT / "eng" / script).read_text(encoding="ascii")
+
+                # Act
+                declarations = re.findall(r"^export ContinuousIntegrationBuild=true$", source, re.M)
+                command = "\n".join(declarations) + '\ndotnet msbuild "$POLICY_PROJECT" -nologo ' \
+                    '-getProperty:WarningsNotAsErrors,NuGetAudit,TreatWarningsAsErrors'
+                result = subprocess.run(["bash", "-eu", "-c", command], cwd=ROOT,
+                                        env=build_policy_environment(POLICY_PROJECT=str(BUILD_POLICY_PROJECT)),
+                                        capture_output=True, text=True, check=False, timeout=60)
+
+                # Assert
+                self.assertEqual(1, len(declarations), "Missing strict release policy in " + script)
+                self.assertLess(source.index(declarations[0]), source.index("dotnet "))
+                self.assertEqual(0, result.returncode, result.stderr)
+                observed = json.loads(result.stdout)["Properties"]
+                self.assertEqual("", observed["WarningsNotAsErrors"])
+                self.assertEqual("true", observed["NuGetAudit"])
+                self.assertEqual("true", observed["TreatWarningsAsErrors"])
 
 
 if __name__ == "__main__":

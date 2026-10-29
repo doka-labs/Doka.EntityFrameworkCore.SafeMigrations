@@ -103,7 +103,7 @@ Its first release requires independent x64 Linux qualification on all three
 declared SQL Server majors; local ARM64 test skips are not qualification.
 
 The current MySQL/MariaDB adapter consumes Doka through the bounded
-`[10.6.2,10.7.0)` NuGet dependency range. Doka 10.3.0 introduced typed
+`[10.6.3,10.7.0)` NuGet dependency range. Doka 10.3.0 introduced typed
 read-only migration metadata for Guid storage, value generation, and index
 prefixes. Doka 10.4.0 adds an explicit commandless consumed result, which the
 internal design-time-services guard uses without emitting synthetic SQL.
@@ -275,6 +275,18 @@ being accepted through broad string normalization.
   release tag and NuGet catalog. Retain the public migration SPI and existing
   dependency ranges. Include secondary Entity Splitting and shared GUID-default
   metadata corrections without changing storage defaults or migration history.
+- 2026-10-29: Advance the Doka floor to `[10.6.3,10.7.0)` and restore the
+  published 10.6.3 package, commit
+  `0372df8dd0c77b6f04e72fa94adae837e4deba7a`, matching its verified signed
+  release tag and NuGet catalog. Inherit MySqlConnector `[2.6.1,3.0.0)` and
+  System.IO.Hashing minimum 10.0.14 without a direct connector pin. Retain
+  provider isolation, public migration SPI, storage and historical migrations.
+- 2026-10-29: Promote the MySQL/MariaDB adapter's existing MySqlConnector
+  dependency to published minimum 2.6.2. This supersedes the same-day
+  no-additional-pin choice after the explicit transport-patch request; Doka
+  remains `[10.6.3,10.7.0)`. SQL Server independently promotes its existing
+  SqlClient minimum to 6.1.8. Keep Core/sibling transport isolation, PKCS
+  9.0.22 and existing exact native-license exceptions unchanged.
 
 ### 2026-09-22 Compatibility Amendment
 
@@ -354,3 +366,8 @@ where it is created instead of rejecting published migrations later.
   [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.6.2),
   and [GUID SQL-default contract](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/6e2618140d821bd6befdf46181fcb82dca323c4f/docs/operations/migrations.md#guid-sql-defaults)
   (primary sources; retrieved 2026-10-25)
+- [Doka 10.6.3 package](https://www.nuget.org/packages/Doka.EntityFrameworkCore.MySql/10.6.3),
+  [NuGet catalog provenance](https://api.nuget.org/v3/catalog0/data/2026.10.29.13.59.01/doka.entityframeworkcore.mysql.10.6.3.json),
+  [verified signed release](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/releases/tag/v10.6.3),
+  and [connector security upgrade](https://github.com/doka-labs/Doka.EntityFrameworkCore.MySql/blob/0372df8dd0c77b6f04e72fa94adae837e4deba7a/docs/security/dependency-audits.md#mysqlconnector-security-floor)
+  (primary sources; retrieved 2026-10-29)

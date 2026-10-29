@@ -7,7 +7,7 @@ unredacted migration reports in issues, pull requests, or test fixtures.
 
 ## Prerequisites
 
-- .NET SDK 10.0.402, selected by `global.json`
+- .NET SDK 10.0.403, selected by `global.json`
 - Docker for MySQL, MariaDB, PostgreSQL, and SQL Server tests; SQLite tests run
   in-process
 - Bash, `jq`, `curl`, `unzip`, and `rsync` for engineering gates
@@ -24,6 +24,41 @@ real package boundary.
 dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx
 dotnet build Doka.EntityFrameworkCore.SafeMigrations.slnx --configuration Release --no-restore
 ```
+
+### Local advisory warnings and strict qualification
+
+Local development, including Rider and ordinary terminal builds, keeps
+NU1901-NU1904 as visible warnings instead of promoting newly published package
+advisories to build errors. `NuGetAudit` remains enabled for all dependencies
+at level `low`; NU1900/NU1905 retrieval/source failures and unrelated warnings
+are not part of this exception. It does not mark an affected package as fixed
+or waive the dependency update.
+
+GitHub workflows set `ContinuousIntegrationBuild` and clear the local warning
+exception. Local package qualification, isolated consumer verification and SBOM
+generation also propagate that strict policy to their child commands. Maintenance
+audits independently enforce fatal audited restore properties.
+
+Dependency Review's historical base snapshot is the sole CI exception:
+NU1901-NU1904 remain visible warnings so an update can compare against the old,
+affected graph. Auditing and locked restore stay enabled; retrieval and other
+restore failures remain fatal. The PR-head snapshot and final review retain
+their normal blocking policies. This comparison-only exception cannot qualify
+a build, package or release.
+
+To reproduce strict workflow behavior locally, use:
+
+```bash
+dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx \
+  -p:ContinuousIntegrationBuild=true -p:WarningsNotAsErrors=
+dotnet build Doka.EntityFrameworkCore.SafeMigrations.slnx \
+  --configuration Release --no-restore \
+  -p:ContinuousIntegrationBuild=true -p:WarningsNotAsErrors=
+```
+
+The shared props use responsibility-labelled groups. Keep package versions,
+published compatibility bounds, overrides and provider isolation separate from
+layout-only maintenance; regrouping does not authorize changing those contracts.
 
 ## Tests
 
@@ -78,14 +113,14 @@ The default local engines are MariaDB 12.3.3 and PostgreSQL
 ```bash
 SAFE_MIGRATIONS_MYSQL_ENGINE=mysql \
 SAFE_MIGRATIONS_MYSQL_VERSION=8.4.13 \
-SAFE_MIGRATIONS_MYSQL_IMAGE='mysql:8.4.13@sha256:76f0358884cb92d9a086d24e5671c38048d3fef40f2588703d73eb55392d6b69' \
+SAFE_MIGRATIONS_MYSQL_IMAGE='mysql:8.4.13@sha256:a0225d1ea6631c8bc2385dc4c2faba17bbf1834ecf369e1659a9a382bd8d5dd7' \
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests.csproj --configuration Release
 ```
 
 or:
 
 ```bash
-SAFE_MIGRATIONS_POSTGRES_IMAGE='postgres:14.24@sha256:8ab94f61668dc73bbab4dc13273ff2fc37e635536af62aef5306a49a9682a446' \
+SAFE_MIGRATIONS_POSTGRES_IMAGE='postgres:14.24@sha256:0472f5295d05c211cc42b3daa5e84a128e390c5267b60ced9fe044bcf4edfdb8' \
 SAFE_MIGRATIONS_POSTGRES_VERSION=14.24 \
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj --configuration Release
 ```

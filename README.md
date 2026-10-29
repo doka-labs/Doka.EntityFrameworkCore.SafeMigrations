@@ -30,7 +30,7 @@ equivalent.
 - `Doka.EntityFrameworkCore.SafeMigrations`: provider-neutral intent,
   definitions, planning, reports, and `MigrationBuilder` extensions
 - `Doka.EntityFrameworkCore.SafeMigrations.MySql`: MySQL and MariaDB adapter on
-  the public `Doka.EntityFrameworkCore.MySql` 10.6 operation-handler (minimum 10.6.2) and
+  the public `Doka.EntityFrameworkCore.MySql` 10.6 operation-handler (minimum 10.6.3) and
   typed migration-metadata SPI
 - `Doka.EntityFrameworkCore.SafeMigrations.PostgreSql`: PostgreSQL adapter on
   Npgsql 10
@@ -55,35 +55,35 @@ evidence. See [Support and qualification](docs/support-and-qualification.md).
 ## Installation
 
 Install one provider package. The core package is included transitively. The
-examples target version 10.6.0 and select that version exactly, so
+examples target version 10.6.1 and select that version exactly, so
 restore does not move to another version implicitly. Release changes and
-compatibility notes belong in the [10.6.0 changelog](CHANGELOG.md#1060---2026-10-25). Review the
-[10.6.0 upgrade notes](docs/support-and-qualification.md#upgrade-to-1060)
+compatibility notes belong in the [10.6.1 changelog](CHANGELOG.md#1061---2026-10-29). Review the
+[10.6.1 upgrade notes](docs/support-and-qualification.md#upgrade-to-1061)
 before updating an application.
 
 ```bash
-package_version='10.6.0'
+package_version='10.6.1'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.MySql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.6.0'
+package_version='10.6.1'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.PostgreSql --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.6.0'
+package_version='10.6.1'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.Sqlite --version "$package_version"
 ```
 
 or:
 
 ```bash
-package_version='10.6.0'
+package_version='10.6.1'
 dotnet package add Doka.EntityFrameworkCore.SafeMigrations.SqlServer --version "$package_version"
 ```
 

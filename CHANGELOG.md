@@ -6,6 +6,60 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+## [10.6.1] - 2026-10-29
+
+Version 10.6.1 updates all five packages with serviced dependency floors and
+reliable release-line maintenance. Public APIs, migration policies, report
+schemas, fingerprint formats and historical migrations remain unchanged from
+10.6.0. The target remains .NET/EF Core 10. Review the
+[upgrade notes](docs/support-and-qualification.md#upgrade-to-1061) for the
+consumer-visible dependency minimums. No database schema migration is required.
+
+### Security
+
+- Raise the MySQL/MariaDB provider's Doka dependency to `[10.6.3,10.7.0)`.
+  Its published MySqlConnector minimum is 2.6.1, addressing
+  [GHSA-473q-m89c-ghf8](https://github.com/advisories/GHSA-473q-m89c-ghf8),
+  and its System.IO.Hashing minimum is 10.0.14. Preserve provider isolation,
+  GUID storage and historical migrations.
+
+### Changed
+
+- Promote the existing provider transports to published minimums:
+  MySqlConnector 2.6.2 for MySQL/MariaDB and SqlClient 6.1.8 for SQL Server.
+  Keep PKCS 9.0.22 and exact SNI/NativeInterop license exceptions unchanged;
+  no transport is introduced into Core or another provider. SqlClient now
+  enforces an explicit `HostNameInCertificate` on its managed-SNI path;
+  correct mismatched certificates rather than bypassing validation.
+- Group shared build/package properties by responsibility without changing
+  package versions, compatibility ranges, overrides or provider isolation.
+  Keep NU1901-NU1904 visible as warnings for local development; GitHub workflows
+  and explicit local release, consumer and SBOM qualification retain fatal
+  audited restores. Failed advisory retrieval and unrelated warnings remain
+  errors; no advisory is suppressed or declared fixed by this exception.
+- Prefer omitting unnecessary arithmetic parentheses in editor suggestions;
+  retain the existing source formatting without a whitespace rewrite.
+- Update the .NET 10 SDK to 10.0.403, EF Core/dependency-injection minimums and
+  dotnet-ef to 10.0.14, and the SQL Server-only PKCS minimum to 9.0.22. Refresh
+  MySQL/MariaDB and PostgreSQL image digests within the existing engine matrix;
+  retain current Action, SQL Server image, SBOM and test-framework pins. Keep
+  .NET 11 and additional release-line activation outside this update.
+
+### Fixed
+
+- Keep historical Dependency Review base snapshots capturable when an update
+  fixes their existing dependency advisories. Preserve visible advisory warnings
+  on base only; retain audited locked restore, fatal retrieval/restore failures,
+  strict PR-head capture and the independent final review gates.
+- Keep disposable NuGet HTTP-cache files outside retained maintenance audit
+  artifacts and clean them after successful or failed scans. Preserve fatal
+  advisory/restore checks and raw diagnostic reports instead of failing a
+  clean audit while uploading colon-bearing cache filenames.
+- Bound initial visibility of the exact dispatched maintenance run without
+  weakening completed source, correlation or producer checks. Retain safe
+  HTTP/identity failure categories so coordinator failures no longer discard
+  the evidence needed to distinguish API visibility from a failed workload.
+
 ## [10.6.0] - 2026-10-25
 
 Version 10.6.0 updates all five packages. This minor release adds public
@@ -2306,7 +2360,8 @@ in [Support and qualification](docs/support-and-qualification.md).
   dedicated legacy safe constraint operation subclasses.
 - Any promise that preflight can be recorded as an applied EF migration.
 
-[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.6.0...HEAD
+[Unreleased]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.6.1...HEAD
+[10.6.1]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.6.0...v10.6.1
 [10.6.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.5.0...v10.6.0
 [10.5.0]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.11...v10.5.0
 [10.4.11]: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations/compare/v10.4.10...v10.4.11

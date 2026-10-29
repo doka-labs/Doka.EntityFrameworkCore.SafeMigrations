@@ -104,6 +104,10 @@ and qualifies Doka 10.6 with the reviewed dependency baseline. Review the
 contract fingerprints, exact expression identity and dependency floors.
 Existing diagnostics and report schemas remain; the full release gates remain
 required. Detailed changes belong in the [changelog](CHANGELOG.md).
+The 10.6.1 maintenance release services dependency minimums and release-line
+audit/coordination reliability without extending public APIs or migration
+semantics. Its [upgrade guidance](docs/support-and-qualification.md#upgrade-to-1061)
+keeps earlier 10.6.0 approval requirements distinct from patch servicing.
 These releases follow changed dependency conditions and confirmed correctness
 requirements; they are not deferred initial scope.
 

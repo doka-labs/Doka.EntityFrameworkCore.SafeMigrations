@@ -36,6 +36,10 @@ if [[ -z "$package_dir" || -z "$package_version" || -z "$doka_source" ]]; then
     exit 2
 fi
 
+# WHY: Standalone consumer qualification is a release gate even outside GitHub.
+# Propagate its strict audit policy without impersonating a hosted workflow.
+export ContinuousIntegrationBuild=true
+
 package_dir="$(cd "$package_dir" && pwd -P)"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 core_nuspec="$(unzip -p \
@@ -256,6 +260,18 @@ verify_consumer() {
 
     grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations/' "$assets_file"
 
+    # WHY: A promoted transport floor belongs only to its adapter, including
+    # isolated consumers that cannot see the repository's central package file.
+    if [[ "$consumer_name" != MySql ]] && grep -Fq '"MySqlConnector/' "$assets_file"; then
+        echo "$consumer_name consumer resolved a MySQL/MariaDB-only transport dependency." >&2
+        exit 1
+    fi
+
+    if [[ "$consumer_name" != SqlServer ]] && grep -Fq '"Microsoft.Data.SqlClient/' "$assets_file"; then
+        echo "$consumer_name consumer resolved a SQL Server-only transport dependency." >&2
+        exit 1
+    fi
+
     case "$tooling_reference" in
         Design | DesignWithoutSafeBuildAssets)
             grep -Fq 'Microsoft.EntityFrameworkCore.Design/' "$assets_file"
@@ -281,6 +297,9 @@ verify_consumer() {
         MySql)
             grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.MySql/' "$assets_file"
             grep -Fq 'Doka.EntityFrameworkCore.MySql/' "$assets_file"
+
+            jq -e '.libraries["MySqlConnector/2.6.2"].type == "package"' \
+                "$assets_file" >/dev/null
 
             if grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.PostgreSql/' "$assets_file" \
                 || grep -Fq 'Npgsql.EntityFrameworkCore.PostgreSQL/' "$assets_file" \
@@ -329,7 +348,9 @@ verify_consumer() {
 
             # This consumer has no repository central pin; the package itself
             # must select the patched dependency in every tooling profile.
-            jq -e '.libraries["System.Security.Cryptography.Pkcs/9.0.21"].type == "package"' \
+            jq -e '.libraries["System.Security.Cryptography.Pkcs/9.0.22"].type == "package"' \
+                "$assets_file" >/dev/null
+            jq -e '.libraries["Microsoft.Data.SqlClient/6.1.8"].type == "package"' \
                 "$assets_file" >/dev/null
 
             if grep -Fq 'Doka.EntityFrameworkCore.SafeMigrations.MySql/' "$assets_file" \

@@ -36,6 +36,10 @@ if [[ -z "$package_version" || -z "$output_dir" || -z "$doka_source" ]]; then
     exit 2
 fi
 
+# WHY: Local release qualification must enforce the same advisory severity as
+# hosted CI; the developer-only warning exception must not reach child builds.
+export ContinuousIntegrationBuild=true
+
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd "$script_dir/.." && pwd -P)"
 mkdir -p "$output_dir"

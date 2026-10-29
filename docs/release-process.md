@@ -16,19 +16,18 @@ SafeMigrations publishes these package IDs at one version:
 - `Doka.EntityFrameworkCore.SafeMigrations.SqlServer`.
 
 Stable 10.4.6 introduced this five-package inventory; releases 10.4.2 through
-10.4.5 retain their historical four-package set. Version 10.6.0 keeps
-the shared .NET/EF Core 10 identity and adds CASE/generated-expression support
-with lossless signed-integer upgrades, ordered projection/DROP and traversal
-corrections, measured allocation reductions and authorized release lines. The
-[changelog](../CHANGELOG.md#1060---2026-10-25) and
-[upgrade notes](support-and-qualification.md#upgrade-to-1060) record the
-conditional computed/CHECK contract-fingerprint changes, renewed approval
-requirements, exact expression comparison and dependency floors. Historical
-migration source, policy selection, report schemas, relational model-fingerprint
-format and history remain unchanged. Do not carry an obsolete contract approval
-forward or rewrite historical migrations. Timing comparisons stay informational;
-functional and evidence failures still block. Selecting another provider does
-not introduce SQL Server runtime dependencies.
+10.4.5 retain their historical four-package set. Version 10.6.1 keeps the shared
+.NET/EF Core 10 identity, services dependency floors and corrects automated
+release-line maintenance. The [changelog](../CHANGELOG.md#1061---2026-10-29) and
+[upgrade notes](support-and-qualification.md#upgrade-to-1061) record current
+consumer requirements. Public APIs, migration policies, report schemas and
+fingerprint formats are unchanged relative to 10.6.0. Applications skipping
+that minor release must still review its
+[computed/CHECK approval boundaries](support-and-qualification.md#upgrade-to-1060).
+Do not carry an obsolete contract approval forward or rewrite historical
+migrations. Timing comparisons stay informational; functional and evidence
+failures still block. Selecting another provider does not introduce SQL Server
+runtime dependencies.
 
 The workflow accepts a canonical lowercase NuGet version without a leading
 `v`. The version must belong to the source `VersionPrefix`, have exactly one

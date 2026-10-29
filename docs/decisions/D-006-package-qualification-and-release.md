@@ -322,6 +322,14 @@ owns independent consumer readback.
   under the shared 10.6.0 release notes dated 2026-10-25. Keep one section per
   change category, prior decision dates and historical releases unchanged.
 
+- 2026-10-29: Set the next shared five-package stable identity to 10.6.1 for
+  serviced Doka/connector, EF/DI and PKCS minimums, reliable maintenance audit
+  evidence and bounded exact-run visibility. Retain public APIs, policies,
+  report schemas, fingerprint formats, .NET 10 and all native release gates.
+  Keep local advisory warnings visible while qualification remains strict.
+  Preserve historical 10.6.0 notes/approval boundaries; publication status
+  remains owned by the runbook and exact candidate evidence.
+
 ### Implementation References
 
 - [Release-line decision](D-018-release-lines-and-monotonic-publication.md)

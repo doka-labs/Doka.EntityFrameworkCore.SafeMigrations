@@ -38,6 +38,10 @@ if [[ -z "$package_dir" || -z "$output_dir" || -z "$package_version" ]]; then
     exit 2
 fi
 
+# WHY: The source restore used for release SBOMs must reject advisory findings
+# even when the operator invokes this gate from a local development shell.
+export ContinuousIntegrationBuild=true
+
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd "$script_dir/.." && pwd -P)"
 package_dir="$(cd "$package_dir" && pwd -P)"
