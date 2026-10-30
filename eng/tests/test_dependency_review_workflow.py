@@ -15,6 +15,7 @@ CI = ROOT / ".github/workflows/ci.yml"
 CAPTURE = ROOT / ".github/workflows/dependency-review.yml"
 RECEIVER = ROOT / ".github/workflows/dependency-review-results.yml"
 RESOLVER = ROOT / ".github/workflows/dependency-snapshot.yml"
+GRAPH = ROOT / ".github/workflows/dependency-graph.yml"
 MAINTENANCE = ROOT / "eng/tests/test-dependency-maintenance.sh"
 AUDIT_WARNINGS = frozenset(("NU1901", "NU1902", "NU1903", "NU1904"))
 BUILD_POLICY_PROJECT = (ROOT / "src/Doka.EntityFrameworkCore.SafeMigrations"
@@ -75,9 +76,10 @@ def execute(command, directory, **values):
         env={**os.environ, **values}, capture_output=True, text=True, check=False)
 
 
-def capture_snapshot_restore(revision: str, returncode: int = 0):
+def capture_snapshot_restore(revision: str, returncode: int = 0, *, command=None):
     """Execute the real workflow shell with a non-restoring argument/exit-code recorder."""
-    command = step_command(job_blocks(RESOLVER)["restore"], "Restore complete dependency graph")
+    if command is None:
+        command = step_command(job_blocks(RESOLVER)["restore"], "Restore complete dependency graph")
 
     with tempfile.TemporaryDirectory() as temporary_root:
         root = Path(temporary_root)
@@ -102,6 +104,34 @@ def sdk_guard_command():
     prefix = 'explicit_sdk_versions="$('
 
     return prefix + source.split(prefix, 1)[1].split('floating_runner_references="$(', 1)[0]
+
+
+def execute_snapshot_guard(command, payload, *, gh_returncode=0, **values):
+    """Run maintained freshness shell with real jq and one bounded recorded GitHub response."""
+    with tempfile.TemporaryDirectory() as temporary_root:
+        root = Path(temporary_root)
+        response = root / "response.json"
+        response.write_text(payload if isinstance(payload, str) else json.dumps(payload), encoding="ascii")
+        calls = root / "calls.txt"
+        recorder = root / "gh"
+        recorder.write_text(
+            '#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "$GH_CALLS"\n'
+            'cat "$GH_RESPONSE"\nexit "$GH_EXIT_CODE"\n', encoding="ascii")
+        recorder.chmod(0o700)
+        environment = {
+            "PATH": str(root) + os.pathsep + os.environ["PATH"],
+            "GITHUB_REPOSITORY": "doka-labs/Doka.EntityFrameworkCore.SafeMigrations",
+            "GITHUB_REF": "refs/heads/main", "GITHUB_SHA": "a" * 40,
+            "GITHUB_WORKFLOW_SHA": "a" * 40, "RUNNER_TEMP": str(root),
+            "GH_CALLS": str(calls), "GH_RESPONSE": str(response), "GH_EXIT_CODE": str(gh_returncode),
+            "DEFAULT_BRANCH": "main", "SNAPSHOT_REF": "refs/heads/main", "SNAPSHOT_SHA": "a" * 40,
+            **values,
+        }
+
+        result = execute(command, root, **environment)
+        arguments = calls.read_text(encoding="ascii").splitlines() if calls.exists() else []
+
+        return result, arguments
 
 
 def sdk_fixture(root: Path, path: str, extra: str = "") -> None:
@@ -328,6 +358,232 @@ class DependencyReviewWorkflowTests(unittest.TestCase):
         self.assertIn("dependency-review-handoff.py finish", finalizer)
         self.assertNotIn("continue-on-error:", review)
         self.assertNotIn("warn-only:", review)
+
+
+class MainDependencyGraphWorkflowTests(unittest.TestCase):
+    """Keep protected-main graph refresh separate from PR comparison and restored hooks."""
+
+    def test_main_refresh_has_automatic_and_manual_protected_main_entrypoints(self):
+        # Arrange
+        self.assertTrue(GRAPH.is_file(), "The authoritative main snapshot needs its own refresh path.")
+        source = GRAPH.read_text(encoding="ascii")
+
+        # Act
+        jobs = job_blocks(GRAPH)
+
+        # Assert
+        self.assertEqual({"capture", "publish"}, set(jobs))
+        self.assertRegex(source, r"(?m)^  push:\n    branches:.*main")
+        self.assertIn("  workflow_dispatch:", source)
+        self.assertNotIn("pull_request_target:", source)
+        for job in jobs.values():
+            self.assertIn("github.ref == 'refs/heads/main'", job)
+            self.assertIn("github.event.repository.default_branch == 'main'", job)
+            self.assertIn("github.ref_protected", job)
+
+    def test_main_capture_cannot_inherit_publisher_permissions_or_cache(self):
+        # Arrange
+        jobs = job_blocks(GRAPH)
+        defaults = GRAPH.read_text(encoding="ascii").split("jobs:\n", 1)[0]
+
+        # Act
+        capture = jobs["capture"]
+
+        # Assert
+        self.assertIn("permissions:\n  contents: read", defaults)
+        self.assertNotIn("permissions:", capture)
+        self.assertIn("cache-mode: none", capture)
+        self.assertNotIn(": write", capture)
+        self.assertNotIn("continue-on-error:", capture)
+        self.assertIn("dotnet restore", capture)
+        self.assertIn("--locked-mode", capture)
+        self.assertIn("-p:WarningsNotAsErrors=", capture)
+        self.assertIn("prepare-dependency-snapshot-inputs.py snapshot-source", capture)
+        self.assertIn("artifact-id: ${{ steps.upload.outputs.artifact-id }}", capture)
+        self.assertIn("persist-credentials: false", capture)
+
+    def test_main_publisher_uses_only_exact_validated_data_and_the_existing_snapshot_identity(self):
+        # Arrange
+        publish = job_blocks(GRAPH)["publish"]
+
+        # Act
+        guard = publish.index("- name: Require current protected main")
+        submission = publish.index("- name: Submit current main snapshot")
+
+        # Assert
+        self.assertLess(guard, submission)
+        self.assertIn("needs: capture", publish)
+        self.assertIn("permissions:\n      contents: write", publish)
+        self.assertIn("artifact-ids: ${{ needs.capture.outputs.artifact-id }}", publish)
+        self.assertNotIn("run-id:", publish)
+        self.assertNotIn("always()", publish)
+        self.assertIn("prepare-dependency-snapshot-inputs.py receive", publish)
+        self.assertIn("git/trees/", publish)
+        self.assertIn("correlator: safemigrations-nuget-resolved-v1", publish)
+        self.assertIn("detector-name: SafeMigrations NuGet qualification", publish)
+        self.assertIn("snapshot-sha: ${{ github.sha }}", publish)
+        self.assertIn("snapshot-ref: ${{ github.ref }}", publish)
+        self.assertIn("detectorsFilter: MSBuildBinaryLog", publish)
+        self.assertNotIn("dotnet restore", publish)
+        self.assertNotIn("continue-on-error:", publish)
+        self.assertNotIn("checks: write", publish)
+
+    def test_main_restore_remains_strict_despite_ambient_warning_or_audit_exceptions(self):
+        # Arrange
+        command = step_command(job_blocks(GRAPH)["capture"], "Restore current main dependency graph")
+        environment = {"GITHUB_ACTIONS": "true", "NoWarn": "NU1902;NU1900",
+                       "WarningsNotAsErrors": "NU1901;NU1902;NU1903;NU1904;CS0618",
+                       "TreatWarningsAsErrors": "false", "NuGetAudit": "false",
+                       "NuGetAuditMode": "direct", "NuGetAuditLevel": "critical"}
+
+        # Act
+        result, arguments = capture_snapshot_restore("head", command=command)
+        properties = tuple(argument for argument in arguments if argument.startswith("-p:"))
+        observed = evaluate_build_policy(environment=environment, properties=properties)
+
+        # Assert
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("", observed["NoWarn"])
+        self.assertEqual("true", observed["TreatWarningsAsErrors"])
+        self.assertEqual("true", observed["NuGetAudit"])
+        self.assertEqual("all", observed["NuGetAuditMode"])
+        self.assertEqual("low", observed["NuGetAuditLevel"])
+        self.assertEqual(1, arguments.count("--locked-mode"))
+        # Only the audit advisories themselves stay non-fatal; an ambient
+        # CS0618 exception cannot ride along into the protected-main writer.
+        self.assertEqual(AUDIT_WARNINGS,
+                         set(filter(None, observed["WarningsNotAsErrors"].split(";"))))
+
+    def test_main_graph_refresh_survives_an_advisory_that_main_still_carries(self):
+        # Arrange
+        command = step_command(job_blocks(GRAPH)["capture"], "Restore current main dependency graph")
+
+        # Act
+        result, arguments = capture_snapshot_restore("head", command=command)
+        properties = tuple(argument for argument in arguments if argument.startswith("-p:"))
+        observed = evaluate_build_policy(properties=properties)
+
+        # Assert
+        # WHY: A fatal audit here would disable the refresh exactly while a
+        # stale vulnerable snapshot is the one that has to be replaced.
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertTrue(AUDIT_WARNINGS.issubset(set(observed["WarningsNotAsErrors"].split(";"))))
+        self.assertNotIn("NU1900", observed["WarningsNotAsErrors"].split(";"))
+        self.assertNotIn("NU1900", observed["NoWarn"].split(";"))
+
+    def test_main_and_pr_writers_share_a_retained_branch_scoped_queue(self):
+        # Arrange
+        main_publish = job_blocks(GRAPH)["publish"]
+        pr_publish = job_blocks(RECEIVER)["submit-nuget"]
+
+        # Act
+        main_group = re.search(r"(?m)^      group: (.+)$", main_publish).group(1)
+        pr_group = re.search(r"(?m)^      group: (.+)$", pr_publish).group(1)
+
+        # Assert
+        self.assertEqual(main_group.replace("github.ref", "matrix.ref"), pr_group)
+        self.assertIn("github.repository_id", main_group)
+        for writer in (main_publish, pr_publish):
+            self.assertIn("      queue: max", writer)
+            self.assertIn("      cancel-in-progress: false", writer)
+
+    def test_current_main_passes_both_live_guards(self):
+        for job in ("capture", "publish"):
+            with self.subTest(job=job):
+                # Arrange
+                command = step_command(job_blocks(GRAPH)[job], "Require current protected main")
+                branch = {"name": "main", "protected": True, "commit": {"sha": "a" * 40}}
+
+                # Act
+                result, calls = execute_snapshot_guard(command, branch)
+
+                # Assert
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertTrue(any(value.endswith("/branches/main") for value in calls))
+
+    def test_stale_unprotected_malformed_or_unavailable_main_fails_both_live_guards(self):
+        cases = (
+            ({"name": "main", "protected": True, "commit": {"sha": "b" * 40}}, 0),
+            ({"name": "main", "protected": False, "commit": {"sha": "a" * 40}}, 0),
+            ({"name": "other", "protected": True, "commit": {"sha": "a" * 40}}, 0),
+            ({"name": "main", "protected": "true", "commit": {"sha": "a" * 40}}, 0),
+            ({}, 0), ("not-json", 0),
+            ({"name": "main", "protected": True, "commit": {"sha": "a" * 40}}, 22),
+        )
+        for job in ("capture", "publish"):
+            for payload, status in cases:
+                with self.subTest(job=job, payload=payload, status=status):
+                    # Arrange
+                    command = step_command(job_blocks(GRAPH)[job], "Require current protected main")
+
+                    # Act
+                    result, _ = execute_snapshot_guard(command, payload, gh_returncode=status)
+
+                    # Assert
+                    self.assertNotEqual(0, result.returncode)
+
+    def test_wrong_ref_workflow_or_sha_cannot_reach_main_api(self):
+        cases = ({"GITHUB_REF": "refs/heads/feature"}, {"GITHUB_SHA": "A" * 40},
+                 {"GITHUB_SHA": "a" * 39}, {"GITHUB_WORKFLOW_SHA": "b" * 40})
+        for job in ("capture", "publish"):
+            for environment in cases:
+                with self.subTest(job=job, environment=environment):
+                    # Arrange
+                    command = step_command(job_blocks(GRAPH)[job], "Require current protected main")
+
+                    # Act
+                    result, calls = execute_snapshot_guard(command, {}, **environment)
+
+                    # Assert
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertEqual([], calls)
+
+    def test_pr_default_branch_guard_runs_inside_writer_before_submission(self):
+        # Arrange
+        submit = job_blocks(RECEIVER)["submit-nuget"]
+
+        # Act
+        guard = submit.index("- name: Require current default-branch snapshot")
+        publication = submit.index("- name: Submit resolved NuGet snapshot")
+
+        # Assert
+        self.assertLess(guard, publication)
+        self.assertIn("SNAPSHOT_REF: ${{ matrix.ref }}", submit)
+        self.assertIn("SNAPSHOT_SHA: ${{ matrix.sha }}", submit)
+        self.assertIn("DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}", submit)
+
+    def test_pr_default_guard_accepts_current_but_rejects_stale_or_unproven_main(self):
+        cases = (({"protected": True, "commit": {"sha": "a" * 40}}, 0, True),
+                 ({"protected": True, "commit": {"sha": "b" * 40}}, 0, False),
+                 ({"protected": False, "commit": {"sha": "a" * 40}}, 0, False),
+                 ({}, 0, False), ("not-json", 0, False),
+                 ({"protected": True, "commit": {"sha": "a" * 40}}, 22, False))
+        for payload, status, accepted in cases:
+            with self.subTest(payload=payload, status=status):
+                # Arrange
+                command = step_command(job_blocks(RECEIVER)["submit-nuget"],
+                                       "Require current default-branch snapshot")
+
+                # Act
+                result, calls = execute_snapshot_guard(command, payload, gh_returncode=status)
+
+                # Assert
+                self.assertEqual(accepted, result.returncode == 0, result.stderr)
+                self.assertTrue(any(value.endswith("/branches/main") for value in calls))
+
+    def test_pr_head_or_nondefault_snapshot_does_not_query_default_main(self):
+        for ref in ("refs/pull/61/head", "refs/heads/maintenance/10.x"):
+            with self.subTest(ref=ref):
+                # Arrange
+                command = step_command(job_blocks(RECEIVER)["submit-nuget"],
+                                       "Require current default-branch snapshot")
+
+                # Act
+                result, calls = execute_snapshot_guard(command, {}, SNAPSHOT_REF=ref)
+
+                # Assert
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertEqual([], calls)
 
 
 class DependencySdkSourceTests(unittest.TestCase):

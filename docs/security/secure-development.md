@@ -113,6 +113,37 @@ not bypass it.
 
 GitHub's independent automatic submission may still run, but is not the
 authority for whether a particular base/head pair has matching snapshots.
+Explicit snapshots also outrank automatic submission in the default-branch
+graph. The protected-main `dependency-graph.yml` workflow therefore refreshes
+the same detector/correlator on every main push, with a main-only manual entry
+for recovery. Read-only, cache-denied restore emits an immutable data artifact;
+a separate writer revalidates the exact source tree and live protected main.
+PR and main snapshot writers share a retained branch-keyed queue. A queued
+PR-base writer must still match the live default-branch tip before submission,
+so it cannot replace a newer main graph with an obsolete comparison baseline.
+A successful submission is not proof of alert closure: verify the authoritative
+GitHub graph and subsequent alert reconciliation before declaring resolution.
+This workflow-only correction requires no NuGet version or consumer update and
+never dismisses a vulnerability alert manually.
+
+The capture restore keeps existing advisories as visible warnings rather than
+failing on them. A main revision that still carries an advisory must remain
+able to publish its accurate graph; a fatal audit there would preserve the
+stale snapshot it is meant to replace. This is not an audit exception for the
+product: advisory retrieval failure, locked-restore failure and every other
+warning stay fatal here, the release-line maintenance audit still reports the
+advisory, and the pull-request head snapshot keeps its strict fatal audit.
+
+After this workflow is merged, the push refresh runs automatically. A maintainer
+can request the same protected-main path again with:
+
+```bash
+gh workflow run dependency-graph.yml --ref main
+```
+
+Dispatching from another branch cannot publish a snapshot. Neither a stale run
+nor a failed capture can update the graph. This is not a package publisher.
+
 Explicit submissions have precedence per manifest; the hosted warning header
 must still be empty before success is claimed. The comparison job reviews the
 pull-request delta with the official action, rejects new high-or-critical

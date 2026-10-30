@@ -1,0 +1,145 @@
+name: Refresh main dependency graph
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    if: >-
+      ${{ github.ref == 'refs/heads/main' && github.event.repository.default_branch == 'main'
+          && github.ref_protected }}
+    runs-on: ubuntu-26.04
+    cache-mode: none
+    timeout-minutes: 15
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - name: Require current protected main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_SHA" = "$GITHUB_WORKFLOW_SHA"
+          gh api "repos/${GITHUB_REPOSITORY}/branches/main" > "$RUNNER_TEMP/dependency-main-branch.json"
+          jq -e --arg sha "$GITHUB_SHA" \
+            '.name == "main" and .protected == true and .commit.sha == $sha' \
+            "$RUNNER_TEMP/dependency-main-branch.json" >/dev/null
+
+      - name: Checkout trusted data helper
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: engineering
+          persist-credentials: false
+
+      - name: Checkout exact main revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: snapshot-source
+          persist-credentials: false
+
+      - name: Setup revision SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: snapshot-source/global.json
+
+      # WHY: Restore hooks never receive the publisher's write token or caches.
+      # Main's graph must stay capturable while main itself still carries an
+      # advisory; a fatal audit here disables the refresh exactly when the
+      # stale snapshot has to be replaced. Advisories remain visible warnings
+      # and are reported by the maintenance audit, not suppressed. Retrieval
+      # failure (NU1900), restore failure and every other warning stay fatal.
+      - name: Restore current main dependency graph
+        working-directory: snapshot-source
+        run: |
+          dotnet restore Doka.EntityFrameworkCore.SafeMigrations.slnx --locked-mode --disable-build-servers \
+            -p:ContinuousIntegrationBuild=true -p:TreatWarningsAsErrors=true \
+            -p:NuGetAudit=true -p:NuGetAuditMode=all -p:NuGetAuditLevel=low \
+            -p:NoWarn= -p:WarningsAsErrors= -p:WarningsNotAsErrors=NU1901%3BNU1902%3BNU1903%3BNU1904
+
+      - name: Stage data-only dependency inputs
+        run: python3 engineering/eng/prepare-dependency-snapshot-inputs.py snapshot-source snapshot-inputs
+
+      - name: Upload current main data
+        id: upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dependency-main-${{ github.run_id }}-${{ github.run_attempt }}
+          path: snapshot-inputs
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: capture
+    if: >-
+      ${{ github.ref == 'refs/heads/main' && github.event.repository.default_branch == 'main'
+          && github.ref_protected }}
+    permissions:
+      contents: write
+    runs-on: ubuntu-26.04
+    cache-mode: none
+    timeout-minutes: 10
+    # WHY: All writers to this branch share one retained queue. A late PR base
+    # must recheck the live tip after its turn, never overwrite a newer main.
+    concurrency:
+      group: dependency-graph-${{ github.repository_id }}-${{ github.ref }}
+      cancel-in-progress: false
+      queue: max
+    steps:
+      - name: Checkout trusted data validator only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: engineering
+          persist-credentials: false
+
+      - name: Download immutable current main data
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.capture.outputs.artifact-id }}
+          path: ${{ runner.temp }}/dependency-inputs
+          merge-multiple: true
+
+      - name: Revalidate exact main source data
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/git/trees/${GITHUB_SHA}?recursive=1" > "$RUNNER_TEMP/dependency-tree.json"
+          python3 engineering/eng/prepare-dependency-snapshot-inputs.py receive \
+            "$RUNNER_TEMP/dependency-inputs" snapshot-source \
+            "$GITHUB_WORKSPACE/snapshot-source" "$RUNNER_TEMP/dependency-tree.json"
+
+      - name: Require current protected main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$GITHUB_SHA" = "$GITHUB_WORKFLOW_SHA"
+          gh api "repos/${GITHUB_REPOSITORY}/branches/main" > "$RUNNER_TEMP/dependency-main-branch.json"
+          jq -e --arg sha "$GITHUB_SHA" \
+            '.name == "main" and .protected == true and .commit.sha == $sha' \
+            "$RUNNER_TEMP/dependency-main-branch.json" >/dev/null
+
+      # WHY: Explicit PR-base snapshots outrank automatic submissions. Replace
+      # that exact detector/correlator with current main after every main push.
+      - name: Submit current main snapshot
+        uses: actions/component-detection-dependency-submission-action@98beaea5a1227f3db476e4c9ca959a0cacd7ac4f
+        with:
+          filePath: snapshot-source
+          detectorsCategories: NuGet
+          detectorsFilter: MSBuildBinaryLog
+          correlator: safemigrations-nuget-resolved-v1
+          detector-name: SafeMigrations NuGet qualification
+          detector-version: '1'
+          detector-url: https://github.com/doka-labs/Doka.EntityFrameworkCore.SafeMigrations
+          snapshot-sha: ${{ github.sha }}
+          snapshot-ref: ${{ github.ref }}
