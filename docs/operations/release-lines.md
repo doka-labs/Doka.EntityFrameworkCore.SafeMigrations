@@ -137,14 +137,33 @@ matrix forms fail instead of silently removing a required producer.
 
 The coordinator follows only the immutable run ID returned by dispatch. Its
 initial API visibility and explicitly unfinished queued identity may settle for
-at most two minutes within the existing workload deadline. Contradictory source
-metadata, authorization failures and completed mismatched identities fail
-immediately. Every successful completion still requires the exact source,
-workflow, correlation title and complete producer inventory. Retained reports
-include bounded failure codes, HTTP status or identity-field categories, never
-raw API error bodies or command diagnostics. The older failed coordinators did
-not retain the first-response details; their precise transient cause cannot be
-reconstructed from those artifacts.
+at most two minutes within the existing workload deadline. An initial display
+title may also finish resolving during `in_progress` or after successful
+completion when all immutable source fields are complete. No placeholder-title
+allowlist or pending title authorizes success. Contradictory source metadata,
+authorization failures, malformed titles and title regressions after the first
+exact identity fail immediately. Unsuccessful completion never waits for a title.
+An unresolved initial title remains blocking when its original visibility bound
+expires; repeated observations never reset either deadline. Every successful
+completion still requires the exact source, workflow, correlation title and
+complete successful producer inventory.
+
+`completed` with a `null` conclusion is a missing result, not a confirmed
+failure. On initial discovery it shares the original visibility bound. For an
+already proven execution, the first such observation starts one fixed result
+window of at most two minutes, capped by the original workload deadline. Neither
+repeated observations nor status changes reset that window. A missing result
+expires as `child_result_timeout`; reaching the overall workload limit remains
+`child_wait_timeout`. Explicit unsuccessful conclusions still reject immediately,
+and no producer evidence is accepted until the conclusion is `success`.
+
+Retained observations include `status`, `conclusion` and `titleState`, including
+before rejection. Title states are `missing`, `empty`, `invalid_type`, `different`
+or `matching`; invalid status/conclusion values become `unknown`. Reports retain
+bounded failure codes, HTTP status and identity-field categories, never raw remote
+titles, API error bodies or command diagnostics. The older failed coordinators
+did not retain the first-response details; their precise transient cause cannot
+be reconstructed from those artifacts.
 
 The three existing Dependabot ecosystems retain their groups and cooldowns.
 Maintained-line version-update targets follow reviewed active policy. Security

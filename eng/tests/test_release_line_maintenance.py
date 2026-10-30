@@ -279,9 +279,10 @@ class MaintenanceTests(unittest.TestCase):
                 observations = []
 
                 # Act / Assert
-                with self.assertRaises(maintenance.MaintenanceError):
-                    maintenance.dispatch_line(api, "owner/repository", "ci.yml", ref,
-                                               "schedule-100-1", record=observations.append)
+                with mock.patch.object(maintenance.time, "monotonic", side_effect=[0, 120]):
+                    with self.assertRaises(maintenance.MaintenanceError):
+                        maintenance.dispatch_line(api, "owner/repository", "ci.yml", ref,
+                                                   "schedule-100-1", record=observations.append)
 
                 self.assertEqual(200, observations[1]["runId"])
 
@@ -453,8 +454,7 @@ class MaintenanceTests(unittest.TestCase):
     def test_initial_visibility_does_not_accept_contradictory_or_completed_identity(self):
         """Missing queued fields differ from a wrong identity or completed placeholder."""
         for field, value in (("id", 201), ("event", "push"), ("head_sha", "b" * 40),
-                             ("head_branch", "main"), ("path", ".github/workflows/other.yml"),
-                             ("display_title", "maintenance forged")):
+                             ("head_branch", "main"), ("path", ".github/workflows/other.yml")):
             with self.subTest(field=field):
                 # Arrange
                 original, ref, _ = dispatch_fixture()
@@ -473,9 +473,622 @@ class MaintenanceTests(unittest.TestCase):
                 self.assertEqual(1, sum(call[0] == route for call in api.calls))
                 self.assertFalse(any("/jobs?" in call[0] for call in api.calls))
 
+    def test_initial_title_materialization_keeps_exact_run_and_producer_checks(self):
+        """Static names and other initial titles are pending, never execution proof."""
+        workflows = (("ci.yml", "CI"), (maintenance.MAINTENANCE_WORKFLOW, "Release line maintenance"))
+        for workflow, name in workflows:
+            for status in ("queued", "pending", "requested", "waiting", "in_progress"):
+                for title in (None, "", name, "do-not-log-secret initial title"):
+                    with self.subTest(workflow=workflow, status=status, title=title):
+                        # Arrange
+                        original, ref, commit = dispatch_fixture(workflow)
+                        route = "repos/owner/repository/actions/runs/200"
+                        completed = original.responses[route]
+                        pending = {**completed, "status": status, "conclusion": None, "display_title": title}
+                        api = SequencedApi(original.responses, route, [pending, completed])
+                        observations = []
+
+                        # Act
+                        with mock.patch.object(maintenance.time, "sleep"), \
+                                mock.patch.object(maintenance.time, "monotonic", return_value=0):
+                            result = maintenance.dispatch_line(
+                                api, "owner/repository", workflow, ref, "schedule-100-1",
+                                record=observations.append)
+
+                        # Assert
+                        self.assertEqual("success", result["verificationStatus"])
+                        self.assertEqual(commit, result["sourceCommit"])
+                        self.assertEqual(200, result["runId"])
+                        pending_updates = [item for item in observations
+                                           if item.get("observationCode") == "child_identity_pending"]
+                        self.assertEqual(1, len(pending_updates))
+                        self.assertEqual("different" if title else "missing" if title is None else "empty",
+                                         pending_updates[0]["titleState"])
+                        self.assertEqual("child_observed", observations[-1]["observationCode"])
+                        self.assertEqual("matching", observations[-1]["titleState"])
+                        run_calls = [call for call in api.calls if call[0] == route or "/jobs?" in call[0]]
+                        self.assertEqual([route, route], [call[0] for call in run_calls[:2]])
+                        self.assertIn("/jobs?", run_calls[2][0])
+                        self.assertTrue(all(call[1] == "GET" for call in run_calls))
+                        self.assertNotIn("do-not-log-secret", json.dumps(observations))
+
+    def test_initial_title_can_resolve_after_execution_begins(self):
+        """Queue progress cannot force a display title to materialize atomically."""
+        for workflow in ("ci.yml", maintenance.MAINTENANCE_WORKFLOW):
+            with self.subTest(workflow=workflow):
+                # Arrange
+                original, ref, commit = dispatch_fixture(workflow)
+                route = "repos/owner/repository/actions/runs/200"
+                completed = original.responses[route]
+                queued = {**completed, "status": "queued", "conclusion": None, "display_title": "initial"}
+                executing = {**queued, "status": "in_progress"}
+                api = SequencedApi(original.responses, route, [queued, executing, completed])
+
+                # Act
+                with mock.patch.object(maintenance.time, "sleep"), \
+                        mock.patch.object(maintenance.time, "monotonic", return_value=0):
+                    result = maintenance.wait_for_child(
+                        api, "owner/repository", 200, workflow, ref, commit, "schedule-100-1",
+                        maintenance.producer_names(api, "owner/repository", workflow, commit))
+
+                # Assert
+                self.assertEqual("success", result["verificationStatus"])
+                self.assertEqual(3, sum(call[0] == route for call in api.calls))
+
+    def test_initial_title_can_resolve_after_successful_completion(self):
+        """Completed work may still await presentation metadata, never its source proof."""
+        for workflow in ("ci.yml", maintenance.MAINTENANCE_WORKFLOW):
+            for first_status in ("queued", "in_progress", "completed"):
+                with self.subTest(workflow=workflow, first_status=first_status):
+                    # Arrange
+                    original, ref, commit = dispatch_fixture(workflow)
+                    route = "repos/owner/repository/actions/runs/200"
+                    completed = original.responses[route]
+                    pending = {**completed, "display_title": "initial"}
+                    first = {**pending, "status": first_status,
+                             "conclusion": "success" if first_status == "completed" else None}
+                    api = SequencedApi(original.responses, route, [first, pending, completed])
+                    observations = []
+
+                    # Act
+                    with mock.patch.object(maintenance.time, "sleep"), \
+                            mock.patch.object(maintenance.time, "monotonic", return_value=0):
+                        result = maintenance.dispatch_line(
+                            api, "owner/repository", workflow, ref, "schedule-100-1",
+                            record=observations.append)
+
+                    # Assert
+                    self.assertEqual("success", result["verificationStatus"])
+                    self.assertEqual(commit, result["sourceCommit"])
+                    pending_updates = [item for item in observations
+                                       if item.get("observationCode") == "child_identity_pending"]
+                    self.assertEqual(2, len(pending_updates))
+                    self.assertEqual("completed", pending_updates[-1]["status"])
+                    self.assertEqual("different", pending_updates[-1]["titleState"])
+                    self.assertEqual("matching", observations[-1]["titleState"])
+                    run_calls = [call for call in api.calls if call[0] == route or "/jobs?" in call[0]]
+                    self.assertEqual([route] * 3, [call[0] for call in run_calls[:3]])
+                    self.assertIn("/jobs?", run_calls[3][0])
+
+    def test_completed_failure_does_not_wait_for_an_initial_title(self):
+        """An unsuccessful child is final evidence, regardless of delayed presentation."""
+        for conclusion in ("failure", "cancelled", "skipped", "timed_out", "neutral", "action_required"):
+            with self.subTest(conclusion=conclusion):
+                # Arrange
+                api, ref, commit = dispatch_fixture()
+                api.responses["repos/owner/repository/actions/runs/200"].update({
+                    "conclusion": conclusion, "display_title": "initial"})
+                observations = []
+
+                # Act
+                with mock.patch.object(maintenance.time, "sleep") as sleep:
+                    with self.assertRaises(maintenance.MaintenanceError) as failure:
+                        maintenance.wait_for_child(
+                            api, "owner/repository", 200, "ci.yml", ref, commit, "schedule-100-1", [],
+                            record=observations.append)
+
+                # Assert
+                self.assertEqual("child_failed", failure.exception.code)
+                self.assertEqual(1, len(api.calls))
+                self.assertEqual("completed", observations[-1]["status"])
+                self.assertEqual("different", observations[-1]["titleState"])
+                sleep.assert_not_called()
+
+    def test_completed_missing_conclusion_resolves_before_producer_checks(self):
+        """Result metadata may settle on first read or after a long proven execution."""
+        for workflow in ("ci.yml", maintenance.MAINTENANCE_WORKFLOW):
+            for initialized, delayed_title in ((False, False), (False, True), (True, False)):
+                with self.subTest(workflow=workflow, initialized=initialized, delayed_title=delayed_title):
+                    # Arrange
+                    original, ref, commit = dispatch_fixture(workflow)
+                    route = "repos/owner/repository/actions/runs/200"
+                    completed = original.responses[route]
+                    pending = {**completed, "conclusion": None}
+                    first = {**pending, "display_title": "initial" if delayed_title else completed["display_title"]}
+                    sequence = [first, pending, completed]
+                    if initialized:
+                        sequence.insert(0, {**completed, "status": "in_progress", "conclusion": None})
+
+                    api = SequencedApi(original.responses, route, sequence)
+                    clock, observations = [0], []
+
+                    def advance(delay):
+                        clock[0] += 300 if initialized and clock[0] == 0 else delay
+
+                    # Act
+                    with mock.patch.object(maintenance.time, "monotonic", side_effect=lambda: clock[0]), \
+                            mock.patch.object(maintenance.time, "sleep", side_effect=advance):
+                        result = maintenance.dispatch_line(
+                            api, "owner/repository", workflow, ref, "schedule-100-1", record=observations.append)
+
+                    # Assert
+                    self.assertEqual("success", result["verificationStatus"])
+                    self.assertEqual(commit, result["sourceCommit"])
+                    pending_updates = [item for item in observations
+                                       if item.get("observationCode") == "child_result_pending"]
+                    self.assertTrue(pending_updates)
+                    self.assertTrue(all(item["conclusion"] is None for item in pending_updates))
+                    self.assertEqual("matching", observations[-1]["titleState"])
+                    self.assertEqual("success", observations[-1]["conclusion"])
+                    calls = [call[0] for call in api.calls if call[0] == route or "/jobs?" in call[0]]
+                    self.assertEqual([route] * len(sequence), calls[:-1])
+                    self.assertIn("/jobs?", calls[-1])
+
+    def test_missing_conclusion_never_resets_result_or_workload_deadline(self):
+        """A missing result has one fixed grace period and cannot extend the workload."""
+        cases = ((False, 14400, 120, "child_result_timeout"),
+                 (True, 14400, 420, "child_result_timeout"),
+                 (True, 310, 310, "child_wait_timeout"),
+                 (False, 7, 7, "child_wait_timeout"))
+        for workflow in ("ci.yml", maintenance.MAINTENANCE_WORKFLOW):
+            for initialized, timeout, bound, code in cases:
+                with self.subTest(workflow=workflow, initialized=initialized, timeout=timeout):
+                    # Arrange
+                    original, ref, commit = dispatch_fixture(workflow)
+                    route = "repos/owner/repository/actions/runs/200"
+                    completed = original.responses[route]
+                    pending = {**completed, "conclusion": None}
+                    sequence = [pending] * 10
+                    if initialized:
+                        sequence.insert(0, {**completed, "status": "in_progress", "conclusion": None})
+
+                    api = SequencedApi(original.responses, route, sequence)
+                    clock, observations = [0], []
+
+                    def advance(delay):
+                        clock[0] += 300 if initialized and clock[0] == 0 else delay
+
+                    # Act
+                    with mock.patch.object(maintenance.time, "monotonic", side_effect=lambda: clock[0]), \
+                            mock.patch.object(maintenance.time, "sleep", side_effect=advance):
+                        with self.assertRaises(maintenance.MaintenanceError) as failure:
+                            maintenance.wait_for_child(
+                                api, "owner/repository", 200, workflow, ref, commit, "schedule-100-1", [],
+                                timeout=timeout, record=observations.append)
+
+                    # Assert
+                    self.assertEqual(code, failure.exception.code)
+                    self.assertEqual(bound, clock[0])
+                    self.assertTrue(any(item.get("observationCode") == "child_result_pending"
+                                        for item in observations))
+                    self.assertFalse(any("/jobs?" in call[0] for call in api.calls))
+
+    def test_late_success_cannot_bypass_the_missing_result_deadline(self):
+        """Even an exact successful readback is too late at the fixed result boundary."""
+        for initialized in (False, True):
+            with self.subTest(initialized=initialized):
+                # Arrange
+                original, ref, commit = dispatch_fixture()
+                route = "repos/owner/repository/actions/runs/200"
+                completed = original.responses[route]
+                sequence = [{**completed, "conclusion": None}, completed]
+                if initialized:
+                    sequence.insert(0, {**completed, "status": "in_progress", "conclusion": None})
+
+                api = SequencedApi(original.responses, route, sequence)
+                clock = [0]
+
+                def wake_at_bound(_):
+                    clock[0] = 300 if initialized and clock[0] == 0 else 420 if initialized else 120
+
+                # Act
+                with mock.patch.object(maintenance.time, "monotonic", side_effect=lambda: clock[0]), \
+                        mock.patch.object(maintenance.time, "sleep", side_effect=wake_at_bound):
+                    with self.assertRaises(maintenance.MaintenanceError) as failure:
+                        maintenance.wait_for_child(
+                            api, "owner/repository", 200, "ci.yml", ref, commit, "schedule-100-1", [])
+
+                # Assert
+                self.assertEqual("child_result_timeout", failure.exception.code)
+                self.assertEqual(420 if initialized else 120, clock[0])
+                self.assertFalse(any("/jobs?" in call[0] for call in api.calls))
+
+    def test_status_changes_cannot_reset_the_missing_result_deadline(self):
+        """An intervening execution status cannot renew a latched result window."""
+        for status in ("queued", "in_progress"):
+            with self.subTest(status=status):
+                # Arrange
+                original, ref, commit = dispatch_fixture()
+                route = "repos/owner/repository/actions/runs/200"
+                completed = original.responses[route]
+                executing = {**completed, "status": "in_progress", "conclusion": None}
+                pending = {**completed, "conclusion": None}
+                interim = {**executing, "status": status}
+                api = SequencedApi(original.responses, route, [executing, pending, interim, pending, completed])
+                clock, delays = [0], iter((300, 15, 15, 90))
+
+                def advance(_):
+                    clock[0] += next(delays)
+
+                # Act
+                with mock.patch.object(maintenance.time, "monotonic", side_effect=lambda: clock[0]), \
+                        mock.patch.object(maintenance.time, "sleep", side_effect=advance):
+                    with self.assertRaises(maintenance.MaintenanceError) as failure:
+                        maintenance.wait_for_child(
+                            api, "owner/repository", 200, "ci.yml", ref, commit, "schedule-100-1", [])
+
+                # Assert
+                self.assertEqual("child_result_timeout", failure.exception.code)
+                self.assertEqual(420, clock[0])
+                self.assertEqual(5, len(api.calls))
+                self.assertFalse(any("/jobs?" in call[0] for call in api.calls))
+
+    def test_missing_conclusion_cannot_bypass_source_title_result_or_job_guards(self):
+        """Result settling never admits substituted evidence or unsuccessful producers."""
+        defects = (("id", 201, "child_identity_mismatch"),
+                   ("event", "push", "child_identity_mismatch"),
+                   ("head_sha", "b" * 40, "child_identity_mismatch"),
+                   ("head_sha", None, "child_identity_mismatch"),
+                   ("head_branch", "other", "child_identity_mismatch"),
+                   ("path", ".github/workflows/other.yml", "child_identity_mismatch"),
+                   ("display_title", "maintenance schedule-101-1", "child_identity_mismatch"),
+                   ("display_title", [], "child_identity_mismatch"),
+                   ("conclusion", "failure", "child_failed"),
+                   ("conclusion", "unknown", "child_state_invalid"),
+                   ("job", "skipped", "producer_unsuccessful"),
+                   ("job", "missing", "producer_unsuccessful"))
+        for workflow in ("ci.yml", maintenance.MAINTENANCE_WORKFLOW):
+            for field, value, code in defects:
+                with self.subTest(workflow=workflow, field=field, value=value):
+                    # Arrange
+                    original, ref, _ = dispatch_fixture(workflow)
+                    route = "repos/owner/repository/actions/runs/200"
+                    completed = original.responses[route]
+                    pending = {**completed, "conclusion": None}
+                    changed = {**completed}
+                    if field == "job":
+                        jobs = original.responses[route + "/jobs?per_page=100&page=1"]
+                        if value == "missing":
+                            jobs["jobs"].pop()
+                            jobs["total_count"] -= 1
+                        else:
+                            jobs["jobs"][0]["conclusion"] = value
+
+                    else:
+                        changed[field] = value
+
+                    api = SequencedApi(original.responses, route, [pending, changed])
+
+                    # Act
+                    with mock.patch.object(maintenance.time, "monotonic", return_value=0), \
+                            mock.patch.object(maintenance.time, "sleep"):
+                        with self.assertRaises(maintenance.MaintenanceError) as failure:
+                            maintenance.dispatch_line(api, "owner/repository", workflow, ref, "schedule-100-1")
+
+                    # Assert
+                    self.assertEqual(code, failure.exception.code)
+                    self.assertEqual(2, sum(call[0] == route for call in api.calls))
+                    self.assertEqual(1 if field == "job" else 0, sum("/jobs?" in call[0] for call in api.calls))
+
+    def test_intermediate_status_wait_is_capped_by_the_result_deadline(self):
+        """A nonfinal status must not sleep beyond the already latched result bound."""
+        # Arrange
+        original, ref, commit = dispatch_fixture()
+        route = "repos/owner/repository/actions/runs/200"
+        completed = original.responses[route]
+        executing = {**completed, "status": "in_progress", "conclusion": None}
+        api = SequencedApi(original.responses, route, [
+            executing, {**completed, "conclusion": None}, executing, completed])
+        clock, delays = [0], []
+
+        def advance(delay):
+            delays.append(delay)
+            clock[0] = 300 if len(delays) == 1 else 419 if len(delays) == 2 else clock[0] + delay
+
+        # Act
+        with mock.patch.object(maintenance.time, "monotonic", side_effect=lambda: clock[0]), \
+                mock.patch.object(maintenance.time, "sleep", side_effect=advance):
+            with self.assertRaises(maintenance.MaintenanceError) as failure:
+                maintenance.wait_for_child(
+                    api, "owner/repository", 200, "ci.yml", ref, commit, "schedule-100-1", [])
+
+        # Assert
+        self.assertEqual("child_result_timeout", failure.exception.code)
+        self.assertEqual([15, 15, 1], delays)
+        self.assertEqual(420, clock[0])
+        self.assertFalse(any("/jobs?" in call[0] for call in api.calls))
+
+    def test_coordinator_retains_categories_without_raw_remote_metadata(self):
+        """Actual failed child polling retains safe diagnoses in the persisted report."""
+        cases = (("do-not-log-secret", "completed", "success", "different", "child_visibility_timeout"),
+                 ("maintenance schedule-100-1", "completed", None, "matching", "child_result_timeout"),
+                 ({"payload": "do-not-log-secret"}, "completed", "success", "invalid_type",
+                  "child_identity_mismatch"),
+                 (None, "do-not-log-secret", "success", "missing", "child_state_invalid"),
+                 ("", "queued", "do-not-log-secret", "empty", "child_state_invalid"))
+        for title, status, conclusion, category, failure_code in cases:
+            with self.subTest(category=category, failure=failure_code):
+                # Arrange
+                api, _, commit = dispatch_fixture(maintenance.MAINTENANCE_WORKFLOW)
+                api.responses["repos/owner/repository/branches/main"] = {
+                    "name": "main", "protected": True, "commit": {"sha": commit}}
+                api.responses["repos/owner/repository/actions/runs/200"].update({
+                    "head_branch": "main", "display_title": title, "status": status, "conclusion": conclusion})
+                policy = policy_fixture()
+                policy["lines"][1]["state"] = "inactive"
+                authority = {"policy": policy, "controlCommit": commit}
+                environment = hosted_environment(maintenance.MAINTENANCE_WORKFLOW, "refs/heads/main")
+                environment.update({"GITHUB_RUN_ID": "100", "GITHUB_RUN_ATTEMPT": "1"})
+                clock = [0]
+
+                def advance(delay):
+                    clock[0] += delay
+
+                with tempfile.TemporaryDirectory() as temporary:
+                    path = Path(temporary) / "observed.json"
+
+                    # Act
+                    with mock.patch.object(maintenance.time, "monotonic", side_effect=lambda: clock[0]), \
+                            mock.patch.object(maintenance.time, "sleep", side_effect=advance):
+                        report = maintenance.coordinate_lines(api, authority, "audit", environment, path)
+                        retained = path.read_text(encoding="ascii")
+
+                # Assert
+                self.assertEqual("failure", report["conclusion"])
+                self.assertEqual(failure_code, report["children"][0]["failureCode"])
+                self.assertEqual(category, report["children"][0]["titleState"])
+                self.assertEqual(status if status != "do-not-log-secret" else "unknown",
+                                 report["children"][0]["status"])
+                self.assertEqual(conclusion if conclusion != "do-not-log-secret" else "unknown",
+                                 report["children"][0]["conclusion"])
+                self.assertEqual(report, json.loads(retained))
+                self.assertNotIn("do-not-log-secret", retained)
+
+    def test_pending_title_does_not_defer_wrong_immutable_identity(self):
+        """A provisional title never grants tolerance to substituted run/source facts."""
+        for field, value in (("id", 201), ("event", "push"), ("head_sha", "b" * 40),
+                             ("head_branch", "other"), ("path", ".github/workflows/other.yml")):
+            with self.subTest(field=field):
+                # Arrange
+                api, ref, commit = dispatch_fixture()
+                api.responses["repos/owner/repository/actions/runs/200"].update({
+                    "status": "in_progress", "conclusion": None, "display_title": "initial", field: value})
+
+                # Act
+                with self.assertRaises(maintenance.MaintenanceError) as failure:
+                    maintenance.wait_for_child(
+                        api, "owner/repository", 200, "ci.yml", ref, commit, "schedule-100-1", [])
+
+                # Assert
+                self.assertEqual("child_identity_mismatch", failure.exception.code)
+                self.assertEqual(field, failure.exception.identity_field)
+                self.assertEqual(1, len(api.calls))
+
+    def test_executing_child_cannot_defer_missing_source_fields_with_its_title(self):
+        """Only the presentation title can settle after execution has started."""
+        for field in ("event", "head_sha", "head_branch", "path"):
+            with self.subTest(field=field):
+                # Arrange
+                api, ref, commit = dispatch_fixture()
+                api.responses["repos/owner/repository/actions/runs/200"].update({
+                    "status": "in_progress", "conclusion": None, "display_title": "initial", field: None})
+
+                # Act
+                with self.assertRaises(maintenance.MaintenanceError) as failure:
+                    maintenance.wait_for_child(
+                        api, "owner/repository", 200, "ci.yml", ref, commit, "schedule-100-1", [])
+
+                # Assert
+                self.assertEqual("child_identity_mismatch", failure.exception.code)
+                self.assertEqual(field, failure.exception.identity_field)
+                self.assertEqual(1, len(api.calls))
+
+    def test_malformed_initial_title_is_not_materialization(self):
+        """Non-string JSON values are corrupt metadata, not unfinished presentation."""
+        for title in (0, False, [], {}):
+            with self.subTest(title=title):
+                # Arrange
+                api, ref, commit = dispatch_fixture()
+                api.responses["repos/owner/repository/actions/runs/200"].update({
+                    "status": "queued", "conclusion": None, "display_title": title})
+
+                # Act
+                with self.assertRaises(maintenance.MaintenanceError) as failure:
+                    maintenance.wait_for_child(
+                        api, "owner/repository", 200, "ci.yml", ref, commit, "schedule-100-1", [])
+
+                # Assert
+                self.assertEqual("child_identity_mismatch", failure.exception.code)
+                self.assertEqual("display_title", failure.exception.identity_field)
+                self.assertEqual(1, len(api.calls))
+
+    def test_unresolved_completed_title_expires_without_polling_jobs(self):
+        """Neither a placeholder nor another correlation can qualify completed work."""
+        for workflow in ("ci.yml", maintenance.MAINTENANCE_WORKFLOW):
+            for title in (None, "", "CI", "Release line maintenance", "maintenance schedule-101-1"):
+                with self.subTest(workflow=workflow, title=title):
+                    # Arrange
+                    api, ref, commit = dispatch_fixture(workflow)
+                    api.responses["repos/owner/repository/actions/runs/200"]["display_title"] = title
+                    observations = []
+
+                    # Act
+                    with mock.patch.object(maintenance.time, "monotonic", side_effect=[0, 120]):
+                        with self.assertRaises(maintenance.MaintenanceError) as failure:
+                            maintenance.wait_for_child(
+                                api, "owner/repository", 200, workflow, ref, commit, "schedule-100-1", [],
+                                record=observations.append)
+
+                    # Assert
+                    self.assertEqual("child_visibility_timeout", failure.exception.code)
+                    self.assertEqual("completed", observations[-1]["status"])
+                    self.assertEqual("child_identity_pending", observations[-1]["observationCode"])
+                    self.assertEqual(1, len(api.calls))
+
+    def test_initialized_title_cannot_regress_to_pending(self):
+        """An established exact correlation cannot borrow initial visibility tolerance."""
+        cases = ((title, status) for title in (None, "", "CI", "maintenance schedule-101-1")
+                 for status in ("in_progress", "completed"))
+        for title, status in cases:
+            with self.subTest(title=title, status=status):
+                # Arrange
+                original, ref, commit = dispatch_fixture()
+                route = "repos/owner/repository/actions/runs/200"
+                executing = {**original.responses[route], "status": "in_progress", "conclusion": None}
+                changed = {**executing, "status": status, "display_title": title,
+                           "conclusion": "success" if status == "completed" else None}
+                api = SequencedApi(original.responses, route, [executing, changed])
+
+                # Act
+                with mock.patch.object(maintenance.time, "sleep"), \
+                        mock.patch.object(maintenance.time, "monotonic", return_value=0):
+                    with self.assertRaises(maintenance.MaintenanceError) as failure:
+                        maintenance.wait_for_child(
+                            api, "owner/repository", 200, "ci.yml", ref, commit, "schedule-100-1", [])
+
+                # Assert
+                self.assertEqual("child_identity_mismatch", failure.exception.code)
+                self.assertEqual("display_title", failure.exception.identity_field)
+                self.assertEqual(2, len(api.calls))
+
+    def test_pending_title_cannot_extend_visibility_or_workload_deadline(self):
+        """Repeated nonfinal titles share one absolute bound, not a fresh retry budget."""
+        for workflow in ("ci.yml", maintenance.MAINTENANCE_WORKFLOW):
+            for status in ("queued", "in_progress", "completed"):
+                for timeout, bound in ((14400, 120), (7, 7)):
+                    with self.subTest(workflow=workflow, status=status, timeout=timeout):
+                        # Arrange
+                        api, ref, commit = dispatch_fixture(workflow)
+                        api.responses["repos/owner/repository/actions/runs/200"].update({
+                            "status": status, "conclusion": "success" if status == "completed" else None,
+                            "display_title": "initial"})
+                        clock, delays, observations = [0], [], []
+
+                        def advance(delay):
+                            clock[0] += delay
+                            delays.append(delay)
+
+                        # Act
+                        with mock.patch.object(maintenance.time, "monotonic", side_effect=lambda: clock[0]), \
+                                mock.patch.object(maintenance.time, "sleep", side_effect=advance):
+                            with self.assertRaises(maintenance.MaintenanceError) as failure:
+                                maintenance.wait_for_child(
+                                    api, "owner/repository", 200, workflow, ref, commit, "schedule-100-1", [],
+                                    timeout=timeout, record=observations.append)
+
+                        # Assert
+                        self.assertEqual("child_visibility_timeout", failure.exception.code)
+                        self.assertEqual(bound, clock[0])
+                        self.assertEqual(bound, sum(delays))
+                        self.assertTrue(all(0 < delay <= 15 for delay in delays))
+                        self.assertEqual((bound + 14) // 15 + 1, len(api.calls))
+                        pending_updates = [item for item in observations
+                                           if item["observationCode"] == "child_identity_pending"]
+                        self.assertEqual(len(api.calls), len(pending_updates))
+                        self.assertTrue(all(item["titleState"] == "different" for item in observations))
+                        self.assertFalse(any("/jobs?" in call[0] for call in api.calls))
+
+    def test_title_materialization_after_visibility_deadline_cannot_qualify(self):
+        """An exact late title cannot bypass the deadline on its successful readback."""
+        for timeout, bound in ((14400, 120), (7, 7)):
+            with self.subTest(timeout=timeout):
+                # Arrange
+                original, ref, commit = dispatch_fixture()
+                route = "repos/owner/repository/actions/runs/200"
+                completed = original.responses[route]
+                pending = {**completed, "display_title": "initial"}
+                api = SequencedApi(original.responses, route, [pending, completed])
+                clock = [0]
+
+                def wake_at_deadline(_):
+                    clock[0] = bound
+
+                # Act
+                with mock.patch.object(maintenance.time, "monotonic", side_effect=lambda: clock[0]), \
+                        mock.patch.object(maintenance.time, "sleep", side_effect=wake_at_deadline):
+                    with self.assertRaises(maintenance.MaintenanceError) as failure:
+                        maintenance.wait_for_child(
+                            api, "owner/repository", 200, "ci.yml", ref, commit, "schedule-100-1", [],
+                            timeout=timeout)
+
+                # Assert
+                self.assertEqual("child_visibility_timeout", failure.exception.code)
+                self.assertEqual(2, len(api.calls))
+                self.assertFalse(any("/jobs?" in call[0] for call in api.calls))
+
+    def test_delayed_title_never_replaces_a_successful_child_conclusion(self):
+        """Resolved presentation metadata cannot turn unsuccessful work into evidence."""
+        for workflow in ("ci.yml", maintenance.MAINTENANCE_WORKFLOW):
+            for conclusion in ("failure", "cancelled", "skipped", "timed_out", "neutral", "action_required"):
+                with self.subTest(workflow=workflow, conclusion=conclusion):
+                    # Arrange
+                    original, ref, commit = dispatch_fixture(workflow)
+                    route = "repos/owner/repository/actions/runs/200"
+                    failed = {**original.responses[route], "conclusion": conclusion}
+                    pending = {**failed, "status": "in_progress", "conclusion": None, "display_title": "initial"}
+                    api = SequencedApi(original.responses, route, [pending, failed])
+
+                    # Act
+                    with mock.patch.object(maintenance.time, "sleep"), \
+                            mock.patch.object(maintenance.time, "monotonic", return_value=0):
+                        with self.assertRaises(maintenance.MaintenanceError) as failure:
+                            maintenance.wait_for_child(
+                                api, "owner/repository", 200, workflow, ref, commit, "schedule-100-1", [])
+
+                    # Assert
+                    self.assertEqual("child_failed", failure.exception.code)
+                    self.assertEqual(2, len(api.calls))
+                    self.assertFalse(any("/jobs?" in call[0] for call in api.calls))
+
+    def test_delayed_title_still_requires_every_successful_producer(self):
+        """Green wrappers cannot hide skipped, missing, duplicate or unsuccessful jobs."""
+        for workflow in ("ci.yml", maintenance.MAINTENANCE_WORKFLOW):
+            for defect in ("skipped", "failure", "cancelled", "in_progress", "missing", "duplicate"):
+                with self.subTest(workflow=workflow, defect=defect):
+                    # Arrange
+                    original, ref, commit = dispatch_fixture(workflow)
+                    route = "repos/owner/repository/actions/runs/200"
+                    jobs = original.responses[route + "/jobs?per_page=100&page=1"]
+                    expected = [job["name"] for job in jobs["jobs"]]
+                    if defect == "missing":
+                        jobs["jobs"].pop()
+                    elif defect == "duplicate":
+                        jobs["jobs"].append({**jobs["jobs"][0], "id": 100})
+                    elif defect == "in_progress":
+                        jobs["jobs"][0].update({"status": "in_progress", "conclusion": None})
+                    else:
+                        jobs["jobs"][0]["conclusion"] = defect
+
+                    jobs["total_count"] = len(jobs["jobs"])
+                    completed = original.responses[route]
+                    pending = {**completed, "display_title": "initial"}
+                    api = SequencedApi(original.responses, route, [pending, completed])
+
+                    # Act
+                    with mock.patch.object(maintenance.time, "sleep"), \
+                            mock.patch.object(maintenance.time, "monotonic", return_value=0):
+                        with self.assertRaises(maintenance.MaintenanceError) as failure:
+                            maintenance.wait_for_child(
+                                api, "owner/repository", 200, workflow, ref, commit, "schedule-100-1", expected)
+
+                    # Assert
+                    self.assertEqual("producer_unsuccessful", failure.exception.code)
+                    self.assertEqual(2, sum(call[0] == route for call in api.calls))
+                    self.assertEqual(1, sum("/jobs?" in call[0] for call in api.calls))
+
     def test_completed_identity_cannot_use_missing_initial_fields(self):
         """Completion never converts an incomplete exact-source observation to success."""
-        for field in ("event", "head_sha", "head_branch", "path", "display_title"):
+        for field in ("event", "head_sha", "head_branch", "path"):
             with self.subTest(field=field):
                 # Arrange
                 api, ref, _ = dispatch_fixture()
