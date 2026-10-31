@@ -8,6 +8,15 @@ the shared release identity described in [Release process](docs/release-process.
 
 ### Fixed
 
+- Keep newly dispatched maintenance children observable while their initial
+  display title resolves, including after execution starts or completes
+  successfully. Retain the existing visibility/workload bounds, immediate
+  source-identity rejection, exact final correlation and successful required-job
+  checks for audits and qualification. Retain categorized title/status evidence
+  before rejection without storing remote text; unsuccessful children fail
+  without waiting for presentation metadata. Treat completed children with a
+  missing conclusion as bounded pending results, not confirmed failures; never
+  accept them or reset the visibility/result/workload deadlines.
 - Refresh the explicit dependency graph from protected main after merges.
   Keep read-only restore separate from snapshot publication and serialize
   writers with live-tip revalidation so stale PR baselines cannot replace a

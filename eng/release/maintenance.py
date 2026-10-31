@@ -35,7 +35,7 @@ SHA = re.compile(r"[0-9a-f]{40}\Z")
 MAX_JSON_BYTES = 16 * 1024 * 1024
 FAILURE_CODES = frozenset(("maintenance_failed", "github_http_error", "github_request_failed",
                            "github_invalid_response", "github_response_limit", "child_identity_mismatch",
-                           "child_visibility_timeout", "child_wait_timeout", "child_failed",
+                           "child_visibility_timeout", "child_wait_timeout", "child_result_timeout", "child_failed",
                            "child_state_invalid", "producer_evidence_invalid", "producer_unsuccessful"))
 IDENTITY_FIELDS = frozenset(("id", "event", "head_sha", "head_branch", "path", "display_title"))
 QUALIFICATION_JOBS = frozenset(("package-and-core", "coverage", "mysql-engine",
@@ -467,6 +467,20 @@ def verify_jobs(api, repository: str, run_id: int, expected: list[str]) -> None:
                                    code="producer_unsuccessful")
 
 
+def classify_title(value: object, expected: str) -> str:
+    """Categorize remote presentation metadata without retaining its untrusted text."""
+    if value is None:
+        return "missing"
+
+    if not isinstance(value, str):
+        return "invalid_type"
+
+    if not value:
+        return "empty"
+
+    return "matching" if value == expected else "different"
+
+
 def wait_for_child(api, repository: str, run_id: int, workflow: str, ref: str,
                    commit: str, correlation: str, expected: list[str], *,
                    timeout: int = 14400, poll_interval: int = 15, record=lambda update: None) -> dict:
@@ -478,11 +492,16 @@ def wait_for_child(api, repository: str, run_id: int, workflow: str, ref: str,
     # budget, and never authorizes substituting a similarly named run.
     visibility_deadline = min(deadline, started + 120)
     initialized = False
+    result_deadline = None
     identities = {"event": "workflow_dispatch", "head_sha": commit,
                   "head_branch": ref.removeprefix("refs/heads/"),
                   "path": f".github/workflows/{workflow}"}
-    placeholder_title = "CI" if workflow == "ci.yml" else "Release-line maintenance coordinator"
     pre_execution = ("queued", "pending", "requested", "waiting")
+    states = (*pre_execution, "in_progress", "completed")
+    conclusions = (None, "success", "failure", "cancelled", "skipped", "timed_out", "neutral",
+                   "action_required", "stale", "startup_failure")
+
+    expected_title = f"maintenance {correlation}"
     while True:
         try:
             run = api.request(f"repos/{repository}/actions/runs/{run_id}")
@@ -503,11 +522,19 @@ def wait_for_child(api, repository: str, run_id: int, workflow: str, ref: str,
                                    code="child_identity_mismatch", identity_field="id")
 
         status, conclusion = run.get("status"), run.get("conclusion")
-        if status not in (*pre_execution, "in_progress", "completed"):
+        title = run.get("display_title")
+        # WHY: Record categories before rejection as well as while polling.
+        # Raw titles and malformed status/conclusion payloads are never reports.
+        observation = {"status": status if status in states else "unknown",
+                       "conclusion": conclusion if conclusion in conclusions else "unknown",
+                       "titleState": classify_title(title, expected_title)}
+
+        record({**observation, "observationCode": "child_metadata_observed"})
+
+        if status not in states:
             raise MaintenanceError("Scheduled child has an unrecognized execution state.", code="child_state_invalid")
 
-        if conclusion not in (None, "success", "failure", "cancelled", "skipped", "timed_out", "neutral",
-                               "action_required", "stale", "startup_failure"):
+        if conclusion not in conclusions:
             raise MaintenanceError("Scheduled child has an unrecognized conclusion.", code="child_state_invalid")
 
         if status != "completed" and conclusion is not None:
@@ -526,20 +553,27 @@ def wait_for_child(api, repository: str, run_id: int, workflow: str, ref: str,
                 raise MaintenanceError("Scheduled child contradicts its dispatched source identity.",
                                        code="child_identity_mismatch", identity_field=field)
 
-        title = run.get("display_title")
-        if title != f"maintenance {correlation}":
-            if title not in (None, "", placeholder_title):
-                raise MaintenanceError("Scheduled child has a different correlation title.",
-                                       code="child_identity_mismatch", identity_field="display_title")
+        title_matches = title == expected_title
+        if not title_matches and (initialized or (title is not None and not isinstance(title, str))):
+            raise MaintenanceError("Scheduled child has a different correlation title.",
+                                   code="child_identity_mismatch", identity_field="display_title")
 
+        if status == "completed" and conclusion not in (None, "success"):
+            raise MaintenanceError("Scheduled child failed or was cancelled; it is not qualification evidence.",
+                                   code="child_failed")
+
+        if not title_matches:
+            # WHY: run-name presentation can lag the immutable run identity.
+            # Even completed success cannot prove the title has materialized;
+            # exact correlation must settle within the original visibility bound.
             missing.append("display_title")
 
         if missing:
-            if initialized or status not in pre_execution:
+            if initialized or (status not in pre_execution and missing != ["display_title"]):
                 raise MaintenanceError("Scheduled child lacks its required exact execution identity.",
                                        code="child_identity_mismatch", identity_field=missing[0])
 
-            record({"status": status, "conclusion": conclusion, "observationCode": "child_identity_pending"})
+            record({**observation, "observationCode": "child_identity_pending"})
             if time.monotonic() >= visibility_deadline:
                 raise MaintenanceError("Initial child metadata did not become complete before its bound.",
                                        code="child_visibility_timeout")
@@ -547,7 +581,7 @@ def wait_for_child(api, repository: str, run_id: int, workflow: str, ref: str,
             time.sleep(min(poll_interval, max(0, visibility_deadline - time.monotonic())))
             continue
 
-        record({"status": status, "conclusion": conclusion, "observationCode": "child_observed"})
+        record({**observation, "observationCode": "child_observed"})
         # WHY: A late scheduler wakeup or slow response must not bypass the
         # bound merely because the next observation is already completed.
         observed_at = time.monotonic()
@@ -559,11 +593,23 @@ def wait_for_child(api, repository: str, run_id: int, workflow: str, ref: str,
             raise MaintenanceError("Scheduled child exceeded its queue/execution wait; no success is recorded.",
                                    code="child_wait_timeout")
 
+        if status == "completed" and conclusion is None and result_deadline is None:
+            # WHY: Completion and its conclusion can be separate observations.
+            # A long-running proven child gets one bounded result window, not
+            # a renewed workload deadline or a reset on each missing response.
+            result_deadline = min(deadline, observed_at + 120) if initialized else visibility_deadline
+
+        if result_deadline is not None and observed_at >= result_deadline:
+            raise MaintenanceError("Completed child did not provide its result before the fixed deadline.",
+                                   code="child_result_timeout")
+
         initialized = True
         if status == "completed":
-            if conclusion != "success":
-                raise MaintenanceError("Scheduled child failed or was cancelled; it is not qualification evidence.",
-                                       code="child_failed")
+            if conclusion is None:
+                assert result_deadline is not None
+                record({**observation, "observationCode": "child_result_pending"})
+                time.sleep(min(poll_interval, max(0, result_deadline - time.monotonic())))
+                continue
 
             verify_jobs(api, repository, run_id, expected)
 
@@ -574,7 +620,8 @@ def wait_for_child(api, repository: str, run_id: int, workflow: str, ref: str,
             raise MaintenanceError("Scheduled child exceeded its queue/execution wait; no success is recorded.",
                                    code="child_wait_timeout")
 
-        time.sleep(min(poll_interval, max(0, deadline - time.monotonic())))
+        poll_deadline = deadline if result_deadline is None else result_deadline
+        time.sleep(min(poll_interval, max(0, poll_deadline - time.monotonic())))
 
 
 def dispatch_line(api, repository: str, workflow: str, ref: str, correlation: str,
