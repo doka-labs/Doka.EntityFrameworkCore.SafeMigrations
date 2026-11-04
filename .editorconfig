@@ -293,7 +293,7 @@ resharper_csharp_place_accessorholder_attribute_on_same_line = never
 resharper_csharp_max_attribute_length_for_same_line = 120
 
 # --- Declarations And Constraints --------------------------------------------
-# More than one declared parameter should become one parameter per line.
+# Keep declaration parameters multiline, including a single parameter.
 resharper_csharp_wrap_parameters_style = chop_always
 resharper_csharp_max_formal_parameters_on_line = 0
 resharper_csharp_wrap_after_declaration_lpar = true
@@ -303,9 +303,9 @@ resharper_csharp_wrap_before_first_type_parameter_constraint = true
 resharper_csharp_wrap_multiple_type_parameter_constraints_style = chop_always
 resharper_csharp_align_multline_type_parameter_constrains = false
 
-# --- Positional Records ------------------------------------------------------
-resharper_csharp_wrap_primary_constructor_parameters_style = chop_if_long
-resharper_csharp_max_primary_constructor_parameters_on_line = 1
+# --- Primary Constructors And Positional Records -----------------------------
+resharper_csharp_wrap_primary_constructor_parameters_style = chop_always
+resharper_csharp_max_primary_constructor_parameters_on_line = 0
 resharper_csharp_wrap_after_primary_constructor_declaration_lpar = true
 resharper_csharp_wrap_before_primary_constructor_declaration_rpar = true
 
@@ -325,6 +325,9 @@ resharper_csharp_align_multiline_calls_chain = false
 resharper_csharp_outdent_dots = false
 
 # --- Binary Expressions And Conditions ---------------------------------------
+# Avoid hanging alignment in multiline expressions and parenthesized conditions.
+resharper_csharp_align_multiline_expression = false
+resharper_csharp_align_multiline_statement_conditions = false
 resharper_csharp_wrap_before_binary_opsign = true
 resharper_csharp_wrap_chained_binary_expressions = chop_if_long
 resharper_csharp_force_chop_compound_if_expression = true
@@ -338,7 +341,7 @@ resharper_csharp_continuous_indent_multiplier = 1
 
 # --- Ternary Expressions -----------------------------------------------------
 resharper_csharp_wrap_before_ternary_opsigns = true
-resharper_csharp_wrap_ternary_expr_style = chop_if_long
+resharper_csharp_wrap_ternary_expr_style = chop_always
 resharper_csharp_nested_ternary_style = expanded
 
 # --- LINQ And Initializers ---------------------------------------------------
@@ -347,6 +350,8 @@ resharper_csharp_nested_ternary_style = expanded
 resharper_csharp_wrap_linq_expressions = chop_always
 resharper_csharp_wrap_before_linq_expression = false
 resharper_csharp_place_linq_into_on_new_line = false
+# Avoid hanging alignment so nested initializers retain normal block indentation.
+resharper_csharp_align_multiline_array_and_object_initializer = false
 resharper_csharp_place_simple_initializer_on_single_line = true
 resharper_csharp_max_initializer_elements_on_line = 1
 resharper_csharp_max_array_initializer_elements_on_line = 4
