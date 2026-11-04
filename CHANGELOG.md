@@ -6,6 +6,19 @@ the shared release identity described in [Release process](docs/release-process.
 
 ## [Unreleased]
 
+### Changed
+
+- Replace the handwritten benchmark timers, samplers and comparison budgets
+  with BenchmarkDotNet 0.15.8 across Core and the four isolated providers.
+  Preserve default workload coverage, maintenance/column attribution and
+  optional native SQL Server diagnostics with native full JSON export.
+  CI and release qualification use complete `Dry` execution/export smoke,
+  not statistical performance gates. Configuration, build, execution and
+  missing/invalid evidence failures remain fatal; numeric duration/allocation
+  values never determine success. Historical thread-local allocation reports
+  are not directly comparable with the new process-wide managed allocation
+  measurements on .NET 10. Published package dependencies and APIs are unchanged.
+
 ### Fixed
 
 - Keep newly dispatched maintenance children observable while their initial

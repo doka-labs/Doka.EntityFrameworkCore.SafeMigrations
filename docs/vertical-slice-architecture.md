@@ -177,6 +177,13 @@ intent/fingerprint and provider generation/analyzer allocations at 384 row
 transitions. Live gates execute and replay 50,000 mixed row transitions using
 the production row/cell batching limits and persist command/allocation evidence.
 
+The five isolated benchmark executables use BenchmarkDotNet 0.15.8 rather than
+a shared handwritten timer or budget evaluator. Shared configuration and
+execution/export validation are compile-linked, not a cross-provider runtime
+dependency. CI's all-case `Dry` job verifies execution and native full JSON
+evidence only; numeric performance is not a gate. Process-wide managed
+allocation diagnostics do not establish constant, peak or native memory bounds.
+
 ## Verification
 
 The vertical-slice architecture remains conformant only while:
@@ -189,7 +196,7 @@ The vertical-slice architecture remains conformant only while:
    status maintained according to the release process;
 5. locked Release build and format checks pass;
 6. unit, provider live, EF tooling and package-consumer gates remain green,
-   and complete informational performance evidence is retained;
+   and complete BenchmarkDotNet execution/export and live performance evidence is retained;
 7. project references, namespace ownership, focused tests, and code review keep
    feature behavior out of aggregate dispatchers and shared fixtures.
 

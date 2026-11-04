@@ -1,6 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks;
 
-internal static partial class SqlServerColumnAttribution
+public partial class SqlServerColumnAttribution
 {
     /// <summary>Confirms a genuine safe repair preserves all data before measuring its matching replay.</summary>
     private static void PrepareRepairReplay(

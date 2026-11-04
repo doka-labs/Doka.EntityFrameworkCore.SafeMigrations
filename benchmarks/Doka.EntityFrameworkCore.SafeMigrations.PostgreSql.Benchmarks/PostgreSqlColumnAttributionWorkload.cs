@@ -1,9 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 
 /// <summary>Records paired column SQL shapes and prepared client generation costs without timing gates.</summary>
-internal static class PostgreSqlColumnAttributionWorkload
+public class PostgreSqlColumnAttributionWorkload : IDisposable
 {
-    private static readonly JsonSerializerOptions s_jsonOptions = new() { WriteIndented = true };
     private static readonly string[] s_catalogRelations =
     [
         "pg_attribute",
@@ -14,82 +13,165 @@ internal static class PostgreSqlColumnAttributionWorkload
         "pg_constraint",
     ];
 
-    /// <summary>Writes every raw sample for the same plain and mixed-collation column contracts.</summary>
-    /// <param name="outputPath">The owned evidence JSON destination.</param>
-    /// <returns>Zero after complete evidence has been written.</returns>
+    private PostgreSqlGenerationContext _context = null!;
+    private IMigrationsSqlGenerator _generator = null!;
+    private PostgreSqlSafeMigrationCatalogSqlBuilder _catalog = null!;
+    private IReadOnlyList<MigrationOperation> _operations = null!;
+    private SafeMigrationOperation[] _safeOperations = null!;
+    private bool _disposed;
+
+    /// <summary>Gets or sets the ordered target table width.</summary>
+    [Params(1, 8, 16, 64)]
+    public int ColumnCount { get; set; }
+
+    /// <summary>Gets or sets whether visible, qualified and type-owned collations are mixed.</summary>
+    [Params(false, true)]
+    public bool MixedCollations { get; set; }
+
+    /// <summary>Gets or sets complete table generation versus individual required-column repairs.</summary>
+    [Params("table", "required_repairs")]
+    public string Kind { get; set; } = "table";
+
+    /// <summary>Runs paired plain and mixed-collation column generation benchmarks.</summary>
+    /// <param name="args">The BenchmarkDotNet command-line arguments.</param>
+    /// <returns>The shared benchmark runner exit code.</returns>
     internal static int Run(
-        string outputPath
-    )
+        string[] args
+    ) => BenchmarkProgram.Run(args, typeof(PostgreSqlColumnAttributionWorkload));
+
+    /// <summary>Prepares ordered contracts and records exact SQL shapes outside timed generation.</summary>
+    [GlobalSetup]
+    public void Setup()
     {
-        using var context = new PostgreSqlGenerationContext();
-        var generator = context.GetService<IMigrationsSqlGenerator>();
-        var catalog = new PostgreSqlSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+        _disposed = false;
+        _context = new PostgreSqlGenerationContext();
+        _generator = _context.GetService<IMigrationsSqlGenerator>();
+        _catalog = new PostgreSqlSafeMigrationCatalogSqlBuilder(
+            _context.GetService<IRelationalTypeMappingSource>(),
+            _context.GetService<ISqlGenerationHelper>());
 
-        var results = new List<object>();
-        foreach (var count in new[] { 1, 8, 16, 64 })
+        var columns = Columns(ColumnCount, MixedCollations);
+        _operations = Kind switch
         {
-            foreach (var mixed in new[] { false, true })
-            {
-                var columns = Columns(count, mixed);
-                var table = new SafeMigrationOperation(new EnsureTableIntent(
-                    new ExpectedTableDefinition("attribution_rows", columns), SafeMigrationTableMode.StrictDefinition),
-                    SafeMigrationPolicy.ThrowIfDifferent);
+            "table" =>
+            [
+                new SafeMigrationOperation(
+                    new EnsureTableIntent(
+                        new ExpectedTableDefinition("attribution_rows", columns),
+                        SafeMigrationTableMode.StrictDefinition),
+                    SafeMigrationPolicy.ThrowIfDifferent)
+            ],
+            "required_repairs" => columns
+                .Select(column => (MigrationOperation)new SafeMigrationOperation(
+                    new EnsureColumnIntent("attribution_rows", column),
+                    SafeMigrationPolicy.RepairIfSafe))
+                .ToArray(),
+            _ => throw new ArgumentOutOfRangeException(nameof(Kind)),
+        };
 
-                var repairs = columns
-                    .Select(column => (MigrationOperation)new SafeMigrationOperation(
-                        new EnsureColumnIntent("attribution_rows", column), SafeMigrationPolicy.RepairIfSafe))
-                    .ToArray();
+        _safeOperations = _operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
 
-                foreach (var (kind, operations) in new[]
-                         {
-                             ("table", (IReadOnlyList<MigrationOperation>)[table]),
-                             ("required_repairs", (IReadOnlyList<MigrationOperation>)repairs),
-                         })
-                {
-                    var plans = operations
-                        .Cast<SafeMigrationOperation>()
-                        .Select(operation => catalog.Build(
-                            operation, includeAnalysisEvidence: true, includeTransitionEvidence: true))
-                        .ToArray();
+        var plans = _safeOperations
+            .Select(operation => _catalog.Build(
+                operation,
+                includeAnalysisEvidence: true,
+                includeTransitionEvidence: true))
+            .ToArray();
 
-                    var commands = generator.Generate(operations, context.Model);
-                    var classificationSql = string.Join(";", plans.Select(plan => plan.RenderStateExpression()));
-                    var runtimeSql = string.Join(";", commands.Select(command => command.CommandText));
-                    var generation = Measure(() => generator.Generate(operations, context.Model).Count);
-                    var catalogBuild = Measure(() =>
+        var commands = _generator.Generate(_operations, _context.Model);
+        var classificationSql = string.Join(";", plans.Select(plan => plan.RenderStateExpression()));
+        var runtimeSql = string.Join(";", commands.Select(command => command.CommandText));
+        var replayClassification = string.Join(
+            ";",
+            _safeOperations.Select(operation => _catalog
+                .Build(operation, includeAnalysisEvidence: true, includeTransitionEvidence: true)
+                .RenderStateExpression()));
+
+        var replayRuntime = string.Join(
+            ";",
+            _generator
+                .Generate(_operations, _context.Model)
+                .Select(command => command.CommandText));
+
+        MaintenanceAttribution.Require(
+            commands.Count > 0
+            && classificationSql.Length > 0
+            && runtimeSql.Length > 0
+            && classificationSql == replayClassification
+            && runtimeSql == replayRuntime,
+            "PostgreSQL column attribution lost nonempty exact SQL or generation replay equivalence.");
+
+        var output = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_ATTRIBUTION_OUTPUT");
+        if (!string.IsNullOrWhiteSpace(output))
+        {
+            _ = MaintenanceAttribution.Write(
+                Path.Combine(output, $"postgresql-columns-{Kind}-{ColumnCount}-{MixedCollations}.json"),
+                "Functional/source evidence; PostgreSQL client SQL generation; not timing evidence",
+                [
+                    new
                     {
-                        var checksum = 0;
-                        foreach (var operation in operations.Cast<SafeMigrationOperation>())
-                        {
-                            checksum += catalog.Build(operation, includeAnalysisEvidence: true,
-                                includeTransitionEvidence: true).StateExpression.Length;
-                        }
-
-                        return checksum;
-                    });
-
-                    results.Add(new
-                    {
-                        Kind = kind,
-                        Columns = count,
-                        MixedCollations = mixed,
+                        Kind,
+                        Columns = ColumnCount,
+                        MixedCollations,
                         RuntimeCommands = commands.Count,
                         Classification = Shape(classificationSql),
                         Runtime = Shape(runtimeSql),
-                        Generation = generation,
-                        CatalogBuild = catalogBuild,
-                    });
-                }
-            }
+                        ClassificationSqlHash = MaintenanceAttribution.Hash(classificationSql),
+                        RuntimeSqlHash = MaintenanceAttribution.Hash(runtimeSql),
+                    },
+                ]);
+        }
+    }
+
+    /// <summary>Generates one complete runtime command sequence from prepared immutable operations.</summary>
+    /// <returns>The generated command count, consumed by BenchmarkDotNet.</returns>
+    [Benchmark]
+    public int GenerateCommands() => _generator.Generate(_operations, _context.Model)
+        .Count;
+
+    /// <summary>Builds catalog plans once for every operation in the prepared workload.</summary>
+    /// <returns>The generated state SQL length checksum, consumed by BenchmarkDotNet.</returns>
+    [Benchmark]
+    public int BuildCatalogPlans()
+    {
+        var checksum = 0;
+
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        foreach (var operation in _safeOperations)
+        {
+            checksum += _catalog.Build(operation, includeAnalysisEvidence: true, includeTransitionEvidence: true)
+                .StateExpression.Length;
         }
 
-        var fullPath = Path.GetFullPath(outputPath);
-        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-        File.WriteAllText(fullPath, JsonSerializer.Serialize(results, s_jsonOptions));
-        Console.WriteLine($"Recorded {results.Count} PostgreSQL column generation workloads in {fullPath}.");
+        return checksum;
+    }
 
-        return 0;
+    /// <summary>Disposes the context owning the real PostgreSQL generation services.</summary>
+    [GlobalCleanup]
+    public void Cleanup() => Dispose();
+
+    /// <summary>Releases the context owning the PostgreSQL generation services.</summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Releases owned managed resources once while supporting generated benchmark subclasses.</summary>
+    /// <param name="disposing">Whether managed resources should be released.</param>
+    protected virtual void Dispose(
+        bool disposing
+    )
+    {
+        if (!disposing || _disposed)
+        {
+            return;
+        }
+
+        _context?.Dispose();
+        _disposed = true;
     }
 
     /// <summary>Builds non-null varchar contracts with default, comment and visible or qualified collations.</summary>
@@ -99,14 +181,25 @@ internal static class PostgreSqlColumnAttributionWorkload
     private static ExpectedColumnDefinition[] Columns(
         int count,
         bool mixed
-    ) => Enumerable.Range(0, count)
+    ) => Enumerable
+        .Range(0, count)
         .Select(index => new ExpectedColumnDefinition(
-            $"value_{index:D2}", typeof(string), false, "character varying(32)", maxLength: 32,
+            $"value_{index:D2}",
+            typeof(string),
+            false,
+            "character varying(32)",
+            maxLength: 32,
             collation: !mixed || index % 3 == 2
                 ? null
                 : new SafeMigrationCollationIdentifier(
-                    index % 3 == 0 ? "C" : "POSIX", index % 3 == 0 ? null : "pg_catalog"),
-            defaultValue: SafeMigrationDefaultValue.Literal("canonical"), comment: "canonical"))
+                    index % 3 == 0
+                        ? "C"
+                        : "POSIX",
+                    index % 3 == 0
+                        ? null
+                        : "pg_catalog"),
+            defaultValue: SafeMigrationDefaultValue.Literal("canonical"),
+            comment: "canonical"))
         .ToArray();
 
     /// <summary>Keeps exact SQL size and relation occurrences separate from execution-plan claims.</summary>
@@ -118,46 +211,9 @@ internal static class PostgreSqlColumnAttributionWorkload
     {
         Characters = sql.Length,
         Utf8Bytes = System.Text.Encoding.UTF8.GetByteCount(sql),
-        Relations = s_catalogRelations
-            .ToDictionary(name => name, name => Occurrences(sql, "pg_catalog." + name + " ")),
+        Relations = s_catalogRelations.ToDictionary(name => name, name => Occurrences(sql, "pg_catalog." + name + " ")),
         InformationSchemaColumns = Occurrences(sql, "information_schema.columns"),
     };
-
-    /// <summary>Preserves unsorted generation samples and consumes the result to prevent dead work.</summary>
-    /// <param name="action">The prepared complete workload batch.</param>
-    /// <returns>All warmed raw allocation and elapsed-time samples.</returns>
-    private static object[] Measure(
-        Func<int> action
-    )
-    {
-        const int iterations = 16;
-        for (var index = 0; index < 8; index++)
-        {
-            _ = action();
-        }
-
-        var samples = new object[7];
-        for (var sample = 0; sample < samples.Length; sample++)
-        {
-            var allocated = GC.GetAllocatedBytesForCurrentThread();
-            var started = Stopwatch.GetTimestamp();
-            var checksum = 0L;
-            for (var iteration = 0; iteration < iterations; iteration++)
-            {
-                checksum += action();
-            }
-
-            samples[sample] = new
-            {
-                Iterations = iterations,
-                ElapsedMilliseconds = Stopwatch.GetElapsedTime(started).TotalMilliseconds,
-                AllocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocated,
-                Checksum = checksum,
-            };
-        }
-
-        return samples;
-    }
 
     /// <summary>Counts exact catalog relation references, not inferred database reads.</summary>
     /// <param name="text">The complete emitted SQL text.</param>

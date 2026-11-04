@@ -1,6 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks;
 
-internal static partial class SqlServerColumnAttribution
+public partial class SqlServerColumnAttribution
 {
     /// <summary>Probes actual dynamic binding rather than inferring guard behavior from generated text.</summary>
     private static void ProbeRepairBinding(

@@ -35,6 +35,7 @@ def write_packages(
     omitted_schema: str | None = None,
     transport_versions: dict[str, str | None] | None = None,
     transport_leak: tuple[str, str] | None = None,
+    benchmark_leak: tuple[str, str] | None = None,
 ) -> None:
     """Create the exact five-package fixture without restoring or loading code."""
     for suffix, provider in PROVIDER_DEPENDENCIES.items():
@@ -56,6 +57,9 @@ def write_packages(
 
         if (suffix == ".SqlServer" and pkcs_version is not None) or suffix == leak:
             dependencies.append((PKCS_ID, pkcs_version or "9.0.22"))
+
+        if benchmark_leak is not None and suffix == benchmark_leak[0]:
+            dependencies.append((benchmark_leak[1], "0.15.8"))
 
         dependency_xml = "".join(
             f'<dependency id="{name}" version="{version}" />' for name, version in dependencies
@@ -91,11 +95,13 @@ def verify(
     omitted_schema: str | None = None,
     transport_versions: dict[str, str | None] | None = None,
     transport_leak: tuple[str, str] | None = None,
+    benchmark_leak: tuple[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Exercise the real package gate against isolated archives, not a duplicate validator."""
     with tempfile.TemporaryDirectory() as temporary_root:
         directory = Path(temporary_root)
-        write_packages(directory, pkcs_version, leak, omitted_schema, transport_versions, transport_leak)
+        write_packages(directory, pkcs_version, leak, omitted_schema, transport_versions,
+                       transport_leak, benchmark_leak)
 
         return subprocess.run(
             ["bash", str(VERIFIER), "--package-dir", str(directory), "--version", PACKAGE_VERSION],
@@ -135,6 +141,21 @@ def verify_consumer_graph(
 
 class VerifyPackageContentsTests(unittest.TestCase):
     """Prove the security floor reaches consumers without crossing provider boundaries."""
+
+    def test_rejects_benchmark_dependencies_in_all_product_packages(self) -> None:
+        """Benchmark assets must never reach any published product dependency graph."""
+        for name in ("BenchmarkDotNet", "BenchmarkDotNet.Annotations", "benchmarkdotnet"):
+            for suffix in PROVIDER_DEPENDENCIES:
+                with self.subTest(package=name, provider=CORE_ID + suffix):
+                    # Arrange
+                    leak = (suffix, name)
+
+                    # Act
+                    result = verify("9.0.22", benchmark_leak=leak)
+
+                    # Assert
+                    self.assertNotEqual(0, result.returncode)
+                    self.assertIn("Benchmark-only dependency", result.stderr)
 
     def test_accepts_published_fixed_minimum(self) -> None:
         """Keep the patched minimum compatible with the full five-package contract."""

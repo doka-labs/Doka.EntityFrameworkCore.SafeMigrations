@@ -266,8 +266,9 @@ the moving `ubuntu-latest` label is not used. The complete hosted qualification
 workflow must establish this candidate's actual engine, tooling, package and
 SBOM evidence on the new image; changing a YAML label or running local ARM
 tests does not establish that result. Existing SDK selection through
-`global.json`, engine image digests, timeouts and performance budgets remain
-unchanged. The repository maintains no permanent second Ubuntu matrix.
+`global.json`, engine image digests and timeouts were unchanged by the runner
+update. BenchmarkDotNet subsequently replaced the handwritten benchmark
+budgets as described below. The repository maintains no permanent second Ubuntu matrix.
 GitHub-managed default-setup CodeQL and automatic dependency-submission runs
 are separate platform workflows; these repository labels do not configure them.
 
@@ -657,19 +658,59 @@ used to hide an uncovered regression.
 
 ## Performance and memory
 
-`eng/performance-budgets.json` defines explicit Core, MySQL/MariaDB,
-PostgreSQL, SQLite, and SQL Server benchmark sets with duration baselines,
-coarse duration comparison limits, and allocation comparison limits at 1, 100, and
-1000 operations.
+Core, MySQL/MariaDB, PostgreSQL, SQLite and SQL Server each have an isolated
+BenchmarkDotNet 0.15.8 executable. The default workload families retain all 56
+parameterized cases, including operation-count parameters where applicable.
+BenchmarkDotNet owns process isolation, warmup, timing, statistics, managed
+allocation diagnostics and native full JSON export. The former custom timer,
+median sampler, budget configuration and result schema are retired.
 
-All five benchmark sets run in `--report-only` mode in CI and release
-qualification. Duration and allocation overruns remain visible in console output
-as `EXCEEDED (informational)` and in JSON as `passed: false`, but do not reject
-qualification on shared hardware. The complete measurements and unchanged limits
-remain in `artifacts/performance`. Invalid configuration, missing/duplicate/unknown
-workloads, execution exceptions and report-write failures still fail the run.
+CI and release qualification select all cases with `--filter '*' --job Dry`
+and retain separate directories under
+`artifacts/performance/{core,mysql,postgresql,sqlite,sqlserver}`. `Dry` validates
+execution and export completeness, not statistically meaningful performance.
+The shared entry point rejects invalid configuration, generated-build or
+execution failure, missing/failed selected cases, and missing/invalid full JSON
+evidence. Numeric duration and allocation values never determine success.
 Build, tests, coverage, live-engine, tooling, package and SBOM gates remain blocking.
-Omit `--report-only` for a deliberately strict manual budget comparison.
+There is no strict numeric mode or benchmark threshold to raise.
+
+The entry point rejects `--resume` so that every selected case supplies current
+execution evidence. It also rejects `--logBuildOutput` and `--generateBinLog`:
+generated builds inherit environment variables, and build diagnostics can
+expose native database credentials. These evidence/privacy restrictions do
+not impose performance thresholds.
+
+Native `--envVars` is supported except for the owned names
+`SAFE_MIGRATIONS_ATTRIBUTION_OUTPUT`,
+`SAFE_MIGRATIONS_SQLSERVER_ATTRIBUTION_OUTPUT` and
+`SAFE_MIGRATIONS_SQLSERVER_ATTRIBUTION_CONNECTION`. Use shell environment
+variables for these settings: a child-job override would bypass output-path
+normalization or expose a native connection string in reported job parameters.
+
+For measurement runs, use the [contributor commands](../CONTRIBUTING.md#required-engineering-gates)
+without `--job Dry`, or choose `--job Short` for a shorter exploratory run.
+Keep the native logs, summaries and `results/*-report-full.json` files together
+with the source revision, runtime, OS, architecture and job configuration.
+The [full exporter][bdn-json]
+retains raw measurements rather than only a repository-derived median.
+
+On .NET 10 the
+[allocation counter][bdn-gc]
+uses process-wide managed allocated bytes, including work on other managed
+threads. This is not the old handwritten thread-local counter. Historical
+allocation and timing numbers are not methodologically comparable with the
+new engine, even when a workload name is unchanged. Managed bytes allocated
+are neither peak live managed memory nor native process/database memory.
+
+PostgreSQL eligibility attribution records exact SQL, transport and replay
+evidence during setup. Its measured deterministic transport disables diagnostic
+retention and disposal counters; no observation cleanup is included in each
+invocation. Result construction and real resource cleanup remain active. These
+client-side measurements are not native server timings.
+
+[bdn-json]: https://github.com/dotnet/BenchmarkDotNet/blob/v0.15.8/src/BenchmarkDotNet/Exporters/Json/JsonExporter.cs
+[bdn-gc]: https://github.com/dotnet/BenchmarkDotNet/blob/v0.15.8/src/BenchmarkDotNet/Engines/GcStats.cs#L126-L146
 
 Prepared-input CPU regressions separately bound shared seed and diagnostic
 evidence parsing, accepted-column projection, MySQL/MariaDB runtime generation
@@ -685,21 +726,27 @@ or replace live migration, recovery and native SQL Server qualification.
 For source-labelled raw samples and exact output/transport counterprobes, use the
 provider projects' [maintenance attribution mode](../CONTRIBUTING.md#maintenance-attribution).
 These prepared client measurements do not establish native engine performance.
+Attribution output environment paths are made absolute against the caller's
+working directory before child launch, then restored in the caller after the
+run. Relative paths therefore do not silently target disposable generated-build
+directories whose cleanup would remove the structural evidence.
 
-The SQL Server set declares eleven generation, analyzer-plan, model-managed
-data, repair, and canonical-model cases. Its initial duration values are the
-exact medians from the five-sample macOS ARM64 developer capture at
+The SQL Server set retains eleven generation, analyzer-plan, model-managed
+data, repair, and canonical-model cases. For historical provenance only, the
+retired handwritten engine's initial duration values were the exact medians
+from the five-sample macOS ARM64 developer capture at
 `2026-09-30T18:07:25.269536+00:00`, running .NET `10.0.12` on `Unix 26.5.2`.
 The evidence file is `artifacts/performance/sqlserver-baseline-macos.json`,
 SHA-256 `6803e8aa94a3b512b80f2f66d6de700f813a08d2467db0732dadcf7ff5c1ddde`.
-Each duration retains the existing 200% regression tolerance. Allocation caps
-are the captured median plus 25%, rounded upward to the next 65,536-byte block;
-the block minimum gives very small cases more than 25% headroom.
+Its historical duration comparisons used a 200% regression tolerance.
+Allocation caps were the captured median plus 25%, rounded upward to the next
+65,536-byte block; the block minimum gave small cases more than 25% headroom.
+These retired values are not BenchmarkDotNet baselines or current thresholds.
 
-This capture is explicitly measurement-only and is not GitHub-hosted x64
-qualification. The quality workflow can retain a separate x64 capture in
-`sqlserver-baseline.json`; its ordinary benchmark report is also retained.
-SQL Server qualification requires the complete pinned x64 workflow.
+This historical capture is measurement-only, not GitHub-hosted x64
+qualification. Current optional hosted capture uses the native BenchmarkDotNet
+Short job described below, not the old median engine. SQL Server qualification
+still requires the complete pinned x64 workflow.
 SQL Server live workloads append timestamped stage markers
 under `artifacts/performance/live/sqlserver-*-progress.log` before potentially
 long-running phases. The existing always-upload artifact preserves these markers
@@ -744,42 +791,34 @@ workload does not substitute ordinary generation or an unsupported-operation
 classification for the repair path; startup rejects a plan that is unsupported
 or lacks safe repair capability.
 
-Benchmark duration and allocation ceilings are informational comparison limits,
-not blocking CI gates. Wall-clock measurements on shared GitHub-hosted runners
-are not deterministic; their three-times-baseline comparisons are regression
-evidence, not throughput claims. Budget evaluation remains unchanged in the
-reports rather than redefining an overrun as a passed measurement.
-Changes to a baseline or ceiling require captured before/after evidence on the
-same pinned `ubuntu-26.04` runner label and a review of asymptotic behavior; a
-budget must not be raised merely to make CI green.
+Benchmark duration and allocation values are informational, not CI gates.
+Wall-clock measurements on shared GitHub-hosted runners are not deterministic.
+Compare complete measurement runs with the same source-controlled workload,
+BenchmarkDotNet job and runtime on a comparable environment; `Dry` results
+must not be used as throughput or regression proof. Review scaling and
+allocation behavior separately from numeric timing, and retain raw evidence.
 Earlier host measurements keep their actual OS and architecture attribution;
 do not relabel an Ubuntu 24.04 result as a 26.04 baseline or compare the hosts
 as though they were the same environment.
 
-The generation and analyzer-plan capture does not open a server connection,
-so it can also run locally on ARM64 for diagnostic evidence. That output
-records its architecture and is not x64 Linux qualification evidence. Run:
+The default generation and analyzer-plan workloads do not open a server
+connection, so they can also run locally on ARM64 for diagnostic evidence.
+Their output records its actual environment and is not x64 Linux qualification
+evidence. For an exploratory native BenchmarkDotNet report, run:
 
 ```sh
-dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks.csproj --configuration Release -- --capture-baseline --output artifacts/performance/sqlserver-baseline.json
+dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks \
+  --configuration Release -- \
+  --filter '*' --job Short --artifacts artifacts/performance/sqlserver-baseline
 ```
 
-The command records medians without a pass/fail verdict. Its output must not
-be copied into `eng/performance-budgets.json` mechanically: review the
-operation counts, allocation scaling, server-independent workload shape, and
-runner identity first. The ordinary invocation without `--capture-baseline`
-remains fail-closed while any declared budget is absent.
-
-These initial budgets retain their macOS ARM64 developer-measurement
-provenance. They do not establish a measured `ubuntu-26.04` x64 baseline or a
-same-hardware hosted comparison; those remain separate performance evidence.
-
 For capture on the pinned x64 Linux runner, dispatch the existing CI workflow
-with `capture-sqlserver-baseline` enabled. The optional capture retains a
-measurement-only `sqlserver-baseline.json` artifact. All blocking qualification
-gates and the informational SQL Server budget report still run. The diagnostic
-capture precedes budget reporting; neither a duration nor allocation overrun
-in that report rejects the run.
+with the compatibility input `capture-sqlserver-baseline` enabled. It runs the
+same command with `--no-build --no-restore` after the matching Release build
+and retains `artifacts/performance/sqlserver-baseline` as an artifact directory.
+All blocking qualification gates and ordinary all-case execution smoke still
+run. The optional report uses the same native full JSON format and failure
+policy; it has no separate sampler, budget evaluation or custom median schema.
 
 The MySQL/MariaDB benchmark has no Npgsql or SQLite dependency, the PostgreSQL
 benchmark has no Doka MySQL or SQLite dependency, and the SQLite benchmark has

@@ -25,6 +25,7 @@
   </ItemGroup>
 
   <ItemGroup Label="Design-time and engineering">
+    <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="$(EfCorePackageVersion)" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="$(EfCorePackageVersion)" />
   </ItemGroup>

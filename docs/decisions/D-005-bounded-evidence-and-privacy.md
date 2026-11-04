@@ -159,12 +159,13 @@ Run every provider fingerprint suite and PostgreSQL facet-isolation cases
 under the qualified dependency profiles. A stable digest in one provider or
 runtime process does not prove all relational facets are represented.
 
-Run all five benchmark projects using the report-only commands in CONTRIBUTING
-and the versioned performance comparisons. Budget overruns are informational;
-configuration, execution and report-write failures remain blocking.
-Require complete, non-duplicate, known measurements for construction,
-planning, SQL generation, model comparison,
-fingerprinting, and serialization as applicable.
+Run all five benchmark projects using the BenchmarkDotNet commands in CONTRIBUTING.
+Require all selected cases and native full JSON evidence for construction,
+planning, SQL generation, model comparison, fingerprinting and serialization as
+applicable. CI's all-case `Dry` job is execution/export smoke, not statistical
+performance qualification. Numeric values are informational; invalid
+configuration, build, execution, missing/failed cases and missing/invalid
+evidence remain blocking.
 
 The live provider suites also verify multi-chunk ordering and noisy catalog
 behavior. The provider tests use the shared evidence collector for 20 pooled
@@ -252,6 +253,23 @@ window. Neither a hash nor a report proves the database server is honest.
   verdict reuse and prior invariant-rejection suppression. SQL Server fixture
   cleanup retains database ownership until confirmed absence; no model-database
   recovery setting is changed.
+- 2026-11-04: Amend benchmark confirmation to use BenchmarkDotNet 0.15.8 for
+  Core and every isolated provider, including attribution workloads. Retire
+  handwritten timing, median sampling and benchmark comparison budgets while
+  preserving workload and structural negative controls. Require all-case `Dry`
+  execution/export smoke in CI and native full JSON; invalid configuration,
+  generated builds, execution and missing/invalid evidence remain fatal, but
+  numeric duration/allocation values never determine success. Full measurement
+  jobs provide informational evidence. BenchmarkDotNet 0.15.8's MemoryDiagnoser
+  uses `GC.GetTotalAllocatedBytes(precise: true)` under our .NET 10 profile,
+  unlike the retired runner's `GC.GetAllocatedBytesForCurrentThread()`.
+  This is a measurement-engine choice, not a change to .NET 10's counter APIs;
+  see the [pinned implementation][bdn-gc]. Historical reports remain historical
+  and are not numerical baselines for the new engine.
+  Neither counter establishes peak live or native memory. Resource, privacy,
+  transport, live test and product correctness contracts remain unchanged.
+
+[bdn-gc]: https://raw.githubusercontent.com/dotnet/BenchmarkDotNet/v0.15.8/src/BenchmarkDotNet/Engines/GcStats.cs
 
 The dispatch choices above are repository contracts, not conclusions about
 SQL Server's cost model. Microsoft's [plan-cache documentation](https://learn.microsoft.com/en-us/sql/relational-databases/query-processing-architecture-guide?view=sql-server-ver17#execution-plan-caching-and-reuse)
@@ -292,7 +310,7 @@ stamps therefore gate proof reuse; they are neither report fields nor log payloa
 - [Run-contract tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Features/Lifecycle/SafeMigrationRunContractTests.cs)
 - [Telemetry implementation](../../src/Doka.EntityFrameworkCore.SafeMigrations/Diagnostics/SafeMigrationTelemetry.cs)
 - [Live performance evidence](../../tests/Shared/LivePerformanceEvidence.cs)
-- [Performance budgets](../../eng/performance-budgets.json)
+- [Benchmark workloads and evidence](../support-and-qualification.md#performance-and-memory)
 - [Observability and measurement boundaries](../runbooks/observability.md)
 
 ### Sources

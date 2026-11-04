@@ -5,8 +5,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\Doka.EntityFrameworkCore.SafeMigrations.Benchmarks\BenchmarkRunner.cs"
-             Link="Infrastructure\BenchmarkRunner.cs" />
     <Compile Include="..\Doka.EntityFrameworkCore.SafeMigrations.Benchmarks\Features\Columns\ColumnBenchmarkWorkload.cs"
              Link="Features\Columns\ColumnBenchmarkWorkload.cs" />
     <Compile

@@ -267,7 +267,9 @@ models.
 Facet-isolation tests and provider-specific golden digests run against the
 centrally declared dependency graph resolved for their test projects. The exact
 canonical snapshot initialization, `IMigrationsModelDiffer`, and fingerprint
-path used by the runner is covered by provider duration/allocation budgets.
+path used by the runner is covered by the isolated provider BenchmarkDotNet
+workloads. Complete execution/export smoke is required; duration and managed
+allocation values are informational, not acceptance thresholds.
 
 ## Qualified dependency ranges
 
@@ -309,7 +311,7 @@ Every EF, Doka, Npgsql, or supported database update requires:
    and Migration Bundle;
 9. deterministic pack, exact contents, package-only consumer, and Public API
    validation;
-10. informational performance/allocation reports, pooled clean/noisy live p95 evidence, and
+10. complete BenchmarkDotNet execution/export smoke, pooled clean/noisy live p95 evidence, and
     SPDX SBOM validation.
 
 If any behavior changes, update expected definitions or provider logic only

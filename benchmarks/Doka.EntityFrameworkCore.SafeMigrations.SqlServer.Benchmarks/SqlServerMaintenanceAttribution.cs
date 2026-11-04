@@ -1,87 +1,39 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks;
 
 /// <summary>Measures exact event-aware topology shapes independently of native server or network latency.</summary>
-internal static class SqlServerMaintenanceAttribution
+[MemoryDiagnoser]
+public class SqlServerMaintenanceAttribution
 {
-    /// <summary>Records graph-size and mutation-prefix attribution with exact expected acceptance sequences.</summary>
-    /// <param name="outputPath">The owned raw-evidence file.</param>
-    /// <returns>Zero after every graph oracle and measurement completes.</returns>
-    internal static int Run(
-        string outputPath
-    )
+    private SqlServerProjectedDependencyGraph.ForeignKeyEdge[] _graph = [];
+    private SqlServerProjectedDependencyGraph.ForeignKeyEdge[][] _prefixes = [];
+    private bool _expected;
+
+    /// <summary>Gets or sets the sparse graph edge cardinality.</summary>
+    [Params(8, 64, 256)]
+    public int EdgeCount { get; set; }
+
+    /// <summary>Gets or sets the initial cascading event action.</summary>
+    [Params(ReferentialAction.Cascade, ReferentialAction.SetNull, ReferentialAction.SetDefault)]
+    public ReferentialAction Action { get; set; }
+
+    /// <summary>Gets or sets whether the initial event is DELETE rather than UPDATE.</summary>
+    [Params(true, false)]
+    public bool Delete { get; set; }
+
+    /// <summary>Gets or sets the independent positive or negative topology shape.</summary>
+    [Params("chain", "star", "diamond", "cycle")]
+    public string Shape { get; set; } = "chain";
+
+    /// <summary>Constructs immutable graph snapshots and verifies all topology oracles before timing.</summary>
+    [GlobalSetup]
+    public void Setup()
     {
-        var results = new List<object>();
-        foreach (var count in new[] { 8, 64, 256 })
-        {
-            foreach (var action in new[]
-                     {
-                         ReferentialAction.Cascade, ReferentialAction.SetNull, ReferentialAction.SetDefault,
-                     })
-            {
-                foreach (var delete in new[] { true, false })
-                {
-                    foreach (var shape in new[] { "chain", "star", "diamond", "cycle" })
-                    {
-                        var graph = Create(count, action, delete, shape);
-                        var expected = shape is "chain" or "star";
-                        var observed = SqlServerProjectedDependencyGraph.HasValidTopology(graph);
-                        MaintenanceAttribution.Require(
-                            observed == expected,
-                            "The topology attribution graph does not have the expected event-aware result.");
+        _graph = Create(EdgeCount, Action, Delete, Shape);
+        _expected = Shape is "chain" or "star";
 
-                        // WHY: Separate immutable prefixes model add/drop/replay calls without caching any
-                        // topology across physical graph mutations or conflating sparse ids with ordinals.
-                        var prefixes = new[]
-                        {
-                            graph
-                                .Take(count - 2)
-                                .ToArray(),
-                            graph,
-                            graph
-                                .Take(count - 2)
-                                .ToArray(),
-                            graph,
-                        };
-
-                        var mutationResults = prefixes
-                            .Select(SqlServerProjectedDependencyGraph.HasValidTopology)
-                            .ToArray();
-                        MaintenanceAttribution.Require(
-                            mutationResults.SequenceEqual([true, expected, true, expected]),
-                            "The topology mutation fixture lost its negative or restoration step.");
-
-                        results.Add(
-                            new
-                            {
-                                Id = "PERF-04",
-                                Shape = shape,
-                                Edges = graph.Length,
-                                SparsePhysicalIds = true,
-                                Action = action.ToString(),
-                                Event = delete ? "delete" : "update",
-                                Expected = expected,
-                                MutationResults = mutationResults,
-                                Samples = MaintenanceAttribution.Measure(
-                                    () => SqlServerProjectedDependencyGraph.HasValidTopology(graph) ? 1 : 0,
-                                    32),
-                                MutationSamples = MaintenanceAttribution.Measure(
-                                    () =>
-                                    {
-                                        var checksum = 0;
-                                        foreach (var prefix in prefixes)
-                                        {
-                                            checksum = (checksum * 2)
-                                                + (SqlServerProjectedDependencyGraph.HasValidTopology(prefix) ? 1 : 0);
-                                        }
-
-                                        return checksum;
-                                    },
-                                    16),
-                            });
-                    }
-                }
-            }
-        }
+        // WHY: Immutable prefixes model physical add/drop/replay without caching topology across mutations.
+        _prefixes = [_graph.Take(EdgeCount - 2).ToArray(), _graph, _graph.Take(EdgeCount - 2).ToArray(), _graph];
+        VerifyTopology();
 
         SqlServerProjectedDependencyGraph.ForeignKeyEdge[] nonCascading =
         [
@@ -92,7 +44,69 @@ internal static class SqlServerMaintenanceAttribution
             SqlServerProjectedDependencyGraph.HasValidTopology(nonCascading),
             "A noncascading self-edge must not become a topology cycle.");
 
-        return MaintenanceAttribution.Write(outputPath, "SQL Server client topology only", results);
+        var output = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_ATTRIBUTION_OUTPUT");
+        if (!string.IsNullOrWhiteSpace(output))
+        {
+            var eventName = Delete ? "delete" : "update";
+            var count = EdgeCount.ToString(CultureInfo.InvariantCulture);
+            var name = $"sqlserver-topology-{count}-{Action}-{eventName}-{Shape}.json";
+
+            // WHY: Structural acceptance evidence remains source-labeled and separate from BDN measurements.
+            _ = MaintenanceAttribution.Write(Path.Combine(output, name), "SQL Server client topology only",
+            [
+                new
+                {
+                    Id = "PERF-04",
+                    Shape,
+                    Edges = _graph.Length,
+                    SparsePhysicalIds = true,
+                    Action = Action.ToString(),
+                    Event = eventName,
+                    Expected = _expected,
+                    MutationResults = _prefixes
+                        .Select(SqlServerProjectedDependencyGraph.HasValidTopology)
+                        .ToArray(),
+                },
+            ]);
+        }
+    }
+
+    /// <summary>Checks the complete event-aware graph without fixture construction.</summary>
+    /// <returns>Whether the sparse graph has an accepted topology.</returns>
+    [Benchmark]
+    public bool ValidateTopology()
+        => SqlServerProjectedDependencyGraph.HasValidTopology(_graph);
+
+    /// <summary>Checks the add/drop/replay sequence without sharing cached topology.</summary>
+    /// <returns>An order-sensitive checksum of the four topology results.</returns>
+    [Benchmark]
+    public int ValidateMutationPrefixes()
+    {
+        var checksum = 0;
+
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        foreach (var prefix in _prefixes)
+        {
+            checksum = (checksum * 2) + (SqlServerProjectedDependencyGraph.HasValidTopology(prefix) ? 1 : 0);
+        }
+
+        return checksum;
+    }
+
+    /// <summary>Verifies positive, negative and restoration results after the measured workload.</summary>
+    [GlobalCleanup]
+    public void Cleanup()
+        => VerifyTopology();
+
+    private void VerifyTopology()
+    {
+        MaintenanceAttribution.Require(
+            ValidateTopology() == _expected,
+            "The topology attribution graph does not have the expected event-aware result.");
+        MaintenanceAttribution.Require(
+            _prefixes.Select(SqlServerProjectedDependencyGraph.HasValidTopology)
+                .SequenceEqual([true, _expected, true, _expected]),
+            "The topology mutation fixture lost its negative or restoration step.");
     }
 
     /// <summary>Builds sparse-id graphs, retaining DELETE-to-UPDATE transitions for SET NULL/DEFAULT.</summary>

@@ -21,7 +21,7 @@ on:
         default: ''
         type: string
       capture-sqlserver-baseline:
-        description: Retain measurement-only SQL Server baseline evidence on the qualification runner.
+        description: Retain a SQL Server BenchmarkDotNet Short run on the qualification runner.
         required: false
         default: false
         type: boolean

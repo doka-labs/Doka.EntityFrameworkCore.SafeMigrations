@@ -1,6 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks;
 
-internal static partial class SqlServerColumnAttribution
+public partial class SqlServerColumnAttribution
 {
     /// <summary>Checks fresh classification and preceding gates in direct and delayed batches.</summary>
     private static void ProbeMatchingBinding(
@@ -51,9 +51,11 @@ internal static partial class SqlServerColumnAttribution
 
                 matchingProperty?.SetValue(plan, probe.Matching);
                 var sql = SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(operation, plan, [], []);
+
                 // WHY: The outer dynamic guard doubles its body's SQL quotes.
                 // Detect the rendered batch, not the unescaped inner template.
                 var conditionalRepair = sql.Contains("IF @doka_state = N''different''", StringComparison.Ordinal);
+
                 // WHY: A baseline without conditional repair still binds the
                 // poison repair expression. Record that legacy behavior while
                 // enforcing prerequisite and permission refusal in every arm.

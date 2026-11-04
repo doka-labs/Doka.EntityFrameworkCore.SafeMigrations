@@ -1,6 +1,6 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks;
 
-internal static partial class SqlServerColumnAttribution
+public partial class SqlServerColumnAttribution
 {
     /// <summary>Includes matching replays and independent facet/data/dependency refusals.</summary>
     private static IEnumerable<Scenario> CreateScenarios()

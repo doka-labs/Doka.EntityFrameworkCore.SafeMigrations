@@ -1,7 +1,6 @@
 global using System;
 global using System.Buffers;
 global using System.Collections.Generic;
-global using System.Diagnostics;
 global using System.Globalization;
 global using System.IO;
 global using System.Linq;
@@ -9,9 +8,7 @@ global using System.Runtime.InteropServices;
 global using System.Security.Cryptography;
 global using System.Text;
 global using System.Text.Json;
-global using Doka.EntityFrameworkCore.SafeMigrations;
 global using Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
-global using Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 global using Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks;
 global using Microsoft.Data.SqlClient;
 global using Microsoft.EntityFrameworkCore;

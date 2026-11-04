@@ -165,11 +165,21 @@ dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests/Doka.Entit
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests.csproj --configuration Release --no-build --no-restore
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests.csproj --configuration Release --no-build --no-restore
 dotnet test tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests.csproj --configuration Release --no-build --no-restore
-dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks.csproj --configuration Release --no-build --no-restore -- --report-only
-dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks.csproj --configuration Release --no-build --no-restore -- --report-only
-dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj --configuration Release --no-build --no-restore -- --report-only
-dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks.csproj --configuration Release --no-build --no-restore -- --report-only
-dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks.csproj --configuration Release --no-build --no-restore -- --report-only
+dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Benchmarks \
+  --configuration Release --no-build --no-restore -- \
+  --filter '*' --job Dry --artifacts artifacts/performance/core
+dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.MySql.Benchmarks \
+  --configuration Release --no-build --no-restore -- \
+  --filter '*' --job Dry --artifacts artifacts/performance/mysql
+dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks \
+  --configuration Release --no-build --no-restore -- \
+  --filter '*' --job Dry --artifacts artifacts/performance/postgresql
+dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks \
+  --configuration Release --no-build --no-restore -- \
+  --filter '*' --job Dry --artifacts artifacts/performance/sqlite
+dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks \
+  --configuration Release --no-build --no-restore -- \
+  --filter '*' --job Dry --artifacts artifacts/performance/sqlserver
 python3 -m unittest eng/tests/test_parallel_test_configuration.py -v
 python3 -m unittest eng/tests/test_verify_coverage.py -v
 bash eng/tests/test-ef-tooling.sh
@@ -179,12 +189,37 @@ dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style --severity warn
 dotnet format Doka.EntityFrameworkCore.SafeMigrations.slnx style --diagnostics IDE0005 --severity hidden --verify-no-changes --no-restore
 ```
 
-All five benchmark sets run as informational evidence in CI and release
-qualification. `--report-only` retains measurements, unchanged comparison limits,
-and failed budget verdicts in JSON and console output without rejecting the run.
-Invalid configuration, incomplete measurements, execution exceptions, and output
-failures still fail. Omit `--report-only` for an explicitly strict local budget
-comparison; benchmark limits must not be raised merely to make a run pass.
+All five suites use BenchmarkDotNet 0.15.8 with managed allocation diagnostics
+and native full JSON export. The commands above match CI and release
+qualification: `Dry` exercises every selected case and validates its evidence,
+but is not a statistically meaningful performance comparison. The default
+workloads retain 56 parameterized cases across the five isolated executables.
+Configuration, generated-build, execution, missing/failed case, and missing or
+invalid export failures remain fatal. Measured durations and allocation values
+never determine success; there are no custom benchmark budgets or strict mode.
+
+The entry point rejects `--resume`: every selected case must execute and
+produce evidence in the current run, rather than reusing completion state.
+It also rejects `--logBuildOutput` and `--generateBinLog`, because generated
+builds inherit environment variables and their diagnostic output can expose
+native database credentials. These are evidence/privacy restrictions, not
+performance thresholds.
+
+Native `--envVars` remains supported for other names, but cannot override
+`SAFE_MIGRATIONS_ATTRIBUTION_OUTPUT`,
+`SAFE_MIGRATIONS_SQLSERVER_ATTRIBUTION_OUTPUT` or
+`SAFE_MIGRATIONS_SQLSERVER_ATTRIBUTION_CONNECTION`. Set these through the
+shell environment as shown below. A child-job override would bypass output-path
+normalization or expose the native connection string as a reported job parameter.
+
+For measurements, remove `--job Dry` to use BenchmarkDotNet's normal job, or
+use `--job Short` for a shorter exploratory run. Retain the complete artifact
+directory, source revision and environment when comparing runs. A narrower
+`--filter` is supported for focused local work, but does not establish complete
+suite execution. Old handwritten, thread-local allocation reports are not
+directly comparable with BenchmarkDotNet's process-wide managed allocation
+measurements on .NET 10; neither measures native memory or peak live memory.
+See [measurement boundaries](docs/support-and-qualification.md#performance-and-memory).
 
 ### Maintenance attribution
 
@@ -192,14 +227,42 @@ The four provider benchmark projects also accept `--maintenance-attribution`.
 For example, after a fresh matching Release build:
 
 ```bash
-SAFE_MIGRATIONS_ATTRIBUTION_SOURCE=candidate dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks.csproj --configuration Release --no-build --no-restore -- --maintenance-attribution --output artifacts/performance/maintenance-postgresql.json
+SAFE_MIGRATIONS_ATTRIBUTION_SOURCE=candidate \
+SAFE_MIGRATIONS_ATTRIBUTION_OUTPUT=artifacts/performance/maintenance-postgresql \
+dotnet run --project benchmarks/Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Benchmarks \
+  --configuration Release --no-build --no-restore -- \
+  --maintenance-attribution --filter '*' --job Dry \
+  --artifacts artifacts/performance/maintenance-postgresql-bdn
 ```
 
-Retain the baseline/candidate revision or diff alongside the source-labelled JSON.
-It records raw allocation, elapsed, checksum and provider-specific output/transport
-evidence for prepared client workloads. Deterministic ADO probes are not native
-engine qualification. Elapsed times are informational; invalid evidence,
-structural/output mismatches and execution failures still fail the command.
+Retain the baseline/candidate revision or diff alongside both artifact
+directories. The prefix selects the attribution benchmark classes; subsequent
+arguments are native BenchmarkDotNet options. `SAFE_MIGRATIONS_ATTRIBUTION_OUTPUT`
+selects structural evidence output, separate from BenchmarkDotNet's full raw JSON.
+Relative attribution output directories are resolved against the caller's
+working directory before BenchmarkDotNet launches child processes; the caller's
+environment is restored afterward. This prevents structural evidence from
+landing in a temporary generated-build directory and disappearing on cleanup.
+Prepared client checksum, SQL-shape and transport controls remain fail-closed.
+Deterministic ADO probes are not native engine qualification. Numeric
+measurements remain informational; invalid evidence, structural/output
+mismatches and execution failures still fail the command. For measurement
+runs remove `--job Dry` or choose `--job Short`.
+
+SQLite's `ExactStateHash` hashes the ordered classification states and codes
+solely to verify replay equality; it is not a workload or model fingerprint.
+Different model sizes may intentionally produce the same hash. Compare evidence
+using `Workload`, `ModelTables`, `Windows` and `ChangingModel`, together with the
+source label and revision or retained diff.
+
+PostgreSQL also accepts the `--column-attribution` prefix with the same
+BenchmarkDotNet arguments and structural-output environment variable.
+SQL Server selects column attribution with `--column-attribution`; its
+optional native attribution reads
+`SAFE_MIGRATIONS_SQLSERVER_ATTRIBUTION_CONNECTION` and writes structural
+evidence through `SAFE_MIGRATIONS_SQLSERVER_ATTRIBUTION_OUTPUT`. Native server
+evidence requires an available supported host and database; prepared client
+runs cannot establish it. Never commit connection strings or credentials.
 
 Live pooled-runner p95 comparisons for server providers are also informational.
 Their 20 measured calls and `2 * clean p95 + 250 ms` comparison remain unchanged;

@@ -1,58 +1,69 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks;
 
-internal static partial class SqlServerColumnAttribution
+/// <summary>Measures synthetic guard rendering independently of catalog and integer-proof construction.</summary>
+[MemoryDiagnoser]
+public class SqlServerGuardGenerationBenchmarks
 {
-    /// <summary>Measures guard rendering without catalog-builder, EF baseline or integer-proof construction.</summary>
-    private static void MeasureGuardGeneration(
-        string output
-    )
+    private GuardGenerationControl? _control;
+    private string _sql = string.Empty;
+    private string? _lastSql;
+
+    /// <summary>Gets or sets the fixed direct, delayed-classifier or delayed-repair microcontrol.</summary>
+    [Params("direct_catalog_64", "delayed_classifier_64", "delayed_repair_64")]
+    public string ControlName { get; set; } = "direct_catalog_64";
+
+    private GuardGenerationControl Control
+        => _control ?? throw new InvalidOperationException("Setup has not completed.");
+
+    /// <summary>Constructs the fixed inputs and records SQL shape outside all measured work.</summary>
+    [GlobalSetup]
+    public void Setup()
     {
-        var results = new List<object>();
-        foreach (var control in CreateGuardGenerationControls())
+        SqlServerColumnAttribution.ValidateEnvironment();
+        _control = CreateGuardGenerationControls().Single(control => control.Name == ControlName);
+        _sql = Generate();
+        var output = SqlServerColumnAttribution.CreateEvidenceDirectory("guard-" + ControlName);
+        File.WriteAllText(Path.Combine(output, "guard-generation.sql"), _sql);
+        SqlServerColumnAttribution.WriteJson(Path.Combine(output, "guard-generation-control.json"), new
         {
-            var sql = SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(control.Operation, control.Plan, [], []);
-            File.WriteAllText(Path.Combine(output, "guard-generation-" + control.Name + ".sql"), sql);
-            var samples = new List<Sample>(Samples);
-            for (var index = 0; index < Samples; index++)
-            {
-                string? measuredSql = null;
-                samples.Add(Measure(() =>
-                {
-                    measuredSql = SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(
-                        control.Operation, control.Plan, [], []);
-
-                    return measuredSql.Length;
-                }, threadLocal: true));
-
-                if (measuredSql != sql)
-                {
-                    throw new InvalidOperationException("Synthetic guard generation was not deterministic.");
-                }
-            }
-
-            results.Add(new
-            {
-                control.Name,
-                Scope = "guard_generation_microcontrol_not_full_generator_attribution",
-                SyntheticInput = true,
-                ExecutesGeneratedSql = false,
-                Policy = control.Operation.Policy.ToString(),
-                RepairCapability = control.Plan.RepairCapability.ToString(),
-                control.Plan.RequiresDelayedBinding,
-                InputStateCharacters = control.Plan.StateExpression.Length,
-                InputRepairCharacters = control.Plan.RepairPrecondition.Length,
-                InputPostconditionCharacters = control.Plan.Postcondition.Length,
-                GeneratedSqlCharacters = sql.Length,
-                GeneratedSqlUtf8Bytes = Encoding.UTF8.GetByteCount(sql),
-                SysColumnsSubqueryOccurrences = CountOccurrences(sql, "FROM sys.columns"),
-                GenerationSamples = samples,
-                Interpretation = "Fixed common plan inputs bypass catalog construction and integer admission. "
-                    + "Results measure combined guard helpers, not individual causes or full-generator improvements.",
-            });
-        }
-
-        WriteJson(Path.Combine(output, "guard-generation-controls.json"), results);
+            Control.Name,
+            Scope = "guard_generation_microcontrol_not_full_generator_attribution",
+            SyntheticInput = true,
+            ExecutesGeneratedSql = false,
+            Policy = Control.Operation.Policy.ToString(),
+            RepairCapability = Control.Plan.RepairCapability.ToString(),
+            Control.Plan.RequiresDelayedBinding,
+            InputStateCharacters = Control.Plan.StateExpression.Length,
+            InputRepairCharacters = Control.Plan.RepairPrecondition.Length,
+            InputPostconditionCharacters = Control.Plan.Postcondition.Length,
+            GeneratedSqlCharacters = _sql.Length,
+            GeneratedSqlUtf8Bytes = Encoding.UTF8.GetByteCount(_sql),
+            SysColumnsSubqueryOccurrences = SqlServerColumnAttribution.CountOccurrences(_sql, "FROM sys.columns"),
+            Interpretation = "Fixed common plan inputs bypass catalog construction and integer admission. "
+                + "Results measure combined guard helpers, not individual causes or full-generator improvements.",
+        });
     }
+
+    /// <summary>Renders one guard using the same preconstructed immutable control inputs.</summary>
+    /// <returns>The complete guarded SQL text.</returns>
+    [Benchmark]
+    public string Generate()
+        => _lastSql = SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(Control.Operation, Control.Plan, [], []);
+
+    /// <summary>Checks each iteration's generated SQL without including validation in the timing.</summary>
+    [IterationCleanup]
+    public void VerifyDeterministicSql()
+    {
+        if (_lastSql != _sql)
+        {
+            throw new InvalidOperationException("Synthetic guard generation was not deterministic.");
+        }
+    }
+
+    /// <summary>Requires the final generated SQL to match the setup oracle.</summary>
+    [GlobalCleanup]
+    public void Cleanup()
+        => VerifyDeterministicSql();
 
     /// <summary>Creates quoted direct and delayed inputs using only the baseline runtime-plan surface.</summary>
     private static IEnumerable<GuardGenerationControl> CreateGuardGenerationControls()
@@ -98,7 +109,7 @@ internal static partial class SqlServerColumnAttribution
         yield return new GuardGenerationControl("delayed_repair_64", repairing, delayedRepair);
     }
 
-    /// <summary>Retains a preconstructed input so factories and fixtures remain outside allocation samples.</summary>
+    /// <summary>Retains a preconstructed input so factories and fixtures remain outside the measurement.</summary>
     private sealed record GuardGenerationControl(
         string Name,
         SafeMigrationOperation Operation,

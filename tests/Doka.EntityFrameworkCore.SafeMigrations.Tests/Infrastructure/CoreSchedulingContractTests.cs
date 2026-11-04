@@ -36,7 +36,6 @@ public sealed class CoreSchedulingContractTests
             typeof(SafeMigrationDiagnosticTruncationAllocationTests),
             typeof(SafeMigrationDiagnosticMessagesAllocationTests),
             typeof(SafeMigrationModelManagedKeyIdentityAllocationTests),
-            typeof(Infrastructure.BenchmarkRunnerMeasurementTests),
         ];
 
         // Act
@@ -92,15 +91,6 @@ public sealed class CoreSchedulingContractTests
                 nameof(SafeMigrationModelManagedKeyIdentityAllocationTests
                     .CompositeKeyAlreadyOrderedPathAvoidsAllocations),
             ],
-            [typeof(Infrastructure.BenchmarkRunnerMeasurementTests)] =
-            [
-                nameof(Infrastructure.BenchmarkRunnerMeasurementTests.CompletePreservesExceededBudgetEvidence),
-                nameof(Infrastructure.BenchmarkRunnerMeasurementTests.CompleteAcceptsMeasurementsWithinBudgets),
-                nameof(Infrastructure.BenchmarkRunnerMeasurementTests.MeasureRejectsDuplicateBenchmarkNames),
-                nameof(Infrastructure.BenchmarkRunnerMeasurementTests.MeasurePropagatesExecutionFailures),
-                nameof(Infrastructure.BenchmarkRunnerMeasurementTests.CompletePropagatesOutputFailures),
-                nameof(Infrastructure.BenchmarkRunnerMeasurementTests.CompleteHonorsCommandLineBudgetPolicy),
-            ],
         };
 
         // Act
@@ -114,9 +104,6 @@ public sealed class CoreSchedulingContractTests
             Assert.Equal(typeof(object), type.BaseType);
             Assert.Equal(methods.OrderBy(static name => name, StringComparer.Ordinal), actual[type]);
         }
-
-        Assert.DoesNotContain(typeof(Infrastructure.BenchmarkFixture).GetMethods(),
-            static method => method.IsDefined(typeof(FactAttribute), true));
     }
 
     /// <summary>
@@ -134,7 +121,6 @@ public sealed class CoreSchedulingContractTests
             typeof(SafeMigrationDiagnosticMessagesTests),
             typeof(SafeMigrationModelManagedKeyIdentityTests),
             typeof(SafeMigrationAnalysisTelemetryTests),
-            typeof(Infrastructure.BenchmarkRunnerTests),
         ];
 
         // Act

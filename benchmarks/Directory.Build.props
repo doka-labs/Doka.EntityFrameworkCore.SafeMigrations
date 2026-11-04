@@ -6,4 +6,28 @@
     <IsPackable>false</IsPackable>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- WHY: Benchmarks share configuration source without introducing a runtime
+         dependency between provider-specific benchmark assemblies or packages. -->
+    <!-- WHY: BDN's generated child project references this executable and must receive its
+         compile/runtime assets. No publishable package references a benchmark project. -->
+    <PackageReference Include="BenchmarkDotNet" />
+    <AssemblyMetadata Include="BenchmarkProjectPath" Value="$(MSBuildProjectFullPath)" />
+    <Using Include="BenchmarkDotNet.Attributes" />
+    <Using Include="BenchmarkDotNet.Characteristics" />
+    <Using Include="BenchmarkDotNet.Configs" />
+    <Using Include="BenchmarkDotNet.ConsoleArguments" />
+    <Using Include="BenchmarkDotNet.ConsoleArguments.ListBenchmarks" />
+    <Using Include="BenchmarkDotNet.Diagnosers" />
+    <Using Include="BenchmarkDotNet.Exporters.Json" />
+    <Using Include="BenchmarkDotNet.Jobs" />
+    <Using Include="BenchmarkDotNet.Loggers" />
+    <Using Include="BenchmarkDotNet.Reports" />
+    <Using Include="BenchmarkDotNet.Running" />
+    <Using Include="BenchmarkDotNet.Toolchains" />
+    <Using Include="BenchmarkDotNet.Toolchains.CsProj" />
+    <Using Include="BenchmarkDotNet.Validators" />
+    <Compile Include="$(MSBuildThisFileDirectory)Shared/**/*.cs" LinkBase="Infrastructure" />
+  </ItemGroup>
 </Project>

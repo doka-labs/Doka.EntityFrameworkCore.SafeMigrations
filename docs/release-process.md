@@ -58,12 +58,16 @@ CI and release call the same reusable quality workflow. It enforces:
   isolated package-only consumers; and
 - SPDX 2.2 SBOM generation and validation.
 
-It also runs Core, MySQL/MariaDB, PostgreSQL, SQLite, and SQL Server benchmarks
-in `--report-only` mode. Budget overruns remain visible in the retained evidence
-but do not block qualification on shared hardware. Invalid benchmark
-configuration, execution failures, incomplete measurements and report-write
-failures remain blocking. Build, tests, coverage, tooling, package and SBOM gates
-are unchanged.
+It also runs Core, MySQL/MariaDB, PostgreSQL, SQLite, and SQL Server through
+BenchmarkDotNet 0.15.8 with `--filter '*' --job Dry`. This smoke checks all 56
+default cases and native full JSON export, not statistical performance.
+Duration and managed allocation values never determine qualification success.
+Invalid configuration, generated-build or execution failures, missing/failed
+selected cases and missing/invalid evidence remain blocking. Retain each
+suite's complete `artifacts/performance` directory. Build, tests, coverage,
+tooling, package and SBOM gates are unchanged. See the
+[measurement boundaries](support-and-qualification.md#performance-and-memory)
+before comparing full measurement runs or historical allocation reports.
 
 The PostgreSQL EF tooling probe waits for the final TCP listener, never the
 image's temporary socket-only initialization server. Large live performance

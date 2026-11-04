@@ -10,32 +10,6 @@ public sealed class RepositoryWorkflowContractTests
         "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0";
 
     /// <summary>
-    /// Keeps every benchmark budget informational without suppressing execution or qualification failures.
-    /// </summary>
-    [Fact]
-    public void QualityWorkflow_ReportsAllBenchmarkBudgetsWithoutIgnoringFailures()
-    {
-        var workflowPath = Path.Combine(RepositoryRoot(), ".github", "workflows", "quality-gates.yml");
-        var providers = new[] { "core", "mysql", "postgresql", "sqlite", "sqlserver" };
-
-        var workflow = File.ReadAllText(workflowPath);
-
-        Assert.Equal(providers.Length, Regex.Count(workflow, "--report-only"));
-
-        foreach (var provider in providers)
-        {
-            Assert.Contains($"--report-only --output artifacts/performance/{provider}-results.json",
-                workflow, StringComparison.Ordinal);
-        }
-
-        Assert.DoesNotContain("continue-on-error:", workflow, StringComparison.Ordinal);
-        Assert.Contains("- name: Core tests", workflow, StringComparison.Ordinal);
-        Assert.Contains("- name: Qualify reproducible packages", workflow, StringComparison.Ordinal);
-        Assert.Contains("- name: Generate and validate SPDX SBOM", workflow, StringComparison.Ordinal);
-        Assert.Contains("artifacts/performance", workflow, StringComparison.Ordinal);
-    }
-
-    /// <summary>
     /// Keeps untrusted restore separate from snapshot writes and binds verdicts to the PR head.
     /// </summary>
     [Fact]

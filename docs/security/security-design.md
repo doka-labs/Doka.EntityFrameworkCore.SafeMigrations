@@ -124,8 +124,9 @@ ordinal validation, and atomic report publication.
 
 Evidence: [query-limit tests](../../tests/Doka.EntityFrameworkCore.SafeMigrations.Tests/Unit/Analysis/SafeMigrationCatalogQueryLimitsTests.cs),
 provider edge-case oversized/chunk-order tests, and
-[performance budgets](../../eng/performance-budgets.json) with live clean/noisy
-catalog measurements. Doka's scoped command owns cleanup after failure or
+[BenchmarkDotNet workload and evidence boundaries](../support-and-qualification.md#performance-and-memory)
+with live clean/noisy catalog measurements. Numeric benchmark values are not
+security or resource-limit gates. Doka's scoped command owns cleanup after failure or
 cancellation and session eviction if cleanup fails. PostgreSQL analysis owns
 a read-only repeatable snapshot when no qualifying caller transaction exists;
 its advisory analysis lock does not fence application writers. Runtime EF

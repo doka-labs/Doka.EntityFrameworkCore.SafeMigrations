@@ -1,90 +1,120 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 
 /// <summary>Attributes prerequisite extraction and native-profile backfill plan generation without a server.</summary>
-internal static class MySqlMaintenanceAttribution
+public class MySqlMaintenanceAttribution : IDisposable
 {
-    /// <summary>Writes Core and independent MySQL/MariaDB generation samples with exact structural output.</summary>
-    /// <param name="outputPath">The caller-owned JSON evidence destination.</param>
-    /// <returns>Zero after all controls and measurements complete.</returns>
+    private ProfileContext _context = null!;
+    private MySqlSafeMigrationCatalogSqlBuilder _catalog = null!;
+    private SafeMigrationOperation _operation = null!;
+    private MySqlMigrationOperationContext _operationContext = null!;
+    private bool _disposed;
+
+    /// <summary>Gets or sets whether the real MariaDB rather than MySQL profile is used.</summary>
+    [Params(false, true)]
+    public bool MariaDb { get; set; }
+
+    /// <summary>Gets or sets the literal domain or negative-control workload.</summary>
+    [Params(
+        "ascii",
+        "latin1",
+        "bmp",
+        "supplementary",
+        "control",
+        "too_long",
+        "boolean",
+        "nullable_fast_path")]
+    public string Workload { get; set; } = "ascii";
+
+    /// <summary>Runs the independent prerequisite and native-profile generation benchmark families.</summary>
+    /// <param name="args">The BenchmarkDotNet command-line arguments.</param>
+    /// <returns>The shared benchmark runner exit code.</returns>
     internal static int Run(
-        string outputPath
-    )
+        string[] args
+    ) => BenchmarkProgram.Run(args, typeof(MySqlPrerequisiteAttribution), typeof(MySqlMaintenanceAttribution));
+
+    /// <summary>Prepares real native mappings and verifies exact producer output before timing.</summary>
+    [GlobalSetup]
+    public void Setup()
     {
-        var results = new List<object>();
-        MeasurePrerequisites(results);
-        foreach (var mariaDb in new[] { false, true })
+        _disposed = false;
+        _context = new ProfileContext(MariaDb);
+        _catalog = new MySqlSafeMigrationCatalogSqlBuilder(
+            _context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalTypeMappingSource>(),
+            _context.GetService<Microsoft.EntityFrameworkCore.Storage.ISqlGenerationHelper>());
+
+        object value = Workload switch
         {
-            using var context = new ProfileContext(mariaDb);
-            var catalog = new MySqlSafeMigrationCatalogSqlBuilder(
-                context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalTypeMappingSource>(),
-                context.GetService<Microsoft.EntityFrameworkCore.Storage.ISqlGenerationHelper>());
+            "ascii" or "nullable_fast_path" => "replacement",
+            "latin1" => "caf\u00e9",
+            "bmp" => "\u20ac",
+            "supplementary" => "\U0001F600",
+            "control" => "a\0b\nc\\d",
+            "too_long" => new string('x', 65),
+            "boolean" => true,
+            _ => throw new ArgumentOutOfRangeException(nameof(Workload)),
+        };
 
-            foreach (var (name, value, type, nullable) in new (string, object, Type, bool)[]
-                     {
-                         ("ascii", "replacement", typeof(string), false),
-                         ("latin1", "caf\u00e9", typeof(string), false),
-                         ("bmp", "\u20ac", typeof(string), false),
-                         ("supplementary", "\U0001F600", typeof(string), false),
-                         ("control", "a\0b\nc\\d", typeof(string), false),
-                         ("too_long", new string('x', 65), typeof(string), false),
-                         ("boolean", true, typeof(bool), false),
-                         ("nullable_fast_path", "replacement", typeof(string), true),
-                     })
-            {
-                var storeType = type == typeof(bool) ? "tinyint(1)" : "varchar(64)";
-                var target = new ExpectedColumnDefinition(
-                    "value",
-                    type,
-                    nullable,
-                    storeType,
-                    maxLength: type == typeof(string) ? 64 : null,
-                    defaultValue: SafeMigrationDefaultValue.Literal(value));
+        var type = Workload == "boolean"
+            ? typeof(bool)
+            : typeof(string);
 
-                // WHY: Equal VARCHAR widths use Core's simple alter path and never build the charset
-                // proof being attributed. A real narrowing forces the provider transition producer.
-                var sourceType = type == typeof(bool) ? "bit(1)" : "varchar(128)";
-                var source = new ExpectedColumnDefinition(
-                    "value",
-                    type,
-                    true,
-                    sourceType,
-                    maxLength: type == typeof(string) ? 128 : null);
+        var nullable = Workload == "nullable_fast_path";
+        var target = new ExpectedColumnDefinition(
+            "value",
+            type,
+            nullable,
+            type == typeof(bool)
+                ? "tinyint(1)"
+                : "varchar(64)",
+            maxLength: type == typeof(string)
+                ? 64
+                : null,
+            defaultValue: SafeMigrationDefaultValue.Literal(value));
 
-                var operation = new SafeMigrationOperation(
-                    new AlterColumnIntent("maintenance_rows", target, source),
-                    SafeMigrationPolicy.RepairIfSafe);
+        // WHY: Equal VARCHAR widths bypass the charset producer. Real narrowing owns this attribution.
+        var source = new ExpectedColumnDefinition(
+            "value",
+            type,
+            true,
+            type == typeof(bool)
+                ? "bit(1)"
+                : "varchar(128)",
+            maxLength: type == typeof(string)
+                ? 128
+                : null);
 
-                var nativeContext = OperationContext(context, operation, mariaDb);
-                var plan = catalog.Build(
-                    operation,
-                    nativeContext,
-                    includeAnalysisEvidence: false,
-                    includeTransitionEvidence: true);
+        _operation = new SafeMigrationOperation(
+            new AlterColumnIntent("maintenance_rows", target, source),
+            SafeMigrationPolicy.RepairIfSafe);
 
-                var charsetGuardPresent = VerifyProducerPath(plan, name, nullable);
-                if (name == "ascii")
-                {
-                    VerifyProducerPathCounterprobe(plan);
-                }
+        _operationContext = OperationContext(_context, _operation, MariaDb);
+        var plan = CreatePlan();
+        var charsetGuardPresent = VerifyProducerPath(plan, Workload, nullable);
+        if (Workload == "ascii")
+        {
+            VerifyProducerPathCounterprobe(plan);
+        }
 
-                var shape = Shape(plan);
-                VerifyShapeNonVacuity(plan);
-                MaintenanceAttribution.Require(
-                    shape
-                    == Shape(
-                        catalog.Build(
-                            operation,
-                            nativeContext,
-                            includeAnalysisEvidence: false,
-                            includeTransitionEvidence: true)),
-                    "MySQL catalog invocation retained stale parameters or proof state.");
+        var shape = Shape(plan);
+        VerifyShapeNonVacuity(plan);
+        MaintenanceAttribution.Require(
+            shape == Shape(CreatePlan()),
+            "MySQL catalog invocation retained stale parameters or proof state.");
 
-                results.Add(
+        var output = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_ATTRIBUTION_OUTPUT");
+        if (!string.IsNullOrWhiteSpace(output))
+        {
+            _ = MaintenanceAttribution.Write(
+                Path.Combine(output, $"mysql-{MariaDb}-{Workload}.json"),
+                "Functional/source evidence; MySQL/MariaDB client generation only; not timing evidence",
+                [
                     new
                     {
                         Id = "PERF-02",
-                        EngineProfile = mariaDb ? "mariadb-11.8.8" : "mysql-8.4.11",
-                        Workload = name,
+                        EngineProfile = MariaDb
+                            ? "mariadb-11.8.8"
+                            : "mysql-8.4.11",
+                        Workload,
                         ProducerPath = type == typeof(bool)
                             ? "boolean_transition_control"
                             : nullable
@@ -101,19 +131,48 @@ internal static class MySqlMaintenanceAttribution
                         SqlCharacters =
                             plan.StateExpression.Length + plan.Postcondition.Length + plan.RepairPrecondition.Length,
                         ExactOutput = shape,
-                        Samples = MaintenanceAttribution.Measure(
-                            () => catalog.Build(
-                                    operation,
-                                    nativeContext,
-                                    includeAnalysisEvidence: false,
-                                    includeTransitionEvidence: true)
-                                .StateExpression.Length,
-                            256),
-                    });
-            }
+                    },
+                ]);
+        }
+    }
+
+    /// <summary>Builds one complete catalog plan using prebuilt operations and native profile services.</summary>
+    /// <returns>The complete runtime plan, consumed by BenchmarkDotNet.</returns>
+    [Benchmark]
+    public object BuildPlan() => CreatePlan();
+
+    /// <summary>Retains the typed plan for setup-only structural assertions.</summary>
+    /// <returns>The complete real provider plan.</returns>
+    private MySqlSafeMigrationRuntimePlan CreatePlan() => _catalog.Build(
+        _operation,
+        _operationContext,
+        includeAnalysisEvidence: false,
+        includeTransitionEvidence: true);
+
+    /// <summary>Disposes the context owning the real native profile services.</summary>
+    [GlobalCleanup]
+    public void Cleanup() => Dispose();
+
+    /// <summary>Releases the context owning the native profile services.</summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Releases owned managed resources once while supporting generated benchmark subclasses.</summary>
+    /// <param name="disposing">Whether managed resources should be released.</param>
+    protected virtual void Dispose(
+        bool disposing
+    )
+    {
+        if (!disposing || _disposed)
+        {
+            return;
         }
 
-        return MaintenanceAttribution.Write(outputPath, "Core; MySQL/MariaDB client generation only", results);
+        _context.Dispose();
+        _disposed = true;
     }
 
     /// <summary>Rejects a vacuous workload that misses its producer or loses existing capability limits.</summary>
@@ -173,8 +232,8 @@ internal static class MySqlMaintenanceAttribution
             _ = VerifyProducerPath(withoutCharsetGuard, "ascii", nullable: false);
         }
         catch (InvalidOperationException exception) when (exception.Message.Contains(
-                                                              "exact charset-domain producer",
-                                                              StringComparison.Ordinal))
+            "exact charset-domain producer",
+            StringComparison.Ordinal))
         {
             rejected = true;
         }
@@ -334,11 +393,9 @@ internal static class MySqlMaintenanceAttribution
             "The MySQL plan-output oracle ignores ordered parameters or proof identity.");
     }
 
-    /// <summary>Measures empty, duplicate, multiple, old/target and deep expression dependency roles.</summary>
-    /// <param name="results">The collection receiving exact outputs and raw samples.</param>
-    private static void MeasurePrerequisites(
-        List<object> results
-    )
+    /// <summary>Builds empty, duplicate, multiple, old/target and deep expression dependency roles.</summary>
+    /// <returns>The complete immutable prerequisite workload inventory and exact column oracles.</returns>
+    internal static (string Id, SafeMigrationIntent Intent, string[] Expected)[] Prerequisites()
     {
         var identifier = SafeMigrationSql.Identifier("source");
         var duplicate = SafeMigrationSql.Binary(identifier, SafeMigrationSqlBinaryOperator.Add, identifier);
@@ -385,39 +442,7 @@ internal static class MySqlMaintenanceAttribution
                     ExpectedCheckConstraintDefinition.FromExpression("ck", "rows", duplicate)), ["source"]),
         };
 
-        foreach (var (id, intent, expected) in definitions)
-        {
-            var observed = SafeMigrationPrerequisiteColumns.Local(intent);
-            MaintenanceAttribution.Require(
-                observed.SequenceEqual(expected, StringComparer.Ordinal),
-                "The prerequisite attribution fixture has incorrect source roles.");
-
-            results.Add(
-                new
-                {
-                    Id = "PERF-01",
-                    Workload = id,
-                    Columns = observed,
-                    Samples = MaintenanceAttribution.Measure(
-                        () => SafeMigrationPrerequisiteColumns.Local(intent)
-                            .Count,
-                        id == "deep_identifier" ? 128 : 4096),
-                });
-        }
-
-        var rejectedNull = false;
-        try
-        {
-            _ = SafeMigrationPrerequisiteColumns.Local(null!);
-        }
-        catch (ArgumentNullException)
-        {
-            rejectedNull = true;
-        }
-
-        MaintenanceAttribution.Require(rejectedNull, "Prerequisite extraction accepted a null operation.");
-
-        return;
+        return definitions;
 
         static EnsureColumnIntent Computed(
             SafeMigrationSqlExpression expression
@@ -449,6 +474,7 @@ internal static class MySqlMaintenanceAttribution
 
         var profile = property.GetValue(version)
             ?? throw new InvalidOperationException("The pinned Doka canonical profile is absent.");
+
         var features = typeof(MySqlMigrationFeatureSet)
             .GetConstructors(flags)
             .Single()
@@ -466,7 +492,7 @@ internal static class MySqlMaintenanceAttribution
                 features,
                 0,
                 "maintenance-attribution",
-                (Func<MigrationOperation, IReadOnlyList<MySqlMigrationCommandSpec>>)Standard
+                (Func<MigrationOperation, IReadOnlyList<MySqlMigrationCommandSpec>>)Standard,
             ]);
 
         static IReadOnlyList<MySqlMigrationCommandSpec> Standard(
@@ -476,7 +502,9 @@ internal static class MySqlMaintenanceAttribution
 
     /// <summary>Provides real type mappings for one explicitly selected generation profile.</summary>
     /// <param name="mariaDb">Whether MariaDB rather than MySQL is selected.</param>
-    private sealed class ProfileContext(bool mariaDb) : DbContext
+    private sealed class ProfileContext(
+        bool mariaDb
+    ) : DbContext
     {
         /// <inheritdoc />
         protected override void OnConfiguring(

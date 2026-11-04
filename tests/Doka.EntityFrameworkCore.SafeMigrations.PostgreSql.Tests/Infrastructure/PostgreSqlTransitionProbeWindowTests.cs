@@ -3,6 +3,97 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 /// <summary>Preserves ordered narrowing eligibility while building only bounded transition SQL windows.</summary>
 public sealed class PostgreSqlTransitionProbeWindowTests
 {
+    /// <summary>Reset clears every observation only after the prior probe resources have been disposed.</summary>
+    /// <param name="native">Whether the deterministic transport uses native batching.</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ResetCaptures_ClearsSubmissionsBatchesAndAllDisposalCounters(
+        bool native
+    )
+    {
+        // Arrange
+        using var context = OfflineContext();
+        await using var connection = new CatalogStatementTestConnection(native, EligibilityRows);
+        var operations = Operations(33);
+        _ = await ResolveAsync(
+            Analyzer(context), connection, operations, new SafeMigrationObservedState?[33], CancellationToken.None);
+
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT 0, TRUE, FALSE;";
+            using var reader = command.ExecuteReader();
+            _ = reader.Read();
+        }
+
+        connection.BeginTransaction().Dispose();
+        var before = (
+            Commands: connection.CommandsDisposed,
+            Batches: connection.BatchesDisposed,
+            Readers: connection.ReadersDisposed,
+            Transactions: connection.TransactionsDisposed);
+
+        var hadSubmissions = connection.Submissions.Count > 0;
+        var hadBatches = connection.BatchCounts.Count > 0;
+
+        // Act
+        connection.ResetCaptures();
+        connection.ResetCaptures();
+
+        // Assert
+        Assert.True(hadSubmissions);
+        Assert.Equal(native, hadBatches);
+        Assert.True(before.Commands > 0);
+        Assert.Equal(native, before.Batches > 0);
+        Assert.True(before.Readers > 0);
+        Assert.Equal(1, before.Transactions);
+        Assert.Empty(connection.Submissions);
+        Assert.Empty(connection.BatchCounts);
+        Assert.Equal(0, connection.CommandsDisposed);
+        Assert.Equal(0, connection.BatchesDisposed);
+        Assert.Equal(0, connection.ReadersDisposed);
+        Assert.Equal(0, connection.TransactionsDisposed);
+        Assert.Equal(ConnectionState.Open, connection.State);
+    }
+
+    /// <summary>Reset makes replay observations invocation-local without changing SQL, results or transport.</summary>
+    /// <param name="native">Whether the deterministic transport uses native batching.</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ResetCaptures_ReplayRetainsExactOutputWithoutAccumulatingObservations(
+        bool native
+    )
+    {
+        // Arrange
+        using var context = OfflineContext();
+        var analyzer = Analyzer(context);
+        var operations = Operations(33);
+        var states = new SafeMigrationObservedState?[33];
+        await using var connection = new CatalogStatementTestConnection(native, EligibilityRows);
+        var first = await ResolveAsync(analyzer, connection, operations, states, CancellationToken.None);
+        var sql = connection.Submissions.Select(static submission => submission.Sql).ToArray();
+        var batches = connection.BatchCounts.ToArray();
+        var disposals = (connection.CommandsDisposed, connection.BatchesDisposed, connection.ReadersDisposed);
+
+        // Act
+        connection.ResetCaptures();
+        var replay = await ResolveAsync(analyzer, connection, operations, states, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(sql, connection.Submissions.Select(static submission => submission.Sql));
+        Assert.Equal(batches, connection.BatchCounts);
+        Assert.Equal(disposals, (connection.CommandsDisposed, connection.BatchesDisposed, connection.ReadersDisposed));
+        Assert.Equal(first.Length, replay.Length);
+        for (var ordinal = 0; ordinal < first.Length; ordinal++)
+        {
+            Assert.Equal(first.GetValue(ordinal), replay.GetValue(ordinal));
+        }
+
+        Assert.Equal(0, connection.TransactionsDisposed);
+        Assert.Equal(ConnectionState.Open, connection.State);
+    }
+
     /// <summary>Each bounded statement preserves the original eligibility SQL and operation ordinals.</summary>
     /// <param name="count">The candidate count surrounding the transport boundary.</param>
     /// <param name="native">Whether the deterministic connection provides native batching.</param>
@@ -168,14 +259,21 @@ public sealed class PostgreSqlTransitionProbeWindowTests
     /// <summary>A corrupt eligibility window cannot assign a physical proof to the wrong operation.</summary>
     /// <param name="fault">The injected ordinal or result-cardinality fault.</param>
     /// <param name="native">Whether the deterministic connection uses native transport.</param>
+    /// <param name="capture">Whether diagnostic observations are retained.</param>
     [Theory]
-    [InlineData("ordinal", true)]
-    [InlineData("ordinal", false)]
-    [InlineData("missing", true)]
-    [InlineData("missing", false)]
-    [InlineData("extra", true)]
-    [InlineData("extra", false)]
-    public async Task EligibilityWindows_RejectUnownedOrIncompleteRows(string fault, bool native)
+    [InlineData("ordinal", true, true)]
+    [InlineData("ordinal", false, true)]
+    [InlineData("missing", true, true)]
+    [InlineData("missing", false, true)]
+    [InlineData("extra", true, true)]
+    [InlineData("extra", false, true)]
+    [InlineData("ordinal", true, false)]
+    [InlineData("ordinal", false, false)]
+    [InlineData("missing", true, false)]
+    [InlineData("missing", false, false)]
+    [InlineData("extra", true, false)]
+    [InlineData("extra", false, false)]
+    public async Task EligibilityWindows_RejectUnownedOrIncompleteRows(string fault, bool native, bool capture)
     {
         // Arrange
         using var context = OfflineContext();
@@ -196,7 +294,7 @@ public sealed class PostgreSqlTransitionProbeWindowTests
             }
 
             return rows;
-        });
+        }) { CaptureObservations = capture };
 
         // Act
         await Assert.ThrowsAsync<InvalidOperationException>(() => ResolveAsync(
@@ -204,17 +302,20 @@ public sealed class PostgreSqlTransitionProbeWindowTests
             CancellationToken.None));
 
         // Assert
-        Assert.Equal(1, connection.ReadersDisposed);
-        Assert.Equal(native ? 1 : 0, connection.BatchesDisposed);
+        Assert.Equal(capture ? 1 : 0, connection.ReadersDisposed);
+        Assert.Equal(native && capture ? 1 : 0, connection.BatchesDisposed);
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 
     /// <summary>Cancellation within a window rejects the entire phase rather than returning partial evidence.</summary>
     /// <param name="native">Whether the deterministic connection uses native transport.</param>
+    /// <param name="capture">Whether diagnostic observations are retained.</param>
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task EligibilityWindows_CancellationDisposesTransportWithoutPartialEvidence(bool native)
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    public async Task EligibilityWindows_CancellationDisposesTransportWithoutPartialEvidence(bool native, bool capture)
     {
         // Arrange
         using var context = OfflineContext();
@@ -222,6 +323,7 @@ public sealed class PostgreSqlTransitionProbeWindowTests
         var reads = 0;
         await using var connection = new CatalogStatementTestConnection(native, EligibilityRows)
         {
+            CaptureObservations = capture,
             BeforeRead = () =>
             {
                 if (++reads == 2)
@@ -237,8 +339,8 @@ public sealed class PostgreSqlTransitionProbeWindowTests
             cancellation.Token));
 
         // Assert
-        Assert.Equal(1, connection.ReadersDisposed);
-        Assert.Equal(native ? 1 : 0, connection.BatchesDisposed);
+        Assert.Equal(capture ? 1 : 0, connection.ReadersDisposed);
+        Assert.Equal(native && capture ? 1 : 0, connection.BatchesDisposed);
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 
