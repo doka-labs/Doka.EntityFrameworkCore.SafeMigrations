@@ -16,11 +16,13 @@ public sealed partial class MySqlColumnsNullabilityConcurrencyIntegrationTests :
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, NullabilityConcurrencyFixtureSql());
+        await ExecuteSqlAsync(connectionString, NullabilityConcurrencyFixtureSql(),
+            cancellationToken: CancellationToken.None);
         var observer = new NullabilityConcurrencyWriter(connectionString, insertNull: true);
         await using var context = CreateRuntimeContext(connectionString, observer);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
-        await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES';");
+        await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES';",
+            cancellationToken: CancellationToken.None);
         var operation = NullabilityConcurrencyOperation(ensure);
 
         // Act
@@ -29,15 +31,20 @@ public sealed partial class MySqlColumnsNullabilityConcurrencyIntegrationTests :
 
         var nullable = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'nullability_race_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'YES';");
+            + "AND TABLE_NAME = 'nullability_race_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'YES';",
+            cancellationToken: CancellationToken.None);
+
         var nullRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `nullability_race_items` WHERE `id` = 2 AND `value` IS NULL;");
+            "SELECT COUNT(*) FROM `nullability_race_items` WHERE `id` = 2 AND `value` IS NULL;",
+            cancellationToken: CancellationToken.None);
+
         var preserved = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM `nullability_race_items` WHERE `id` = 1 "
-            + "AND `value` = '00000000-0000-0000-0000-000000000001';");
+            + "AND `value` = '00000000-0000-0000-0000-000000000001';", cancellationToken: CancellationToken.None);
+
         var invented = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM `nullability_race_items` WHERE `value` = '' "
-            + "OR `value` = '00000000-0000-0000-0000-000000000000';");
+            + "OR `value` = '00000000-0000-0000-0000-000000000000';", cancellationToken: CancellationToken.None);
 
         // Assert
         var providerException = Assert.IsType<MySqlException>(exception);
@@ -65,22 +72,27 @@ public sealed partial class MySqlColumnsNullabilityConcurrencyIntegrationTests :
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, NullabilityConcurrencyFixtureSql());
+        await ExecuteSqlAsync(connectionString, NullabilityConcurrencyFixtureSql(),
+            cancellationToken: CancellationToken.None);
         var observer = new NullabilityConcurrencyWriter(connectionString, insertNull: false);
         await using var context = CreateRuntimeContext(connectionString, observer);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
-        await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES';");
+        await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES';",
+            cancellationToken: CancellationToken.None);
         var operation = NullabilityConcurrencyOperation(ensure);
 
         // Act
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
         var required = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'nullability_race_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';");
+            + "AND TABLE_NAME = 'nullability_race_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';",
+            cancellationToken: CancellationToken.None);
+
         var preserved = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM `nullability_race_items` WHERE "
             + "(`id` = 1 AND `value` = '00000000-0000-0000-0000-000000000001') "
-            + "OR (`id` = 2 AND `value` = '00000000-0000-0000-0000-000000000002');");
+            + "OR (`id` = 2 AND `value` = '00000000-0000-0000-0000-000000000002');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.True(observer.ProvenRepairCheckpointObserved);

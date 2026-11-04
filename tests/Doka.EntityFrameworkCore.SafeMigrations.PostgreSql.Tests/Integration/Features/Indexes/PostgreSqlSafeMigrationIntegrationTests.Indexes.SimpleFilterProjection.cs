@@ -21,7 +21,7 @@ public sealed class PostgreSqlIndexesSimpleFilterProjectionIntegrationTests : Po
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA hierarchy;");
+        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA hierarchy;", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(
@@ -34,14 +34,14 @@ public sealed class PostgreSqlIndexesSimpleFilterProjectionIntegrationTests : Po
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("simple-filter-projected-missing"));
+            new SafeMigrationRunOptions("simple-filter-projected-missing"), CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, report.Assessments[1].ObservedState);
         Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[1].Action);
-        Assert.Equal(0, await SimpleFilterIndexCountAsync(connectionString));
+        Assert.Equal(0, await SimpleFilterIndexCountAsync(connectionString, cancellationToken: CancellationToken.None));
     }
 
     /// <summary>An accepted table or earlier column supplies the canonical predicate's exact prerequisite.</summary>
@@ -59,7 +59,7 @@ public sealed class PostgreSqlIndexesSimpleFilterProjectionIntegrationTests : Po
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA hierarchy;");
+        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA hierarchy;", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(
@@ -82,13 +82,13 @@ public sealed class PostgreSqlIndexesSimpleFilterProjectionIntegrationTests : Po
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("simple-filter-projected-present"));
+            new SafeMigrationRunOptions("simple-filter-projected-present"), CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(report.Assessments, assessment => Assert.Equal(SafeMigrationAction.Apply, assessment.Action));
         Assert.Equal(SafeMigrationObservedState.Missing, report.Assessments[^1].ObservedState);
-        Assert.Equal(0, await SimpleFilterIndexCountAsync(connectionString));
+        Assert.Equal(0, await SimpleFilterIndexCountAsync(connectionString, cancellationToken: CancellationToken.None));
     }
 
     /// <summary>A matching table's compact projection cannot discard a missing raw-filter dependency.</summary>
@@ -108,7 +108,8 @@ public sealed class PostgreSqlIndexesSimpleFilterProjectionIntegrationTests : Po
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters (id integer NOT NULL);");
+            "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters (id integer NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(
@@ -121,7 +122,7 @@ public sealed class PostgreSqlIndexesSimpleFilterProjectionIntegrationTests : Po
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("simple-filter-compact-missing"));
+            new SafeMigrationRunOptions("simple-filter-compact-missing"), CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -143,7 +144,8 @@ public sealed class PostgreSqlIndexesSimpleFilterProjectionIntegrationTests : Po
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters (id integer NOT NULL);");
+            "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters (id integer NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(
@@ -161,7 +163,7 @@ public sealed class PostgreSqlIndexesSimpleFilterProjectionIntegrationTests : Po
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("simple-filter-compact-present"));
+            new SafeMigrationRunOptions("simple-filter-compact-present"), CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -176,7 +178,7 @@ public sealed class PostgreSqlIndexesSimpleFilterProjectionIntegrationTests : Po
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA hierarchy;");
+        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA hierarchy;", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(
@@ -189,7 +191,7 @@ public sealed class PostgreSqlIndexesSimpleFilterProjectionIntegrationTests : Po
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("simple-filter-projected-opaque"));
+            new SafeMigrationRunOptions("simple-filter-projected-opaque"), CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);

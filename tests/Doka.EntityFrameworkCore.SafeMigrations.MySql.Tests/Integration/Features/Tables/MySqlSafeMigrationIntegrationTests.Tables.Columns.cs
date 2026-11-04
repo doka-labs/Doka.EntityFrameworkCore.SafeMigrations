@@ -23,7 +23,8 @@ public sealed partial class MySqlTablesColumnsIntegrationTests : MySqlSafeMigrat
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, $"CREATE TABLE `strict_column_shape` ({liveColumns});");
+        await ExecuteSqlAsync(connectionString, $"CREATE TABLE `strict_column_shape` ({liveColumns});",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(
@@ -38,22 +39,27 @@ public sealed partial class MySqlTablesColumnsIntegrationTests : MySqlSafeMigrat
 
         // WHY: Identical types and nullability isolate name/order drift from ordinary facet checks;
         // the independent live DDL also prevents the generator from preparing its own expected shape.
-        var definitionBefore = await ReadStrictColumnTableDefinitionAsync(connectionString, "strict_column_shape");
+        var definitionBefore = await ReadStrictColumnTableDefinitionAsync(connectionString, "strict_column_shape",
+            cancellationToken: CancellationToken.None);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("strict-column-shape-preflight"));
+            new SafeMigrationRunOptions("strict-column-shape-preflight"), CancellationToken.None);
 
-        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
         var postflight = await runner.VerifyAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("strict-column-shape-postflight"));
+            new SafeMigrationRunOptions("strict-column-shape-postflight"), CancellationToken.None);
 
-        var definitionAfter = await ReadStrictColumnTableDefinitionAsync(connectionString, "strict_column_shape");
+        var definitionAfter = await ReadStrictColumnTableDefinitionAsync(connectionString, "strict_column_shape",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(preflight.Assessments);
@@ -90,7 +96,7 @@ public sealed partial class MySqlTablesColumnsIntegrationTests : MySqlSafeMigrat
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `strict_column_default` (`id` int NOT NULL, `code` int NOT NULL"
-            + defaultClause + ");");
+            + defaultClause + ");", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -111,24 +117,29 @@ public sealed partial class MySqlTablesColumnsIntegrationTests : MySqlSafeMigrat
             connectionString,
             "SELECT (c.COLUMN_DEFAULT IN ('7')) IS NULL FROM INFORMATION_SCHEMA.COLUMNS c "
             + "WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = 'strict_column_default' "
-            + "AND c.COLUMN_NAME = 'code';");
+            + "AND c.COLUMN_NAME = 'code';", cancellationToken: CancellationToken.None);
 
-        var definitionBefore = await ReadStrictColumnTableDefinitionAsync(connectionString, "strict_column_default");
+        var definitionBefore = await ReadStrictColumnTableDefinitionAsync(connectionString, "strict_column_default",
+            cancellationToken: CancellationToken.None);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("strict-column-default-preflight"));
+            new SafeMigrationRunOptions("strict-column-default-preflight"), CancellationToken.None);
 
-        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
         var postflight = await runner.VerifyAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("strict-column-default-postflight"));
+            new SafeMigrationRunOptions("strict-column-default-postflight"), CancellationToken.None);
 
-        var definitionAfter = await ReadStrictColumnTableDefinitionAsync(connectionString, "strict_column_default");
+        var definitionAfter = await ReadStrictColumnTableDefinitionAsync(connectionString, "strict_column_default",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(preflight.Assessments);
@@ -178,7 +189,8 @@ public sealed partial class MySqlTablesColumnsIntegrationTests : MySqlSafeMigrat
             connectionString,
             "CREATE TABLE `mixed_collation` ("
             + $"`pinned` varchar(32) CHARACTER SET utf8mb4 COLLATE {liveCollation} NOT NULL, "
-            + "`inherited` varchar(32) NOT NULL) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;");
+            + "`inherited` varchar(32) NOT NULL) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -194,16 +206,19 @@ public sealed partial class MySqlTablesColumnsIntegrationTests : MySqlSafeMigrat
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var definitionBefore = await ReadStrictColumnTableDefinitionAsync(connectionString, "mixed_collation");
+        var definitionBefore = await ReadStrictColumnTableDefinitionAsync(connectionString, "mixed_collation",
+            cancellationToken: CancellationToken.None);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("mixed-collation-preflight"));
+            new SafeMigrationRunOptions("mixed-collation-preflight"), CancellationToken.None);
 
-        var definitionAfter = await ReadStrictColumnTableDefinitionAsync(connectionString, "mixed_collation");
+        var definitionAfter = await ReadStrictColumnTableDefinitionAsync(connectionString, "mixed_collation",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(preflight.Assessments);
@@ -214,17 +229,21 @@ public sealed partial class MySqlTablesColumnsIntegrationTests : MySqlSafeMigrat
     }
 
     /// <summary>Reads the complete server-side DDL for the independently created column fixture.</summary>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<string> ReadStrictColumnTableDefinitionAsync(
         string connectionString,
-        string table
+        string table,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync(CancellationToken.None);
+        await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"SHOW CREATE TABLE `{table.Replace("`", "``", StringComparison.Ordinal)}`;";
-        await using var reader = await command.ExecuteReaderAsync(CancellationToken.None);
-        if (!await reader.ReadAsync(CancellationToken.None))
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
         {
             throw new InvalidOperationException("The strict column fixture has no table definition.");
         }

@@ -18,7 +18,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql());
+        await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql(),
+            cancellationToken: CancellationToken.None);
         var operation = AtomicRequiredAddOperation(useGuidStorage);
         var guardName = AtomicRequiredAddGuardName(operation);
         var observer = new AtomicRequiredAddStageProbe(guardName);
@@ -39,7 +40,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
 
         rerun.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
-        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, Assert.Single(preflight.Assessments).Action);
@@ -73,7 +75,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql());
+        await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql(),
+            cancellationToken: CancellationToken.None);
         var operation = AtomicRequiredAddOperation(useGuidStorage);
         var observer = new AtomicRequiredAddStageProbe(AtomicRequiredAddGuardName(operation),
             "SELECT * FROM `atomic_required_add_missing_probe`;");
@@ -85,13 +88,17 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
         var interrupted = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var staged = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+        var staged = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: CancellationToken.None);
+
         var resume = await runner.AnalyzeAsync(context, [operation],
             new SafeMigrationRunOptions("atomic-required-add-resume"), CancellationToken.None);
 
         resume.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
-        var final = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+        var final = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: CancellationToken.None);
+
         var postflight = await runner.VerifyAsync(context, [operation],
             new SafeMigrationRunOptions("atomic-required-add-resume-final"), CancellationToken.None);
 
@@ -111,10 +118,12 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql());
+        await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql(),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
-        await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = '';");
+        await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = '';",
+            cancellationToken: CancellationToken.None);
         var operation = AtomicRequiredAddOperation();
 
         // Act
@@ -124,7 +133,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.RejectUnsupported, Assert.Single(report.Assessments).Action);
@@ -140,7 +150,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE `atomic_required_items` (`key` int NOT NULL PRIMARY KEY) ENGINE=MyISAM;");
+            "CREATE TABLE `atomic_required_items` (`key` int NOT NULL PRIMARY KEY) ENGINE=MyISAM;",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operation = AtomicRequiredAddOperation();
 
@@ -151,7 +162,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.RejectUnsupported, Assert.Single(report.Assessments).Action);
@@ -171,13 +183,14 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
         await ExecuteSqlAsync(connectionString, Fixture.IsMariaDb
             ? AtomicRequiredAddOriginalTableSql()
             : AtomicRequiredAddStagedTableSql(operation, guardName, "`required_value` IS NOT NULL",
-                checkSuffix: " NOT ENFORCED"));
+                checkSuffix: " NOT ENFORCED"), cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         if (Fixture.IsMariaDb)
         {
-            await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION check_constraint_checks = OFF;");
+            await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION check_constraint_checks = OFF;",
+                cancellationToken: CancellationToken.None);
         }
 
         // Act
@@ -187,7 +200,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(Fixture.IsMariaDb ? SafeMigrationAction.RejectUnsupported : SafeMigrationAction.RejectDifferent,
@@ -233,9 +247,10 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
                 columnType: failure == "wrong-type" ? "varchar(36)" : "char(36)",
                 columnSuffix: failure == "unexpected-default" ? " DEFAULT 'caller-owned'" : "");
 
-        await ExecuteSqlAsync(connectionString, createSql);
+        await ExecuteSqlAsync(connectionString, createSql, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        var before = await ReadAtomicRequiredAddStateAsync(connectionString, operation, actualGuardName);
+        var before = await ReadAtomicRequiredAddStateAsync(
+            connectionString, operation, CancellationToken.None, actualGuardName);
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
@@ -244,7 +259,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var after = await ReadAtomicRequiredAddStateAsync(connectionString, operation, actualGuardName);
+        var after = await ReadAtomicRequiredAddStateAsync(
+            connectionString, operation, CancellationToken.None, actualGuardName);
 
         // Assert
         Assert.Equal(failure == "name-collision"
@@ -268,7 +284,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var operation = AtomicRequiredAddOperation();
         await ExecuteSqlAsync(connectionString, AtomicRequiredAddStagedTableSql(operation,
-            AtomicRequiredAddGuardName(operation), "`required_value` IS NOT NULL", nullable: false));
+            AtomicRequiredAddGuardName(operation), "`required_value` IS NOT NULL", nullable: false),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
 
@@ -279,7 +296,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.RejectDifferent, Assert.Single(report.Assessments).Action);
@@ -301,7 +319,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         const string table = "atomic_'slash\\`owner";
         const string column = "value_'slash\\`";
-        await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql(table));
+        await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql(table),
+            cancellationToken: CancellationToken.None);
         // WHY: MySqlConnector's string-parameter escaping must agree with the
         // session mode; retaining default driver escaping would test a broken
         // connection contract instead of SafeMigrations identifier handling.
@@ -309,7 +328,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
         await using var context = CreateContext(configuredConnection.ConnectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_TRANS_TABLES,"
-            + "NO_BACKSLASH_ESCAPES" + (ansiQuotes ? ",ANSI_QUOTES" : "") + "';");
+            + "NO_BACKSLASH_ESCAPES" + (ansiQuotes ? ",ANSI_QUOTES" : "") + "';",
+            cancellationToken: CancellationToken.None);
         var operation = AtomicRequiredAddOperation(table: table, column: column,
             schema: new MySqlConnectionStringBuilder(connectionString).Database);
 
@@ -319,10 +339,12 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
 
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
-        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: CancellationToken.None);
+
         var actualOwnerHex = await ScalarStringAsync(connectionString,
             "SELECT HEX(TABLE_NAME) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = " + AtomicRequiredAddLiteral(table) + ";");
+            + "AND TABLE_NAME = " + AtomicRequiredAddLiteral(table) + ";", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, Assert.Single(report.Assessments).Action);
@@ -348,7 +370,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
             : guardName;
 
         await ExecuteSqlAsync(connectionString, AtomicRequiredAddStagedTableSql(operation, actualGuardName,
-            ownership == "wrong-expression" ? "`required_value` IS NULL" : "`required_value` IS NOT NULL"));
+            ownership == "wrong-expression" ? "`required_value` IS NULL" : "`required_value` IS NOT NULL"),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var intent = Assert.IsType<EnsureColumnIntent>(operation.Intent);
@@ -368,7 +391,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
         var inventory = await context.GetService<ISafeMigrationProviderAnalyzer>().FindUnexpectedObjectsAsync(
             context, builder.Operations, CancellationToken.None);
 
-        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation, actualGuardName);
+        var state = await ReadAtomicRequiredAddStateAsync(
+            connectionString, operation, CancellationToken.None, actualGuardName);
 
         // Assert
         if (ownership == "owned")
@@ -395,7 +419,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
         await ExecuteSqlAsync(connectionString, AtomicRequiredAddStagedTableSql(operation,
             AtomicRequiredAddGuardName(operation), "`required_value` IS NOT NULL")
             + " INSERT INTO `atomic_required_items` (`key`, `required_value`) VALUES "
-            + "(1, '00000000-0000-0000-0000-000000000001'), (2, '00000000-0000-0000-0000-000000000001');");
+            + "(1, '00000000-0000-0000-0000-000000000001'), (2, '00000000-0000-0000-0000-000000000001');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -407,10 +432,13 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("atomic-required-add-duplicate-key"), CancellationToken.None);
 
-        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: CancellationToken.None);
+
         var originalKeys = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE CONSTRAINT_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'atomic_required_items' AND CONSTRAINT_NAME = 'PRIMARY' AND COLUMN_NAME = 'key';");
+            + "AND TABLE_NAME = 'atomic_required_items' AND CONSTRAINT_NAME = 'PRIMARY' AND COLUMN_NAME = 'key';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -434,7 +462,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
         await ExecuteSqlAsync(connectionString, AtomicRequiredAddStagedTableSql(operation,
             AtomicRequiredAddGuardName(operation), "`required_value` IS NOT NULL")
             + " INSERT INTO `atomic_required_items` (`key`, `required_value`) VALUES "
-            + "(1, '00000000-0000-0000-0000-000000000001'), (2, '00000000-0000-0000-0000-000000000002');");
+            + "(1, '00000000-0000-0000-0000-000000000001'), (2, '00000000-0000-0000-0000-000000000002');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -449,13 +478,17 @@ public sealed partial class MySqlColumnsAtomicRequiredAddIntegrationTests : MySq
 
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: CancellationToken.None);
+
         var targetKeys = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE CONSTRAINT_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'atomic_required_items' AND CONSTRAINT_NAME = 'PRIMARY' "
-            + "AND COLUMN_NAME = 'required_value';");
+            + "AND COLUMN_NAME = 'required_value';", cancellationToken: CancellationToken.None);
+
         var distinctValues = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(DISTINCT `required_value`) FROM `atomic_required_items`;");
+            "SELECT COUNT(DISTINCT `required_value`) FROM `atomic_required_items`;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -561,27 +594,37 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     /// <param name="operation">The pending target whose owner is inspected.</param>
     /// <param name="actualGuardName">An optional deliberately unowned CHECK name to inspect.</param>
     /// <returns>The immutable state needed to prove that rejection never loses the barrier or data.</returns>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private protected static async Task<AtomicRequiredAddState> ReadAtomicRequiredAddStateAsync(
         string connectionString,
         SafeMigrationOperation operation,
+        CancellationToken cancellationToken,
         string? actualGuardName = null
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var intent = Assert.IsType<EnsureColumnIntent>(operation.Intent);
         var owner = "TABLE_SCHEMA = DATABASE() AND TABLE_NAME = " + AtomicRequiredAddLiteral(intent.Table);
         var column = owner + " AND COLUMN_NAME = " + AtomicRequiredAddLiteral(intent.Definition.Name);
         var columns = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE " + column + ";");
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE " + column + ";",
+            cancellationToken: cancellationToken);
+
         var nullableColumns = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE " + column + " AND IS_NULLABLE = 'YES';");
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE " + column + " AND IS_NULLABLE = 'YES';",
+            cancellationToken: cancellationToken);
+
         var guards = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = " + AtomicRequiredAddLiteral(intent.Table) + " AND CONSTRAINT_TYPE = 'CHECK' "
             + "AND CONSTRAINT_NAME = "
             + AtomicRequiredAddLiteral(actualGuardName ?? AtomicRequiredAddGuardName(operation))
-            + ";");
+            + ";", cancellationToken: cancellationToken);
+
         var rows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM " + AtomicRequiredAddDelimited(intent.Table) + ";");
+            "SELECT COUNT(*) FROM " + AtomicRequiredAddDelimited(intent.Table) + ";",
+            cancellationToken: cancellationToken);
 
         return new AtomicRequiredAddState(columns, nullableColumns, guards, rows);
     }
@@ -589,11 +632,18 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     /// <summary>Sets only this test's already open migration session, never global server configuration.</summary>
     /// <param name="context">The context retaining the session under test.</param>
     /// <param name="sql">The bounded test-owned session statement.</param>
-    protected static async Task AtomicRequiredAddSessionSqlAsync(DbContext context, string sql)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    protected static async Task AtomicRequiredAddSessionSqlAsync(
+        DbContext context,
+        string sql,
+        CancellationToken cancellationToken
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var command = context.Database.GetDbConnection().CreateCommand();
         command.CommandText = sql;
-        await command.ExecuteNonQueryAsync(CancellationToken.None);
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>Escapes identifiers using delimiter doubling, independently of literal-string SQL modes.</summary>

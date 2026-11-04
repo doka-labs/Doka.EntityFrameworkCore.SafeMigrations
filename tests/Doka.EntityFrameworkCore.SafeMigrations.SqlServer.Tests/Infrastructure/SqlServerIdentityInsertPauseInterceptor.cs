@@ -116,9 +116,12 @@ internal sealed class SqlServerIdentityInsertPauseInterceptor
     /// <summary>
     /// Observes the marker without acquiring it or using the connection running the migration.
     /// </summary>
+    /// <param name="observer">The independent connection observing marker availability.</param>
+    /// <param name="cancellationToken">The token cancelling the marker query.</param>
+    /// <returns>Whether the observing session could acquire the marker.</returns>
     public async Task<bool> CanAcquireMarkerAsync(
         SqlConnection observer,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         await using var command = CreateMarkerObservationCommand(observer);

@@ -16,7 +16,7 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
             "CREATE TABLE `projection_parents` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
             + "CREATE TABLE `projection_children` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
             + "INSERT INTO `projection_parents` (`id`) VALUES (1); "
-            + "INSERT INTO `projection_children` (`id`) VALUES (1);");
+            + "INSERT INTO `projection_children` (`id`) VALUES (1);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = ExistingTableForeignKeyConvergence(context, defaultValue: null);
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -58,12 +58,14 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
                 + "WHERE CONSTRAINT_SCHEMA = DATABASE() "
-                + "AND CONSTRAINT_NAME = 'fk_projection_children_parents';"));
+                + "AND CONSTRAINT_NAME = 'fk_projection_children_parents';",
+                cancellationToken: CancellationToken.None));
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM `projection_children` WHERE `id` = 1 AND `parent_id` IS NULL;"));
+                "SELECT COUNT(*) FROM `projection_children` WHERE `id` = 1 AND `parent_id` IS NULL;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -75,7 +77,7 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
             "CREATE TABLE `projection_parents` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
             + "CREATE TABLE `projection_children` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
             + "INSERT INTO `projection_parents` (`id`) VALUES (1); "
-            + "INSERT INTO `projection_children` (`id`) VALUES (1);");
+            + "INSERT INTO `projection_children` (`id`) VALUES (1);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = ExistingTableForeignKeyConvergence(context, defaultValue: 999);
 
@@ -100,7 +102,7 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'projection_children' "
-                + "AND COLUMN_NAME = 'parent_id';"));
+                + "AND COLUMN_NAME = 'parent_id';", cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -112,7 +114,8 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
             "CREATE TABLE `alias_projection_parents` ("
             + "`id` int NOT NULL, `code` int NOT NULL, "
             + "PRIMARY KEY (`id`), "
-            + "CONSTRAINT `uq_alias_projection_parents_code` UNIQUE (`code`));");
+            + "CONSTRAINT `uq_alias_projection_parents_code` UNIQUE (`code`));",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = SemanticUniqueDropProjection(context);
 
@@ -160,7 +163,7 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
             + "CREATE TABLE `identity_children` ("
             + "`id` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`), "
             + "CONSTRAINT `fk_identity_parent` FOREIGN KEY (`parent_id`) "
-            + "REFERENCES `identity_parents` (`id`) ON DELETE CASCADE);");
+            + "REFERENCES `identity_parents` (`id`) ON DELETE CASCADE);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = SemanticAliasOperations(context, "identity");
         var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
@@ -205,7 +208,7 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
             + "CONSTRAINT `fk_ambiguous_parent_a` FOREIGN KEY (`parent_id`) "
             + "REFERENCES `ambiguous_parents` (`id`) ON DELETE CASCADE, "
             + "CONSTRAINT `fk_ambiguous_parent_b` FOREIGN KEY (`parent_id`) "
-            + "REFERENCES `ambiguous_parents` (`id`) ON DELETE CASCADE);");
+            + "REFERENCES `ambiguous_parents` (`id`) ON DELETE CASCADE);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = SemanticAliasOperations(context, "ambiguous");
         var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
@@ -230,7 +233,8 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `projection_constraints` (`legacy_marker` int NULL);");
+            "CREATE TABLE `projection_constraints` (`legacy_marker` int NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = EmptyExistingTableConstraintConvergence(context);
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -359,7 +363,7 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'provider_artifacts' "
-                + "AND INDEX_NAME = 'ix_provider_artifacts_public_id';"));
+                + "AND INDEX_NAME = 'ix_provider_artifacts_public_id';", cancellationToken: CancellationToken.None));
     }
 
     [Theory]
@@ -394,7 +398,7 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
             + $"CREATE TABLE `{childTable}` ("
             + "`id` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`), "
             + $"CONSTRAINT `{foreignKey}` FOREIGN KEY (`parent_id`) "
-            + $"REFERENCES `{parentTable}` (`id`) ON DELETE CASCADE);");
+            + $"REFERENCES `{parentTable}` (`id`) ON DELETE CASCADE);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = DropThenEnsureOperations(
             context,
@@ -475,7 +479,7 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
             connectionString,
             $"CREATE TABLE `{table}` ("
             + "`id` int NOT NULL, `code` int NOT NULL, PRIMARY KEY (`id`), "
-            + $"CONSTRAINT `{constraint}` UNIQUE (`code`));");
+            + $"CONSTRAINT `{constraint}` UNIQUE (`code`));", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropUniqueConstraintIfExists(constraint, table);
@@ -500,7 +504,8 @@ public sealed partial class MySqlProviderProjectionIntegrationTests : MySqlSafeM
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, replacement.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, replacement.Action);
         Assert.Equal("projected_data_state_unknown", replacement.AnalysisCode);
-        Assert.Equal(0, await ScalarIntAsync(connectionString, $"SELECT COUNT(*) FROM `{table}`;"));
+        Assert.Equal(0, await ScalarIntAsync(connectionString, $"SELECT COUNT(*) FROM `{table}`;",
+            cancellationToken: CancellationToken.None));
     }
 
     private static MigrationBuilder ExistingTableForeignKeyConvergence(

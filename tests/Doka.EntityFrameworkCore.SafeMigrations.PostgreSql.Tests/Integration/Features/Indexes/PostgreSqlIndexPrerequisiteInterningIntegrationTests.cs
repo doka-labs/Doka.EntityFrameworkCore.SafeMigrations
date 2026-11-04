@@ -20,7 +20,8 @@ public sealed class PostgreSqlIndexPrerequisiteInterningIntegrationTests : Postg
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE \"_doka_sm_index_input_0\" (id integer, parent_id integer);"
-            + " CREATE INDEX ix_prerequisite ON \"_doka_sm_index_input_0\" (id,parent_id);");
+            + " CREATE INDEX ix_prerequisite ON \"_doka_sm_index_input_0\" (id,parent_id);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operations = PostgreSqlIndexPrerequisiteInterningTests.Operations(context, 32, distinct);
@@ -28,7 +29,8 @@ public sealed class PostgreSqlIndexPrerequisiteInterningIntegrationTests : Postg
             PostgreSqlIndexPrerequisiteInterningTests.Results);
 
         // Act
-        _ = await PostgreSqlIndexPrerequisiteInterningTests.ReadPrerequisitesAsync(context, capture, operations);
+        _ = await PostgreSqlIndexPrerequisiteInterningTests.ReadPrerequisitesAsync(context, capture, operations,
+            CancellationToken.None);
         var submission = capture.Submissions[0];
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
@@ -66,7 +68,7 @@ public sealed class PostgreSqlIndexPrerequisiteInterningIntegrationTests : Postg
         const string owner = "_doka_sm_index_input_0";
         await ExecuteSqlAsync(connectionString, "CREATE TABLE \"" + owner
             + "\" (id integer, label text, payload json); CREATE INDEX ix_computed ON \"" + owner
-            + "\" (" + (cast ? "(payload::text)" : "lower(label)") + ");");
+            + "\" (" + (cast ? "(payload::text)" : "lower(label)") + ");", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var migration = new MigrationBuilder(context.Database.ProviderName!);
@@ -103,7 +105,7 @@ public sealed class PostgreSqlIndexPrerequisiteInterningIntegrationTests : Postg
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE input_members (id integer, payload "
             + (jsonb ? "jsonb" : "json") + "); CREATE UNIQUE INDEX ix_target ON input_members(id); "
-            + "INSERT INTO input_members VALUES (1,'{}'),(2,'{}');");
+            + "INSERT INTO input_members VALUES (1,'{}'),(2,'{}');", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var migration = new MigrationBuilder(context.Database.ProviderName!);
@@ -140,7 +142,8 @@ public sealed class PostgreSqlIndexPrerequisiteInterningIntegrationTests : Postg
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE input_members (id integer, payload jsonb, label text);"
             + " INSERT INTO input_members VALUES (1,'{}','FIRST'),(2,'"
-            + (duplicate ? "{}" : "{\"value\":2}") + "','" + (duplicate ? "first" : "second") + "');");
+            + (duplicate ? "{}" : "{\"value\":2}") + "','" + (duplicate ? "first" : "second") + "');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var migration = new MigrationBuilder(context.Database.ProviderName!);
@@ -156,9 +159,10 @@ public sealed class PostgreSqlIndexPrerequisiteInterningIntegrationTests : Postg
         // Act
         var report = await runner.AnalyzeAsync(context, migration.Operations,
             new SafeMigrationRunOptions("qualified-unique-row-proof"), CancellationToken.None);
+
         if (!duplicate)
         {
-            await ExecuteOperationsAsync(context, migration.Operations);
+            await ExecuteOperationsAsync(context, migration.Operations, CancellationToken.None);
             postflight = await runner.VerifyAsync(context, migration.Operations,
                 new SafeMigrationRunOptions("qualified-unique-postflight"), CancellationToken.None);
             replay = await runner.AnalyzeAsync(context, migration.Operations,
@@ -197,7 +201,7 @@ public sealed class PostgreSqlIndexPrerequisiteInterningIntegrationTests : Postg
             + "OPERATOR 3 =(integer,integer), OPERATOR 4 >=(integer,integer), OPERATOR 5 >(integer,integer), "
             + "FUNCTION 1 btint4cmp(integer,integer); CREATE TABLE input_members(id integer); CREATE INDEX "
             + (alias ? "ix_alias" : "ix_target") + " ON input_members(id "
-            + (hidden ? "hidden.int4_ops" : "pg_catalog.int4_ops") + ");");
+            + (hidden ? "hidden.int4_ops" : "pg_catalog.int4_ops") + ");", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var migration = new MigrationBuilder(context.Database.ProviderName!);

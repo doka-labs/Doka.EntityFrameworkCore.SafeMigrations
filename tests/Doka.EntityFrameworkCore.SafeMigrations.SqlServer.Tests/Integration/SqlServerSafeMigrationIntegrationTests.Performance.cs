@@ -26,9 +26,9 @@ public sealed class SqlServerSafeMigrationPerformanceIntegrationTests : SqlServe
     public async Task Analyzer_BoundedMixedOperationsRetainExactDeferredContracts()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, MixedStressSchemaSql);
-        await PopulateStressModelManagedRowsAsync(connectionString);
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, MixedStressSchemaSql, cancellationToken: CancellationToken.None);
+        await PopulateStressModelManagedRowsAsync(connectionString, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         context.Database.SetCommandTimeout(PerformanceFixtureCommandTimeoutSeconds);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -37,7 +37,8 @@ public sealed class SqlServerSafeMigrationPerformanceIntegrationTests : SqlServe
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-bounded-mixed-migration"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-bounded-mixed-migration"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         expectation.AssertReport(report);
@@ -52,10 +53,10 @@ public sealed class SqlServerSafeMigrationPerformanceIntegrationTests : SqlServe
     {
         // Arrange
         SqlServerLiveQualificationEvidence.WriteStage("mixed-100k", "fixture-setup");
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, MixedStressSchemaSql);
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, MixedStressSchemaSql, cancellationToken: CancellationToken.None);
         SqlServerLiveQualificationEvidence.WriteStage("mixed-100k", "populate-source-rows");
-        await PopulateStressModelManagedRowsAsync(connectionString);
+        await PopulateStressModelManagedRowsAsync(connectionString, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         context.Database.SetCommandTimeout(PerformanceFixtureCommandTimeoutSeconds);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -65,7 +66,8 @@ public sealed class SqlServerSafeMigrationPerformanceIntegrationTests : SqlServe
         // Act
         SqlServerLiveQualificationEvidence.WriteStage("mixed-100k", "analyze");
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-large-mixed-migration"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-large-mixed-migration"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         expectation.AssertReport(report);
@@ -82,7 +84,7 @@ public sealed class SqlServerSafeMigrationPerformanceIntegrationTests : SqlServe
     {
         // Arrange
         SqlServerLiveQualificationEvidence.WriteStage("catalog-p95", "fixture-setup");
-        var databaseConnectionString = await CreateDatabaseAsync();
+        var databaseConnectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var connectionString = new SqlConnectionStringBuilder(databaseConnectionString)
         {
             Pooling = true,
@@ -90,7 +92,8 @@ public sealed class SqlServerSafeMigrationPerformanceIntegrationTests : SqlServe
         }.ConnectionString;
 
         await ExecuteSqlAsync(connectionString,
-            BuildSqlServerPerformanceTables("expected_perf_", ExpectedPerformanceTableCount, includeIndex: false));
+            BuildSqlServerPerformanceTables("expected_perf_", ExpectedPerformanceTableCount, includeIndex: false),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         context.Database.SetCommandTimeout(PerformanceFixtureCommandTimeoutSeconds);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -103,20 +106,33 @@ public sealed class SqlServerSafeMigrationPerformanceIntegrationTests : SqlServe
 
         var runner = context.GetService<ISafeMigrationRunner>();
         var options = new SafeMigrationRunOptions("sqlserver-live-performance");
-        var environment = await context.GetService<ISafeMigrationProviderAnalyzer>().GetEnvironmentAsync(context);
+        var environment = await context.GetService<ISafeMigrationProviderAnalyzer>().GetEnvironmentAsync(context,
+            cancellationToken: CancellationToken.None);
+
         using var stageCapture = SqlServerLiveQualificationEvidence.CaptureAnalysisStages("catalog-p95");
 
         // Act
         SqlServerLiveQualificationEvidence.WriteStage("catalog-p95", "clean-samples");
-        var clean = await LivePerformanceEvidence.MeasureAsync(() =>
-            runner.AnalyzeAsync(context, builder.Operations, options));
+        var clean = await LivePerformanceEvidence.MeasureAsync(token =>
+            runner.AnalyzeAsync(
+                context,
+                builder.Operations,
+                options,
+                cancellationToken: token),
+            CancellationToken.None);
 
         SqlServerLiveQualificationEvidence.WriteStage("catalog-p95", "create-foreign-objects");
         await ExecuteSqlAsync(connectionString,
-            BuildSqlServerPerformanceTables("foreign_perf_", ForeignPerformanceTableCount, includeIndex: true));
+            BuildSqlServerPerformanceTables("foreign_perf_", ForeignPerformanceTableCount, includeIndex: true),
+            cancellationToken: CancellationToken.None);
         SqlServerLiveQualificationEvidence.WriteStage("catalog-p95", "noisy-samples");
-        var noisy = await LivePerformanceEvidence.MeasureAsync(() =>
-            runner.AnalyzeAsync(context, builder.Operations, options));
+        var noisy = await LivePerformanceEvidence.MeasureAsync(token =>
+            runner.AnalyzeAsync(
+                context,
+                builder.Operations,
+                options,
+                cancellationToken: token),
+            CancellationToken.None);
 
         LivePerformanceEvidence.Write("sqlserver", environment.ServerVersion, clean, noisy,
             ExpectedPerformanceTableCount, ForeignPerformanceTableCount);
@@ -158,11 +174,15 @@ public sealed class SqlServerSafeMigrationPerformanceIntegrationTests : SqlServe
 
     /// <summary>Creates one source row for every linear managed update in the mixed stress stream.</summary>
     /// <param name="connectionString">The isolated stress database connection.</param>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     /// <returns>A task that completes when all ordinal-specific source rows are available.</returns>
     private static async Task PopulateStressModelManagedRowsAsync(
-        string connectionString
+        string connectionString,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         using var rows = new DataTable { Locale = CultureInfo.InvariantCulture };
         rows.Columns.Add("id", typeof(int));
         rows.Columns.Add("managed_value", typeof(string));
@@ -175,7 +195,7 @@ public sealed class SqlServerSafeMigrationPerformanceIntegrationTests : SqlServe
         }
 
         await using var connection = new SqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(cancellationToken: cancellationToken);
         using var bulkCopy = new SqlBulkCopy(connection)
         {
             DestinationTableName = "dbo.sqlserver_stress_managed",
@@ -186,6 +206,6 @@ public sealed class SqlServerSafeMigrationPerformanceIntegrationTests : SqlServe
         bulkCopy.ColumnMappings.Add("id", "id");
         bulkCopy.ColumnMappings.Add("managed_value", "managed_value");
 
-        await bulkCopy.WriteToServerAsync(rows);
+        await bulkCopy.WriteToServerAsync(rows, cancellationToken);
     }
 }

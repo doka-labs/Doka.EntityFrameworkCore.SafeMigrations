@@ -23,7 +23,7 @@ public sealed class PostgreSqlConstraintsProjectedCallableBindingsIntegrationTes
             "CREATE TABLE mixed_columns (id varchar(32) NOT NULL, added integer NOT NULL, "
             + "CONSTRAINT ck_lower_binding CHECK (LOWER(id) >= '' AND added >= 0)); "
             + $"CREATE FUNCTION public.lower({signature}) RETURNS text LANGUAGE sql IMMUTABLE "
-            + "AS 'SELECT upper($1::text)';");
+            + "AS 'SELECT upper($1::text)';", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -39,7 +39,7 @@ public sealed class PostgreSqlConstraintsProjectedCallableBindingsIntegrationTes
             new SafeMigrationRunOptions("native-lower-overload-boundary"), CancellationToken.None);
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-            ExecuteOperationsAsync(context, builder.Operations));
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -74,7 +74,8 @@ public sealed class PostgreSqlConstraintsProjectedCallableBindingsIntegrationTes
             + $"CREATE FUNCTION metadata_ambiguous({firstSignature}) RETURNS boolean LANGUAGE plpgsql AS "
             + "'BEGIN INSERT INTO callback_audit VALUES (1); RETURN TRUE; END'; "
             + $"CREATE FUNCTION metadata_ambiguous({secondSignature}) RETURNS boolean LANGUAGE plpgsql AS "
-            + "'BEGIN INSERT INTO callback_audit VALUES (2); RETURN TRUE; END';");
+            + "'BEGIN INSERT INTO callback_audit VALUES (2); RETURN TRUE; END';",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -97,7 +98,7 @@ public sealed class PostgreSqlConstraintsProjectedCallableBindingsIntegrationTes
         if (exact)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
             postflight = await runner.VerifyAsync(context, builder.Operations,
                 new SafeMigrationRunOptions("sparse-check-callable-final"), CancellationToken.None);
 
@@ -107,10 +108,12 @@ public sealed class PostgreSqlConstraintsProjectedCallableBindingsIntegrationTes
         else
         {
             nativeError = await Assert.ThrowsAsync<PostgresException>(() => ExecuteSqlAsync(connectionString,
-                "ALTER TABLE mixed_columns ADD CONSTRAINT native_probe CHECK (metadata_ambiguous(id));"));
+                "ALTER TABLE mixed_columns ADD CONSTRAINT native_probe CHECK (metadata_ambiguous(id));",
+                cancellationToken: CancellationToken.None));
         }
 
-        var callbacks = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM callback_audit;");
+        var callbacks = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM callback_audit;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(0, callbacks);

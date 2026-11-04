@@ -21,7 +21,8 @@ public sealed class PostgreSqlConstraintsProjectedCollationBindingsIntegrationTe
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var type = text ? "text" : "integer";
-        await ExecuteSqlAsync(connectionString, $"CREATE TABLE mixed_columns (id {type} NOT NULL);");
+        await ExecuteSqlAsync(connectionString, $"CREATE TABLE mixed_columns (id {type} NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var collation = exists ? "C" : "absent_collation";
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -46,7 +47,7 @@ public sealed class PostgreSqlConstraintsProjectedCollationBindingsIntegrationTe
         if (text && exists)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
             postflight = await runner.VerifyAsync(context, builder.Operations,
                 new SafeMigrationRunOptions("sparse-check-collation-final"), CancellationToken.None);
 
@@ -57,7 +58,7 @@ public sealed class PostgreSqlConstraintsProjectedCollationBindingsIntegrationTe
         {
             nativeError = await Assert.ThrowsAsync<PostgresException>(() => ExecuteSqlAsync(connectionString,
                 $"ALTER TABLE mixed_columns ADD CONSTRAINT native_probe CHECK ((id COLLATE \"{collation}\") "
-                + (text ? ">= ''" : ">= 0") + ");"));
+                + (text ? ">= ''" : ">= 0") + ");", cancellationToken: CancellationToken.None));
         }
 
         // Assert

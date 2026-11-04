@@ -15,6 +15,7 @@ public sealed class SqlServerIdentityInsertScopeTests
         // Act
         var sql = SqlServerSafeMigrationIdentityInsertScope.BuildRecoverySql(
             token, "SET IDENTITY_INSERT [dbo].[roles] OFF;");
+
         var off = sql.IndexOf("SET IDENTITY_INSERT", StringComparison.Ordinal);
         var tokenProof = sql.IndexOf("<> 0x" + token + " RETURN;", StringComparison.Ordinal);
         var acquiredProof = sql.IndexOf("SUBSTRING(@doka_identity_scope, 1, 1) = 0x02", StringComparison.Ordinal);

@@ -14,10 +14,10 @@ public sealed class SqlServerSafeMigrationMemberRenameEvidenceIntegrationTests :
     public async Task MemberRename_MixedProbeWireTypesRemainBoolean()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.member_rows (id int NOT NULL); "
-            + "CREATE INDEX source_index ON dbo.member_rows (id);");
+            + "CREATE INDEX source_index ON dbo.member_rows (id);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
@@ -74,7 +74,7 @@ public sealed class SqlServerSafeMigrationMemberRenameEvidenceIntegrationTests :
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var source = index ? "source_index" : "source_value";
         var target = index ? "target_index" : "target_value";
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.member_rows (id int NOT NULL, decoy int NULL"
@@ -82,7 +82,8 @@ public sealed class SqlServerSafeMigrationMemberRenameEvidenceIntegrationTests :
             + (!index && targetExists ? ", target_value int NULL" : string.Empty) + "); "
             + "INSERT INTO dbo.member_rows (id) VALUES (7); "
             + (index && sourceExists ? "CREATE INDEX source_index ON dbo.member_rows (id); " : string.Empty)
-            + (index && targetExists ? "CREATE INDEX target_index ON dbo.member_rows (decoy); " : string.Empty));
+            + (index && targetExists ? "CREATE INDEX target_index ON dbo.member_rows (decoy); " : string.Empty),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -102,18 +103,23 @@ public sealed class SqlServerSafeMigrationMemberRenameEvidenceIntegrationTests :
         var rename = (SafeMigrationOperation)builder.Operations[^1];
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename]);
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("member-rename-brownfield"));
+        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename],
+            cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("member-rename-brownfield"), cancellationToken: CancellationToken.None);
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var targetCount = await ScalarIntAsync(connectionString, index
             ? "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.member_rows', N'U') "
                 + "AND name = N'target_index';"
             : "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.member_rows', N'U') "
-                + "AND name = N'target_value';");
+                + "AND name = N'target_value';", cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.member_rows WHERE id = 7;");
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.member_rows WHERE id = 7;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);
@@ -143,10 +149,10 @@ public sealed class SqlServerSafeMigrationMemberRenameEvidenceIntegrationTests :
     public async Task MemberRename_IndexDestinationRemainsOwnerLocal()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.member_rows (id int NOT NULL); CREATE TABLE dbo.other_rows (id int NOT NULL); "
-            + "CREATE INDEX target_index ON dbo.other_rows (id);");
+            + "CREATE INDEX target_index ON dbo.other_rows (id);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -156,11 +162,12 @@ public sealed class SqlServerSafeMigrationMemberRenameEvidenceIntegrationTests :
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("member-rename-owner-local"));
+            new SafeMigrationRunOptions("member-rename-owner-local"), cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var targets = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.indexes WHERE name = N'target_index';");
+            "SELECT COUNT(*) FROM sys.indexes WHERE name = N'target_index';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -176,10 +183,11 @@ public sealed class SqlServerSafeMigrationMemberRenameEvidenceIntegrationTests :
     public async Task MemberRename_AbsentSourceReplayPreservesDestination(bool index)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.member_rows (id int NOT NULL, target_value int NULL); "
-            + "INSERT INTO dbo.member_rows VALUES (7, 29); CREATE INDEX target_index ON dbo.member_rows (id);");
+            + "INSERT INTO dbo.member_rows VALUES (7, 29); CREATE INDEX target_index ON dbo.member_rows (id);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -194,11 +202,11 @@ public sealed class SqlServerSafeMigrationMemberRenameEvidenceIntegrationTests :
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("member-rename-replay"));
+            new SafeMigrationRunOptions("member-rename-replay"), cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var rows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.member_rows WHERE target_value = 29;");
+            "SELECT COUNT(*) FROM dbo.member_rows WHERE target_value = 29;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -214,13 +222,13 @@ public sealed class SqlServerSafeMigrationMemberRenameEvidenceIntegrationTests :
     public async Task MemberRename_TargetDropRequiresIndependentlySupportedSource(bool constraint)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.member_rows (id int NOT NULL, decoy int NULL"
             + (constraint ? ", CONSTRAINT source_index PRIMARY KEY (id)" : string.Empty)
             + "); INSERT INTO dbo.member_rows (id) VALUES (7); "
             + (constraint ? string.Empty : "CREATE INDEX source_index ON dbo.member_rows (id); ")
-            + "CREATE INDEX target_index ON dbo.member_rows (decoy);");
+            + "CREATE INDEX target_index ON dbo.member_rows (decoy);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -229,16 +237,21 @@ public sealed class SqlServerSafeMigrationMemberRenameEvidenceIntegrationTests :
         var rename = (SafeMigrationOperation)builder.Operations[^1];
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename]);
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("member-rename-source-kind"));
+        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename],
+            cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("member-rename-source-kind"), cancellationToken: CancellationToken.None);
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var sourceCount = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.member_rows', N'U') "
-            + "AND name = N'source_index';");
+            + "AND name = N'source_index';", cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.member_rows WHERE id = 7;");
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.member_rows WHERE id = 7;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);

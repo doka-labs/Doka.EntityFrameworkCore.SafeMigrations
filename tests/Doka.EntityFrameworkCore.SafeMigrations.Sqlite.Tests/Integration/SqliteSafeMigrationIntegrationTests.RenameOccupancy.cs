@@ -11,10 +11,13 @@ public sealed class SqliteSafeMigrationRenameOccupancyIntegrationTests : SqliteS
     public async Task CreatedSourceRename_UsesIndependentLiveDestinationPresence(bool targetExists)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         if (targetExists)
         {
-            await ExecuteSqlAsync(connection, "CREATE TABLE rename_destination (Id INTEGER NOT NULL);");
+            await ExecuteSqlAsync(
+                connection,
+                "CREATE TABLE rename_destination (Id INTEGER NOT NULL);",
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connection);
@@ -24,10 +27,12 @@ public sealed class SqliteSafeMigrationRenameOccupancyIntegrationTests : SqliteS
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("rename-created"));
+            context, builder.Operations, new SafeMigrationRunOptions("rename-created"),
+            cancellationToken: CancellationToken.None);
 
         var sourceCount = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' AND name = 'rename_source';");
+            "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' AND name = 'rename_source';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var rename = report.Assessments[^1];
@@ -41,8 +46,11 @@ public sealed class SqliteSafeMigrationRenameOccupancyIntegrationTests : SqliteS
     public async Task CreatedSourceRename_AcceptedDestinationDropDischargesLiveOccupancy()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection, "CREATE TABLE rename_destination (Id INTEGER NOT NULL);");
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE rename_destination (Id INTEGER NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = CreateRenameSource(context);
         builder.DropTableIfExists("rename_destination");
@@ -51,7 +59,8 @@ public sealed class SqliteSafeMigrationRenameOccupancyIntegrationTests : SqliteS
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("rename-dropped"));
+            context, builder.Operations, new SafeMigrationRunOptions("rename-dropped"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -63,8 +72,11 @@ public sealed class SqliteSafeMigrationRenameOccupancyIntegrationTests : SqliteS
     public async Task MissingSourceRename_WithExistingDestinationRemainsNoOp()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection, "CREATE TABLE rename_destination (Id INTEGER NOT NULL);");
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE rename_destination (Id INTEGER NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("rename_source", "rename_destination");
@@ -72,7 +84,8 @@ public sealed class SqliteSafeMigrationRenameOccupancyIntegrationTests : SqliteS
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("rename-replay"));
+            context, builder.Operations, new SafeMigrationRunOptions("rename-replay"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var rename = Assert.Single(report.Assessments);
@@ -88,8 +101,11 @@ public sealed class SqliteSafeMigrationRenameOccupancyIntegrationTests : SqliteS
     public async Task CreatedSourceRename_RejectsNonTableDestinationOccupant(string createOccupant)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection, "CREATE TABLE occupied_owner (Id INTEGER NOT NULL); " + createOccupant);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE occupied_owner (Id INTEGER NOT NULL); " + createOccupant,
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = CreateRenameSource(context);
         builder.RenameTableIfExists("rename_source", "RENAME_DESTINATION");
@@ -97,7 +113,8 @@ public sealed class SqliteSafeMigrationRenameOccupancyIntegrationTests : SqliteS
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("rename-object"));
+            context, builder.Operations, new SafeMigrationRunOptions("rename-object"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -114,9 +131,10 @@ public sealed class SqliteSafeMigrationRenameOccupancyIntegrationTests : SqliteS
     public async Task ExistingSourceRename_RejectsNonTableDestinationOccupant(string createOccupant)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection, "CREATE TABLE rename_source (Id INTEGER NOT NULL); "
-            + "CREATE TABLE occupied_owner (Id INTEGER NOT NULL); " + createOccupant);
+            + "CREATE TABLE occupied_owner (Id INTEGER NOT NULL); " + createOccupant,
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("rename_source", "RENAME_DESTINATION");
@@ -124,10 +142,12 @@ public sealed class SqliteSafeMigrationRenameOccupancyIntegrationTests : SqliteS
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("rename-live-source-object"));
+            context, builder.Operations, new SafeMigrationRunOptions("rename-live-source-object"),
+            cancellationToken: CancellationToken.None);
 
         var sourceCount = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' AND name = 'rename_source';");
+            "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' AND name = 'rename_source';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var rename = Assert.Single(report.Assessments);
@@ -147,8 +167,11 @@ public sealed class SqliteSafeMigrationRenameOccupancyIntegrationTests : SqliteS
     public async Task MissingSourceRename_NonTableDestinationRemainsNoOp(string createOccupant)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection, "CREATE TABLE occupied_owner (Id INTEGER NOT NULL); " + createOccupant);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE occupied_owner (Id INTEGER NOT NULL); " + createOccupant,
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("rename_source", "RENAME_DESTINATION");
@@ -156,7 +179,8 @@ public sealed class SqliteSafeMigrationRenameOccupancyIntegrationTests : SqliteS
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("rename-missing-source-object"));
+            context, builder.Operations, new SafeMigrationRunOptions("rename-missing-source-object"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var rename = Assert.Single(report.Assessments);
@@ -170,9 +194,10 @@ public sealed class SqliteSafeMigrationRenameOccupancyIntegrationTests : SqliteS
     public async Task CreatedSourceRename_AllowsIndependentTriggerName()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection, "CREATE TABLE occupied_owner (Id INTEGER NOT NULL); "
-            + "CREATE TRIGGER rename_destination AFTER INSERT ON occupied_owner BEGIN SELECT 1; END;");
+            + "CREATE TRIGGER rename_destination AFTER INSERT ON occupied_owner BEGIN SELECT 1; END;",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = CreateRenameSource(context);
         builder.RenameTableIfExists("rename_source", "rename_destination");
@@ -180,7 +205,8 @@ public sealed class SqliteSafeMigrationRenameOccupancyIntegrationTests : SqliteS
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("rename-trigger"));
+            context, builder.Operations, new SafeMigrationRunOptions("rename-trigger"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -195,9 +221,10 @@ public sealed class SqliteSafeMigrationRenameOccupancyIntegrationTests : SqliteS
     public async Task CreatedSourceRename_RetainsLegacyAlterTableBoundary(bool legacyAlterTable)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection, legacyAlterTable
-            ? "PRAGMA legacy_alter_table = ON;" : "PRAGMA legacy_alter_table = OFF;");
+            ? "PRAGMA legacy_alter_table = ON;" : "PRAGMA legacy_alter_table = OFF;",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = CreateRenameSource(context);
         builder.RenameTableIfExists("rename_source", "rename_destination");
@@ -205,7 +232,8 @@ public sealed class SqliteSafeMigrationRenameOccupancyIntegrationTests : SqliteS
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("rename-capability"));
+            context, builder.Operations, new SafeMigrationRunOptions("rename-capability"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(legacyAlterTable ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready,
@@ -219,9 +247,9 @@ public sealed class SqliteSafeMigrationRenameOccupancyIntegrationTests : SqliteS
     public async Task MissingSourceRename_LegacyAlterTableDoesNotBlockReplay()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection, "CREATE TABLE rename_destination (Id INTEGER NOT NULL); "
-            + "PRAGMA legacy_alter_table = ON;");
+            + "PRAGMA legacy_alter_table = ON;", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("rename_source", "rename_destination");
@@ -229,7 +257,8 @@ public sealed class SqliteSafeMigrationRenameOccupancyIntegrationTests : SqliteS
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("rename-capability-replay"));
+            context, builder.Operations, new SafeMigrationRunOptions("rename-capability-replay"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);

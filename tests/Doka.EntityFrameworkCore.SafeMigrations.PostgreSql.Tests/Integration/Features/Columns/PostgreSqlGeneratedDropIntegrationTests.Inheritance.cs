@@ -16,7 +16,8 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE generated_parent(source integer, unrelated integer); "
             + "CREATE TABLE generated_child(derived integer GENERATED ALWAYS AS(source+1) STORED) "
-            + "INHERITS(generated_parent); INSERT INTO generated_child(source,unrelated) VALUES(2,9);");
+            + "INHERITS(generated_parent); INSERT INTO generated_child(source,unrelated) VALUES(2,9);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -26,10 +27,12 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-drop-inherited-owner"), CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
         var childColumns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='generated_child'::regclass "
-            + "AND attnum>0 AND NOT attisdropped;");
+            + "AND attnum>0 AND NOT attisdropped;", cancellationToken: CancellationToken.None);
 
         // Assert
         _output.WriteLine("preflight={0}; native-failure={1}; surviving-child-columns={2}", report.Status,
@@ -48,6 +51,7 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
 
         Assert.Equal(3, childColumns);
         Assert.Equal("2:9:3", await ScalarStringAsync(connectionString,
-            "SELECT source::text || ':' || unrelated::text || ':' || derived::text FROM generated_child;"));
+            "SELECT source::text || ':' || unrelated::text || ':' || derived::text FROM generated_child;",
+            cancellationToken: CancellationToken.None));
     }
 }

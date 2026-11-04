@@ -16,13 +16,14 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
     public async Task CapturedComputedSourceSurvivesCreateAddAndReplay(bool addColumn, bool stored)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (addColumn)
         {
             await ExecuteSqlAsync(connection,
-                "CREATE TABLE source_nodes (source INTEGER NOT NULL); INSERT INTO source_nodes VALUES (7);");
+                "CREATE TABLE source_nodes (source INTEGER NOT NULL); INSERT INTO source_nodes VALUES (7);",
+                cancellationToken: CancellationToken.None);
 
             builder.AddColumnIfNotExistsFromModel(operation => operation.AddColumn<int>(
                 "derived", "source_nodes", type: "INTEGER", nullable: false,
@@ -39,19 +40,27 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
         }
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         if (!addColumn)
         {
-            await ExecuteSqlAsync(connection, "INSERT INTO source_nodes (source) VALUES (7);");
+            await ExecuteSqlAsync(
+                connection,
+                "INSERT INTO source_nodes (source) VALUES (7);",
+                cancellationToken: CancellationToken.None);
         }
 
-        var rows = await ScalarIntAsync(connection, "SELECT COUNT(*) FROM source_nodes WHERE derived = 7;");
+        var rows = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM source_nodes WHERE derived = 7;",
+            cancellationToken: CancellationToken.None);
+
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'source_nodes';";
         var sql = await command.ExecuteScalarAsync();
         var report = await context.GetService<ISafeMigrationRunner>().VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-captured-generated-source"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-captured-generated-source"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, rows);
@@ -68,11 +77,12 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
     public async Task ComputedCatalogDoesNotAliasIntegerAndRealBoundaryTokens(bool decimalSuffix)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         var actual = decimalSuffix ? ComputedSql.Replace("5808)", "5808.0)", StringComparison.Ordinal) : ComputedSql;
         await ExecuteSqlAsync(connection,
             "CREATE TABLE source_nodes (source INTEGER NOT NULL, derived INTEGER NOT NULL GENERATED ALWAYS AS ("
-            + actual + ") VIRTUAL); INSERT INTO source_nodes (source) VALUES (7);");
+            + actual + ") VIRTUAL); INSERT INTO source_nodes (source) VALUES (7);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -82,9 +92,13 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-captured-numeric-drift"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-captured-numeric-drift"),
+            cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connection, "SELECT COUNT(*) FROM source_nodes WHERE derived = 7;");
+        var rows = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM source_nodes WHERE derived = 7;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
@@ -103,9 +117,10 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
         // Arrange
         const string expected = "typeof(-9223372036854775808) = 'integer'";
         var actual = decimalSuffix ? "typeof(-9223372036854775808.0) = 'integer'" : expected;
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
-            "CREATE TABLE source_nodes (source INTEGER, CONSTRAINT ck_source CHECK (" + actual + "));");
+            "CREATE TABLE source_nodes (source INTEGER, CONSTRAINT ck_source CHECK (" + actual + "));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -113,10 +128,14 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-captured-check-drift"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-captured-check-drift"),
+            cancellationToken: CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() =>
-            ExecuteSqlAsync(connection, "INSERT INTO source_nodes VALUES (1);"));
+            ExecuteSqlAsync(
+                connection,
+                "INSERT INTO source_nodes VALUES (1);",
+                cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Equal(decimalSuffix ? SafeMigrationObservedState.Different : SafeMigrationObservedState.Matching,
@@ -137,7 +156,7 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
     {
         // Arrange
         const string expression = "typeof(-9223372036854775808) = 'integer'";
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists("source_nodes", table => new
@@ -146,13 +165,19 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
         }, constraints: table => table.CheckConstraint("ck_source", expression));
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteSqlAsync(connection, "INSERT INTO source_nodes VALUES (7);");
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "INSERT INTO source_nodes VALUES (7);",
+            cancellationToken: CancellationToken.None);
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT sql FROM sqlite_schema WHERE name = 'source_nodes' AND type = 'table';";
         var sql = await command.ExecuteScalarAsync();
-        var rows = await ScalarIntAsync(connection, "SELECT COUNT(*) FROM source_nodes;");
+        var rows = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM source_nodes;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Contains("CHECK (" + expression + ")", Assert.IsType<string>(sql), StringComparison.Ordinal);
@@ -168,7 +193,7 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
     public async Task CapturedNativeIdentifierDelimitersExecuteWithoutRewriting(string quotedSource)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var expression = quotedSource + " + 1";
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -179,9 +204,16 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
         });
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteSqlAsync(connection, "INSERT INTO source_nodes (source) VALUES (7);");
-        var rows = await ScalarIntAsync(connection, "SELECT COUNT(*) FROM source_nodes WHERE derived = 8;");
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "INSERT INTO source_nodes (source) VALUES (7);",
+            cancellationToken: CancellationToken.None);
+        var rows = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM source_nodes WHERE derived = 8;",
+            cancellationToken: CancellationToken.None);
+
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT sql FROM sqlite_schema WHERE name = 'source_nodes' AND type = 'table';";
         var sql = await command.ExecuteScalarAsync();
@@ -200,7 +232,7 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
     public async Task NativeDoubleQuotedStringFallbackDoesNotAuthorizeMissingColumn(bool missing)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         var handle = connection.Handle ?? throw new InvalidOperationException("The fixture connection must be open.");
         var ddlCode = SQLitePCL.raw.sqlite3_db_config(handle, SQLitePCL.raw.SQLITE_DBCONFIG_DQS_DDL, 1,
             out var ddlEnabled);
@@ -211,7 +243,8 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
         var expression = missing ? "\"absent\"" : "\"source\"";
         await ExecuteSqlAsync(connection,
             "CREATE TABLE native_dqs (source TEXT NOT NULL, derived TEXT GENERATED ALWAYS AS (" + expression
-            + ") VIRTUAL); INSERT INTO native_dqs (source) VALUES ('present');");
+            + ") VIRTUAL); INSERT INTO native_dqs (source) VALUES ('present');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -223,14 +256,19 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-dqs-source-proof"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-dqs-source-proof"),
+            cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var tables = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'source_nodes' AND type = 'table';");
+            "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'source_nodes' AND type = 'table';",
+            cancellationToken: CancellationToken.None);
 
         var nativeRows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM native_dqs WHERE derived = '" + (missing ? "absent" : "present") + "';");
+            "SELECT COUNT(*) FROM native_dqs WHERE derived = '" + (missing ? "absent" : "present") + "';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SQLitePCL.raw.SQLITE_OK, ddlCode);
@@ -261,19 +299,20 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
     public async Task DoubleQuotedCheckRequiresDeclaredOperand(bool missing, bool ensureOnly)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         EnableDoubleQuotedStringCompatibility(connection);
         var expression = (missing ? "\"absent\"" : "\"source\"") + " <> ''";
         await ExecuteSqlAsync(connection,
             "CREATE TABLE native_dqs (source TEXT NOT NULL, CHECK (" + expression
-            + ")); INSERT INTO native_dqs VALUES ('present');");
+            + ")); INSERT INTO native_dqs VALUES ('present');", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (ensureOnly)
         {
             await ExecuteSqlAsync(connection,
-                "CREATE TABLE source_nodes (source TEXT NOT NULL, CONSTRAINT ck_source CHECK (" + expression + "));");
+                "CREATE TABLE source_nodes (source TEXT NOT NULL, CONSTRAINT ck_source CHECK (" + expression + "));",
+                cancellationToken: CancellationToken.None);
 
             builder.AddCheckConstraintIfNotExists("ck_source", "source_nodes", expression);
         }
@@ -287,13 +326,20 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-dqs-check-proof"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-dqs-check-proof"),
+            cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var tables = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'source_nodes' AND type = 'table';");
+            "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'source_nodes' AND type = 'table';",
+            cancellationToken: CancellationToken.None);
 
-        var nativeRows = await ScalarIntAsync(connection, "SELECT COUNT(*) FROM native_dqs;");
+        var nativeRows = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM native_dqs;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, nativeRows);
@@ -320,17 +366,19 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
     public async Task DoubleQuotedComputedAddRequiresLiveOperand(bool missing, bool exists)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         EnableDoubleQuotedStringCompatibility(connection);
         await ExecuteSqlAsync(connection,
-            "CREATE TABLE source_nodes (source TEXT NOT NULL); INSERT INTO source_nodes VALUES ('present');");
+            "CREATE TABLE source_nodes (source TEXT NOT NULL); INSERT INTO source_nodes VALUES ('present');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
         var expression = missing ? "\"absent\"" : "\"source\"";
         if (exists)
         {
             await ExecuteSqlAsync(connection,
-                "ALTER TABLE source_nodes ADD derived TEXT NOT NULL GENERATED ALWAYS AS (" + expression + ") VIRTUAL;");
+                "ALTER TABLE source_nodes ADD derived TEXT NOT NULL GENERATED ALWAYS AS (" + expression + ") VIRTUAL;",
+                cancellationToken: CancellationToken.None);
         }
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -339,13 +387,20 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-dqs-computed-add-proof"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-dqs-computed-add-proof"),
+            cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var columns = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM pragma_table_xinfo('source_nodes') WHERE name = 'derived';");
+            "SELECT COUNT(*) FROM pragma_table_xinfo('source_nodes') WHERE name = 'derived';",
+            cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connection, "SELECT COUNT(*) FROM source_nodes;");
+        var rows = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM source_nodes;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(missing ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready, report.Status);
@@ -384,7 +439,7 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
         const string renamedExpression =
             "CASE WHEN \"renamed\" > 0 AND 'source' = 'source' THEN \"renamed\" ELSE 0 END";
 
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var create = new MigrationBuilder(context.Database.ProviderName!);
         create.CreateTableIfNotExists("source_nodes", table => new
@@ -393,8 +448,11 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
             derived = table.Column<int>(type: "INTEGER", nullable: false, computedColumnSql: expression),
         });
 
-        await ExecuteOperationsAsync(context, create.Operations);
-        await ExecuteSqlAsync(connection, "INSERT INTO source_nodes (source) VALUES (7);");
+        await ExecuteOperationsAsync(context, create.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "INSERT INTO source_nodes (source) VALUES (7);",
+            cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameColumnIfExists("source", "source_nodes", "renamed");
         var expected = new MigrationBuilder(context.Database.ProviderName!);
@@ -403,14 +461,24 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-captured-source-rename"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-captured-source-rename"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var versionBefore = await ScalarIntAsync(connection, "PRAGMA schema_version;");
-        await ExecuteOperationsAsync(context, expected.Operations);
-        var versionAfter = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        var versionBefore = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, expected.Operations, cancellationToken: CancellationToken.None);
+        var versionAfter = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
+
         var rows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM source_nodes WHERE renamed = 7 AND derived = 7;");
+            "SELECT COUNT(*) FROM source_nodes WHERE renamed = 7 AND derived = 7;",
+            cancellationToken: CancellationToken.None);
 
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT sql FROM sqlite_schema WHERE name = 'source_nodes' AND type = 'table';";
@@ -437,7 +505,7 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
         const string renamedExpression =
             "CASE WHEN \"renamed\" > 0 AND 'source' = 'source' THEN \"renamed\" ELSE 0 END";
 
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var create = new MigrationBuilder(context.Database.ProviderName!);
         create.CreateTableIfNotExists("source_nodes", table => new
@@ -446,8 +514,11 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
             derived = table.Column<int>(type: "INTEGER", nullable: false, computedColumnSql: expression),
         }, constraints: table => table.CheckConstraint("ck_source_nodes", "\"source\" >= 0"));
 
-        await ExecuteOperationsAsync(context, create.Operations);
-        await ExecuteSqlAsync(connection, "INSERT INTO source_nodes (source) VALUES (7);");
+        await ExecuteOperationsAsync(context, create.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "INSERT INTO source_nodes (source) VALUES (7);",
+            cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         foreach (var operation in create.Operations)
         {
@@ -462,14 +533,19 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-known-computed-source-rename"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-known-computed-source-rename"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var rows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM source_nodes WHERE renamed = 7 AND derived = 7;");
+            "SELECT COUNT(*) FROM source_nodes WHERE renamed = 7 AND derived = 7;",
+            cancellationToken: CancellationToken.None);
 
         var invalidRow = await Record.ExceptionAsync(
-            () => ExecuteSqlAsync(connection, "INSERT INTO source_nodes (renamed) VALUES (-1);"));
+            () => ExecuteSqlAsync(
+                connection,
+                "INSERT INTO source_nodes (renamed) VALUES (-1);",
+                cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.True(report.Status == SafeMigrationReportStatus.Ready,
@@ -487,7 +563,7 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
     public async Task CheckRenameUsesNativeColumnRolesWithoutChangingLiteralCase(bool literalDrift)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var create = new MigrationBuilder(context.Database.ProviderName!);
         create.CreateTableIfNotExists("source_nodes", table => new
@@ -495,8 +571,11 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
             Value = table.Column<string>(type: "TEXT", nullable: false),
         }, constraints: table => table.CheckConstraint("ck_source_nodes", "\"value\" <> 'VALUE'"));
 
-        await ExecuteOperationsAsync(context, create.Operations);
-        await ExecuteSqlAsync(connection, "INSERT INTO source_nodes (Value) VALUES ('value');");
+        await ExecuteOperationsAsync(context, create.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "INSERT INTO source_nodes (Value) VALUES ('value');",
+            cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         foreach (var operation in create.Operations)
         {
@@ -507,26 +586,38 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
         builder.AddCheckConstraintIfNotExists("ck_source_nodes", "source_nodes",
             literalDrift ? "\"score\" <> 'value'" : "\"score\" <> 'VALUE'");
 
-        var versionBefore = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var versionBefore = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var transition = new SqliteTableConstraintTransitions([builder.Operations[0], builder.Operations[1]])
             .Find((SafeMigrationOperation)builder.Operations[0]);
 
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-native-check-column-role"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-native-check-column-role"),
+            cancellationToken: CancellationToken.None);
 
         if (!literalDrift)
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         }
 
         var column = literalDrift ? "Value" : "score";
         var invalidRow = await Record.ExceptionAsync(() => ExecuteSqlAsync(connection,
-            "INSERT INTO source_nodes (\"" + column + "\") VALUES ('VALUE');"));
+            "INSERT INTO source_nodes (\"" + column + "\") VALUES ('VALUE');",
+            cancellationToken: CancellationToken.None));
 
-        var rows = await ScalarIntAsync(connection, "SELECT COUNT(*) FROM source_nodes;");
-        var versionAfter = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var rows = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM source_nodes;",
+            cancellationToken: CancellationToken.None);
+
+        var versionAfter = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var diagnostic = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
@@ -554,11 +645,11 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
         // Arrange
         const string original = "CASE WHEN \"source\" > 0 THEN \"source\" ELSE 0 END";
         const string renamed = "CASE WHEN \"renamed\" > 0 THEN \"renamed\" ELSE 0 END";
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE source_nodes (renamed INTEGER NOT NULL, payload TEXT NOT NULL DEFAULT 'drift', "
             + "derived INTEGER NOT NULL GENERATED ALWAYS AS (" + renamed + ") VIRTUAL); "
-            + "INSERT INTO source_nodes (renamed) VALUES (7);");
+            + "INSERT INTO source_nodes (renamed) VALUES (7);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -573,15 +664,24 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
         builder.AddColumnIfNotExistsFromModel(operation => operation.AddColumn<int>(
             "derived", "source_nodes", type: "INTEGER", nullable: false, computedColumnSql: renamed));
 
-        var versionBefore = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var versionBefore = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-rename-retained-default-proof"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-rename-retained-default-proof"),
+            cancellationToken: CancellationToken.None);
 
-        var versionAfter = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var versionAfter = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
+
         var rows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM source_nodes WHERE renamed = 7 AND derived = 7 AND payload = 'drift';");
+            "SELECT COUNT(*) FROM source_nodes WHERE renamed = 7 AND derived = 7 AND payload = 'drift';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -597,7 +697,7 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
         // Arrange
         const string original = "CASE WHEN \"source\" > 0 THEN \"source\" ELSE 0 END";
         const string renamed = "CASE WHEN \"renamed\" > 0 THEN \"renamed\" ELSE 0 END";
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists("source_nodes", table => new
@@ -606,8 +706,11 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
             derived = table.Column<int>(type: "INTEGER", nullable: false, computedColumnSql: original),
         });
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteSqlAsync(connection, "INSERT INTO source_nodes (source) VALUES (7);");
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "INSERT INTO source_nodes (source) VALUES (7);",
+            cancellationToken: CancellationToken.None);
         builder.RenameColumnIfExists("source", "source_nodes", "renamed");
         builder.AddColumnIfNotExistsFromModel(operation => operation.AddColumn<int>(
             "derived", "source_nodes", type: "INTEGER", nullable: false, computedColumnSql: renamed));
@@ -619,7 +722,10 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
             context.GetService<MigrationsSqlGeneratorDependencies>());
 
         var commands = generator.Generate(builder.Operations, context.Model);
-        var versionBefore = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var versionBefore = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var exception = await Record.ExceptionAsync(async () =>
@@ -630,12 +736,18 @@ public sealed class SqliteCapturedExpressionSourceTests : SqliteIntegrationTestB
             }
         });
 
-        var versionAfter = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var versionAfter = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
+
         var columns = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM pragma_table_xinfo('source_nodes') WHERE name IN ('renamed', 'unreviewed');");
+            "SELECT COUNT(*) FROM pragma_table_xinfo('source_nodes') WHERE name IN ('renamed', 'unreviewed');",
+            cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM source_nodes WHERE source = 7 AND derived = 7;");
+            "SELECT COUNT(*) FROM source_nodes WHERE source = 7 AND derived = 7;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Contains("doka_sm_postcondition", Assert.IsType<InvalidOperationException>(exception).Message,

@@ -39,7 +39,7 @@ public sealed class PostgreSqlIntegerWideningCatalogIntegrationTests : PostgreSq
             + (nullable ? " NULL); " : " NOT NULL); ")
             + "INSERT INTO catalog_integer_rows VALUES (7); "
             + "ALTER TABLE catalog_integer_rows OWNER TO " + role + "; "
-            + "REVOKE SELECT ON pg_catalog." + catalog + " FROM PUBLIC;");
+            + "REVOKE SELECT ON pg_catalog." + catalog + " FROM PUBLIC;", cancellationToken: CancellationToken.None);
 
         try
         {
@@ -55,11 +55,16 @@ public sealed class PostgreSqlIntegerWideningCatalogIntegrationTests : PostgreSq
 
             // Act
             var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-                context, builder.Operations, new SafeMigrationRunOptions("integer-catalog-visibility"));
-            var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+                context, builder.Operations, new SafeMigrationRunOptions("integer-catalog-visibility"),
+                CancellationToken.None);
+
+            var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+                CancellationToken.None));
+
             var postflight = targetCanBeCertified
                 ? await context.GetService<ISafeMigrationRunner>().VerifyAsync(
-                    context, builder.Operations, new SafeMigrationRunOptions("integer-catalog-replay"))
+                    context, builder.Operations, new SafeMigrationRunOptions("integer-catalog-replay"),
+                    CancellationToken.None)
                 : null;
 
             // Assert
@@ -79,13 +84,16 @@ public sealed class PostgreSqlIntegerWideningCatalogIntegrationTests : PostgreSq
 
             Assert.Equal(targetAlreadyWidened ? "bigint" : "integer", await ScalarStringAsync(connectionString,
                 "SELECT data_type FROM information_schema.columns WHERE table_schema = 'public' "
-                + "AND table_name = 'catalog_integer_rows' AND column_name = 'value';"));
-            Assert.Equal(7, await ScalarIntAsync(connectionString, "SELECT value FROM catalog_integer_rows;"));
+                + "AND table_name = 'catalog_integer_rows' AND column_name = 'value';",
+                cancellationToken: CancellationToken.None));
+            Assert.Equal(7, await ScalarIntAsync(connectionString, "SELECT value FROM catalog_integer_rows;",
+                cancellationToken: CancellationToken.None));
         }
         finally
         {
             await ExecuteSqlAsync(connectionString, "ALTER TABLE catalog_integer_rows OWNER TO postgres; "
-                + "REVOKE USAGE, CREATE ON SCHEMA public FROM " + role + "; DROP ROLE " + role + ";");
+                + "REVOKE USAGE, CREATE ON SCHEMA public FROM " + role + "; DROP ROLE " + role + ";",
+                cancellationToken: CancellationToken.None);
         }
     }
 
@@ -104,7 +112,7 @@ public sealed class PostgreSqlIntegerWideningCatalogIntegrationTests : PostgreSq
             + "CREATE TABLE optional_index_rows(value integer NOT NULL); "
             + "CREATE INDEX ix_optional_role ON optional_index_rows(value); "
             + "ALTER TABLE optional_index_rows OWNER TO " + role + "; "
-            + "REVOKE SELECT ON pg_catalog." + catalog + " FROM PUBLIC;");
+            + "REVOKE SELECT ON pg_catalog." + catalog + " FROM PUBLIC;", cancellationToken: CancellationToken.None);
 
         try
         {
@@ -116,19 +124,23 @@ public sealed class PostgreSqlIntegerWideningCatalogIntegrationTests : PostgreSq
 
             // Act
             var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-                context, builder.Operations, new SafeMigrationRunOptions("optional-index-role-catalog"));
-            await ExecuteOperationsAsync(context, builder.Operations);
-            await ExecuteOperationsAsync(context, builder.Operations);
+                context, builder.Operations, new SafeMigrationRunOptions("optional-index-role-catalog"),
+                CancellationToken.None);
+
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
             // Assert
             Assert.Equal(SafeMigrationAction.Apply, Assert.Single(report.Assessments).Action);
             Assert.Equal(0, await ScalarIntAsync(connectionString,
-                "SELECT count(*) FROM pg_catalog.pg_class WHERE relname = 'ix_optional_role';"));
+                "SELECT count(*) FROM pg_catalog.pg_class WHERE relname = 'ix_optional_role';",
+                cancellationToken: CancellationToken.None));
         }
         finally
         {
             await ExecuteSqlAsync(connectionString, "ALTER TABLE optional_index_rows OWNER TO postgres; "
-                + "REVOKE USAGE, CREATE ON SCHEMA public FROM " + role + "; DROP ROLE " + role + ";");
+                + "REVOKE USAGE, CREATE ON SCHEMA public FROM " + role + "; DROP ROLE " + role + ";",
+                cancellationToken: CancellationToken.None);
         }
     }
 

@@ -42,10 +42,12 @@ public sealed partial class MySqlTablesJsonIntegrationTests : MySqlSafeMigration
 
         await ExecuteSqlAsync(
             connectionString,
-            "INSERT INTO `json_documents` (`id`, `Payload`) VALUES (1, '{\"valid\":true}');");
+            "INSERT INTO `json_documents` (`id`, `Payload`) VALUES (1, '{\"valid\":true}');",
+            cancellationToken: CancellationToken.None);
         var invalidJson = await Assert.ThrowsAsync<MySqlException>(() => ExecuteSqlAsync(
             connectionString,
-            "INSERT INTO `json_documents` (`id`, `Payload`) VALUES (2, 'not-json');"));
+            "INSERT INTO `json_documents` (`id`, `Payload`) VALUES (2, 'not-json');",
+            cancellationToken: CancellationToken.None));
 
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.True(Assert.Single(postflight.Assessments).PostconditionSatisfied);
@@ -71,7 +73,8 @@ public sealed partial class MySqlTablesJsonIntegrationTests : MySqlSafeMigration
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "ALTER TABLE `json_check_drift` ADD CONSTRAINT `ck_json_check_drift_id` CHECK (`Id` > 0);");
+            "ALTER TABLE `json_check_drift` ADD CONSTRAINT `ck_json_check_drift_id` CHECK (`Id` > 0);",
+            cancellationToken: CancellationToken.None);
 
         var report = await context
             .GetService<ISafeMigrationRunner>()

@@ -12,7 +12,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await SeedSparseDropConcurrencyAsync(connectionString);
+        await SeedSparseDropConcurrencyAsync(connectionString, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("unrelated", "generated_sparse_drop");
@@ -20,13 +20,19 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             new SafeMigrationRunOptions("standalone-generated-before-concurrent-change"), CancellationToken.None);
 
         // Act
-        await ExecuteSqlAsync(connectionString, SparseDropConcurrentMutation(mutation));
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        await ExecuteSqlAsync(connectionString, SparseDropConcurrentMutation(mutation),
+            cancellationToken: CancellationToken.None);
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
         var after = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("standalone-generated-after-concurrent-change"), CancellationToken.None);
 
-        var unrelated = await SparseDropColumnCountAsync(connectionString, "unrelated");
-        var retained = await SparseDropRetainedOriginalRowsAsync(connectionString);
+        var unrelated = await SparseDropColumnCountAsync(connectionString, "unrelated",
+            cancellationToken: CancellationToken.None);
+
+        var retained = await SparseDropRetainedOriginalRowsAsync(connectionString,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, Assert.Single(preflight.Assessments).Action);
@@ -47,11 +53,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await SeedSparseDropConcurrencyAsync(connectionString);
+        await SeedSparseDropConcurrencyAsync(connectionString, cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE generated_sparse_control LIKE generated_sparse_drop; "
             + "ALTER TABLE generated_sparse_control "
-            + "ADD COLUMN dependent int GENERATED ALWAYS AS (unrelated + 1) VIRTUAL;");
+            + "ADD COLUMN dependent int GENERATED ALWAYS AS (unrelated + 1) VIRTUAL;",
+            cancellationToken: CancellationToken.None);
         var gateName = "sm-sparse-drop-" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture);
         var checkpoint = new SparseDropCheckpointInterceptor(gateName);
         await using var context = CreateRuntimeContext(connectionString, checkpoint);
@@ -71,7 +78,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         // Act
         var controlFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString,
-            "ALTER TABLE generated_sparse_control DROP COLUMN unrelated;"));
+            "ALTER TABLE generated_sparse_control DROP COLUMN unrelated;", cancellationToken: deadline.Token));
 
         var execution = Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, executionCancellation.Token));
@@ -100,8 +107,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             }
         }
 
-        var unrelated = await SparseDropColumnCountAsync(connectionString, "unrelated");
-        var retained = await SparseDropRetainedOriginalRowsAsync(connectionString);
+        var unrelated = await SparseDropColumnCountAsync(connectionString, "unrelated",
+            cancellationToken: CancellationToken.None);
+
+        var retained = await SparseDropRetainedOriginalRowsAsync(connectionString,
+            cancellationToken: CancellationToken.None);
+
         var after = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("standalone-generated-race-replay"), CancellationToken.None);
 
@@ -124,13 +135,14 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     }
 
     /// <summary>Creates anonymous rows and a separately committed checkpoint, never production fixtures.</summary>
-    private static Task SeedSparseDropConcurrencyAsync(string connectionString)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static Task SeedSparseDropConcurrencyAsync(string connectionString, CancellationToken cancellationToken)
         => ExecuteSqlAsync(connectionString,
             "CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, source int NULL, "
             + "unrelated int NULL, result int GENERATED ALWAYS AS (source + 1) VIRTUAL); "
             + "INSERT INTO generated_sparse_drop (id, source, unrelated) VALUES (1, 3, 11), (2, 7, 13); "
             + "CREATE TABLE generated_drop_checkpoint (id int NOT NULL PRIMARY KEY, reached int NOT NULL); "
-            + "INSERT INTO generated_drop_checkpoint VALUES (1, 0);");
+            + "INSERT INTO generated_drop_checkpoint VALUES (1, 0);", cancellationToken: cancellationToken);
 
     /// <summary>Describes a committed dependency change without accepting arbitrary fixture SQL.</summary>
     private static string SparseDropConcurrentMutation(string mutation) => mutation switch
@@ -152,13 +164,20 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     };
 
     /// <summary>Checks every original ordinary value after a refused DROP.</summary>
-    private static Task<int> SparseDropRetainedOriginalRowsAsync(string connectionString)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static Task<int> SparseDropRetainedOriginalRowsAsync(
+        string connectionString,
+        CancellationToken cancellationToken
+    )
         => ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM generated_sparse_drop "
-            + "WHERE (id = 1 AND source = 3 AND unrelated = 11) OR (id = 2 AND source = 7 AND unrelated = 13);");
+            + "WHERE (id = 1 AND source = 3 AND unrelated = 11) OR (id = 2 AND source = 7 AND unrelated = 13);",
+            cancellationToken: cancellationToken);
 
     /// <summary>Waits for a database-visible marker rather than guessing command duration.</summary>
     private static async Task WaitForSparseDropCheckpointAsync(
-        MySqlConnection writer, CancellationToken cancellationToken)
+        MySqlConnection writer,
+        CancellationToken cancellationToken
+    )
     {
         while (true)
         {

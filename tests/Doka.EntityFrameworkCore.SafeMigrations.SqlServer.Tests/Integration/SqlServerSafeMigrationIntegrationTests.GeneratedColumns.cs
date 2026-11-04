@@ -15,8 +15,9 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task ConstantTargetDoesNotCollideWithCompilerAuxiliary(string name)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.generated_nodes(Id int NOT NULL);");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.generated_nodes(Id int NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn("generated_nodes",
@@ -26,10 +27,10 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-auxiliary-name"));
+            new SafeMigrationRunOptions("generated-auxiliary-name"), cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -43,10 +44,11 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task ConstantComputedProofDoesNotInventMissingOwner(bool dropped)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         if (dropped)
         {
-            await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.generated_nodes(Id int NOT NULL);");
+            await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.generated_nodes(Id int NOT NULL);",
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -61,7 +63,7 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-missing-owner"));
+            new SafeMigrationRunOptions("generated-missing-owner"), cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -76,8 +78,9 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task NativeIdentifierAliasesUseOneComputedOperand(bool populated)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, "ALTER DATABASE CURRENT COLLATE Latin1_General_100_CI_AS;");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "ALTER DATABASE CURRENT COLLATE Latin1_General_100_CI_AS;",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var source = new ExpectedColumnDefinition("left_bound", typeof(long), false, "bigint");
@@ -88,7 +91,7 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         {
             await ExecuteSqlAsync(connectionString,
                 "CREATE TABLE dbo.generated_nodes(left_bound bigint NOT NULL);"
-                + "INSERT dbo.generated_nodes VALUES(4);");
+                + "INSERT dbo.generated_nodes VALUES(4);", cancellationToken: CancellationToken.None);
             builder.EnsureColumn("generated_nodes", flag, SafeMigrationPolicy.ThrowIfDifferent);
         }
         else
@@ -101,10 +104,10 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-native-alias"));
+            new SafeMigrationRunOptions("generated-native-alias"), cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -118,12 +121,13 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task CaseSensitiveSourcesRequireUnambiguousTempdbIdentity(bool colliding)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, "ALTER DATABASE CURRENT COLLATE Latin1_General_100_CS_AS;");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "ALTER DATABASE CURRENT COLLATE Latin1_General_100_CS_AS;",
+            cancellationToken: CancellationToken.None);
         var second = colliding ? "l" : "R";
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.generated_nodes([L] bigint NOT NULL,[" + second + "] bigint NOT NULL);"
-            + "INSERT dbo.generated_nodes VALUES(4,1);");
+            + "INSERT dbo.generated_nodes VALUES(4,1);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn("generated_nodes", new ExpectedColumnDefinition("Flag", typeof(int), false, "int",
@@ -132,11 +136,11 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-cs-operand-identity"));
+            new SafeMigrationRunOptions("generated-cs-operand-identity"), cancellationToken: CancellationToken.None);
 
         if (!colliding)
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         }
 
         // Assert
@@ -157,31 +161,32 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task FreshGeneratedTableAppliesReplaysAndPreservesExtrema(bool stored)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = GeneratedTable(context, stored);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
         var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-fresh"));
+            new SafeMigrationRunOptions("generated-fresh"), cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "INSERT dbo.generated_nodes (Id,L,R) VALUES (1,1,4),"
             + "(2,9223372036854775807,9223372036854775807),"
-            + "(3,-9223372036854775808,-9223372036854775807);");
-        await ExecuteOperationsAsync(context, builder.Operations);
+            + "(3,-9223372036854775808,-9223372036854775807);", cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-replay"));
+            new SafeMigrationRunOptions("generated-replay"), cancellationToken: CancellationToken.None);
 
         var flags = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM dbo.generated_nodes WHERE (Id=1 AND HasChildren=1) "
-            + "OR (Id IN(2,3) AND HasChildren=0);");
+            + "OR (Id IN(2,3) AND HasChildren=0);", cancellationToken: CancellationToken.None);
 
         var storage = await ScalarIntAsync(connectionString,
             "SELECT CONVERT(int,is_persisted) FROM sys.computed_columns "
-            + "WHERE object_id=OBJECT_ID(N'dbo.generated_nodes') AND name=N'HasChildren';");
+            + "WHERE object_id=OBJECT_ID(N'dbo.generated_nodes') AND name=N'HasChildren';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -198,10 +203,11 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task PopulatedGeneratedAdditionSupportsNullOperandsAndCoveringIndexes(bool included)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NULL,R bigint NULL); "
-            + "INSERT dbo.generated_nodes VALUES(1,NULL,7),(2,9223372036854775807,9223372036854775807),(3,1,4);");
+            + "INSERT dbo.generated_nodes VALUES(1,NULL,7),(2,9223372036854775807,9223372036854775807),(3,1,4);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn("generated_nodes", SqlServerGeneratedColumnSqlTests.Flag(),
@@ -213,13 +219,13 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-populated"));
+            new SafeMigrationRunOptions("generated-populated"), cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var flags = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM dbo.generated_nodes WHERE (Id IN(1,2) AND HasChildren=0) "
-            + "OR (Id=3 AND HasChildren=1);");
+            + "OR (Id=3 AND HasChildren=1);", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -231,11 +237,11 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task ExistingUnstampedGeneratedColumnIsRecognizedByNativeDefinition()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint NOT NULL,"
             + "HasChildren AS CONVERT(bit,CASE WHEN R>CASE WHEN L=9223372036854775807 "
-            + "THEN L ELSE L+1 END THEN 1 ELSE 0 END));");
+            + "THEN L ELSE L+1 END THEN 1 ELSE 0 END));", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn("generated_nodes", SqlServerGeneratedColumnSqlTests.Flag(),
@@ -243,9 +249,9 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-native-adoption"));
+            new SafeMigrationRunOptions("generated-native-adoption"), cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -261,7 +267,7 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task GeneratedColumnDriftFailsClosed(string drift)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var expression = drift == "expression"
             ? "CONVERT(bit,CASE WHEN R>L THEN 0 ELSE 1 END)"
             : "CONVERT(" + (drift == "type" ? "bigint" : "bit")
@@ -270,7 +276,7 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint NOT NULL,"
             + "HasChildren AS " + expression + (drift == "storage" ? " PERSISTED" : string.Empty) + "); "
-            + "INSERT dbo.generated_nodes(Id,L,R)VALUES(1,1,4);");
+            + "INSERT dbo.generated_nodes(Id,L,R)VALUES(1,1,4);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn("generated_nodes", SqlServerGeneratedColumnSqlTests.Flag(),
@@ -278,9 +284,10 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-drift"));
+            new SafeMigrationRunOptions("generated-drift"), cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.generated_nodes;");
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.generated_nodes;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -293,9 +300,10 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task ParallelCompilerSessionsUseIndependentTemporaryScopes()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint NOT NULL);");
+            "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
@@ -309,9 +317,16 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         await second.OpenAsync();
 
         // Act
-        var proofs = await Task.WhenAll(ReadCompilerProofAsync(first, sql), ReadCompilerProofAsync(second, sql));
-        var firstScope = await CompilerScopeExistsAsync(first, sql);
-        var secondScope = await CompilerScopeExistsAsync(second, sql);
+        var proofs = await Task.WhenAll(ReadCompilerProofAsync(
+            first,
+            sql,
+            cancellationToken: CancellationToken.None), ReadCompilerProofAsync(
+            second,
+            sql,
+            cancellationToken: CancellationToken.None));
+
+        var firstScope = await CompilerScopeExistsAsync(first, sql, cancellationToken: CancellationToken.None);
+        var secondScope = await CompilerScopeExistsAsync(second, sql, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.All(proofs, proof => Assert.InRange(proof, 1, 2));
@@ -324,9 +339,10 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task OccupiedCompilerScopePreservesCallerOwnedTable()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint NOT NULL);");
+            "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
@@ -342,7 +358,7 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         await setup.ExecuteNonQueryAsync();
 
         // Act
-        var proof = await ReadCompilerProofAsync(connection, sql);
+        var proof = await ReadCompilerProofAsync(connection, sql, cancellationToken: CancellationToken.None);
         await using var query = connection.CreateCommand();
         query.CommandText = "SELECT Sentinel FROM [" + name + "];";
         var sentinel = Convert.ToInt32(await query.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
@@ -357,7 +373,7 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task IncompatibleGeneratedResultTypeIsRejectedBeforeCreation()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(new ExpectedTableDefinition("generated_nodes",
@@ -368,10 +384,11 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-incompatible-type"));
+            new SafeMigrationRunOptions("generated-incompatible-type"), cancellationToken: CancellationToken.None);
 
         var tableCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.generated_nodes');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.generated_nodes');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -390,13 +407,13 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task ComputedIndexAdmissionPreservesCallerSetOptions(bool roundAbort, bool quotedIdentifier)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint NOT NULL,"
             + "HasChildren AS CONVERT(bit,CASE WHEN R>CASE WHEN L=9223372036854775807 "
-            + "THEN L ELSE L+1 END THEN 1 ELSE 0 END));");
+            + "THEN L ELSE L+1 END THEN 1 ELSE 0 END));", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var settings = context.Database.GetDbConnection().CreateCommand();
         settings.CommandText = "SET ARITHABORT OFF; SET ANSI_WARNINGS ON; "
             + (roundAbort ? "SET NUMERIC_ROUNDABORT ON;" : "SET NUMERIC_ROUNDABORT OFF;")
@@ -408,9 +425,11 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-effective-set-options"));
+            new SafeMigrationRunOptions("generated-effective-set-options"), cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         await using var options = context.Database.GetDbConnection().CreateCommand();
         options.CommandText = "SELECT CONVERT(int,SESSIONPROPERTY(N'NUMERIC_ROUNDABORT'))*100 "
             + "+CONVERT(int,SESSIONPROPERTY(N'QUOTED_IDENTIFIER'))*10 "
@@ -437,7 +456,7 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task CancelledNativeCompilerDoesNotRetainTemporaryState()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
@@ -481,8 +500,10 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
             await marker.WaitUntilReadyAsync(observer, execution, readiness.Token);
             await cancellation.CancelAsync();
             failure = await Record.ExceptionAsync(async () => { await execution; });
-            retained = await CompilerScopeExistsAsync(connection, original);
-            repeated = await ReadCompilerProofAsync(connection, original);
+            // WHY: Readiness has already completed; its old deadline may expire while attention drains.
+            // Observe recovery independently rather than rejecting a healthy session with an earlier phase's token.
+            retained = await CompilerScopeExistsAsync(connection, original, cancellationToken: CancellationToken.None);
+            repeated = await ReadCompilerProofAsync(connection, original, cancellationToken: CancellationToken.None);
         }
         finally
         {
@@ -516,23 +537,25 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task ComputedDependenciesAreQualifiedPerActualColumn(string column, bool blocked)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint NOT NULL,Payload int NULL,"
             + "HasChildren AS CONVERT(bit,CASE WHEN R>CASE WHEN L=9223372036854775807 "
-            + "THEN L ELSE L+1 END THEN 1 ELSE 0 END));");
+            + "THEN L ELSE L+1 END THEN 1 ELSE 0 END));", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists(column, "generated_nodes");
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-drop-dependency"));
+            new SafeMigrationRunOptions("generated-drop-dependency"), cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var remaining = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.generated_nodes') "
-            + "AND name=N'" + column + "';");
+            + "AND name=N'" + column + "';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(blocked ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready, report.Status);
@@ -556,22 +579,25 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task ExistingComputedDependenciesQualifyOnlyTheirReferencedRename(string column, bool blocked)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.generated_nodes(L bigint NOT NULL,R bigint NOT NULL,Payload int NULL,"
-            + "HasChildren AS CONVERT(bit,CASE WHEN R>L THEN 1 ELSE 0 END));");
+            + "HasChildren AS CONVERT(bit,CASE WHEN R>L THEN 1 ELSE 0 END));",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameColumnIfExists(column, "generated_nodes", "Renamed");
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-native-source-rename"));
+            new SafeMigrationRunOptions("generated-native-source-rename"), cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var remaining = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.generated_nodes') "
-            + "AND name=N'" + column + "';");
+            + "AND name=N'" + column + "';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(blocked ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready, report.Status);
@@ -594,10 +620,10 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task ComputedIndexProjectionQualifiesMixedLiveAndNewOperandTypes(bool imprecise)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,R bigint NOT NULL); "
-            + "INSERT dbo.generated_nodes VALUES(1,4);");
+            + "INSERT dbo.generated_nodes VALUES(1,4);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn("generated_nodes", new ExpectedColumnDefinition("L",
@@ -609,16 +635,16 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-mixed-operands"));
+            new SafeMigrationRunOptions("generated-mixed-operands"), cancellationToken: CancellationToken.None);
 
         if (!imprecise)
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         }
 
         var indexes = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.generated_nodes') "
-            + "AND name=N'IX_generated_ancestor';");
+            + "AND name=N'IX_generated_ancestor';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(imprecise ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready, report.Status);
@@ -640,10 +666,10 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task ImpreciseGeneratedIndexAdmissionDistinguishesKeysAndIncludes(bool stored, bool included)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L float NULL); "
-            + "INSERT dbo.generated_nodes VALUES(1,4),(2,NULL);");
+            + "INSERT dbo.generated_nodes VALUES(1,4),(2,NULL);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn("generated_nodes", new ExpectedColumnDefinition("Flag", typeof(bool), false, "bit",
@@ -656,17 +682,17 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-imprecise-index"));
+            new SafeMigrationRunOptions("generated-imprecise-index"), cancellationToken: CancellationToken.None);
 
         if (admitted)
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+            await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         }
 
         var indexes = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.generated_nodes') "
-            + "AND name=N'IX_generated_precision';");
+            + "AND name=N'IX_generated_precision';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(admitted ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked, report.Status);
@@ -682,10 +708,10 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task PersistedComputedUniqueIndexStillRejectsDuplicateResults()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L float NULL); "
-            + "INSERT dbo.generated_nodes VALUES(1,4),(2,4);");
+            + "INSERT dbo.generated_nodes VALUES(1,4),(2,4);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn("generated_nodes", new ExpectedColumnDefinition("Flag", typeof(bool), false, "bit",
@@ -695,12 +721,14 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-duplicate-results"));
+            new SafeMigrationRunOptions("generated-duplicate-results"), cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var indexes = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.generated_nodes') "
-            + "AND name=N'IX_generated_unique';");
+            + "AND name=N'IX_generated_unique';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -713,10 +741,10 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task VirtualGeneratedAdditionRemainsValidAfterOrdinaryColumnDrop()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint NOT NULL,Retired int NULL); "
-            + "INSERT dbo.generated_nodes VALUES(1,1,4,NULL);");
+            + "INSERT dbo.generated_nodes VALUES(1,1,4,NULL);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("Retired", "generated_nodes");
@@ -726,11 +754,13 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-virtual-retained-layout"));
+            new SafeMigrationRunOptions("generated-virtual-retained-layout"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var flags = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.generated_nodes WHERE Id=1 AND HasChildren=1;");
+            "SELECT COUNT(*) FROM dbo.generated_nodes WHERE Id=1 AND HasChildren=1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -745,10 +775,10 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task ComputedIndexAfterSiblingDropPreservesAcceptedIndexIdentity(bool different)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint NOT NULL,Retired int NULL); "
-            + "INSERT dbo.generated_nodes VALUES(1,1,4,NULL);");
+            + "INSERT dbo.generated_nodes VALUES(1,1,4,NULL);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("Retired", "generated_nodes");
@@ -760,11 +790,12 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-accepted-index-identity"));
+            new SafeMigrationRunOptions("generated-accepted-index-identity"),
+            cancellationToken: CancellationToken.None);
 
         if (!different)
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         }
 
         // Assert
@@ -784,10 +815,10 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task ComputedIndexAfterSiblingDropPreservesConstraintBackingNames(bool primary, bool dropped)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NOT NULL,R bigint NOT NULL,Retired int NULL); "
-            + "INSERT dbo.generated_nodes VALUES(1,1,4,NULL);");
+            + "INSERT dbo.generated_nodes VALUES(1,1,4,NULL);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (primary)
@@ -818,12 +849,16 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-constraint-backing-index"));
+            new SafeMigrationRunOptions("generated-constraint-backing-index"),
+            cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var independent = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.generated_nodes') "
-            + "AND name=N'IX_result' AND is_primary_key=0 AND is_unique_constraint=0;");
+            + "AND name=N'IX_result' AND is_primary_key=0 AND is_unique_constraint=0;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(dropped ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked, report.Status);
@@ -847,10 +882,10 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task DroppedComputedSourceCannotReuseOriginalNativeProof(bool replace)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,L bigint NULL,R bigint NOT NULL); "
-            + "INSERT dbo.generated_nodes VALUES(1,1,4);");
+            + "INSERT dbo.generated_nodes VALUES(1,1,4);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("L", "generated_nodes");
@@ -866,7 +901,7 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-invalidated-source"));
+            new SafeMigrationRunOptions("generated-invalidated-source"), cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -887,7 +922,7 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task SourceRenameRespectsComputedDependencyCreationOrder(bool dependent)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var columns = new List<ExpectedColumnDefinition>
         {
@@ -919,16 +954,17 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         // Act
         var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-source-rename"));
+            new SafeMigrationRunOptions("generated-source-rename"), cancellationToken: CancellationToken.None);
 
         SafeMigrationRunReport? verified = null;
         if (!dependent)
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
             // WHY: Verify checks the reviewed final schema, not the superseded
             // three-column strict table contract preceding the later ADD.
             verified = await runner.VerifyAsync(context, final.Operations,
-                new SafeMigrationRunOptions("generated-source-rename-verify"));
+                new SafeMigrationRunOptions("generated-source-rename-verify"),
+                cancellationToken: CancellationToken.None);
         }
 
         // Assert
@@ -960,13 +996,14 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task DeclaredCheckRenameUsesNativeColumnIdentityAndAcceptedLineage(int scenario)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var sensitive = scenario is 1 or 2;
         var blocked = scenario is 0 or 1 or 4;
         var dropped = scenario is 3 or 5 or 6;
         var providerCreated = scenario is 4 or 6;
         await ExecuteSqlAsync(connectionString,
-            "ALTER DATABASE CURRENT COLLATE Latin1_General_100_" + (sensitive ? "CS_AS" : "CI_AS") + ";");
+            "ALTER DATABASE CURRENT COLLATE Latin1_General_100_" + (sensitive ? "CS_AS" : "CI_AS") + ";",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var columns = sensitive
             ? new ExpectedColumnDefinition[]
@@ -1020,14 +1057,17 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         // Act
         var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("declared-check-native-rename"));
+            new SafeMigrationRunOptions("declared-check-native-rename"), cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         SafeMigrationRunReport? verified = null;
         if (!blocked)
         {
             verified = await runner.VerifyAsync(context, final.Operations,
-                new SafeMigrationRunOptions("declared-check-native-rename-verify"));
+                new SafeMigrationRunOptions("declared-check-native-rename-verify"),
+                cancellationToken: CancellationToken.None);
         }
 
         // Assert
@@ -1059,7 +1099,7 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task CheckRenameUsesAcceptedDefinitionRatherThanExistenceOnlyWish(bool different, bool dependent)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var columns = new ExpectedColumnDefinition[]
             { new("Upper", typeof(int), false, "int"), new("Payload", typeof(int), false, "int") };
@@ -1082,14 +1122,18 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         // Act
         var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("declared-check-existence-only-lineage"));
+            new SafeMigrationRunOptions("declared-check-existence-only-lineage"),
+            cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         SafeMigrationRunReport? verified = null;
         if (!dependent)
         {
             verified = await runner.VerifyAsync(context, final.Operations,
-                new SafeMigrationRunOptions("declared-check-existence-only-verify"));
+                new SafeMigrationRunOptions("declared-check-existence-only-verify"),
+                cancellationToken: CancellationToken.None);
         }
 
         // Assert
@@ -1128,10 +1172,11 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task GeneratedCharacterCollationMatchesTheNativeExpression(bool explicitCollation)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.generated_nodes(Id int NOT NULL,Code nvarchar(80) "
-            + "COLLATE Latin1_General_100_BIN2 NULL); INSERT dbo.generated_nodes VALUES(1,N'A');");
+            + "COLLATE Latin1_General_100_BIN2 NULL); INSERT dbo.generated_nodes VALUES(1,N'A');",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn("generated_nodes", new ExpectedColumnDefinition("Normalized", typeof(string), true,
@@ -1141,14 +1186,15 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-native-collation"));
+            new SafeMigrationRunOptions("generated-native-collation"), cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var collation = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.generated_nodes') "
             + "AND name=N'Normalized' AND collation_name=N'"
-            + (explicitCollation ? "Latin1_General_100_CI_AS" : "Latin1_General_100_BIN2") + "';");
+            + (explicitCollation ? "Latin1_General_100_CI_AS" : "Latin1_General_100_BIN2") + "';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -1163,7 +1209,7 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task GeneratedCharacterTableConvergesWithAuthoredOperandCollation(bool explicitCollation)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var definition = new ExpectedColumnDefinition("Normalized", typeof(string), true, "nvarchar(80)",
@@ -1178,17 +1224,21 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-authored-collation"));
+            new SafeMigrationRunOptions("generated-authored-collation"), cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteSqlAsync(connectionString, "INSERT dbo.generated_nodes(Id,Code)VALUES(1,N'A');");
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "INSERT dbo.generated_nodes(Id,Code)VALUES(1,N'A');",
+            cancellationToken: CancellationToken.None);
         var result = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.generated_nodes WHERE Normalized=N'a';");
+            "SELECT COUNT(*) FROM dbo.generated_nodes WHERE Normalized=N'a';",
+            cancellationToken: CancellationToken.None);
+
         var collation = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.generated_nodes') "
             + "AND name=N'Normalized' AND is_computed=1 AND max_length=160 AND collation_name=N'"
-            + (explicitCollation ? "Latin1_General_100_CI_AS" : "Latin1_General_100_BIN2") + "';");
+            + (explicitCollation ? "Latin1_General_100_CI_AS" : "Latin1_General_100_BIN2") + "';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -1204,7 +1254,7 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task GeneratedCharacterIndexProofUsesAuthoredOperandCollation(bool explicitCollation)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
@@ -1222,8 +1272,8 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         await connection.OpenAsync();
 
         // Act
-        var proof = await ReadCompilerProofAsync(connection, sql);
-        var remaining = await CompilerScopeExistsAsync(connection, sql);
+        var proof = await ReadCompilerProofAsync(connection, sql, cancellationToken: CancellationToken.None);
+        var remaining = await CompilerScopeExistsAsync(connection, sql, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.NotEqual(0, proof);
@@ -1238,7 +1288,7 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     public async Task GeneratedCharacterIndexProofRejectsUnvalidatedOperandCollation(string? schema)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
@@ -1258,8 +1308,8 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         await connection.OpenAsync();
 
         // Act
-        var proof = await ReadCompilerProofAsync(connection, sql);
-        var remaining = await CompilerScopeExistsAsync(connection, sql);
+        var proof = await ReadCompilerProofAsync(connection, sql, cancellationToken: CancellationToken.None);
+        var remaining = await CompilerScopeExistsAsync(connection, sql, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(0, proof);
@@ -1284,12 +1334,17 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
         return builder;
     }
 
-    private static async Task<int> ReadCompilerProofAsync(SqlConnection connection, string sql)
+    private static async Task<int> ReadCompilerProofAsync(
+        SqlConnection connection,
+        string sql,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
-        await using var reader = await command.ExecuteReaderAsync();
-        Assert.True(await reader.ReadAsync());
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken: cancellationToken);
+        Assert.True(await reader.ReadAsync(cancellationToken: cancellationToken));
         Assert.Equal(7, reader.GetInt32(0));
 
         return reader.GetInt32(1);
@@ -1298,12 +1353,18 @@ public sealed class SqlServerSafeMigrationGeneratedColumnsIntegrationTests : Sql
     private static string CompilerScopeName(string sql)
         => System.Text.RegularExpressions.Regex.Match(sql, "#doka_sm_computed_[A-F0-9]{24}").Value;
 
-    private static async Task<bool> CompilerScopeExistsAsync(SqlConnection connection, string sql)
+    private static async Task<bool> CompilerScopeExistsAsync(
+        SqlConnection connection,
+        string sql,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT CASE WHEN OBJECT_ID(N'tempdb.." + CompilerScopeName(sql)
             + "') IS NULL THEN 0 ELSE 1 END;";
 
-        return Convert.ToInt32(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture) == 1;
+        return Convert.ToInt32(await command.ExecuteScalarAsync(
+            cancellationToken: cancellationToken), CultureInfo.InvariantCulture) == 1;
     }
 }

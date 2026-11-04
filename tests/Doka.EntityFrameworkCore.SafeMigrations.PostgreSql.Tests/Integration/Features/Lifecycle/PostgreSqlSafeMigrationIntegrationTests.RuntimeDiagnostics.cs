@@ -37,7 +37,8 @@ public sealed class PostgreSqlRuntimeDiagnosticsIntegrationTests : PostgreSqlSaf
         var sql = PostgreSqlRuntimeDiagnosticTests.Render(operation, plan);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, sql));
+        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, sql,
+            cancellationToken: CancellationToken.None));
 
         // Assert
         var native = Assert.IsType<PostgresException>(failure);
@@ -73,7 +74,8 @@ public sealed class PostgreSqlRuntimeDiagnosticsIntegrationTests : PostgreSqlSaf
         var sql = PostgreSqlRuntimeDiagnosticTests.Render(operation, plan);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, sql));
+        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, sql,
+            cancellationToken: CancellationToken.None));
 
         // Assert
         var native = Assert.IsType<PostgresException>(failure);
@@ -95,7 +97,8 @@ public sealed class PostgreSqlRuntimeDiagnosticsIntegrationTests : PostgreSqlSaf
         var sql = "SET standard_conforming_strings = off; " + PostgreSqlRuntimeDiagnosticTests.Render(operation, plan);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, sql));
+        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, sql,
+            cancellationToken: CancellationToken.None));
 
         // Assert
         var native = Assert.IsType<PostgresException>(failure);
@@ -124,7 +127,8 @@ public sealed class PostgreSqlRuntimeDiagnosticsIntegrationTests : PostgreSqlSaf
         var sql = PostgreSqlRuntimeDiagnosticTests.Render(operation, plan);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, sql));
+        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, sql,
+            cancellationToken: CancellationToken.None));
 
         // Assert
         var native = Assert.IsType<PostgresException>(failure);
@@ -141,13 +145,14 @@ public sealed class PostgreSqlRuntimeDiagnosticsIntegrationTests : PostgreSqlSaf
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE native_error (id integer PRIMARY KEY); "
-            + "INSERT INTO native_error VALUES (1);");
+            + "INSERT INTO native_error VALUES (1);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.Sql("INSERT INTO native_error VALUES (1);");
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
 
         // Assert
         var native = Assert.IsType<PostgresException>(failure);
@@ -162,17 +167,18 @@ public sealed class PostgreSqlRuntimeDiagnosticsIntegrationTests : PostgreSqlSaf
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE diagnostic_tags (id integer PRIMARY KEY); "
-            + "INSERT INTO diagnostic_tags VALUES (1);");
+            + "INSERT INTO diagnostic_tags VALUES (1);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<bool>("IsActive", "diagnostic_tags", type: "boolean", nullable: false,
             defaultValue: true);
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var activeRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM diagnostic_tags WHERE \"IsActive\" = TRUE;");
+            "SELECT COUNT(*) FROM diagnostic_tags WHERE \"IsActive\" = TRUE;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, activeRows);

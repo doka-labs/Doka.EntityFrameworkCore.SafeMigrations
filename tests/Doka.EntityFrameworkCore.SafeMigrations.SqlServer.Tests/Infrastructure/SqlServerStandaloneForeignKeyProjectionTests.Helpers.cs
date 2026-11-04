@@ -3,11 +3,15 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
 {
     /// <summary>Captures the same compact key/storage inputs while keeping this unit fixture catalog-only.</summary>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task<SqlServerProjectedDependencyGraph> ReadGraph(
         GraphConnection connection,
-        IReadOnlyList<SafeMigrationOperation> operations
+        IReadOnlyList<SafeMigrationOperation> operations,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         using var context = new SafeMigrationDbContext("Server=localhost;Database=catalog;Integrated Security=true;");
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
@@ -16,7 +20,7 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
             static (table, foreign) => table.Columns.First(column => column.Name == foreign.Columns[0]).StoreType
                 == "int" ? "1 = 1" : "0 = 1",
             catalog.ColumnStorageEquals,
-            static (_, _) => true, CancellationToken.None,
+            static (_, _) => true, cancellationToken,
             static (table, _, _) => table is null || table.Columns[0].StoreType == "int" ? "1 = 1" : "0 = 1");
     }
 

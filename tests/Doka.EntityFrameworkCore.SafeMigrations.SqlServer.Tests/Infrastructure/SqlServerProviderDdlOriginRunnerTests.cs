@@ -23,7 +23,9 @@ public sealed class SqlServerProviderDdlOriginRunnerTests
         var runner = new SafeMigrationRunner(analyzer);
 
         // Act
-        var report = await runner.AnalyzeAsync(context, operations, new SafeMigrationRunOptions("ddl-origin-contract"));
+        var report = await runner.AnalyzeAsync(context, operations, new SafeMigrationRunOptions("ddl-origin-contract"),
+            cancellationToken: CancellationToken.None);
+
         var json = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
         var block = Record.Exception(report.ThrowIfBlocked);
 
@@ -63,7 +65,7 @@ public sealed class SqlServerProviderDdlOriginRunnerTests
 
         // Act
         var failure = await Record.ExceptionAsync(() => runner.AnalyzeAsync(context, Operations(typed: false),
-            new SafeMigrationRunOptions("ddl-invalid-origin-contract")));
+            new SafeMigrationRunOptions("ddl-invalid-origin-contract"), cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Contains("invalid deferred-validation origin", Assert.IsType<InvalidOperationException>(failure).Message,
@@ -119,18 +121,18 @@ public sealed class SqlServerProviderDdlOriginRunnerTests
 
         /// <inheritdoc />
         public Task<SafeMigrationProviderEnvironment> GetEnvironmentAsync(
-            DbContext context, CancellationToken cancellationToken = default)
+            DbContext context, CancellationToken cancellationToken)
             => Task.FromResult(new SafeMigrationProviderEnvironment(ProviderId, "sqlserver", "16.0.0"));
 
         /// <inheritdoc />
         public Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
-            DbContext context, CancellationToken cancellationToken = default)
+            DbContext context, CancellationToken cancellationToken)
             => Task.FromResult<IAsyncDisposable>(new EmptyScope());
 
         /// <inheritdoc />
         public Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
             DbContext context, IReadOnlyList<SafeMigrationOperation> operations,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken)
         {
             _projection.CaptureProjectedDdlRowEffects(_trigger
                 ? SqlServerDdlRowEffectRisk.EnabledTrigger : SqlServerDdlRowEffectRisk.VisibilityUnproven);
@@ -149,7 +151,7 @@ public sealed class SqlServerProviderDdlOriginRunnerTests
         /// <inheritdoc />
         public Task<IReadOnlyList<SafeMigrationUnexpectedObject>> FindUnexpectedObjectsAsync(
             DbContext context, IReadOnlyList<MigrationOperation> operations,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken)
             => Task.FromResult<IReadOnlyList<SafeMigrationUnexpectedObject>>([]);
 
         /// <inheritdoc />

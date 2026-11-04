@@ -15,7 +15,7 @@ public sealed class SqliteSafeMigrationInventorySnapshotsIntegrationTests : Sqli
     public async Task UnexpectedObjectInventory_AliasWindowsCaptureCatalogOnce(int aliasCount)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         var sql = new StringBuilder("CREATE TABLE inventory_windows (Code TEXT, Legacy TEXT); ");
         for (var index = 0; index < aliasCount; index++)
         {
@@ -25,7 +25,7 @@ public sealed class SqliteSafeMigrationInventorySnapshotsIntegrationTests : Sqli
         }
 
         sql.Append("CREATE INDEX physical_drift ON inventory_windows (Legacy);");
-        await ExecuteSqlAsync(connection, sql.ToString());
+        await ExecuteSqlAsync(connection, sql.ToString(), cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var operations = CreateInventoryOperations(context, "inventory_windows");
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
@@ -48,11 +48,11 @@ public sealed class SqliteSafeMigrationInventorySnapshotsIntegrationTests : Sqli
     public async Task UnexpectedObjectInventory_RefreshesCatalogBetweenInvocations()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE inventory_fresh (Code TEXT, Legacy TEXT); "
-            + "CREATE INDEX physical_index ON inventory_fresh (Code);");
+            + "CREATE INDEX physical_index ON inventory_fresh (Code);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var operations = CreateInventoryOperations(context, "inventory_fresh");
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
@@ -62,7 +62,8 @@ public sealed class SqliteSafeMigrationInventorySnapshotsIntegrationTests : Sqli
         var before = await analyzer.FindUnexpectedObjectsAsync(context, operations, CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "DROP INDEX physical_index; CREATE INDEX physical_index ON inventory_fresh (Legacy);");
+            "DROP INDEX physical_index; CREATE INDEX physical_index ON inventory_fresh (Legacy);",
+            cancellationToken: CancellationToken.None);
         var after = await analyzer.FindUnexpectedObjectsAsync(context, operations, CancellationToken.None);
 
         // Assert
@@ -76,8 +77,11 @@ public sealed class SqliteSafeMigrationInventorySnapshotsIntegrationTests : Sqli
     public async Task UnexpectedObjectInventory_RefreshesCatalogAfterTransactionRollback()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection, "CREATE TABLE inventory_transactions (Code TEXT, Legacy TEXT);");
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE inventory_transactions (Code TEXT, Legacy TEXT);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var operations = CreateInventoryOperations(context, "inventory_transactions");
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
@@ -109,16 +113,18 @@ public sealed class SqliteSafeMigrationInventorySnapshotsIntegrationTests : Sqli
     public async Task UnexpectedObjectInventory_RefreshesCatalogForEachConnection()
     {
         // Arrange
-        await using var firstConnection = await OpenConnectionAsync();
-        await using var secondConnection = await OpenConnectionAsync();
+        await using var firstConnection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await using var secondConnection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             firstConnection,
             "CREATE TABLE inventory_connections (Code TEXT, Legacy TEXT); "
-            + "CREATE INDEX physical_index ON inventory_connections (Code);");
+            + "CREATE INDEX physical_index ON inventory_connections (Code);",
+            cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             secondConnection,
             "CREATE TABLE inventory_connections (Code TEXT, Legacy TEXT); "
-            + "CREATE INDEX physical_index ON inventory_connections (Legacy);");
+            + "CREATE INDEX physical_index ON inventory_connections (Legacy);",
+            cancellationToken: CancellationToken.None);
         await using var firstContext = CreateContext(firstConnection);
         await using var secondContext = CreateContext(secondConnection);
         var operations = CreateInventoryOperations(firstContext, "inventory_connections");
@@ -142,10 +148,11 @@ public sealed class SqliteSafeMigrationInventorySnapshotsIntegrationTests : Sqli
     public async Task Analyzer_RefreshesDataProofsBetweenInvocations()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            "CREATE TABLE inventory_data (Code TEXT NOT NULL); INSERT INTO inventory_data VALUES ('value');");
+            "CREATE TABLE inventory_data (Code TEXT NOT NULL); INSERT INTO inventory_data VALUES ('value');",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexIfNotExists("expected_unique", "inventory_data", ["Code"], unique: true);
@@ -155,7 +162,10 @@ public sealed class SqliteSafeMigrationInventorySnapshotsIntegrationTests : Sqli
 
         // Act
         var before = await analyzer.AnalyzeAsync(context, operations, CancellationToken.None);
-        await ExecuteSqlAsync(connection, "INSERT INTO inventory_data VALUES ('value');");
+        await ExecuteSqlAsync(
+            connection,
+            "INSERT INTO inventory_data VALUES ('value');",
+            cancellationToken: CancellationToken.None);
         var after = await analyzer.AnalyzeAsync(context, operations, CancellationToken.None);
 
         // Assert
@@ -169,11 +179,11 @@ public sealed class SqliteSafeMigrationInventorySnapshotsIntegrationTests : Sqli
     public async Task UnexpectedObjectInventory_CancellationDuringCaptureRemainsObservable()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE inventory_cancelled (Code TEXT, Legacy TEXT); "
-            + "CREATE INDEX physical_index ON inventory_cancelled (Code);");
+            + "CREATE INDEX physical_index ON inventory_cancelled (Code);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var operations = CreateInventoryOperations(context, "inventory_cancelled");
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();

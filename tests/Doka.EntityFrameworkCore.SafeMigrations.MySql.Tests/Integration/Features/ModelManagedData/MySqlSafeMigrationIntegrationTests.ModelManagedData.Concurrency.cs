@@ -15,7 +15,8 @@ public sealed partial class MySqlModelManagedDataConcurrencyIntegrationTests : M
             connectionString,
             "CREATE TABLE `model_race_roles` (`id` int NOT NULL, `name` varchar(64) NOT NULL, "
             + "PRIMARY KEY (`id`)) ENGINE=InnoDB;"
-            + "INSERT INTO `model_race_roles` (`id`, `name`) VALUES (1, 'source');");
+            + "INSERT INTO `model_race_roles` (`id`, `name`) VALUES (1, 'source');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var update = ModelManagedNameUpdate(context.Database.ProviderName!, "model_race_roles");
@@ -29,21 +30,24 @@ public sealed partial class MySqlModelManagedDataConcurrencyIntegrationTests : M
 
         await ExecuteSqlAsync(
             connectionString,
-            "UPDATE `model_race_roles` SET `name` = 'concurrent' WHERE `id` = 1;");
+            "UPDATE `model_race_roles` SET `name` = 'concurrent' WHERE `id` = 1;",
+            cancellationToken: CancellationToken.None);
 
-        _ = await AssertOwnedGuardFailureAsync(() =>
-            ExecuteOperationsAsync(context, update.Operations, CancellationToken.None));
+        _ = await AssertOwnedGuardFailureAsync(operationToken =>
+            ExecuteOperationsAsync(context, update.Operations, operationToken),
+            cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
             "UPDATE `model_race_roles` SET `name` = 'source' WHERE `id` = 1;"
             + "CREATE TRIGGER `trg_model_race_roles_rewrite` BEFORE UPDATE ON `model_race_roles` "
-            + "FOR EACH ROW SET NEW.`name` = 'triggered';");
+            + "FOR EACH ROW SET NEW.`name` = 'triggered';", cancellationToken: CancellationToken.None);
 
         await using (var transaction = await context.Database.BeginTransactionAsync(CancellationToken.None))
         {
-            _ = await AssertOwnedGuardFailureAsync(() =>
-                ExecuteOperationsAsync(context, update.Operations, CancellationToken.None));
+            _ = await AssertOwnedGuardFailureAsync(operationToken =>
+                ExecuteOperationsAsync(context, update.Operations, operationToken),
+                cancellationToken: CancellationToken.None);
 
             // The provider intentionally leaves transaction ownership with EF.
             // Roll back explicitly here because this helper invokes the generated
@@ -57,7 +61,8 @@ public sealed partial class MySqlModelManagedDataConcurrencyIntegrationTests : M
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM `model_race_roles` WHERE `id` = 1 AND `name` = 'source';"));
+                "SELECT COUNT(*) FROM `model_race_roles` WHERE `id` = 1 AND `name` = 'source';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Theory]
@@ -77,7 +82,8 @@ public sealed partial class MySqlModelManagedDataConcurrencyIntegrationTests : M
             + "CREATE TABLE `model_dependency_users` (`id` int NOT NULL, `role_id` int NULL, "
             + "PRIMARY KEY (`id`), CONSTRAINT `fk_model_dependency_users_role` FOREIGN KEY (`role_id`) "
             + $"REFERENCES `model_dependency_roles` (`id`) ON DELETE {referentialAction}) ENGINE=InnoDB;"
-            + "INSERT INTO `model_dependency_roles` (`id`, `name`) VALUES (1, 'source');");
+            + "INSERT INTO `model_dependency_roles` (`id`, `name`) VALUES (1, 'source');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var deletion = ModelManagedRoleDeletion(context.Database.ProviderName!);
@@ -91,10 +97,12 @@ public sealed partial class MySqlModelManagedDataConcurrencyIntegrationTests : M
 
         await ExecuteSqlAsync(
             connectionString,
-            "INSERT INTO `model_dependency_users` (`id`, `role_id`) VALUES (11, 1);");
+            "INSERT INTO `model_dependency_users` (`id`, `role_id`) VALUES (11, 1);",
+            cancellationToken: CancellationToken.None);
 
-        _ = await AssertOwnedGuardFailureAsync(() =>
-            ExecuteOperationsAsync(context, deletion.Operations, CancellationToken.None));
+        _ = await AssertOwnedGuardFailureAsync(operationToken =>
+            ExecuteOperationsAsync(context, deletion.Operations, operationToken),
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationObservedState.TransitionReady,
             Assert.Single(preflight.Assessments).ObservedState);
@@ -102,12 +110,14 @@ public sealed partial class MySqlModelManagedDataConcurrencyIntegrationTests : M
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM `model_dependency_roles` WHERE `id` = 1;"));
+                "SELECT COUNT(*) FROM `model_dependency_roles` WHERE `id` = 1;",
+                cancellationToken: CancellationToken.None));
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM `model_dependency_users` WHERE `id` = 11 AND `role_id` = 1;"));
+                "SELECT COUNT(*) FROM `model_dependency_users` WHERE `id` = 11 AND `role_id` = 1;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -120,7 +130,7 @@ public sealed partial class MySqlModelManagedDataConcurrencyIntegrationTests : M
             + "PRIMARY KEY (`id`)) ENGINE=InnoDB;"
             + "INSERT INTO `model_cancel_roles` (`id`, `name`) VALUES (1, 'source');"
             + "CREATE TRIGGER `trg_model_cancel_roles_wait` BEFORE UPDATE ON `model_cancel_roles` "
-            + "FOR EACH ROW DO SLEEP(10);");
+            + "FOR EACH ROW DO SLEEP(10);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var update = ModelManagedNameUpdate(context.Database.ProviderName!, "model_cancel_roles");
@@ -133,7 +143,8 @@ public sealed partial class MySqlModelManagedDataConcurrencyIntegrationTests : M
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM `model_cancel_roles` WHERE `id` = 1 AND `name` = 'source';"));
+                "SELECT COUNT(*) FROM `model_cancel_roles` WHERE `id` = 1 AND `name` = 'source';",
+                cancellationToken: CancellationToken.None));
     }
 
     private static MigrationBuilder ModelManagedNameUpdate(

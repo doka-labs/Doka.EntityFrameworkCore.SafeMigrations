@@ -22,7 +22,7 @@ public sealed class SqlServerRenameDestinationEvidenceTests
         SafeMigrationOperation[] operations = [rename];
         SafeMigrationProviderAnalysis[] analyses = [Live(SafeMigrationObservedState.Missing)];
         await using var connection = Connection(tableExists, otherObjectExists);
-        var graph = await ReadGraphAsync(connection, operations);
+        var graph = await ReadGraphAsync(connection, operations, cancellationToken: CancellationToken.None);
         var commandsBefore = connection.Submissions.Count;
 
         // Act
@@ -57,7 +57,7 @@ public sealed class SqlServerRenameDestinationEvidenceTests
         SafeMigrationOperation[] operations = [rename];
         SafeMigrationProviderAnalysis[] analyses = [Live(SafeMigrationObservedState.Missing)];
         await using var connection = Connection(tableExists, false);
-        var graph = await ReadGraphAsync(connection, operations);
+        var graph = await ReadGraphAsync(connection, operations, cancellationToken: CancellationToken.None);
         graph.CaptureRenameTargetPresence(operations, analyses);
         var projection = new SafeMigrationPreflightProjection();
         var source = new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition("source",
@@ -118,7 +118,7 @@ public sealed class SqlServerRenameDestinationEvidenceTests
         SafeMigrationOperation[] operations = [rename];
         SafeMigrationProviderAnalysis[] analyses = [Live(SafeMigrationObservedState.Missing)];
         await using var connection = Connection(false, false, intermediateExists, crossSchema: true);
-        var graph = await ReadGraphAsync(connection, operations);
+        var graph = await ReadGraphAsync(connection, operations, cancellationToken: CancellationToken.None);
         graph.CaptureRenameTargetPresence(operations, analyses);
         var projection = new SafeMigrationPreflightProjection();
         var source = new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition("source",
@@ -184,9 +184,10 @@ public sealed class SqlServerRenameDestinationEvidenceTests
 
     private static Task<SqlServerProjectedDependencyGraph> ReadGraphAsync(
         CatalogStatementTestConnection connection,
-        IReadOnlyList<SafeMigrationOperation> operations
+        IReadOnlyList<SafeMigrationOperation> operations,
+        CancellationToken cancellationToken
     ) => SqlServerProjectedDependencyGraph.ReadAsync(connection, null, operations, 71,
-        static (_, _) => "1=1", static (_, _) => true, static (_, _) => true, CancellationToken.None);
+        static (_, _) => "1=1", static (_, _) => true, static (_, _) => true, cancellationToken);
 
     private static CatalogStatementTestConnection Connection(
         bool targetExists,

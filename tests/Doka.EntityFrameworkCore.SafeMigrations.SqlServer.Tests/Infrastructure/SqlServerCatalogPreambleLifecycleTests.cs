@@ -13,7 +13,7 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         var analyzer = Analyzer(context);
 
         // Act
-        await analyzer.AnalyzeAsync(context, AnalysisOperations());
+        await analyzer.AnalyzeAsync(context, AnalysisOperations(), cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Contains("HAS_PERMS_BY_NAME(NULL,NULL,N'VIEW ANY DEFINITION')", connection.EnvironmentCommand,
@@ -38,11 +38,14 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         }
 
         var analyzer = Analyzer(context);
-        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context);
-        await analyzer.AnalyzeAsync(context, AnalysisOperations());
+        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context,
+            cancellationToken: CancellationToken.None);
+
+        await analyzer.AnalyzeAsync(context, AnalysisOperations(), cancellationToken: CancellationToken.None);
 
         // Act
-        var inventory = await analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations());
+        var inventory = await analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Empty(inventory);
@@ -66,12 +69,13 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         }
 
         var analyzer = Analyzer(context);
-        await analyzer.AnalyzeAsync(context, AnalysisOperations());
+        await analyzer.AnalyzeAsync(context, AnalysisOperations(), cancellationToken: CancellationToken.None);
         connection.MetadataVisible = false;
 
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations()));
+            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+                cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Contains("requires database metadata visibility", failure.Message, StringComparison.Ordinal);
@@ -94,14 +98,15 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         }
 
         var analyzer = Analyzer(context);
-        var scope = await analyzer.AcquireAnalysisScopeAsync(context);
-        await analyzer.AnalyzeAsync(context, AnalysisOperations());
+        var scope = await analyzer.AcquireAnalysisScopeAsync(context, cancellationToken: CancellationToken.None);
+        await analyzer.AnalyzeAsync(context, AnalysisOperations(), cancellationToken: CancellationToken.None);
         await scope.DisposeAsync();
         connection.MetadataVisible = false;
 
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations()));
+            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+                cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Contains("requires database metadata visibility", failure.Message, StringComparison.Ordinal);
@@ -120,8 +125,10 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         await using var connection = new PreambleConnection();
         await using var context = Context(connection);
         var analyzer = Analyzer(context);
-        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context);
-        await analyzer.AnalyzeAsync(context, AnalysisOperations());
+        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context,
+            cancellationToken: CancellationToken.None);
+
+        await analyzer.AnalyzeAsync(context, AnalysisOperations(), cancellationToken: CancellationToken.None);
         if (changeDatabase)
         {
             connection.ChangeDatabase("another_catalog");
@@ -136,7 +143,8 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
 
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations()));
+            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+                cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Contains("requires database metadata visibility", failure.Message, StringComparison.Ordinal);
@@ -154,17 +162,22 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         await using var connection = new PreambleConnection();
         await using var context = Context(connection);
         var analyzer = Analyzer(context);
-        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context);
+        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context,
+            cancellationToken: CancellationToken.None);
+
         connection.ClassificationFailure = cancelled
             ? new OperationCanceledException("Injected classification cancellation.")
             : new InvalidOperationException("Injected classification failure.");
 
-        var analysisFailure = await Record.ExceptionAsync(() => analyzer.AnalyzeAsync(context, AnalysisOperations()));
+        var analysisFailure = await Record.ExceptionAsync(() => analyzer.AnalyzeAsync(context, AnalysisOperations(),
+            cancellationToken: CancellationToken.None));
+
         connection.MetadataVisible = false;
 
         // Act
         var inventoryFailure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations()));
+            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+                cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Same(connection.ClassificationFailure, analysisFailure);
@@ -180,13 +193,16 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         await using var connection = new PreambleConnection { MetadataVisible = false };
         await using var context = Context(connection);
         var analyzer = Analyzer(context);
-        var scope = await analyzer.AcquireAnalysisScopeAsync(context);
-        var analyses = await analyzer.AnalyzeAsync(context, AnalysisOperations());
+        var scope = await analyzer.AcquireAnalysisScopeAsync(context, cancellationToken: CancellationToken.None);
+        var analyses = await analyzer.AnalyzeAsync(context, AnalysisOperations(),
+            cancellationToken: CancellationToken.None);
+
         await scope.DisposeAsync();
 
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations()));
+            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+                cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Unsupported, Assert.Single(analyses).ObservedState);
@@ -201,11 +217,15 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         await using var connection = new PreambleConnection { MetadataVisible = false };
         await using var context = Context(connection);
         var analyzer = Analyzer(context);
-        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context);
-        var analyses = await analyzer.AnalyzeAsync(context, AnalysisOperations());
+        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context,
+            cancellationToken: CancellationToken.None);
+
+        var analyses = await analyzer.AnalyzeAsync(context, AnalysisOperations(),
+            cancellationToken: CancellationToken.None);
 
         // Act
-        var inventory = await analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations());
+        var inventory = await analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Unsupported, Assert.Single(analyses).ObservedState);
@@ -220,15 +240,18 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         await using var connection = new PreambleConnection();
         await using var context = Context(connection);
         var analyzer = Analyzer(context);
-        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context);
-        await analyzer.AnalyzeAsync(context, AnalysisOperations());
+        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context,
+            cancellationToken: CancellationToken.None);
+
+        await analyzer.AnalyzeAsync(context, AnalysisOperations(), cancellationToken: CancellationToken.None);
         await context.Database.CurrentTransaction!.DisposeAsync();
         await context.Database.BeginTransactionAsync();
         connection.MetadataVisible = false;
 
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations()));
+            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+                cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Contains("requires database metadata visibility", failure.Message, StringComparison.Ordinal);
@@ -247,8 +270,8 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         await using var context = Context(connection);
         await context.Database.BeginTransactionAsync();
         var analyzer = Analyzer(context);
-        var scope = await analyzer.AcquireAnalysisScopeAsync(context);
-        await analyzer.AnalyzeAsync(context, AnalysisOperations());
+        var scope = await analyzer.AcquireAnalysisScopeAsync(context, cancellationToken: CancellationToken.None);
+        await analyzer.AnalyzeAsync(context, AnalysisOperations(), cancellationToken: CancellationToken.None);
 
         // Act
         if (disposeAnalyzer)
@@ -264,7 +287,8 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         await analyzer.DisposeAsync();
         connection.MetadataVisible = false;
         var failure = await Record.ExceptionAsync(() =>
-            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations()));
+            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+                cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Contains("requires database metadata visibility",
@@ -281,12 +305,17 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         await using var connection = new PreambleConnection();
         await using var context = Context(connection);
         var analyzer = Analyzer(context);
-        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context);
-        await analyzer.AnalyzeAsync(context, AnalysisOperations());
+        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context,
+            cancellationToken: CancellationToken.None);
+
+        await analyzer.AnalyzeAsync(context, AnalysisOperations(), cancellationToken: CancellationToken.None);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => analyzer.AcquireAnalysisScopeAsync(context));
-        var inventory = await analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations());
+        var failure = await Record.ExceptionAsync(() => analyzer.AcquireAnalysisScopeAsync(context,
+            cancellationToken: CancellationToken.None));
+
+        var inventory = await analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Contains("already owns an active analysis scope",
@@ -311,15 +340,16 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         }
 
         var analyzer = Analyzer(context);
-        var scope = await analyzer.AcquireAnalysisScopeAsync(context);
-        await analyzer.AnalyzeAsync(context, AnalysisOperations());
+        var scope = await analyzer.AcquireAnalysisScopeAsync(context, cancellationToken: CancellationToken.None);
+        await analyzer.AnalyzeAsync(context, AnalysisOperations(), cancellationToken: CancellationToken.None);
 
         // Act
         analyzer.Dispose();
         await scope.DisposeAsync();
         connection.MetadataVisible = false;
         var failure = await Record.ExceptionAsync(() =>
-            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations()));
+            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+                cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Contains("requires database metadata visibility",
@@ -343,9 +373,12 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         await using var connection = new PreambleConnection();
         await using var context = Context(connection);
         var analyzer = Analyzer(context);
-        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context);
+        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context,
+            cancellationToken: CancellationToken.None);
+
         var operations = InventoryOperations();
-        await analyzer.AnalyzeAsync(context, operations.Cast<SafeMigrationOperation>().ToArray());
+        await analyzer.AnalyzeAsync(context, operations.Cast<SafeMigrationOperation>().ToArray(),
+            cancellationToken: CancellationToken.None);
         switch (change)
         {
             case "principal":
@@ -368,7 +401,8 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         connection.IdentifierSafe = false;
 
         // Act
-        var failure = await Record.ExceptionAsync(() => analyzer.FindUnexpectedObjectsAsync(context, operations));
+        var failure = await Record.ExceptionAsync(() => analyzer.FindUnexpectedObjectsAsync(context, operations,
+            cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Equal(2, connection.EnvironmentReads);
@@ -392,13 +426,16 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         await using var connection = new PreambleConnection { MetadataVisible = false };
         await using var context = Context(connection);
         var analyzer = Analyzer(context);
-        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context);
-        await analyzer.AnalyzeAsync(context, AnalysisOperations());
+        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context,
+            cancellationToken: CancellationToken.None);
+
+        await analyzer.AnalyzeAsync(context, AnalysisOperations(), cancellationToken: CancellationToken.None);
         connection.PrincipalId = 2;
 
         // Act
         var failure = await Record.ExceptionAsync(() =>
-            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations()));
+            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+                cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Contains("requires database metadata visibility",
@@ -418,7 +455,7 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         await using var context = Context(connection);
         await context.Database.BeginTransactionAsync();
         var analyzer = Analyzer(context);
-        var scope = await analyzer.AcquireAnalysisScopeAsync(context);
+        var scope = await analyzer.AcquireAnalysisScopeAsync(context, cancellationToken: CancellationToken.None);
         await context.Database.CurrentTransaction!.DisposeAsync();
 
         // Act
@@ -462,8 +499,8 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
             await context.Database.BeginTransactionAsync();
         }
 
-        var scope = await analyzer.AcquireAnalysisScopeAsync(context);
-        await analyzer.AnalyzeAsync(context, AnalysisOperations());
+        var scope = await analyzer.AcquireAnalysisScopeAsync(context, cancellationToken: CancellationToken.None);
+        await analyzer.AnalyzeAsync(context, AnalysisOperations(), cancellationToken: CancellationToken.None);
 
         // Act
         var failure = asynchronous

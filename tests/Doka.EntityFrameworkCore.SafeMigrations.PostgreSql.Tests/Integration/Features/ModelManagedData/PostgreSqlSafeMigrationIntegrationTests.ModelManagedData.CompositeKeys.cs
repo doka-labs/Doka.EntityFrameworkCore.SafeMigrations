@@ -19,7 +19,7 @@ public sealed class PostgreSqlModelManagedDataCompositeKeysIntegrationTests : Po
             + "tenant_id integer NOT NULL, id integer NOT NULL, name varchar(64) NOT NULL, "
             + "PRIMARY KEY (tenant_id, id));"
             + "INSERT INTO model_composite_roles (tenant_id, id, name) VALUES "
-            + "(1, 1, 'source'), (2, 1, 'removed');");
+            + "(1, 1, 'source'), (2, 1, 'removed');", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = CompositeModelManagedOperations(
@@ -55,12 +55,14 @@ public sealed class PostgreSqlModelManagedDataCompositeKeysIntegrationTests : Po
             2,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM model_composite_roles WHERE name = 'target';"));
+                "SELECT COUNT(*) FROM model_composite_roles WHERE name = 'target';",
+                cancellationToken: CancellationToken.None));
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM model_composite_roles WHERE tenant_id = 2 AND id = 1;"));
+                "SELECT COUNT(*) FROM model_composite_roles WHERE tenant_id = 2 AND id = 1;",
+                cancellationToken: CancellationToken.None));
     }
 
     private static MigrationBuilder CompositeModelManagedOperations(

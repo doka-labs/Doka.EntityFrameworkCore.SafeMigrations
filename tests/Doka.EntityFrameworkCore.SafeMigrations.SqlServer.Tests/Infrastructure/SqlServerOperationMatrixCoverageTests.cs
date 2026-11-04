@@ -1,5 +1,3 @@
-using System.Reflection;
-
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 /// <summary>

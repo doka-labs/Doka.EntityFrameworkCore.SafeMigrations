@@ -14,13 +14,13 @@ public sealed class SqlServerSafeMigrationIdentityAdmissionIntegrationTests : Sq
     public async Task ExistingIdentityWithoutSelect_IsStructuredUnsupportedInsteadOfPermissionFailure()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.identity_admission (Id int IDENTITY(1,1) NOT NULL, Value int NOT NULL); "
             + "CREATE USER identity_metadata_reader WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; "
-            + "GRANT VIEW DEFINITION TO identity_metadata_reader;");
+            + "GRANT VIEW DEFINITION TO identity_metadata_reader;", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync("EXECUTE AS USER=N'identity_metadata_reader';");
         var operation = IdentityAdmissionColumn("Id", "int", "1, 1");
         IReadOnlyList<SafeMigrationProviderAnalysis> analyses;
@@ -29,8 +29,10 @@ public sealed class SqlServerSafeMigrationIdentityAdmissionIntegrationTests : Sq
         // Act
         try
         {
-            analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation]);
-            failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+            analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation],
+                cancellationToken: CancellationToken.None);
+            failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+                cancellationToken: CancellationToken.None));
         }
         finally
         {
@@ -38,7 +40,8 @@ public sealed class SqlServerSafeMigrationIdentityAdmissionIntegrationTests : Sq
         }
 
         var columns = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.identity_columns WHERE object_id=OBJECT_ID(N'dbo.identity_admission');");
+            "SELECT COUNT(*) FROM sys.identity_columns WHERE object_id=OBJECT_ID(N'dbo.identity_admission');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);
@@ -61,19 +64,21 @@ public sealed class SqlServerSafeMigrationIdentityAdmissionIntegrationTests : Sq
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.identity_admission (Value int NOT NULL);");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.identity_admission (Value int NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operation = IdentityAdmissionColumn("Id", storeType, identity);
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
 
         // Act
-        var before = await analyzer.AnalyzeAsync(context, [operation]);
-        await ExecuteOperationsAsync(context, [operation]);
-        var after = await analyzer.AnalyzeAsync(context, [operation]);
-        await ExecuteOperationsAsync(context, [operation]);
+        var before = await analyzer.AnalyzeAsync(context, [operation], cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, [operation], cancellationToken: CancellationToken.None);
+        var after = await analyzer.AnalyzeAsync(context, [operation], cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, [operation], cancellationToken: CancellationToken.None);
         var count = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.identity_columns WHERE object_id = OBJECT_ID(N'dbo.identity_admission');");
+            "SELECT COUNT(*) FROM sys.identity_columns WHERE object_id = OBJECT_ID(N'dbo.identity_admission');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, Assert.Single(before).ObservedState);
@@ -87,26 +92,33 @@ public sealed class SqlServerSafeMigrationIdentityAdmissionIntegrationTests : Sq
     public async Task SecondPhysicalIdentity_IsPrerequisiteMissingWithoutMutation()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.identity_admission (First int IDENTITY(1,1) NOT NULL, Value int NOT NULL); "
-            + "CREATE TABLE dbo.identity_ddl_events (Id int NOT NULL);");
+            + "CREATE TABLE dbo.identity_ddl_events (Id int NOT NULL);", cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TRIGGER identity_ddl_audit ON DATABASE FOR DDL_TABLE_EVENTS "
-            + "AS INSERT dbo.identity_ddl_events VALUES (1);");
+            + "AS INSERT dbo.identity_ddl_events VALUES (1);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operation = IdentityAdmissionColumn("Second", "int", "1, 1");
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation]);
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation],
+            cancellationToken: CancellationToken.None);
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            cancellationToken: CancellationToken.None));
+
         var identityCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.identity_columns WHERE object_id = OBJECT_ID(N'dbo.identity_admission');");
+            "SELECT COUNT(*) FROM sys.identity_columns WHERE object_id = OBJECT_ID(N'dbo.identity_admission');",
+            cancellationToken: CancellationToken.None);
 
         var columns = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.identity_admission');");
+            "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.identity_admission');",
+            cancellationToken: CancellationToken.None);
 
-        var events = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.identity_ddl_events;");
+        var events = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.identity_ddl_events;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);
@@ -127,27 +139,34 @@ public sealed class SqlServerSafeMigrationIdentityAdmissionIntegrationTests : Sq
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.identity_admission (Id int IDENTITY(1,1) "
             + (notForReplication ? "NOT FOR REPLICATION " : string.Empty) + "NOT NULL, Value int NOT NULL); "
             + "INSERT dbo.identity_admission(Value) VALUES (7); "
-            + "CREATE TABLE dbo.identity_ddl_events (Id int NOT NULL);");
+            + "CREATE TABLE dbo.identity_ddl_events (Id int NOT NULL);", cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TRIGGER identity_ddl_audit ON DATABASE FOR DDL_TABLE_EVENTS "
-            + "AS INSERT dbo.identity_ddl_events VALUES (1);");
+            + "AS INSERT dbo.identity_ddl_events VALUES (1);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operation = IdentityAdmissionColumn("Id", "int", "1, 1");
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation]);
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation],
+            cancellationToken: CancellationToken.None);
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            cancellationToken: CancellationToken.None));
+
         var physicalFacet = await ScalarIntAsync(connectionString,
             "SELECT CONVERT(int,is_not_for_replication) FROM sys.identity_columns "
-            + "WHERE object_id = OBJECT_ID(N'dbo.identity_admission');");
+            + "WHERE object_id = OBJECT_ID(N'dbo.identity_admission');", cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.identity_admission WHERE Value=7;");
-        var events = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.identity_ddl_events;");
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.identity_admission WHERE Value=7;",
+            cancellationToken: CancellationToken.None);
+
+        var events = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.identity_ddl_events;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);
@@ -173,24 +192,31 @@ public sealed class SqlServerSafeMigrationIdentityAdmissionIntegrationTests : Sq
     public async Task WideExistingIdentitySeed_IsAStableMismatchWithoutOverflow()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.identity_admission (Id decimal(38,0) IDENTITY(100000000000000000000,1) NOT NULL, "
-            + "Value int NOT NULL); CREATE TABLE dbo.identity_ddl_events (Id int NOT NULL);");
+            + "Value int NOT NULL); CREATE TABLE dbo.identity_ddl_events (Id int NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TRIGGER identity_ddl_audit ON DATABASE FOR DDL_TABLE_EVENTS "
-            + "AS INSERT dbo.identity_ddl_events VALUES (1);");
+            + "AS INSERT dbo.identity_ddl_events VALUES (1);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operation = IdentityAdmissionColumn("Id", "decimal(38,0)", "1, 1");
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation]);
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation],
+            cancellationToken: CancellationToken.None);
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            cancellationToken: CancellationToken.None));
+
         var preserved = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.identity_columns WHERE object_id=OBJECT_ID(N'dbo.identity_admission') "
-            + "AND CONVERT(decimal(38,0),seed_value)=100000000000000000000;");
+            + "AND CONVERT(decimal(38,0),seed_value)=100000000000000000000;",
+            cancellationToken: CancellationToken.None);
 
-        var events = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.identity_ddl_events;");
+        var events = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.identity_ddl_events;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(analyses).ObservedState);
@@ -208,7 +234,7 @@ public sealed class SqlServerSafeMigrationIdentityAdmissionIntegrationTests : Sq
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var first = IdentityAdmissionColumn("First", "int", "1, 1");
         var second = IdentityAdmissionColumn("Second", "int", "1, 1");
@@ -223,10 +249,11 @@ public sealed class SqlServerSafeMigrationIdentityAdmissionIntegrationTests : Sq
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, operations,
-            new SafeMigrationRunOptions("identity-slot-projection"));
+            new SafeMigrationRunOptions("identity-slot-projection"), cancellationToken: CancellationToken.None);
 
         var tables = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.identity_admission');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.identity_admission');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -239,7 +266,7 @@ public sealed class SqlServerSafeMigrationIdentityAdmissionIntegrationTests : Sq
     public async Task OrderedNewOrdinaryTable_AllowsTheFirstIdentity()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var table = new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition(
             "identity_admission", [new ExpectedColumnDefinition("Value", typeof(int), false, "int")]),
@@ -251,12 +278,13 @@ public sealed class SqlServerSafeMigrationIdentityAdmissionIntegrationTests : Sq
         var options = new SafeMigrationRunOptions("identity-first-projection");
 
         // Act
-        var before = await runner.AnalyzeAsync(context, operations, options);
-        await ExecuteOperationsAsync(context, operations);
-        var after = await runner.VerifyAsync(context, operations, options);
-        await ExecuteOperationsAsync(context, operations);
+        var before = await runner.AnalyzeAsync(context, operations, options, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, operations, cancellationToken: CancellationToken.None);
+        var after = await runner.VerifyAsync(context, operations, options, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, operations, cancellationToken: CancellationToken.None);
         var count = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.identity_columns WHERE object_id = OBJECT_ID(N'dbo.identity_admission');");
+            "SELECT COUNT(*) FROM sys.identity_columns WHERE object_id = OBJECT_ID(N'dbo.identity_admission');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, before.Status);

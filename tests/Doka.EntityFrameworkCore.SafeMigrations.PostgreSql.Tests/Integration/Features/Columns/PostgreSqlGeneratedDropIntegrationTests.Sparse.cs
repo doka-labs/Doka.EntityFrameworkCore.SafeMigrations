@@ -17,7 +17,7 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE sparse_generated (unrelated integer); "
-            + "INSERT INTO sparse_generated VALUES(9);");
+            + "INSERT INTO sparse_generated VALUES(9);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -44,7 +44,7 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
 
         if (report.Status == SafeMigrationReportStatus.Ready)
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         // Assert
@@ -53,7 +53,7 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
             report.Assessments[1].Action + ":" + report.Assessments[1].AnalysisCode);
         Assert.Equal(expected == SafeMigrationAction.Apply ? 3 : 1, await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='sparse_generated'::regclass "
-            + "AND attnum>0 AND NOT attisdropped;"));
+            + "AND attnum>0 AND NOT attisdropped;", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>
@@ -64,7 +64,8 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE sparse_generated (unrelated integer);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE sparse_generated (unrelated integer);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("source", "sparse_generated", type: "integer", nullable: true);
@@ -81,7 +82,7 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
         Assert.NotEqual(SafeMigrationAction.Apply, report.Assessments[^1].Action);
         Assert.Equal(1, await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='sparse_generated'::regclass "
-            + "AND attnum>0 AND NOT attisdropped;"));
+            + "AND attnum>0 AND NOT attisdropped;", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>
@@ -95,7 +96,8 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE sparse_generated (unrelated integer);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE sparse_generated (unrelated integer);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (wide)
@@ -116,7 +118,7 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
             new SafeMigrationRunOptions("generated-sparse-comparison-binding"), CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);

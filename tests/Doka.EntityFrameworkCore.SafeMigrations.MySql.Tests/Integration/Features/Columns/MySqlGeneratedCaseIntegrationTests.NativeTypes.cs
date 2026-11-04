@@ -14,7 +14,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL, "
             + "native_result bigint GENERATED ALWAYS AS (CAST(id AS SIGNED)) VIRTUAL, "
-            + "CONSTRAINT ck_source_cast CHECK(CAST(id AS SIGNED) > 0));");
+            + "CONSTRAINT ck_source_cast CHECK(CAST(id AS SIGNED) > 0));", cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (check)
         {
@@ -34,7 +34,9 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         // Act
         var nativeFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString,
-            $"PREPARE source_cast_probe FROM 'SELECT CAST(id AS bigint) FROM {Table}';"));
+            $"PREPARE source_cast_probe FROM 'SELECT CAST(id AS bigint) FROM {Table}';",
+            cancellationToken: CancellationToken.None));
+
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("captured-native-cast-target"), CancellationToken.None);
 
@@ -57,7 +59,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL); "
-            + $"INSERT INTO `{Table}` VALUES (-1);");
+            + $"INSERT INTO `{Table}` VALUES (-1);", cancellationToken: CancellationToken.None);
         var definition = source is null
             ? new ExpectedColumnDefinition("native_result", typeof(long), true, "bigint",
                 computedExpression: SafeMigrationSql.Cast(SqlColumn("id"), "bigint"), isStored: false)
@@ -76,12 +78,13 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var failure = await Record.ExceptionAsync(async () =>
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         });
 
         var result = failure is null
-            ? await ScalarIntAsync(connectionString, $"SELECT native_result FROM `{Table}`;") : int.MinValue;
+            ? await ScalarIntAsync(connectionString, $"SELECT native_result FROM `{Table}`;",
+                cancellationToken: CancellationToken.None) : int.MinValue;
 
         // Assert
         Assert.True(preflight.Status == SafeMigrationReportStatus.Ready, DescribeGeneratedReport(preflight));

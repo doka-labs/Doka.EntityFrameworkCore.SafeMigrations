@@ -78,6 +78,7 @@ public sealed class SqlServerDatabaseCleanupTests
         // Act
         var release = SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(databases, "sm_owned",
             (_, _) => completion.Task, CancellationToken.None);
+
         var ownershipWhilePending = databases.ToArray();
         var releaseWasPending = !release.IsCompleted;
         completion.SetResult();
@@ -133,6 +134,7 @@ public sealed class SqlServerDatabaseCleanupTests
         // Act
         var observed = await Record.ExceptionAsync(() => SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(
             databases, "sm_owned", DropAsync, CancellationToken.None));
+
         var ownershipAfterFailure = databases.ToArray();
 
         if (useFinalCleanup)
@@ -203,6 +205,7 @@ public sealed class SqlServerDatabaseCleanupTests
         // Act
         var observed = await Record.ExceptionAsync(() => SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(
             databases, "sm_owned", DropAsync, cancellation.Token));
+
         var ownershipAfterCancellation = databases.ToArray();
 
         if (useFinalCleanup)
@@ -291,6 +294,7 @@ public sealed class SqlServerDatabaseCleanupTests
         // Act
         var observed = await Record.ExceptionAsync(() => SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(
             databases, "sm_owned", DropAsync, CancellationToken.None));
+
         var ownershipAfterUncertainCompletion = databases.ToArray();
         await SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(databases, "sm_owned", DropAsync,
             CancellationToken.None);
@@ -328,6 +332,7 @@ public sealed class SqlServerDatabaseCleanupTests
         // Act
         var observed = await Record.ExceptionAsync(() =>
             SqlServerContainerFixture.DropOwnedDatabasesAsync(databases, DropAsync, CancellationToken.None));
+
         var ownershipAfterFailure = databases.ToArray();
         await SqlServerContainerFixture.DropOwnedDatabasesAsync(databases, DropAsync, CancellationToken.None);
 
@@ -369,6 +374,7 @@ public sealed class SqlServerDatabaseCleanupTests
         // Act
         var observed = await Record.ExceptionAsync(() =>
             SqlServerContainerFixture.DropOwnedDatabasesAsync(databases, DropAsync, cancellation.Token));
+
         var ownershipAfterCancellation = databases.ToArray();
         await SqlServerContainerFixture.DropOwnedDatabasesAsync(databases, DropAsync, CancellationToken.None);
 

@@ -16,7 +16,7 @@ public sealed class SqlServerSafeMigrationHistoryIntegrationTests : SqlServerSaf
     public async Task EfMigrator_RecordsHistoryOnceAndReplays()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
 
         // Act
@@ -26,11 +26,13 @@ public sealed class SqlServerSafeMigrationHistoryIntegrationTests : SqlServerSaf
         var historyCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM dbo.__EFMigrationsHistory "
-            + $"WHERE MigrationId = N'{SqlServerHistoryMigration.MigrationIdentifier}';");
+            + $"WHERE MigrationId = N'{SqlServerHistoryMigration.MigrationIdentifier}';",
+            cancellationToken: CancellationToken.None);
 
         var safeTableCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.safe_history_probe', N'U');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.safe_history_probe', N'U');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, historyCount);
@@ -44,8 +46,9 @@ public sealed class SqlServerSafeMigrationHistoryIntegrationTests : SqlServerSaf
     public async Task EfMigrator_BlockedSafeOperationRollsBackOrdinaryDdlAndHistory()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.safe_history_probe (Id bigint NOT NULL);");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.safe_history_probe (Id bigint NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
 
         // Act
@@ -53,13 +56,15 @@ public sealed class SqlServerSafeMigrationHistoryIntegrationTests : SqlServerSaf
 
         var ordinaryTableCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.ordinary_pipeline_probe', N'U');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.ordinary_pipeline_probe', N'U');",
+            cancellationToken: CancellationToken.None);
 
         var historyRowCount = await ScalarIntAsync(
             connectionString,
             "IF OBJECT_ID(N'dbo.__EFMigrationsHistory', N'U') IS NULL SELECT 0; "
             + "ELSE SELECT COUNT(*) FROM dbo.__EFMigrationsHistory "
-            + $"WHERE MigrationId = N'{SqlServerHistoryMigration.MigrationIdentifier}';");
+            + $"WHERE MigrationId = N'{SqlServerHistoryMigration.MigrationIdentifier}';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.NotNull(exception);
@@ -74,11 +79,12 @@ public sealed class SqlServerSafeMigrationHistoryIntegrationTests : SqlServerSaf
     public async Task EfMigrator_FailedContractStampRollsBackDdlAndHistory()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TRIGGER reject_contract_stamp ON DATABASE FOR CREATE_EXTENDED_PROPERTY AS "
-            + "BEGIN THROW 51009, N'Injected extended-property failure', 1; END;");
+            + "BEGIN THROW 51009, N'Injected extended-property failure', 1; END;",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
 
         // Act
@@ -87,13 +93,14 @@ public sealed class SqlServerSafeMigrationHistoryIntegrationTests : SqlServerSaf
         var createdTableCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.tables WHERE name IN "
-            + "(N'ordinary_pipeline_probe', N'safe_history_probe');");
+            + "(N'ordinary_pipeline_probe', N'safe_history_probe');", cancellationToken: CancellationToken.None);
 
         var historyRowCount = await ScalarIntAsync(
             connectionString,
             "IF OBJECT_ID(N'dbo.__EFMigrationsHistory', N'U') IS NULL SELECT 0; "
             + "ELSE SELECT COUNT(*) FROM dbo.__EFMigrationsHistory "
-            + $"WHERE MigrationId = N'{SqlServerHistoryMigration.MigrationIdentifier}';");
+            + $"WHERE MigrationId = N'{SqlServerHistoryMigration.MigrationIdentifier}';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.NotNull(exception);

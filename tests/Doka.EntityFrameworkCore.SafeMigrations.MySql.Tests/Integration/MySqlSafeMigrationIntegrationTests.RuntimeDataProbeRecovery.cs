@@ -36,11 +36,12 @@ public sealed partial class MySqlRuntimeDataProbeRecoveryIntegrationTests : MySq
             connectionString,
             "CREATE TABLE `runtime_probe_rows` (`Id` int NOT NULL, `Code` varchar(20) NULL, "
             + "PRIMARY KEY (`Id`)) ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `runtime_probe_rows` VALUES (1, 'preserved'), (2, NULL), (3, '');");
+            + "INSERT INTO `runtime_probe_rows` VALUES (1, 'preserved'), (2, NULL), (3, '');",
+            cancellationToken: CancellationToken.None);
 
         await using var blocker = failureMode == "error"
             ? null
-            : await AcquireRuntimeSetupLockAsync(connectionString);
+            : await AcquireRuntimeSetupLockAsync(connectionString, cancellationToken: CancellationToken.None);
 
         using var cancellation = new CancellationTokenSource();
         var observer = new MySqlRuntimeCommandInterceptor();
@@ -128,29 +129,54 @@ public sealed partial class MySqlRuntimeDataProbeRecoveryIntegrationTests : MySq
         CancellationToken cancellationToken
     )
     {
-        var sessionBefore = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();");
+        var sessionBefore = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();",
+            cancellationToken: cancellationToken);
+
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, operations, cancellationToken));
 
+        // WHY: The attempted operation may have canceled its token. Recovery observations and retry
+        // remain independent so cancellation cannot hide failed cleanup or poison the same-session retry.
+
         var bodiesBefore = observer.GuardedBodyCount;
-        var cleanup = await ReadRuntimeCleanupProofAsync(context.Database.GetDbConnection());
+        var cleanup = await ReadRuntimeCleanupProofAsync(context.Database.GetDbConnection(),
+            cancellationToken: CancellationToken.None);
+
         var preparedMarker = await ContextScalarIntAsync(
             context,
-            "SELECT COALESCE(@runtime_data_probe_prepared = 1, FALSE);");
+            "SELECT COALESCE(@runtime_data_probe_prepared = 1, FALSE);", cancellationToken: CancellationToken.None);
 
-        var sentinel = await ContextScalarIntAsync(context, "SELECT @runtime_data_probe_sentinel IS NOT NULL;");
-        var lengthBefore = await ContextScalarIntAsync(context, RuntimeProbeColumnLengthSql);
-        var nullableBefore = await ContextScalarIntAsync(context, RuntimeProbeColumnNullableSql);
-        var rowCountBefore = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `runtime_probe_rows`;");
-        var preservedBefore = await ContextScalarIntAsync(context, RuntimeProbePreservedRowsSql);
+        var sentinel = await ContextScalarIntAsync(context, "SELECT @runtime_data_probe_sentinel IS NOT NULL;",
+            cancellationToken: CancellationToken.None);
+
+        var lengthBefore = await ContextScalarIntAsync(context, RuntimeProbeColumnLengthSql,
+            cancellationToken: CancellationToken.None);
+
+        var nullableBefore = await ContextScalarIntAsync(context, RuntimeProbeColumnNullableSql,
+            cancellationToken: CancellationToken.None);
+
+        var rowCountBefore = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `runtime_probe_rows`;",
+            cancellationToken: CancellationToken.None);
+
+        var preservedBefore = await ContextScalarIntAsync(context, RuntimeProbePreservedRowsSql,
+            cancellationToken: CancellationToken.None);
 
         context.Database.SetCommandTimeout(60);
         await ExecuteOperationsAsync(context, operations, CancellationToken.None);
-        var sessionAfter = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();");
-        var lengthAfter = await ContextScalarIntAsync(context, RuntimeProbeColumnLengthSql);
-        var nullableAfter = await ContextScalarIntAsync(context, RuntimeProbeColumnNullableSql);
-        var rowCountAfter = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `runtime_probe_rows`;");
-        var preservedAfter = await ContextScalarIntAsync(context, RuntimeProbePreservedRowsSql);
+        var sessionAfter = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();",
+            cancellationToken: CancellationToken.None);
+
+        var lengthAfter = await ContextScalarIntAsync(context, RuntimeProbeColumnLengthSql,
+            cancellationToken: CancellationToken.None);
+
+        var nullableAfter = await ContextScalarIntAsync(context, RuntimeProbeColumnNullableSql,
+            cancellationToken: CancellationToken.None);
+
+        var rowCountAfter = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `runtime_probe_rows`;",
+            cancellationToken: CancellationToken.None);
+
+        var preservedAfter = await ContextScalarIntAsync(context, RuntimeProbePreservedRowsSql,
+            cancellationToken: CancellationToken.None);
 
         return new RuntimeDataProbeRecovery(
             exception,

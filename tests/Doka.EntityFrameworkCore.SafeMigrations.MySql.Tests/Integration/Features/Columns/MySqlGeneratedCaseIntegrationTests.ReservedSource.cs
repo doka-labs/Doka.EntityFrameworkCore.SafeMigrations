@@ -21,7 +21,8 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var sourceName = source.Trim('`');
         if (!createOwner)
         {
-            await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL);");
+            await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL);",
+                cancellationToken: CancellationToken.None);
         }
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -66,7 +67,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`select` int NOT NULL, "
             + "native_result tinyint(1) GENERATED ALWAYS AS (`select` > 0) VIRTUAL, "
-            + "CONSTRAINT ck_source_reserved CHECK(`select` > 0));");
+            + "CONSTRAINT ck_source_reserved CHECK(`select` > 0));", cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (check)
         {
@@ -86,7 +87,9 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         // Act
         var nativeFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString,
-            $"PREPARE source_keyword_probe FROM 'SELECT (select > 0) FROM {Table}';"));
+            $"PREPARE source_keyword_probe FROM 'SELECT (select > 0) FROM {Table}';",
+            cancellationToken: CancellationToken.None));
+
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("captured-reserved-native-source"), CancellationToken.None);
 
@@ -106,7 +109,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`select` int NOT NULL); "
-            + $"INSERT INTO `{Table}` VALUES (1);");
+            + $"INSERT INTO `{Table}` VALUES (1);", cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureCheckConstraint(SafeMigrationExpectedDefinitionFactory.From(new AddCheckConstraintOperation
         {
@@ -119,8 +122,8 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var failure = await Record.ExceptionAsync(async () =>
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         });
 
         // Assert
@@ -136,7 +139,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`select` int NOT NULL); "
-            + $"INSERT INTO `{Table}` VALUES (1);");
+            + $"INSERT INTO `{Table}` VALUES (1);", cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureCheckConstraint(SafeMigrationExpectedDefinitionFactory.From(new AddCheckConstraintOperation
         {
@@ -146,7 +149,8 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         // Act
         var nativeFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString,
             $"PREPARE qualified_source_probe FROM 'SELECT {Table}.select > 0 FROM {Table}'; "
-            + "DEALLOCATE PREPARE qualified_source_probe;"));
+            + "DEALLOCATE PREPARE qualified_source_probe;", cancellationToken: CancellationToken.None));
+
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("captured-qualified-keyword"), CancellationToken.None);
 
@@ -165,7 +169,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`value` int NOT NULL); "
-            + $"INSERT INTO `{Table}` VALUES (1);");
+            + $"INSERT INTO `{Table}` VALUES (1);", cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureCheckConstraint(SafeMigrationExpectedDefinitionFactory.From(new AddCheckConstraintOperation
         {
@@ -175,7 +179,8 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         // Act
         var nativeFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString,
             $"PREPARE nonreserved_source_probe FROM 'SELECT value > 0 FROM {Table}'; "
-            + "DEALLOCATE PREPARE nonreserved_source_probe;"));
+            + "DEALLOCATE PREPARE nonreserved_source_probe;", cancellationToken: CancellationToken.None));
+
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("captured-nonreserved-keyword"), CancellationToken.None);
 

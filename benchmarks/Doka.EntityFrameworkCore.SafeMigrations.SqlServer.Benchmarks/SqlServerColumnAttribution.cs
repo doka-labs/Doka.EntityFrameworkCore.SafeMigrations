@@ -140,7 +140,7 @@ public partial class SqlServerColumnAttribution : IDisposable
     /// <returns>The number of provider analysis results.</returns>
     [Benchmark]
     public int Analyze() => Analyzer
-        .AnalyzeAsync(Context, _operations)
+        .AnalyzeAsync(Context, _operations, CancellationToken.None)
         .GetAwaiter()
         .GetResult()
         .Count;
@@ -156,7 +156,7 @@ public partial class SqlServerColumnAttribution : IDisposable
     {
         ValidateAnalyses(
             Analyzer
-                .AnalyzeAsync(Context, _operations)
+                .AnalyzeAsync(Context, _operations, CancellationToken.None)
                 .GetAwaiter()
                 .GetResult(),
             ScenarioDefinition);
@@ -310,7 +310,7 @@ public partial class SqlServerColumnAttribution : IDisposable
             // WHY: Statistics and artifact I/O are diagnostic controls, never benchmark instrumentation.
             ValidateAnalyses(
                 Analyzer
-                    .AnalyzeAsync(Context, _operations)
+                    .AnalyzeAsync(Context, _operations, CancellationToken.None)
                     .GetAwaiter()
                     .GetResult(),
                 ScenarioDefinition);
@@ -319,7 +319,7 @@ public partial class SqlServerColumnAttribution : IDisposable
             Execute(catalogConnection, "SET STATISTICS IO ON; SET STATISTICS TIME ON;");
             statistics.Clear();
             var analyses = Analyzer
-                .AnalyzeAsync(Context, _operations)
+                .AnalyzeAsync(Context, _operations, CancellationToken.None)
                 .GetAwaiter()
                 .GetResult();
 

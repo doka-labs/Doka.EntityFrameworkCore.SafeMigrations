@@ -19,7 +19,8 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalIntegrationTests : MySq
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, PrimaryKeyRemovalFixture(supportingIndexExists));
+        await ExecuteSqlAsync(connectionString, PrimaryKeyRemovalFixture(supportingIndexExists),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operations = PrimaryKeyRemovalOperations(useEnsure);
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -40,20 +41,24 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalIntegrationTests : MySq
         await ExecuteOperationsAsync(context, operations, CancellationToken.None);
         var nullable = await ScalarStringAsync(connectionString,
             "SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'key_items' AND COLUMN_NAME = 'user_id';");
+            + "AND TABLE_NAME = 'key_items' AND COLUMN_NAME = 'user_id';", cancellationToken: CancellationToken.None);
+
         var retained = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM `key_items` WHERE `question_id` = "
             + "'00000000-0000-0000-0000-000000000001' AND `user_id` = "
-            + "'00000000-0000-0000-0000-000000000002' AND `payload` = 'retained';");
+            + "'00000000-0000-0000-0000-000000000002' AND `payload` = 'retained';",
+            cancellationToken: CancellationToken.None);
+
         var remainingForeignKey = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
             + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'key_items' "
-            + "AND CONSTRAINT_NAME = 'fk_key_items_question';");
+            + "AND CONSTRAINT_NAME = 'fk_key_items_question';", cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(connectionString,
-            "INSERT INTO `key_items` VALUES ('00000000-0000-0000-0000-000000000001', NULL, 'nullable');");
+            "INSERT INTO `key_items` VALUES ('00000000-0000-0000-0000-000000000001', NULL, 'nullable');",
+            cancellationToken: CancellationToken.None);
         var nullRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `key_items` WHERE `user_id` IS NULL;");
+            "SELECT COUNT(*) FROM `key_items` WHERE `user_id` IS NULL;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -77,7 +82,8 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalIntegrationTests : MySq
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, PrimaryKeyRemovalFixture(supportingIndexExists: true));
+        await ExecuteSqlAsync(connectionString, PrimaryKeyRemovalFixture(supportingIndexExists: true),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operations = PrimaryKeyRemovalOperations();
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -92,7 +98,8 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalIntegrationTests : MySq
         var final = await runner.VerifyAsync(context, operations,
             new SafeMigrationRunOptions("primary-removal-resumed-final"), CancellationToken.None);
 
-        var retained = await PrimaryKeyRemovalSentinelCountAsync(connectionString);
+        var retained = await PrimaryKeyRemovalSentinelCountAsync(connectionString,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, resumed.Status);
@@ -109,19 +116,23 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalIntegrationTests : MySq
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, PrimaryKeyRemovalFixture(supportingIndexExists: true));
+        await ExecuteSqlAsync(connectionString, PrimaryKeyRemovalFixture(supportingIndexExists: true),
+            cancellationToken: CancellationToken.None);
 
         // Act
         await ExecuteSqlAsync(connectionString,
             "ALTER TABLE `key_items` DROP FOREIGN KEY `fk_key_items_user`; "
             + "ALTER TABLE `key_items` DROP PRIMARY KEY; "
-            + "ALTER TABLE `key_items` MODIFY COLUMN `user_id` char(36) NULL;");
+            + "ALTER TABLE `key_items` MODIFY COLUMN `user_id` char(36) NULL;",
+            cancellationToken: CancellationToken.None);
         var retained = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM `key_items` WHERE `user_id` = "
-            + "'00000000-0000-0000-0000-000000000002' AND `payload` = 'retained';");
+            + "'00000000-0000-0000-0000-000000000002' AND `payload` = 'retained';",
+            cancellationToken: CancellationToken.None);
+
         var nullable = await ScalarStringAsync(connectionString,
             "SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'key_items' AND COLUMN_NAME = 'user_id';");
+            + "AND TABLE_NAME = 'key_items' AND COLUMN_NAME = 'user_id';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, retained);

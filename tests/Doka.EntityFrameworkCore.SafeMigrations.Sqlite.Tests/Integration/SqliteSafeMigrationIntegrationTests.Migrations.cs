@@ -6,11 +6,11 @@ public sealed class SqliteSafeMigrationMigrationsIntegrationTests : SqliteSafeMi
     [Fact]
     public async Task Migrator_MixesProviderAndSafeOperationsAndWritesHistoryAfterSuccess()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE pipeline_state (Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_pipeline_state PRIMARY KEY (Id));");
+            + "CONSTRAINT pk_pipeline_state PRIMARY KEY (Id));", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
 
         await context.Database.MigrateAsync(cancellationToken: CancellationToken.None);
@@ -20,19 +20,21 @@ public sealed class SqliteSafeMigrationMigrationsIntegrationTests : SqliteSafeMi
             1,
             await ScalarIntAsync(
                 connection,
-                "SELECT COUNT(*) FROM pragma_table_xinfo('pipeline_state') WHERE name = 'payload';"));
+                "SELECT COUNT(*) FROM pragma_table_xinfo('pipeline_state') WHERE name = 'payload';",
+                cancellationToken: CancellationToken.None));
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connection,
                 "SELECT COUNT(*) FROM __EFMigrationsHistory "
-                + $"WHERE MigrationId = '{SqliteCoreConvergenceMigration.MigrationIdentifier}';"));
+                + $"WHERE MigrationId = '{SqliteCoreConvergenceMigration.MigrationIdentifier}';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task Migrator_WithoutSafeRegistrationWritesNeitherDdlNorHistoryRow()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection, registerSafeMigrations: false);
 
         _ = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -43,19 +45,21 @@ public sealed class SqliteSafeMigrationMigrationsIntegrationTests : SqliteSafeMi
             await ScalarIntAsync(
                 connection,
                 "SELECT COUNT(*) FROM main.sqlite_schema "
-                + "WHERE type = 'table' AND name IN ('pipeline_probe', 'pipeline_state');"));
+                + "WHERE type = 'table' AND name IN ('pipeline_probe', 'pipeline_state');",
+                cancellationToken: CancellationToken.None));
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connection,
                 "SELECT COUNT(*) FROM __EFMigrationsHistory "
-                + $"WHERE MigrationId = '{SqliteCoreConvergenceMigration.MigrationIdentifier}';"));
+                + $"WHERE MigrationId = '{SqliteCoreConvergenceMigration.MigrationIdentifier}';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task MigrationScriptGenerationWithSafeOperationsFailsWithoutPartialSql()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var migrator = context.GetService<IMigrator>();
 

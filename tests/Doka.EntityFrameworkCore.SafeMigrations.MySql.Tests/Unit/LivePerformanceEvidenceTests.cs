@@ -100,13 +100,13 @@ public sealed class LivePerformanceEvidenceTests
         var report = CreateReport();
         var failure = new InvalidOperationException("Deterministic action failure.");
         var calls = 0;
-        Func<Task<SafeMigrationRunReport>> action = () => ++calls == failureCall
+        Func<CancellationToken, Task<SafeMigrationRunReport>> action = _ => ++calls == failureCall
             ? Task.FromException<SafeMigrationRunReport>(failure)
             : Task.FromResult(report);
 
         // Act
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            LivePerformanceEvidence.MeasureAsync(action));
+            LivePerformanceEvidence.MeasureAsync(action, cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Same(failure, exception);
@@ -120,7 +120,7 @@ public sealed class LivePerformanceEvidenceTests
         // Arrange
         var report = CreateReport();
         var calls = 0;
-        Func<Task<SafeMigrationRunReport>> action = () =>
+        Func<CancellationToken, Task<SafeMigrationRunReport>> action = _ =>
         {
             calls++;
 
@@ -128,7 +128,7 @@ public sealed class LivePerformanceEvidenceTests
         };
 
         // Act
-        var measurement = await LivePerformanceEvidence.MeasureAsync(action);
+        var measurement = await LivePerformanceEvidence.MeasureAsync(action, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(21, calls);

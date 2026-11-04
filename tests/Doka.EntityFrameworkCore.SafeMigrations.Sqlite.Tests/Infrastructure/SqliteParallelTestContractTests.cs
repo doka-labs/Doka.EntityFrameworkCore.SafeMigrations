@@ -109,18 +109,28 @@ public sealed class SqliteParallelTestContractTests : SqliteIntegrationTestBase
     public async Task InMemoryConnections_KeepOverlappingNamesAndFailuresIndependent()
     {
         // Arrange
-        await using var first = await OpenConnectionAsync();
-        await using var second = await OpenConnectionAsync();
+        await using var first = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await using var second = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(first,
-            "CREATE TABLE parallel_owned_rows (Id INTEGER); INSERT INTO parallel_owned_rows VALUES (11);");
+            "CREATE TABLE parallel_owned_rows (Id INTEGER); INSERT INTO parallel_owned_rows VALUES (11);",
+            cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(second,
-            "CREATE TABLE parallel_owned_rows (Id INTEGER); INSERT INTO parallel_owned_rows VALUES (22);");
+            "CREATE TABLE parallel_owned_rows (Id INTEGER); INSERT INTO parallel_owned_rows VALUES (22);",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var exception = await Record.ExceptionAsync(() => ExecuteSqlAsync(first,
-            "INSERT INTO nonexistent_parallel_table VALUES (33);"));
-        var firstValue = await ScalarIntAsync(first, "SELECT Id FROM parallel_owned_rows;");
-        var secondValue = await ScalarIntAsync(second, "SELECT Id FROM parallel_owned_rows;");
+            "INSERT INTO nonexistent_parallel_table VALUES (33);", cancellationToken: CancellationToken.None));
+
+        var firstValue = await ScalarIntAsync(
+            first,
+            "SELECT Id FROM parallel_owned_rows;",
+            cancellationToken: CancellationToken.None);
+
+        var secondValue = await ScalarIntAsync(
+            second,
+            "SELECT Id FROM parallel_owned_rows;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.NotSame(first, second);
@@ -154,12 +164,17 @@ public sealed class SqliteParallelTestContractTests : SqliteIntegrationTestBase
                 await first.OpenAsync(CancellationToken.None);
                 await ExecuteSqlAsync(first,
                     "PRAGMA journal_mode=WAL; CREATE TABLE parallel_owned_rows (Id INTEGER); "
-                    + "INSERT INTO parallel_owned_rows VALUES (11);");
+                    + "INSERT INTO parallel_owned_rows VALUES (11);", cancellationToken: CancellationToken.None);
             }
 
             var observedTables = await ScalarIntAsync(second,
-                "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'parallel_owned_rows';");
-            await ExecuteSqlAsync(second, "CREATE TABLE surviving_connection (Id INTEGER);");
+                "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'parallel_owned_rows';",
+                cancellationToken: CancellationToken.None);
+
+            await ExecuteSqlAsync(
+                second,
+                "CREATE TABLE surviving_connection (Id INTEGER);",
+                cancellationToken: CancellationToken.None);
 
             // Assert
             Assert.NotEqual(firstPath, secondPath);
@@ -167,7 +182,8 @@ public sealed class SqliteParallelTestContractTests : SqliteIntegrationTestBase
             Assert.False(new SqliteConnectionStringBuilder(secondString).Pooling);
             Assert.Equal(independentFiles ? 0 : 1, observedTables);
             Assert.Equal(1, await ScalarIntAsync(second,
-                "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'surviving_connection';"));
+                "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'surviving_connection';",
+                cancellationToken: CancellationToken.None));
         }
         finally
         {

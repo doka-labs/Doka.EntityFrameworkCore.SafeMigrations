@@ -15,7 +15,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         operations[0].AddAnnotation("Test:CapturedMetadata", "preserved");
 
         // Act
-        var report = await VerifyAsync(operations, analyzer);
+        var report = await VerifyAsync(operations, analyzer, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.All(report.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
@@ -45,7 +45,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         var operations = RenameOperations(initial, expected);
 
         // Act
-        var report = await VerifyAsync(operations, analyzer);
+        var report = await VerifyAsync(operations, analyzer, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -64,7 +64,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         MigrationOperation[] operations = [Safe(new EnsureTableIntent(final, SafeMigrationTableMode.StrictDefinition))];
 
         // Act
-        var report = await VerifyAsync(operations, analyzer);
+        var report = await VerifyAsync(operations, analyzer, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.True(Assert.Single(report.Assessments).PostconditionSatisfied);
@@ -86,7 +86,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         ];
 
         // Act
-        var report = await VerifyAsync(operations, analyzer);
+        var report = await VerifyAsync(operations, analyzer, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.All(report.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
@@ -114,7 +114,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         });
 
         // Act
-        var report = await VerifyAsync(operations, analyzer);
+        var report = await VerifyAsync(operations, analyzer, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -133,7 +133,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         var operations = RenameOperations(initial, final);
 
         // Act
-        var report = await VerifyAsync(operations, analyzer);
+        var report = await VerifyAsync(operations, analyzer, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -152,7 +152,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         var operations = RenameOperations(initial, final);
 
         // Act
-        var report = await VerifyAsync(operations, analyzer);
+        var report = await VerifyAsync(operations, analyzer, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -171,7 +171,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         var operations = RenameOperations(initial, final);
 
         // Act
-        var report = await VerifyAsync(operations, analyzer);
+        var report = await VerifyAsync(operations, analyzer, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -194,7 +194,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         List<IModel?> models = [null, tableModel, new ModelBuilder().FinalizeModel(), null];
 
         // Act
-        var report = await VerifyAsync(operations, analyzer, models);
+        var report = await VerifyAsync(operations, analyzer, CancellationToken.None, models);
 
         // Assert
         Assert.True(report.Assessments[1].PostconditionSatisfied);
@@ -215,7 +215,8 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         var operations = RenameOperations(initial, final);
 
         // Act
-        var exception = await Record.ExceptionAsync(() => VerifyAsync(operations, analyzer));
+        var exception = await Record.ExceptionAsync(() => VerifyAsync(operations, analyzer,
+            cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Contains("table analyzer returned an inconsistent result count",
@@ -239,7 +240,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         ];
 
         // Act
-        var report = await VerifyAsync(operations, analyzer);
+        var report = await VerifyAsync(operations, analyzer, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.All(report.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
@@ -259,7 +260,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         var operations = RenameOperations(initial, final);
 
         // Act
-        var report = await VerifyAsync(operations, analyzer);
+        var report = await VerifyAsync(operations, analyzer, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -283,7 +284,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         ];
 
         // Act
-        var report = await VerifyAsync(operations, analyzer);
+        var report = await VerifyAsync(operations, analyzer, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -327,7 +328,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         ];
 
         // Act
-        var report = await VerifyAsync(operations, analyzer);
+        var report = await VerifyAsync(operations, analyzer, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(!drift, report.Assessments[0].PostconditionSatisfied);
@@ -357,7 +358,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         ];
 
         // Act
-        var report = await VerifyAsync(operations, analyzer);
+        var report = await VerifyAsync(operations, analyzer, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -376,7 +377,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         var operations = RenameOperations(initial, final);
 
         // Act
-        var report = await VerifyAsync(operations, analyzer);
+        var report = await VerifyAsync(operations, analyzer, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -402,7 +403,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         ];
 
         // Act
-        var report = await VerifyAsync(operations, analyzer);
+        var report = await VerifyAsync(operations, analyzer, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(!unrelatedDrift, report.Assessments[0].PostconditionSatisfied);
@@ -463,12 +464,21 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
     private static SafeMigrationOperation Safe(SafeMigrationIntent intent) =>
         new(intent, SafeMigrationPolicy.ThrowIfDifferent);
 
+    /// <summary>Verifies the ordered postflight contract through the production dispatch loop.</summary>
+    /// <param name="operations">The ordered operations whose final contracts are verified.</param>
+    /// <param name="analyzer">The deterministic provider catalog analyzer.</param>
+    /// <param name="cancellationToken">The operation token forwarded to the production runner.</param>
+    /// <param name="targetModels">The optional migration target models used for provider operations.</param>
+    /// <returns>The report from the real postflight dispatch loop.</returns>
     private static async Task<SafeMigrationRunReport> VerifyAsync(
         IReadOnlyList<MigrationOperation> operations,
         FinalCatalogAnalyzer analyzer,
+        CancellationToken cancellationToken,
         List<IModel?>? targetModels = null
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         using var context = new DbContext(new DbContextOptionsBuilder().Options);
         var runner = new SafeMigrationRunner(analyzer);
         var method = typeof(SafeMigrationRunner).GetMethod("AnalyzeOperationsAsync",
@@ -481,7 +491,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
             context, operations, SafeMigrationReportMode.Postflight, new SafeMigrationRunOptions("isolated"),
             $"safe-relational-model:v1:sqlite:sha256:{new string('a', 64)}", new string('b', 64),
             DateTimeOffset.UnixEpoch, new SafeMigrationProviderEnvironment("sqlite", "sqlite", "test"),
-            targetModels, null, CancellationToken.None,
+            targetModels, null, cancellationToken,
         ])!;
 
         return await task;
@@ -516,17 +526,17 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         public void ValidateContext(DbContext context) => ArgumentNullException.ThrowIfNull(context);
 
         public Task<SafeMigrationProviderEnvironment> GetEnvironmentAsync(
-            DbContext context, CancellationToken cancellationToken = default
+            DbContext context, CancellationToken cancellationToken
         ) => throw new NotSupportedException("The ordered seam receives its environment.");
 
         public Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
-            DbContext context, CancellationToken cancellationToken = default
+            DbContext context, CancellationToken cancellationToken
         ) => throw new NotSupportedException("The isolated ordered seam performs no I/O.");
 
         public Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
             DbContext context,
             IReadOnlyList<SafeMigrationOperation> operations,
-            CancellationToken cancellationToken = default
+            CancellationToken cancellationToken
         )
         {
             Batches.Add(operations.ToArray());
@@ -582,7 +592,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
             DbContext context,
             IReadOnlyList<MigrationOperation> operations,
             IReadOnlyList<IModel?>? targetModels,
-            CancellationToken cancellationToken = default
+            CancellationToken cancellationToken
         )
         {
             ModelBatches.Add(targetModels?.ToArray());
@@ -593,7 +603,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         public Task<IReadOnlyList<SafeMigrationUnexpectedObject>> FindUnexpectedObjectsAsync(
             DbContext context,
             IReadOnlyList<MigrationOperation> operations,
-            CancellationToken cancellationToken = default
+            CancellationToken cancellationToken
         ) => Task.FromResult<IReadOnlyList<SafeMigrationUnexpectedObject>>([]);
     }
 

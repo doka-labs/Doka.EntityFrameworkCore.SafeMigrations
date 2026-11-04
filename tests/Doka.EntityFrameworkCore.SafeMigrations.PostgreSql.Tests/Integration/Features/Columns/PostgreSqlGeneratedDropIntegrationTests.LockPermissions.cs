@@ -14,7 +14,7 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
             + "CREATE TABLE drop_lock_permissions(source integer, unrelated integer); "
             + "INSERT INTO drop_lock_permissions VALUES(2,9); "
             + "ALTER TABLE drop_lock_permissions OWNER TO " + role + "; "
-            + "REVOKE ALL ON drop_lock_permissions FROM " + role + ";");
+            + "REVOKE ALL ON drop_lock_permissions FROM " + role + ";", cancellationToken: CancellationToken.None);
 
         try
         {
@@ -28,19 +28,22 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
             var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
                 new SafeMigrationRunOptions("generated-drop-lock-permission-unproven"), CancellationToken.None);
 
-            var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+            var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+                CancellationToken.None));
 
             // Assert
             Assert.Equal(SafeMigrationAction.RejectUnsupported, Assert.Single(report.Assessments).Action);
             Assert.Equal("generated_column_drop_unproven", report.Assessments[0].AnalysisCode);
             Assert.Equal("P1002", Assert.IsType<PostgresException>(failure).SqlState);
             Assert.Equal("2:9", await ScalarStringAsync(connectionString,
-                "SELECT source::text || ':' || unrelated::text FROM drop_lock_permissions;"));
+                "SELECT source::text || ':' || unrelated::text FROM drop_lock_permissions;",
+                cancellationToken: CancellationToken.None));
         }
         finally
         {
             await ExecuteSqlAsync(connectionString, "ALTER TABLE drop_lock_permissions OWNER TO postgres; "
-                + "REVOKE USAGE, CREATE ON SCHEMA public FROM " + role + "; DROP ROLE " + role + ";");
+                + "REVOKE USAGE, CREATE ON SCHEMA public FROM " + role + "; DROP ROLE " + role + ";",
+                cancellationToken: CancellationToken.None);
         }
     }
 
@@ -55,7 +58,7 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
             + "GRANT USAGE, CREATE ON SCHEMA public TO " + role + "; "
             + "CREATE TABLE drop_lock_permissions(source integer, unrelated integer); "
             + "ALTER TABLE drop_lock_permissions OWNER TO " + role + "; "
-            + "REVOKE ALL ON drop_lock_permissions FROM " + role + ";");
+            + "REVOKE ALL ON drop_lock_permissions FROM " + role + ";", cancellationToken: CancellationToken.None);
 
         try
         {
@@ -75,12 +78,13 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
             Assert.Null(dropFailure);
             Assert.Equal(1, await ScalarIntAsync(connectionString,
                 "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='drop_lock_permissions'::regclass "
-                + "AND attnum>0 AND NOT attisdropped;"));
+                + "AND attnum>0 AND NOT attisdropped;", cancellationToken: CancellationToken.None));
         }
         finally
         {
             await ExecuteSqlAsync(connectionString, "ALTER TABLE drop_lock_permissions OWNER TO postgres; "
-                + "REVOKE USAGE, CREATE ON SCHEMA public FROM " + role + "; DROP ROLE " + role + ";");
+                + "REVOKE USAGE, CREATE ON SCHEMA public FROM " + role + "; DROP ROLE " + role + ";",
+                cancellationToken: CancellationToken.None);
         }
     }
 
@@ -95,7 +99,8 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE drop_snapshot(source integer, unrelated integer);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE drop_snapshot(source integer, unrelated integer);",
+            cancellationToken: CancellationToken.None);
         await using var reader = new NpgsqlConnection(connectionString);
         await reader.OpenAsync();
 
@@ -107,7 +112,8 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
 
         var initial = Convert.ToInt32(await count.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
         await ExecuteSqlAsync(connectionString,
-            "ALTER TABLE drop_snapshot ADD COLUMN derived integer GENERATED ALWAYS AS(source+1) STORED;");
+            "ALTER TABLE drop_snapshot ADD COLUMN derived integer GENERATED ALWAYS AS(source+1) STORED;",
+            cancellationToken: CancellationToken.None);
 
         await using var locked = reader.CreateCommand();
         locked.CommandText = "LOCK TABLE drop_snapshot IN ACCESS EXCLUSIVE MODE;";
@@ -120,7 +126,7 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
         Assert.Equal(0, afterLock);
         Assert.Equal(1, await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='drop_snapshot'::regclass "
-            + "AND attgenerated<>'' AND NOT attisdropped;"));
+            + "AND attgenerated<>'' AND NOT attisdropped;", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Transaction-snapshot callers cannot turn an old dependency snapshot into an executable DROP.</summary>
@@ -137,7 +143,8 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE drop_snapshot(source integer, unrelated integer); INSERT INTO drop_snapshot VALUES(2,9);");
+            "CREATE TABLE drop_snapshot(source integer, unrelated integer); INSERT INTO drop_snapshot VALUES(2,9);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         await using var transaction = await context.Database.BeginTransactionAsync(isolation);
@@ -147,10 +154,13 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
         builder.DropColumnIfExists(missing ? "missing" : "source", "drop_snapshot");
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
         var exclusive = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_locks WHERE pid=" + processId.ToString(CultureInfo.InvariantCulture)
-            + " AND relation='drop_snapshot'::regclass AND mode='AccessExclusiveLock';");
+            + " AND relation='drop_snapshot'::regclass AND mode='AccessExclusiveLock';",
+            cancellationToken: CancellationToken.None);
 
         await transaction.RollbackAsync();
 
@@ -166,6 +176,7 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
 
         Assert.Equal(0, exclusive);
         Assert.Equal("2:9", await ScalarStringAsync(connectionString,
-            "SELECT source::text || ':' || unrelated::text FROM drop_snapshot;"));
+            "SELECT source::text || ':' || unrelated::text FROM drop_snapshot;",
+            cancellationToken: CancellationToken.None));
     }
 }

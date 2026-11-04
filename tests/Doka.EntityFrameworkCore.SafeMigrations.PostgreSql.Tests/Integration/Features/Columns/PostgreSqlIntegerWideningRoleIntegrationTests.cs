@@ -41,7 +41,7 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
 
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE role_integer_rows(value integer NOT NULL); INSERT INTO role_integer_rows VALUES (7); "
-            + dependent);
+            + dependent, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AlterColumnIfDifferent("role_integer_rows",
@@ -51,19 +51,24 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("integer-dependent-native-role"));
+            context, builder.Operations, new SafeMigrationRunOptions("integer-dependent-native-role"),
+            CancellationToken.None);
+
         var failure = await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(context,
-            builder.Operations));
+            builder.Operations, CancellationToken.None));
+
         await using var transaction = await context.Database.BeginTransactionAsync(CancellationToken.None);
         var nativeFailure = await Record.ExceptionAsync(() => context.Database.ExecuteSqlRawAsync(
             "ALTER TABLE role_integer_rows ALTER COLUMN value TYPE bigint;", CancellationToken.None));
+
         await transaction.RollbackAsync(CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.RejectDifferent, Assert.Single(report.Assessments).Action);
         Assert.Equal("P1001", failure.SqlState);
         Assert.Equal("0A000", Assert.IsType<PostgresException>(nativeFailure).SqlState);
-        Assert.Equal(7, await ScalarIntAsync(connectionString, "SELECT value FROM role_integer_rows;"));
+        Assert.Equal(7, await ScalarIntAsync(connectionString, "SELECT value FROM role_integer_rows;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Does not turn safe owner-level or unrelated roles into source-column dependencies.</summary>
@@ -100,7 +105,8 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
 
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE independent_integer_rows(value integer NOT NULL, unrelated integer NOT NULL); "
-            + "INSERT INTO independent_integer_rows VALUES (7, 9); " + unrelated);
+            + "INSERT INTO independent_integer_rows VALUES (7, 9); " + unrelated,
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AlterColumnIfDifferent("independent_integer_rows",
@@ -110,18 +116,22 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("integer-independent-native-role"));
+            context, builder.Operations, new SafeMigrationRunOptions("integer-independent-native-role"),
+            CancellationToken.None);
+
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Repair, Assert.Single(report.Assessments).Action);
         Assert.Equal("7:9", await ScalarStringAsync(connectionString,
-            "SELECT value::text || ':' || unrelated::text FROM independent_integer_rows;"));
+            "SELECT value::text || ':' || unrelated::text FROM independent_integer_rows;",
+            cancellationToken: CancellationToken.None));
         Assert.Equal("bigint", await ScalarStringAsync(connectionString,
             "SELECT data_type FROM information_schema.columns WHERE table_schema='public' "
-            + "AND table_name='independent_integer_rows' AND column_name='value';"));
+            + "AND table_name='independent_integer_rows' AND column_name='value';",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Rejects whole-row predicates whose truth is not preserved by an integer range proof.</summary>
@@ -154,7 +164,8 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
 
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE whole_integer_rows(value integer NOT NULL); INSERT INTO whole_integer_rows VALUES(7); "
-            + callback + "ALTER TABLE whole_integer_rows ADD CONSTRAINT ck_whole_integer CHECK(" + check + ");");
+            + callback + "ALTER TABLE whole_integer_rows ADD CONSTRAINT ck_whole_integer CHECK(" + check + ");",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AlterColumnIfDifferent("whole_integer_rows",
@@ -164,9 +175,12 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("integer-whole-row-check"));
+            context, builder.Operations, new SafeMigrationRunOptions("integer-whole-row-check"),
+            CancellationToken.None);
+
         var failure = await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(context,
-            builder.Operations));
+            builder.Operations, CancellationToken.None));
+
         await using var transaction = await context.Database.BeginTransactionAsync(CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync("ALTER TABLE whole_integer_rows ALTER COLUMN value TYPE bigint;",
             CancellationToken.None);
@@ -189,8 +203,10 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
         Assert.False(nativePreservesCheck);
         Assert.Equal("integer", await ScalarStringAsync(connectionString,
             "SELECT data_type FROM information_schema.columns WHERE table_schema='public' "
-            + "AND table_name='whole_integer_rows' AND column_name='value';"));
-        Assert.Equal(7, await ScalarIntAsync(connectionString, "SELECT value FROM whole_integer_rows;"));
+            + "AND table_name='whole_integer_rows' AND column_name='value';",
+            cancellationToken: CancellationToken.None));
+        Assert.Equal(7, await ScalarIntAsync(connectionString, "SELECT value FROM whole_integer_rows;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Preserves direct whole-row NULL predicates with exact ordinary or quoted owner identity.</summary>
@@ -210,7 +226,8 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
         var predicate = "(" + owner + ".*) IS " + (notNull ? "NOT NULL" : "NULL");
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE " + owner + "(value integer NULL, unrelated integer NULL, CHECK(" + predicate + ")); "
-            + "INSERT INTO " + owner + " VALUES(" + (notNull ? "7,9" : "NULL,NULL") + ");");
+            + "INSERT INTO " + owner + " VALUES(" + (notNull ? "7,9" : "NULL,NULL") + ");",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AlterColumnIfDifferent(table,
@@ -220,18 +237,20 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("integer-whole-row-nullness"));
+            context, builder.Operations, new SafeMigrationRunOptions("integer-whole-row-nullness"),
+            CancellationToken.None);
+
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Repair, Assert.Single(report.Assessments).Action);
         Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT count(*) FROM " + owner + " WHERE " + predicate + ";"));
+            "SELECT count(*) FROM " + owner + " WHERE " + predicate + ";", cancellationToken: CancellationToken.None));
         Assert.Equal("bigint", await ScalarStringAsync(connectionString,
             "SELECT data_type FROM information_schema.columns WHERE table_schema='public' "
-            + "AND table_name='" + table + "' AND column_name='value';"));
+            + "AND table_name='" + table + "' AND column_name='value';", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Retains a constant-false contract on an empty owner without inventing a row proof.</summary>
@@ -241,7 +260,8 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE empty_integer_rows(value integer NOT NULL, CHECK(FALSE));");
+            "CREATE TABLE empty_integer_rows(value integer NOT NULL, CHECK(FALSE));",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AlterColumnIfDifferent("empty_integer_rows",
@@ -251,17 +271,20 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("integer-constant-false"));
+            context, builder.Operations, new SafeMigrationRunOptions("integer-constant-false"), CancellationToken.None);
+
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Repair, Assert.Single(report.Assessments).Action);
-        Assert.Equal(0, await ScalarIntAsync(connectionString, "SELECT count(*) FROM empty_integer_rows;"));
+        Assert.Equal(0, await ScalarIntAsync(connectionString, "SELECT count(*) FROM empty_integer_rows;",
+            cancellationToken: CancellationToken.None));
         Assert.Equal("bigint", await ScalarStringAsync(connectionString,
             "SELECT data_type FROM information_schema.columns WHERE table_schema='public' "
-            + "AND table_name='empty_integer_rows' AND column_name='value';"));
+            + "AND table_name='empty_integer_rows' AND column_name='value';",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Checks rebuilt whole-row index keys and predicates against a forced sequential native result.</summary>
@@ -287,7 +310,7 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
 
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE indexed_integer_rows(value integer NOT NULL, unrelated integer NOT NULL); "
-            + "INSERT INTO indexed_integer_rows VALUES(7,9); " + definition);
+            + "INSERT INTO indexed_integer_rows VALUES(7,9); " + definition, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AlterColumnIfDifferent("indexed_integer_rows",
@@ -297,10 +320,12 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("integer-whole-row-index-rebuild"));
+            context, builder.Operations, new SafeMigrationRunOptions("integer-whole-row-index-rebuild"),
+            CancellationToken.None);
+
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await using var command = ((NpgsqlConnection)context.Database.GetDbConnection()).CreateCommand();
         if (!partial)
@@ -335,7 +360,8 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
         Assert.Equal(partial ? 0L : 1L, sequentialCount);
         Assert.Equal(sequentialCount, indexedCount);
         Assert.Equal("7:9", await ScalarStringAsync(connectionString,
-            "SELECT value::text || ':' || unrelated::text FROM indexed_integer_rows;"));
+            "SELECT value::text || ':' || unrelated::text FROM indexed_integer_rows;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Distinguishes column-filter publications from harmless whole-owner membership.</summary>
@@ -349,7 +375,7 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
             "CREATE TABLE published_integer_rows(value integer NOT NULL); "
             + "INSERT INTO published_integer_rows VALUES(7); "
             + "CREATE PUBLICATION integer_values FOR TABLE published_integer_rows"
-            + (filtered ? " WHERE (value > 0)" : string.Empty) + ";");
+            + (filtered ? " WHERE (value > 0)" : string.Empty) + ";", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AlterColumnIfDifferent("published_integer_rows",
@@ -359,8 +385,11 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("integer-publication-column-filter"));
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+            context, builder.Operations, new SafeMigrationRunOptions("integer-publication-column-filter"),
+            CancellationToken.None);
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
 
         // Assert
         Assert.Equal(filtered ? SafeMigrationAction.RejectDifferent : SafeMigrationAction.Repair,
@@ -374,7 +403,8 @@ public sealed class PostgreSqlIntegerWideningRoleIntegrationTests : PostgreSqlIn
             Assert.Null(failure);
         }
 
-        Assert.Equal(7, await ScalarIntAsync(connectionString, "SELECT value FROM published_integer_rows;"));
+        Assert.Equal(7, await ScalarIntAsync(connectionString, "SELECT value FROM published_integer_rows;",
+            cancellationToken: CancellationToken.None));
     }
 
 }

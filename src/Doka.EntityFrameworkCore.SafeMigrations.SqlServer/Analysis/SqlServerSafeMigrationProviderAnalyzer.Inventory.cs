@@ -6,7 +6,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     public async Task<IReadOnlyList<SafeMigrationUnexpectedObject>> FindUnexpectedObjectsAsync(
         DbContext context,
         IReadOnlyList<MigrationOperation> operations,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ValidateContext(context);

@@ -252,7 +252,7 @@ public sealed class SqlServerIdentityDefinitionTests
 
         // Act
         var before = analyzer.QualifyProjectedIdentityOperation(second, missing);
-        await analyzer.AnalyzeAsync(context, []);
+        await analyzer.AnalyzeAsync(context, [], cancellationToken: CancellationToken.None);
         var after = analyzer.QualifyProjectedIdentityOperation(second, missing);
 
         // Assert

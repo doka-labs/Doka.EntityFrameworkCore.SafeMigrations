@@ -105,7 +105,8 @@ public sealed class SafeMigrationRunnerDiagnosticsTests
 
         // Act
         var report = await CaptureAsync(operations, migrationIds,
-            postflight ? SafeMigrationReportMode.Postflight : SafeMigrationReportMode.Preflight);
+            postflight ? SafeMigrationReportMode.Postflight : SafeMigrationReportMode.Preflight,
+            cancellationToken: CancellationToken.None);
         using var document = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
 
         // Assert
@@ -142,7 +143,8 @@ public sealed class SafeMigrationRunnerDiagnosticsTests
         List<string> migrationIds = ["202610140001_Preparation", "202610140002_Index"];
 
         // Act
-        var report = await CaptureAsync(operations, migrationIds, SafeMigrationReportMode.Preflight);
+        var report = await CaptureAsync(operations, migrationIds, SafeMigrationReportMode.Preflight,
+            cancellationToken: CancellationToken.None);
         var text = SafeMigrationReportText.Format(report, SafeMigrationReportSelection.NonMatching);
 
         // Assert
@@ -170,7 +172,8 @@ public sealed class SafeMigrationRunnerDiagnosticsTests
         ];
 
         // Act
-        var report = await CaptureAsync(operations, migrationIds: null, SafeMigrationReportMode.Preflight);
+        var report = await CaptureAsync(operations, migrationIds: null, SafeMigrationReportMode.Preflight,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Null(Assert.Single(report.Assessments).MigrationId);
@@ -190,7 +193,7 @@ public sealed class SafeMigrationRunnerDiagnosticsTests
 
         // Act
         var report = await CaptureAsync(operations, ["202610140001_Target"], SafeMigrationReportMode.Postflight,
-            postconditionsSatisfied: false);
+            postconditionsSatisfied: false, cancellationToken: CancellationToken.None);
 
         var text = SafeMigrationReportText.Format(report);
 
@@ -225,7 +228,7 @@ public sealed class SafeMigrationRunnerDiagnosticsTests
 
         // Act
         var report = await CaptureAsync(operations, ["202610140001_Target"], SafeMigrationReportMode.Preflight,
-            capturedAnalysis: providerAnalysis);
+            capturedAnalysis: providerAnalysis, cancellationToken: CancellationToken.None);
         var exception = Assert.Throws<SafeMigrationPreflightException>(report.ThrowIfBlocked);
 
         // Assert
@@ -258,7 +261,8 @@ public sealed class SafeMigrationRunnerDiagnosticsTests
         // WHY: Postflight leaves ordinary EF operations unclassified. This
         // verifies diagnostic fallback without changing the existing rejection
         // of malformed authored operations inside preflight projection.
-        var report = await CaptureAsync(operations, ["202610140001_Target"], SafeMigrationReportMode.Postflight);
+        var report = await CaptureAsync(operations, ["202610140001_Target"], SafeMigrationReportMode.Postflight,
+            cancellationToken: CancellationToken.None);
         var text = SafeMigrationReportText.Format(report, SafeMigrationReportSelection.Complete);
         using var document = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
 
@@ -279,14 +283,24 @@ public sealed class SafeMigrationRunnerDiagnosticsTests
     private static ExpectedColumnDefinition Column(string name) => new(name, typeof(int), true, "int");
 
     /// <summary>Exercises ordered report creation without bypassing it through a constructed assessment.</summary>
+    /// <param name="operations">The immutable operations to classify.</param>
+    /// <param name="migrationIds">The owning migration identities when resolved.</param>
+    /// <param name="mode">The preflight or postflight dispatch mode.</param>
+    /// <param name="cancellationToken">The operation token forwarded into the production dispatch loop.</param>
+    /// <param name="postconditionsSatisfied">Whether the fixed test analyzer reports matching postconditions.</param>
+    /// <param name="capturedAnalysis">The optional explicit provider classification.</param>
+    /// <returns>The report produced by the actual runner loop.</returns>
     private static async Task<SafeMigrationRunReport> CaptureAsync(
         IReadOnlyList<MigrationOperation> operations,
         List<string>? migrationIds,
         SafeMigrationReportMode mode,
+        CancellationToken cancellationToken,
         bool postconditionsSatisfied = true,
         SafeMigrationProviderAnalysis? capturedAnalysis = null
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         using var context = new DbContext(new DbContextOptionsBuilder().Options);
         var runner = new SafeMigrationRunner(new CapturedAnalyzer(postconditionsSatisfied, capturedAnalysis));
         var method = typeof(SafeMigrationRunner).GetMethod("AnalyzeOperationsAsync",
@@ -300,7 +314,7 @@ public sealed class SafeMigrationRunnerDiagnosticsTests
             context, operations, mode, new SafeMigrationRunOptions("instance-test", "202610140099_Target"),
             $"safe-relational-model:v1:doka_mysql:sha256:{new string('a', 64)}", new string('b', 64),
             DateTimeOffset.UnixEpoch, new SafeMigrationProviderEnvironment("doka_mysql", "mariadb", "11.8.9"),
-            null, migrationIds, CancellationToken.None,
+            null, migrationIds, cancellationToken,
         ])!;
 
         return await task;
@@ -321,20 +335,20 @@ public sealed class SafeMigrationRunnerDiagnosticsTests
         /// <inheritdoc />
         public Task<SafeMigrationProviderEnvironment> GetEnvironmentAsync(
             DbContext context,
-            CancellationToken cancellationToken = default
+            CancellationToken cancellationToken
         ) => throw new NotSupportedException("The ordered-report seam receives already captured environment evidence.");
 
         /// <inheritdoc />
         public Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
             DbContext context,
-            CancellationToken cancellationToken = default
+            CancellationToken cancellationToken
         ) => throw new NotSupportedException("The ordered-report seam does not acquire live database scopes.");
 
         /// <inheritdoc />
         public Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
             DbContext context,
             IReadOnlyList<SafeMigrationOperation> operations,
-            CancellationToken cancellationToken = default
+            CancellationToken cancellationToken
         ) => Task.FromResult<IReadOnlyList<SafeMigrationProviderAnalysis>>(operations.Select(_ =>
             capturedAnalysis ?? new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Matching,
                 SafeMigrationRepairCapability.None, postconditionsSatisfied, "classified_matching")).ToArray());
@@ -343,7 +357,7 @@ public sealed class SafeMigrationRunnerDiagnosticsTests
         public Task<IReadOnlyList<SafeMigrationUnexpectedObject>> FindUnexpectedObjectsAsync(
             DbContext context,
             IReadOnlyList<MigrationOperation> operations,
-            CancellationToken cancellationToken = default
+            CancellationToken cancellationToken
         ) => Task.FromResult<IReadOnlyList<SafeMigrationUnexpectedObject>>([]);
     }
 }

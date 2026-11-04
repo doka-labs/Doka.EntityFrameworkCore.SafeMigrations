@@ -31,7 +31,7 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE `runtime_match_rows` (`id` int PRIMARY KEY, `value` {storeType} NOT NULL "
             + "COMMENT 'canonical') ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + $"INSERT INTO `runtime_match_rows` VALUES (1, {value});");
+            + $"INSERT INTO `runtime_match_rows` VALUES (1, {value});", cancellationToken: CancellationToken.None);
 
         var observer = new RuntimeMatchingProbeInterceptor();
         await using var context = CreateRuntimeMatchingContext(connectionString, observer);
@@ -42,11 +42,15 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
         var operation = RuntimeMatchingOperation(textColumn);
 
         // Act
-        await ExecuteOperationsAsync(context, [operation]);
-        var visits = await ReadRuntimeMatchingVisitsAsync(context);
-        var cleaned = await ContextScalarIntAsync(context, NullProofVariablesClearedSql);
+        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
+        var visits = await ReadRuntimeMatchingVisitsAsync(context, cancellationToken: CancellationToken.None);
+        var cleaned = await ContextScalarIntAsync(context, NullProofVariablesClearedSql,
+            cancellationToken: CancellationToken.None);
+
         var preservedRows = await ScalarIntAsync(connectionString,
-            $"SELECT COUNT(*) FROM `runtime_match_rows` WHERE `id` = 1 AND `value` = {value};");
+            $"SELECT COUNT(*) FROM `runtime_match_rows` WHERE `id` = 1 AND `value` = {value};",
+            cancellationToken: CancellationToken.None);
+
         var report = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
             context, [operation], CancellationToken.None);
 
@@ -83,7 +87,7 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE `runtime_match_rows` (`id` int PRIMARY KEY, `value` {storeType} {nullability} "
             + "COMMENT 'legacy') ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + $"INSERT INTO `runtime_match_rows` VALUES (1, {value});");
+            + $"INSERT INTO `runtime_match_rows` VALUES (1, {value});", cancellationToken: CancellationToken.None);
 
         var observer = new RuntimeMatchingProbeInterceptor();
         await using var context = CreateRuntimeMatchingContext(connectionString, observer);
@@ -92,16 +96,22 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
         var operation = RuntimeMatchingOperation(textColumn);
 
         // Act
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var visits = await ReadRuntimeMatchingVisitsAsync(context);
-        var cleaned = await ContextScalarIntAsync(context, NullProofVariablesClearedSql);
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
+        var visits = await ReadRuntimeMatchingVisitsAsync(context, cancellationToken: CancellationToken.None);
+        var cleaned = await ContextScalarIntAsync(context, NullProofVariablesClearedSql,
+            cancellationToken: CancellationToken.None);
+
         var preservedRows = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM `runtime_match_rows` WHERE `id` = 1 AND `value` "
-            + (blocked ? "IS NULL;" : $"= {value};"));
+            + (blocked ? "IS NULL;" : $"= {value};"), cancellationToken: CancellationToken.None);
+
         var canonicalColumns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'runtime_match_rows' AND COLUMN_NAME = 'value' "
-            + "AND IS_NULLABLE = 'NO' AND COLUMN_COMMENT = 'canonical';");
+            + "AND IS_NULLABLE = 'NO' AND COLUMN_COMMENT = 'canonical';", cancellationToken: CancellationToken.None);
+
         var report = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
             context, [operation], CancellationToken.None);
 
@@ -143,7 +153,7 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
             "CREATE TABLE `runtime_match_rows` (`id` int PRIMARY KEY, `value` varchar(5) "
             + $"COLLATE {columnCollation} NOT NULL {defaultClause}COMMENT 'canonical') "
             + "ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `runtime_match_rows` VALUES (1, 'kept');");
+            + "INSERT INTO `runtime_match_rows` VALUES (1, 'kept');", cancellationToken: CancellationToken.None);
 
         var observer = new RuntimeMatchingProbeInterceptor();
         await using var context = CreateRuntimeMatchingContext(connectionString, observer);
@@ -152,17 +162,22 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
         var operation = RuntimeMatchingOperation(textColumn: true);
 
         // Act
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var visits = await ReadRuntimeMatchingVisitsAsync(context);
-        var cleaned = await ContextScalarIntAsync(context, NullProofVariablesClearedSql);
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
+        var visits = await ReadRuntimeMatchingVisitsAsync(context, cancellationToken: CancellationToken.None);
+        var cleaned = await ContextScalarIntAsync(context, NullProofVariablesClearedSql,
+            cancellationToken: CancellationToken.None);
+
         var preservedRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `runtime_match_rows` WHERE `id` = 1 AND `value` = 'kept';");
+            "SELECT COUNT(*) FROM `runtime_match_rows` WHERE `id` = 1 AND `value` = 'kept';",
+            cancellationToken: CancellationToken.None);
 
         var finalColumns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'runtime_match_rows' AND COLUMN_NAME = 'value' "
             + $"AND COLLATION_NAME = '{columnCollation}' AND COLUMN_DEFAULT IS NULL "
-            + "AND IS_NULLABLE = 'NO' AND COLUMN_COMMENT = 'canonical';");
+            + "AND IS_NULLABLE = 'NO' AND COLUMN_COMMENT = 'canonical';", cancellationToken: CancellationToken.None);
 
         var report = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
             context, [operation], CancellationToken.None);
@@ -203,7 +218,7 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE `runtime_match_rows` (`id` int PRIMARY KEY, `value` {storeType} NOT NULL "
             + "COMMENT 'canonical') ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + $"INSERT INTO `runtime_match_rows` VALUES (1, {value});");
+            + $"INSERT INTO `runtime_match_rows` VALUES (1, {value});", cancellationToken: CancellationToken.None);
 
         var observer = new RuntimeMatchingProbeInterceptor();
         await using var context = CreateRuntimeMatchingContext(connectionString, observer);
@@ -220,15 +235,22 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
         _ = builder.Sql("SET @runtime_matching_after_rejection = 1;");
 
         // Act
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
-        var visits = await ReadRuntimeMatchingVisitsAsync(context);
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
+        var visits = await ReadRuntimeMatchingVisitsAsync(context, cancellationToken: CancellationToken.None);
         var firstRepairVisits = await ContextScalarIntAsync(context,
-            "SELECT @runtime_matching_first_repair_visits;");
+            "SELECT @runtime_matching_first_repair_visits;", cancellationToken: CancellationToken.None);
+
         var laterStatementExecuted = await ContextScalarIntAsync(context,
-            "SELECT @runtime_matching_after_rejection IS NOT NULL;");
-        var cleaned = await ContextScalarIntAsync(context, NullProofVariablesClearedSql);
+            "SELECT @runtime_matching_after_rejection IS NOT NULL;", cancellationToken: CancellationToken.None);
+
+        var cleaned = await ContextScalarIntAsync(context, NullProofVariablesClearedSql,
+            cancellationToken: CancellationToken.None);
+
         var preservedRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `runtime_match_rows` WHERE `id` = 1 AND `value` IS NULL;");
+            "SELECT COUNT(*) FROM `runtime_match_rows` WHERE `id` = 1 AND `value` IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(exception).Message,
@@ -252,7 +274,7 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
         await ExecuteSqlAsync(foreignConnectionString,
             "CREATE TABLE `runtime_match_rows` (`id` int PRIMARY KEY, `value` varchar(5) NOT NULL "
             + "COMMENT 'canonical') ENGINE=InnoDB DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + "INSERT INTO `runtime_match_rows` VALUES (1, 'kept');");
+            + "INSERT INTO `runtime_match_rows` VALUES (1, 'kept');", cancellationToken: CancellationToken.None);
 
         var observer = new RuntimeMatchingProbeInterceptor();
         await using var context = CreateRuntimeMatchingContext(connectionString, observer);
@@ -261,14 +283,20 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
         var operation = RuntimeMatchingOperation(textColumn: true, schema: foreignDatabase);
 
         // Act
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var visits = await ReadRuntimeMatchingVisitsAsync(context);
-        var cleaned = await ContextScalarIntAsync(context, NullProofVariablesClearedSql);
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
+        var visits = await ReadRuntimeMatchingVisitsAsync(context, cancellationToken: CancellationToken.None);
+        var cleaned = await ContextScalarIntAsync(context, NullProofVariablesClearedSql,
+            cancellationToken: CancellationToken.None);
+
         var preservedRows = await ScalarIntAsync(foreignConnectionString,
-            "SELECT COUNT(*) FROM `runtime_match_rows` WHERE `id` = 1 AND BINARY `value` = BINARY 'kept';");
+            "SELECT COUNT(*) FROM `runtime_match_rows` WHERE `id` = 1 AND BINARY `value` = BINARY 'kept';",
+            cancellationToken: CancellationToken.None);
+
         var localTables = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'runtime_match_rows';");
+            + "AND TABLE_NAME = 'runtime_match_rows';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(exception).Message,
@@ -300,7 +328,7 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `runtime_match_rows` (`id` int PRIMARY KEY, `value` int NULL "
             + $"COMMENT '{liveComment}') ENGINE=InnoDB; "
-            + "INSERT INTO `runtime_match_rows` VALUES (1, 7), (2, NULL);");
+            + "INSERT INTO `runtime_match_rows` VALUES (1, 7), (2, NULL);", cancellationToken: CancellationToken.None);
 
         var observer = new RuntimeMatchingProbeInterceptor();
         await using var context = CreateRuntimeMatchingContext(connectionString, observer);
@@ -320,17 +348,19 @@ public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigr
         var plan = CaptureMySqlNullEligibilityPlan(context, operation);
 
         // Act
-        await ExecuteOperationsAsync(context, [operation]);
-        var visits = await ReadRuntimeMatchingVisitsAsync(context);
+        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
+        var visits = await ReadRuntimeMatchingVisitsAsync(context, cancellationToken: CancellationToken.None);
         var cleaned = await ContextScalarIntAsync(context,
-            "SELECT @doka_sm_state IS NULL AND @doka_sm_repair_ok IS NULL;");
+            "SELECT @doka_sm_state IS NULL AND @doka_sm_repair_ok IS NULL;", cancellationToken: CancellationToken.None);
+
         var canonicalColumns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'runtime_match_rows' AND COLUMN_NAME = 'value' "
-            + "AND IS_NULLABLE = 'YES' AND COLUMN_COMMENT = 'canonical';");
+            + "AND IS_NULLABLE = 'YES' AND COLUMN_COMMENT = 'canonical';", cancellationToken: CancellationToken.None);
+
         var preservedRows = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM `runtime_match_rows` WHERE (`id` = 1 AND `value` = 7) "
-            + "OR (`id` = 2 AND `value` IS NULL);");
+            + "OR (`id` = 2 AND `value` IS NULL);", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.False(plan.RequiresLazyStateEvaluation);
@@ -378,15 +408,23 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 {
 
     /// <summary>Reads only bounded counters that cleanup intentionally does not own.</summary>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     protected static async Task<RuntimeMatchingVisits> ReadRuntimeMatchingVisitsAsync(
-        DbContext context
+        DbContext context,
+        CancellationToken cancellationToken
     ) => new(
-        await ContextScalarIntAsync(context, "SELECT @runtime_matching_catalog_visits;"),
-        await ContextScalarIntAsync(context, "SELECT @runtime_matching_transition_visits;"),
-        await ContextScalarIntAsync(context, "SELECT @runtime_matching_repair_visits;"),
-        await ContextScalarIntAsync(context, "SELECT @runtime_matching_null_visits;"),
-        await ContextScalarIntAsync(context, "SELECT @runtime_matching_length_visits;"),
-        await ContextScalarIntAsync(context, "SELECT @runtime_matching_final_repair_visits;"));
+        await ContextScalarIntAsync(context, "SELECT @runtime_matching_catalog_visits;",
+            cancellationToken: cancellationToken),
+        await ContextScalarIntAsync(context, "SELECT @runtime_matching_transition_visits;",
+            cancellationToken: cancellationToken),
+        await ContextScalarIntAsync(context, "SELECT @runtime_matching_repair_visits;",
+            cancellationToken: cancellationToken),
+        await ContextScalarIntAsync(context, "SELECT @runtime_matching_null_visits;",
+            cancellationToken: cancellationToken),
+        await ContextScalarIntAsync(context, "SELECT @runtime_matching_length_visits;",
+            cancellationToken: cancellationToken),
+        await ContextScalarIntAsync(context, "SELECT @runtime_matching_final_repair_visits;",
+            cancellationToken: cancellationToken));
 }
 
 public sealed partial class MySqlRuntimeMatchingIntegrationTests : MySqlSafeMigrationIntegrationTests

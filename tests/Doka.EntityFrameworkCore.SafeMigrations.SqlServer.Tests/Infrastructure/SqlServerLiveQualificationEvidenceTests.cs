@@ -96,8 +96,13 @@ public sealed class SqlServerLiveQualificationEvidenceTests
 
         // Act
         await Task.WhenAll(
-            RecordStageAsync(firstPath, 7, firstStarted, secondStarted.Task),
-            RecordStageAsync(secondPath, 13, secondStarted, firstStarted.Task));
+            RecordStageAsync(firstPath, 7, firstStarted, secondStarted.Task, cancellationToken: CancellationToken.None),
+            RecordStageAsync(
+                secondPath,
+                13,
+                secondStarted,
+                firstStarted.Task,
+                cancellationToken: CancellationToken.None));
 
         var firstLines = File.ReadAllLines(firstPath);
         var secondLines = File.ReadAllLines(secondPath);
@@ -108,6 +113,73 @@ public sealed class SqlServerLiveQualificationEvidenceTests
         Assert.All(firstLines, static line => Assert.Contains("\toperations=7\t", line));
         Assert.All(secondLines, static line => Assert.Contains("\toperations=13\t", line));
         Assert.Same(previousActivity, Activity.Current);
+    }
+
+    /// <summary>Pre-cancellation settles the startup signal so its already-admitted peer cannot wait forever.</summary>
+    [Fact]
+    public async Task PreCanceledStageCancelsStartupSignalAndReleasesPeer()
+    {
+        // Arrange
+        using var directory = new EvidenceDirectory();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var peerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // Act
+        var peer = RecordStageAsync(directory.FilePath("peer.log"), 2, peerStarted, started.Task,
+            CancellationToken.None);
+
+        var stage = RecordStageAsync(directory.FilePath("canceled.log"), 1, started, peerStarted.Task,
+            cancellation.Token);
+
+        var failure = await Record.ExceptionAsync(() => stage);
+        var canceledBeforeControllerDrain = started.Task.IsCanceled;
+
+        // WHY: Observe the original signal first, then drain it so a failing regression cannot strand the peer.
+        started.TrySetCanceled(cancellation.Token);
+        peerStarted.TrySetResult();
+        var peerFailure = await Record.ExceptionAsync(() => peer);
+
+        // Assert
+        Assert.True(canceledBeforeControllerDrain);
+        Assert.Equal(cancellation.Token,
+            Assert.IsAssignableFrom<OperationCanceledException>(failure).CancellationToken);
+        Assert.Equal(cancellation.Token,
+            Assert.IsAssignableFrom<OperationCanceledException>(peerFailure).CancellationToken);
+        Assert.True(peerStarted.Task.IsCompletedSuccessfully);
+    }
+
+    /// <summary>Listener-construction failure faults the startup signal and releases the waiting peer.</summary>
+    [Fact]
+    public async Task StageConstructionFailureFaultsStartupSignalAndReleasesPeer()
+    {
+        // Arrange
+        using var directory = new EvidenceDirectory();
+        var expected = new InvalidOperationException("Injected listener startup failure.");
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var peerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // Act
+        var peer = RecordStageAsync(directory.FilePath("peer.log"), 2, peerStarted, started.Task,
+            CancellationToken.None);
+
+        var stage = RecordStageAsync(directory.FilePath("failed.log"), 1, started, peerStarted.Task,
+            CancellationToken.None, _ => throw expected);
+
+        var failure = await Record.ExceptionAsync(() => stage);
+        var faultedBeforeControllerDrain = started.Task.IsFaulted;
+
+        // WHY: Complete both controller signals before awaiting a peer, even against the broken startup path.
+        started.TrySetException(expected);
+        peerStarted.TrySetResult();
+        var peerFailure = await Record.ExceptionAsync(() => peer);
+
+        // Assert
+        Assert.True(faultedBeforeControllerDrain);
+        Assert.Same(expected, failure);
+        Assert.Same(expected, peerFailure);
+        Assert.True(peerStarted.Task.IsCompletedSuccessfully);
     }
 
     /// <summary>Preserves the analysis exception even when a stage callback encounters an unusable path.</summary>
@@ -153,21 +225,48 @@ public sealed class SqlServerLiveQualificationEvidenceTests
     }
 
     /// <summary>Waits for the peer listener before recording a phase under its own workload trace.</summary>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
+    /// <param name="createCapture">
+    /// An optional isolated constructor-failure probe; otherwise creates the real listener.
+    /// </param>
     private static async Task RecordStageAsync(
         string path,
         int operationCount,
         TaskCompletionSource started,
-        Task peerStarted
+        Task peerStarted,
+        CancellationToken cancellationToken,
+        Func<string, SqlServerLiveQualificationEvidence.AnalysisStageCapture>? createCapture = null
     )
     {
-        using var capture = new SqlServerLiveQualificationEvidence.AnalysisStageCapture(path);
-        started.SetResult();
-        await peerStarted;
-        using (SafeMigrationTelemetry.StartAnalysisStage("catalog-batch", operationCount))
+        try
         {
-        }
+            cancellationToken.ThrowIfCancellationRequested();
 
-        capture.ThrowIfWriteFailed();
+            using var capture = createCapture is null
+                ? new SqlServerLiveQualificationEvidence.AnalysisStageCapture(path)
+                : createCapture(path);
+
+            started.SetResult();
+            await peerStarted.WaitAsync(cancellationToken);
+            using (SafeMigrationTelemetry.StartAnalysisStage("catalog-batch", operationCount))
+            {
+            }
+
+            capture.ThrowIfWriteFailed();
+        }
+        catch (OperationCanceledException exception)
+        {
+            // WHY: Startup failure must release a waiting peer; TrySet cannot overwrite an already-ready listener.
+            started.TrySetCanceled(exception.CancellationToken);
+
+            throw;
+        }
+        catch (Exception exception)
+        {
+            started.TrySetException(exception);
+
+            throw;
+        }
     }
 
     /// <summary>Owns a unique temporary directory so evidence tests never mutate shared artifact paths.</summary>

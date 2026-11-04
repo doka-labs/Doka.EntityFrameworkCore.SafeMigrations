@@ -3,16 +3,28 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 internal static partial class SqlServerLocalCatalogDiagnostics
 {
     /// <summary>Checks metadata refusals on the explicit diagnostic engine without bypassing native test gates.</summary>
-    private static async Task VerifyManagedTypesAsync(SqlConnection root, string rootString, string output)
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
+    private static async Task VerifyManagedTypesAsync(
+        SqlConnection root,
+        string rootString,
+        string output,
+        CancellationToken cancellationToken)
     {
-        var database = await CreateDatabaseAsync(root);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var database = await CreateDatabaseAsync(root, cancellationToken: cancellationToken);
         try
         {
             var connectionString = SqlServerContainerFixture.BuildTestConnectionString(rootString, database);
             await using var connection = new SqlConnection(connectionString);
-            await connection.OpenAsync();
-            await SqlServerScalarProofRegressionTests.VerifyLocalAsync(connection);
-            await ExecuteAsync(connection, "CREATE TYPE dbo.guard_alias FROM int;");
+            await connection.OpenAsync(cancellationToken: cancellationToken);
+            await SqlServerScalarProofRegressionTests.VerifyLocalAsync(
+                connection,
+                cancellationToken: cancellationToken);
+            await ExecuteAsync(
+                connection,
+                "CREATE TYPE dbo.guard_alias FROM int;",
+                cancellationToken: cancellationToken);
             using var context = new SafeMigrationDbContext(connectionString);
             var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
                 context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
@@ -32,23 +44,34 @@ internal static partial class SqlServerLocalCatalogDiagnostics
             var evidence = new List<string> { "scalar_binding_freshness_boundary_and_cancellation: verified" };
             foreach (var contract in contracts)
             {
-                await ExecuteAsync(connection, "DROP TABLE IF EXISTS dbo.managed_types;");
+                await ExecuteAsync(
+                    connection,
+                    "DROP TABLE IF EXISTS dbo.managed_types;",
+                    cancellationToken: cancellationToken);
                 if (contract.Actual != "missing_table")
                 {
                     var column = contract.Actual == "missing_column" ? "OtherValue int" : "Value " + contract.Actual;
                     await ExecuteAsync(connection,
-                        "CREATE TABLE dbo.managed_types (Id int NOT NULL PRIMARY KEY, " + column + " NULL);");
+                        "CREATE TABLE dbo.managed_types (Id int NOT NULL PRIMARY KEY, " + column + " NULL);",
+                        cancellationToken: cancellationToken);
                 }
 
                 var intent = new EnsureModelManagedDataIntent("managed_types", ["Id"], ["int"],
                     ["Id", "Value"], ["int", contract.Expected], new object?[,] { { 1, null } }, null, null);
 
                 var guard = catalog.BuildModelManagedDataAnalysisGuard(intent).Guard;
-                await VerifyManagedGuardAsync(connection, guard, contract.Matches);
+                await VerifyManagedGuardAsync(
+                    connection,
+                    guard,
+                    contract.Matches,
+                    cancellationToken: cancellationToken);
                 evidence.Add(contract.Actual + " -> " + contract.Expected + ": " + contract.Matches);
             }
 
-            await ExecuteAsync(connection, "CREATE TABLE dbo.identity_types (Id int IDENTITY NOT NULL PRIMARY KEY);");
+            await ExecuteAsync(
+                connection,
+                "CREATE TABLE dbo.identity_types (Id int IDENTITY NOT NULL PRIMARY KEY);",
+                cancellationToken: cancellationToken);
             ModelManagedDataIntent[] identities =
             [
                 new EnsureModelManagedDataIntent("identity_types", ["Id"], ["int"], ["Id"], ["int"],
@@ -62,13 +85,18 @@ internal static partial class SqlServerLocalCatalogDiagnostics
             foreach (var intent in identities)
             {
                 var guard = catalog.BuildModelManagedDataAnalysisGuard(intent).Guard;
-                await VerifyManagedGuardAsync(connection, guard, intent is not UpdateModelManagedDataIntent);
+                await VerifyManagedGuardAsync(
+                    connection,
+                    guard,
+                    intent is not UpdateModelManagedDataIntent,
+                    cancellationToken: cancellationToken);
                 evidence.Add(intent.GetType().Name + ": verified");
             }
 
-            await ExecuteAsync(connection, "CREATE SCHEMA audit;");
+            await ExecuteAsync(connection, "CREATE SCHEMA audit;", cancellationToken: cancellationToken);
             await ExecuteAsync(connection, "CREATE TABLE dbo.type_principals (Id int NOT NULL PRIMARY KEY, "
-                + "Code bigint NOT NULL); CREATE TABLE dbo.type_dependents (ReferenceId int NULL);");
+                + "Code bigint NOT NULL); CREATE TABLE dbo.type_dependents (ReferenceId int NULL);",
+                cancellationToken: cancellationToken);
 
             (string Mode, bool Matches)[] dependents =
             [
@@ -78,13 +106,19 @@ internal static partial class SqlServerLocalCatalogDiagnostics
 
             foreach (var dependent in dependents)
             {
-                await ExecuteAsync(connection, "DROP TABLE IF EXISTS audit.type_dependents;");
+                await ExecuteAsync(
+                    connection,
+                    "DROP TABLE IF EXISTS audit.type_dependents;",
+                    cancellationToken: cancellationToken);
                 if (dependent.Mode != "missing_table")
                 {
                     var column = dependent.Mode == "missing_column" ? "OtherId int"
                         : dependent.Mode == "wrong_type" ? "ReferenceId bigint" : "ReferenceId int";
 
-                    await ExecuteAsync(connection, "CREATE TABLE audit.type_dependents (" + column + " NULL);");
+                    await ExecuteAsync(
+                        connection,
+                        "CREATE TABLE audit.type_dependents (" + column + " NULL);",
+                        cancellationToken: cancellationToken);
                 }
 
                 var foreignKeys = new List<ExpectedModelManagedDataForeignKeyDefinition>
@@ -104,11 +138,18 @@ internal static partial class SqlServerLocalCatalogDiagnostics
                     new object?[,] { { 1, 2L } }, null, foreignKeys.ToArray());
 
                 var guard = catalog.BuildModelManagedDataAnalysisGuard(intent).Guard;
-                await VerifyManagedGuardAsync(connection, guard, dependent.Matches);
+                await VerifyManagedGuardAsync(
+                    connection,
+                    guard,
+                    dependent.Matches,
+                    cancellationToken: cancellationToken);
                 evidence.Add("dependent " + dependent.Mode + ": " + dependent.Matches);
             }
 
-            await File.WriteAllLinesAsync(Path.Combine(output, "managed-type-guards.log"), evidence);
+            await File.WriteAllLinesAsync(
+                Path.Combine(output, "managed-type-guards.log"),
+                evidence,
+                cancellationToken: cancellationToken);
         }
         finally
         {
@@ -117,11 +158,18 @@ internal static partial class SqlServerLocalCatalogDiagnostics
     }
 
     /// <summary>Fails on missing, NULL or contradictory physical guard evidence.</summary>
-    private static async Task VerifyManagedGuardAsync(SqlConnection connection, string guard, bool expected)
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
+    private static async Task VerifyManagedGuardAsync(
+        SqlConnection connection,
+        string guard,
+        bool expected,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT (" + guard + ");";
-        var actual = await command.ExecuteScalarAsync();
+        var actual = await command.ExecuteScalarAsync(cancellationToken: cancellationToken);
         Assert.NotNull(actual);
         Assert.Equal(expected ? 1 : 0, Convert.ToInt32(actual, CultureInfo.InvariantCulture));
     }

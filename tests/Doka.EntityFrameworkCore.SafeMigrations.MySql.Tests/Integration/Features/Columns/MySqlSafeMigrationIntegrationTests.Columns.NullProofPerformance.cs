@@ -25,7 +25,7 @@ public sealed partial class MySqlColumnsNullProofPerformanceIntegrationTests : M
             "CREATE TABLE `null_read_rows` (`Id` int NOT NULL PRIMARY KEY, `Value` int NULL); "
             + "INSERT INTO `null_read_rows` SELECT a.d + 10*b.d + 100*c.d + 1000*d.d, 7 "
             + $"FROM {digits} a CROSS JOIN {digits} b CROSS JOIN {digits} c CROSS JOIN {digits} d "
-            + $"LIMIT {rowCount.ToString(CultureInfo.InvariantCulture)};");
+            + $"LIMIT {rowCount.ToString(CultureInfo.InvariantCulture)};", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
@@ -76,23 +76,34 @@ public sealed partial class MySqlColumnsNullProofPerformanceIntegrationTests : M
         // WHY: Both proof paths consume the protocol's real catalog status.
         // Resolve it outside each measured window rather than inventing an
         // ordinary status or charging catalog setup to only the shared path.
-        await ExecuteNullProofMeasurementSqlAsync(connection, "SET @doka_sm_state = NULL;" + statusSql);
-        var baselineStatus = await ContextScalarIntAsync(context, "SELECT @doka_sm_add_status = 'ordinary';");
-        var before = await ReadNullProofHandlerReadsAsync(connection);
-        await ExecuteNullProofMeasurementSqlAsync(connection, baselineSql);
-        var baselineReads = await ReadNullProofHandlerReadsAsync(connection) - before;
-        var baselineAccepted = await ContextScalarIntAsync(context,
-            "SELECT @doka_sm_state = 'different' AND @doka_sm_repair_ok;");
+        await ExecuteNullProofMeasurementSqlAsync(connection, "SET @doka_sm_state = NULL;" + statusSql,
+            cancellationToken: CancellationToken.None);
+        var baselineStatus = await ContextScalarIntAsync(context, "SELECT @doka_sm_add_status = 'ordinary';",
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteNullProofMeasurementSqlAsync(connection, "SET @doka_sm_state = NULL;" + statusSql);
-        var sharedStatus = await ContextScalarIntAsync(context, "SELECT @doka_sm_add_status = 'ordinary';");
-        before = await ReadNullProofHandlerReadsAsync(connection);
+        var before = await ReadNullProofHandlerReadsAsync(connection, cancellationToken: CancellationToken.None);
+        await ExecuteNullProofMeasurementSqlAsync(connection, baselineSql, cancellationToken: CancellationToken.None);
+        var baselineReads = await ReadNullProofHandlerReadsAsync(connection,
+            cancellationToken: CancellationToken.None) - before;
+
+        var baselineAccepted = await ContextScalarIntAsync(context,
+            "SELECT @doka_sm_state = 'different' AND @doka_sm_repair_ok;", cancellationToken: CancellationToken.None);
+
+        await ExecuteNullProofMeasurementSqlAsync(connection, "SET @doka_sm_state = NULL;" + statusSql,
+            cancellationToken: CancellationToken.None);
+        var sharedStatus = await ContextScalarIntAsync(context, "SELECT @doka_sm_add_status = 'ordinary';",
+            cancellationToken: CancellationToken.None);
+
+        before = await ReadNullProofHandlerReadsAsync(connection, cancellationToken: CancellationToken.None);
         await ExecuteNullProofMeasurementSqlAsync(connection,
-            "SET @doka_sm_column_repair_eligible = (" + eligibilitySql + ");");
-        await ExecuteNullProofMeasurementSqlAsync(connection, proofSql);
-        await ExecuteNullProofMeasurementSqlAsync(connection, stateSql);
-        await ExecuteNullProofMeasurementSqlAsync(connection, repairSql);
-        var sharedReads = await ReadNullProofHandlerReadsAsync(connection) - before;
+            "SET @doka_sm_column_repair_eligible = (" + eligibilitySql + ");",
+            cancellationToken: CancellationToken.None);
+        await ExecuteNullProofMeasurementSqlAsync(connection, proofSql, cancellationToken: CancellationToken.None);
+        await ExecuteNullProofMeasurementSqlAsync(connection, stateSql, cancellationToken: CancellationToken.None);
+        await ExecuteNullProofMeasurementSqlAsync(connection, repairSql, cancellationToken: CancellationToken.None);
+        var sharedReads = await ReadNullProofHandlerReadsAsync(connection,
+            cancellationToken: CancellationToken.None) - before;
+
         Console.WriteLine(
             $"NULL-proof row-read evidence: rows={rowCount}, baseline={baselineReads}, shared={sharedReads}");
 
@@ -106,22 +117,31 @@ public sealed partial class MySqlColumnsNullProofPerformanceIntegrationTests : M
         // This compares engine work, not hardware-dependent elapsed time.
         Assert.True(sharedReads <= baselineReads * 3 / 4);
         Assert.Equal(1, await ContextScalarIntAsync(context,
-            "SELECT @doka_sm_state = 'different' AND @doka_sm_repair_ok AND NOT @doka_sm_nullability_blocked;"));
-        Assert.Equal(rowCount, await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `null_read_rows`;"));
+            "SELECT @doka_sm_state = 'different' AND @doka_sm_repair_ok AND NOT @doka_sm_nullability_blocked;",
+            cancellationToken: CancellationToken.None));
+        Assert.Equal(rowCount, await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `null_read_rows`;",
+            cancellationToken: CancellationToken.None));
         Assert.Equal(rowCount, await ContextScalarIntAsync(context,
-            "SELECT COUNT(*) FROM `null_read_rows` WHERE `Value` = 7;"));
+            "SELECT COUNT(*) FROM `null_read_rows` WHERE `Value` = 7;", cancellationToken: CancellationToken.None));
         Assert.Equal(1, await ContextScalarIntAsync(context,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'null_read_rows' AND COLUMN_NAME = 'Value' AND IS_NULLABLE = 'YES';"));
+            + "AND TABLE_NAME = 'null_read_rows' AND COLUMN_NAME = 'Value' AND IS_NULLABLE = 'YES';",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Reads the selected session's full-scan counter without retaining SQL or connection details.</summary>
-    private static async Task<long> ReadNullProofHandlerReadsAsync(DbConnection connection)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static async Task<long> ReadNullProofHandlerReadsAsync(
+        DbConnection connection,
+        CancellationToken cancellationToken
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var command = connection.CreateCommand();
         command.CommandText = "SHOW SESSION STATUS LIKE 'Handler_read_rnd_next';";
-        await using var reader = await command.ExecuteReaderAsync(CancellationToken.None);
-        if (!await reader.ReadAsync(CancellationToken.None))
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
         {
             throw new InvalidOperationException("The engine did not return its session row-read counter.");
         }
@@ -130,11 +150,18 @@ public sealed partial class MySqlColumnsNullProofPerformanceIntegrationTests : M
     }
 
     /// <summary>Executes only proof/classification statements against an already qualified synthetic table.</summary>
-    private static async Task ExecuteNullProofMeasurementSqlAsync(DbConnection connection, string sql)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static async Task ExecuteNullProofMeasurementSqlAsync(
+        DbConnection connection,
+        string sql,
+        CancellationToken cancellationToken
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
-        await command.ExecuteNonQueryAsync(CancellationToken.None);
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 }
 

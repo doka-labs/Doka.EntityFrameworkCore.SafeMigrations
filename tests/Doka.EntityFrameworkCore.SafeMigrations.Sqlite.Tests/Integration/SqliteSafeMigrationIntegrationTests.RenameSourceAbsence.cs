@@ -8,23 +8,31 @@ public sealed class SqliteSafeMigrationRenameSourceAbsenceIntegrationTests : Sql
     public async Task TableRenameWithBothNamesMissing_SatisfiesSourceAbsencePostflight()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("absent_source", "absent_target");
         var runner = context.GetService<ISafeMigrationRunner>();
-        var schemaVersion = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var schemaVersion = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-table-rename-absent-source"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-table-rename-absent-source"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-table-rename-absent-postflight"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-table-rename-absent-postflight"),
+            cancellationToken: CancellationToken.None);
 
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
-        var finalSchemaVersion = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var finalSchemaVersion = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
@@ -55,12 +63,12 @@ public sealed class SqliteSafeMigrationRenameSourceAbsenceIntegrationTests : Sql
     )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         if (ownerExists)
         {
             await ExecuteSqlAsync(connection,
                 "CREATE TABLE absent_member_owner (Id INTEGER NOT NULL); "
-                + "INSERT INTO absent_member_owner (Id) VALUES (1);");
+                + "INSERT INTO absent_member_owner (Id) VALUES (1);", cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connection);
@@ -75,20 +83,32 @@ public sealed class SqliteSafeMigrationRenameSourceAbsenceIntegrationTests : Sql
         }
 
         var runner = context.GetService<ISafeMigrationRunner>();
-        var schemaVersion = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var schemaVersion = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-member-rename-absent-source"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-member-rename-absent-source"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-member-rename-absent-postflight"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-member-rename-absent-postflight"),
+            cancellationToken: CancellationToken.None);
 
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
-        var finalSchemaVersion = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var finalSchemaVersion = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
+
         var remainingRows = ownerExists
-            ? await ScalarIntAsync(connection, "SELECT COUNT(*) FROM absent_member_owner WHERE Id = 1;")
+            ? await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM absent_member_owner WHERE Id = 1;",
+                cancellationToken: CancellationToken.None)
             : 0;
 
         // Assert

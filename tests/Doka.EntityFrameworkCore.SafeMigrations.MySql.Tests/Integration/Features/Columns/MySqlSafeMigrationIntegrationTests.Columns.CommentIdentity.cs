@@ -20,7 +20,8 @@ public sealed partial class MySqlColumnsCommentIdentityIntegrationTests : MySqlS
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `comment_items` (`key` int NOT NULL PRIMARY KEY, "
             + "`required_value` int NULL COMMENT '" + actualComment + "') ENGINE=InnoDB; "
-            + "INSERT INTO `comment_items` (`key`, `required_value`) VALUES (1, 7);");
+            + "INSERT INTO `comment_items` (`key`, `required_value`) VALUES (1, 7);",
+            cancellationToken: CancellationToken.None);
 
         var operation = new SafeMigrationOperation(new EnsureColumnIntent("comment_items",
                 new ExpectedColumnDefinition("required_value", typeof(int), true, "int", comment: "Alpha")),
@@ -30,7 +31,9 @@ public sealed partial class MySqlColumnsCommentIdentityIntegrationTests : MySqlS
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var comparison = await ReadCommentIdentityComparisonAsync(connectionString, "comment_items");
+        var comparison = await ReadCommentIdentityComparisonAsync(connectionString, "comment_items",
+            cancellationToken: CancellationToken.None);
+
         var report = await runner.AnalyzeAsync(context, [operation],
             new SafeMigrationRunOptions("column-comment-identity"), CancellationToken.None);
 
@@ -38,9 +41,12 @@ public sealed partial class MySqlColumnsCommentIdentityIntegrationTests : MySqlS
         var final = await runner.VerifyAsync(context, [operation],
             new SafeMigrationRunOptions("column-comment-identity-final"), CancellationToken.None);
 
-        var finalComparison = await ReadCommentIdentityComparisonAsync(connectionString, "comment_items");
+        var finalComparison = await ReadCommentIdentityComparisonAsync(connectionString, "comment_items",
+            cancellationToken: CancellationToken.None);
+
         var preservedRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `comment_items` WHERE `key` = 1 AND `required_value` = 7;");
+            "SELECT COUNT(*) FROM `comment_items` WHERE `key` = 1 AND `required_value` = 7;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(exactComment || Fixture.IsMariaDb ? 1 : 0, comparison.CatalogCollationMatches);
@@ -72,7 +78,8 @@ public sealed partial class MySqlColumnsCommentIdentityIntegrationTests : MySqlS
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `strict_comment_items` (`key` int NOT NULL PRIMARY KEY, "
             + "`required_value` int NULL COMMENT '" + actualComment + "') ENGINE=InnoDB; "
-            + "INSERT INTO `strict_comment_items` (`key`, `required_value`) VALUES (1, 7);");
+            + "INSERT INTO `strict_comment_items` (`key`, `required_value`) VALUES (1, 7);",
+            cancellationToken: CancellationToken.None);
 
         var definition = new ExpectedTableDefinition("strict_comment_items",
             [
@@ -86,16 +93,21 @@ public sealed partial class MySqlColumnsCommentIdentityIntegrationTests : MySqlS
         builder.EnsureTable(definition, SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var comparison = await ReadCommentIdentityComparisonAsync(connectionString, "strict_comment_items");
+        var comparison = await ReadCommentIdentityComparisonAsync(connectionString, "strict_comment_items",
+            cancellationToken: CancellationToken.None);
+
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("strict-table-column-comment-identity"), CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
-        var finalComparison = await ReadCommentIdentityComparisonAsync(connectionString, "strict_comment_items");
+        var finalComparison = await ReadCommentIdentityComparisonAsync(connectionString, "strict_comment_items",
+            cancellationToken: CancellationToken.None);
+
         var preservedRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `strict_comment_items` WHERE `key` = 1 AND `required_value` = 7;");
+            "SELECT COUNT(*) FROM `strict_comment_items` WHERE `key` = 1 AND `required_value` = 7;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(exactComment || Fixture.IsMariaDb ? 1 : 0, comparison.CatalogCollationMatches);
@@ -132,23 +144,32 @@ public sealed partial class MySqlColumnsCommentIdentityIntegrationTests : MySqlS
         await ExecuteSqlAsync(connectionString, AtomicRequiredAddStagedTableSql(operation,
                 AtomicRequiredAddGuardName(operation), "`required_value` IS NOT NULL", columnType: "int",
                 columnSuffix: " COMMENT '" + actualComment + "'")
-            + " INSERT INTO `atomic_required_items` (`key`, `required_value`) VALUES (1, 7);");
+            + " INSERT INTO `atomic_required_items` (`key`, `required_value`) VALUES (1, 7);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
-        var before = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+        var before = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: CancellationToken.None);
 
         // Act
-        var comparison = await ReadCommentIdentityComparisonAsync(connectionString, "atomic_required_items");
+        var comparison = await ReadCommentIdentityComparisonAsync(connectionString, "atomic_required_items",
+            cancellationToken: CancellationToken.None);
+
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
             new SafeMigrationRunOptions("atomic-required-add-comment-identity"), CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var after = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
-        var finalComparison = await ReadCommentIdentityComparisonAsync(connectionString, "atomic_required_items");
+        var after = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: CancellationToken.None);
+
+        var finalComparison = await ReadCommentIdentityComparisonAsync(connectionString, "atomic_required_items",
+            cancellationToken: CancellationToken.None);
+
         var preservedRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `atomic_required_items` WHERE `key` = 1 AND `required_value` = 7;");
+            "SELECT COUNT(*) FROM `atomic_required_items` WHERE `key` = 1 AND `required_value` = 7;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(new AtomicRequiredAddState(1, 1, 1, 1), before);
@@ -198,11 +219,15 @@ public sealed partial class MySqlColumnsCommentIdentityIntegrationTests : MySqlS
     /// <param name="connectionString">The isolated native fixture connection.</param>
     /// <param name="table">The single fixture owner to inspect.</param>
     /// <returns>Separate ordinary-collation and byte-exact match counts for the same native comment.</returns>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<(int CatalogCollationMatches, int ExactMatches)> ReadCommentIdentityComparisonAsync(
         string connectionString,
-        string table
+        string table,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         // WHY: MariaDB's catalog comparison masks case drift; the qualified
         // MySQL image already distinguishes it. Both forms inspect the same
         // row so exact fixtures cannot hide an engine-specific false match.
@@ -210,11 +235,12 @@ public sealed partial class MySqlColumnsCommentIdentityIntegrationTests : MySqlS
             + AtomicRequiredAddLiteral(table) + " AND COLUMN_NAME = 'required_value' AND ";
 
         var catalogMatches = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*)" + predicate + "COALESCE(COLUMN_COMMENT, '') = 'Alpha';");
+            "SELECT COUNT(*)" + predicate + "COALESCE(COLUMN_COMMENT, '') = 'Alpha';",
+            cancellationToken: cancellationToken);
 
         var exactMatches = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*)" + predicate
-            + "CAST(COALESCE(COLUMN_COMMENT, '') AS BINARY) = 'Alpha';");
+            + "CAST(COALESCE(COLUMN_COMMENT, '') AS BINARY) = 'Alpha';", cancellationToken: cancellationToken);
 
         return (catalogMatches, exactMatches);
     }

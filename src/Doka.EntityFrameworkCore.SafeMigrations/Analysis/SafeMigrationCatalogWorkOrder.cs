@@ -11,7 +11,7 @@ internal static class SafeMigrationCatalogWorkOrder
     public static int[] Create(
         int count,
         Func<int, bool> include,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(include);

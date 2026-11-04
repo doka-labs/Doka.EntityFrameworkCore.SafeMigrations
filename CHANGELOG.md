@@ -8,6 +8,19 @@ the shared release identity described in [Release process](docs/release-process.
 
 ### Changed
 
+- Require an explicit `CancellationToken` on repository-owned asynchronous
+  methods, including the public runner and provider-analyzer contracts.
+  Extend explicit propagation to ordinary asynchronous helpers and owned action
+  delegates that previously had no token parameter.
+  Allow same-operation local functions to capture the enclosing cancellation
+  scope; retain explicit callback and independent-operation token contracts.
+  Existing source callers that omitted the argument must pass their operation
+  token or deliberately select `CancellationToken.None`. This is a source
+  compatibility break; existing binary signatures, policies, SQL, reports and
+  migration history are unchanged. Framework-owned EF/ADO.NET overrides retain
+  their external signatures, as do framework-controlled test/benchmark entry
+  points. Deliberately uninterruptible cleanup/recovery helpers remain tokenless
+  where required and retain their independent completion boundaries.
 - Replace the handwritten benchmark timers, samplers and comparison budgets
   with BenchmarkDotNet 0.15.8 across Core and the four isolated providers.
   Preserve default workload coverage, maintenance/column attribution and

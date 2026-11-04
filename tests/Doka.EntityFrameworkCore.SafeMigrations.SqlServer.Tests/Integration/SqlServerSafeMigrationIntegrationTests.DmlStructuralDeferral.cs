@@ -27,21 +27,24 @@ public sealed class SqlServerSafeMigrationDmlStructuralDeferralIntegrationTests 
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.dml_source(Id int NOT NULL); "
             + "CREATE TABLE dbo.dml_other(Value int NOT NULL,OtherValue int NOT NULL); "
             + "CREATE INDEX IX_matching ON dbo.dml_other(Value); "
-            + (writeKind == "insert" ? string.Empty : "INSERT dbo.dml_source VALUES(1); "));
+            + (writeKind == "insert" ? string.Empty : "INSERT dbo.dml_source VALUES(1); "),
+            cancellationToken: CancellationToken.None);
         if (triggerMode != "absent")
         {
             await ExecuteSqlAsync(connectionString,
                 "CREATE TRIGGER mutate_dml_metadata ON dbo.dml_source AFTER " + writeKind.ToUpperInvariant()
                 + " AS EXEC sys.sp_executesql N'DROP INDEX IX_matching ON dbo.dml_other; "
-                + (different ? "CREATE INDEX IX_matching ON dbo.dml_other(OtherValue);" : string.Empty) + "';");
+                + (different ? "CREATE INDEX IX_matching ON dbo.dml_other(OtherValue);" : string.Empty) + "';",
+                    cancellationToken: CancellationToken.None);
             if (triggerMode == "disabled")
             {
-                await ExecuteSqlAsync(connectionString, "DISABLE TRIGGER mutate_dml_metadata ON dbo.dml_source;");
+                await ExecuteSqlAsync(connectionString, "DISABLE TRIGGER mutate_dml_metadata ON dbo.dml_source;",
+                cancellationToken: CancellationToken.None);
             }
         }
 
@@ -52,15 +55,21 @@ public sealed class SqlServerSafeMigrationDmlStructuralDeferralIntegrationTests 
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-dml-matching-metadata"));
-        await ExecuteOperationsAsync(context, [builder.Operations[0]]);
+            new SafeMigrationRunOptions("sqlserver-dml-matching-metadata"), cancellationToken: CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, [builder.Operations[0]], cancellationToken: CancellationToken.None);
         var beforeEnsure = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.dml_other') AND name=N'IX_matching';");
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [builder.Operations[1]]));
+            "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.dml_other') AND name=N'IX_matching';",
+            cancellationToken: CancellationToken.None);
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [builder.Operations[1]],
+            cancellationToken: CancellationToken.None));
+
         var correctKey = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.indexes i JOIN sys.index_columns k ON k.object_id=i.object_id "
             + "AND k.index_id=i.index_id JOIN sys.columns c ON c.object_id=k.object_id AND c.column_id=k.column_id "
-            + "WHERE i.object_id=OBJECT_ID(N'dbo.dml_other') AND i.name=N'IX_matching' AND c.name=N'Value';");
+            + "WHERE i.object_id=OBJECT_ID(N'dbo.dml_other') AND i.name=N'IX_matching' AND c.name=N'Value';",
+                cancellationToken: CancellationToken.None);
 
         // Assert
         if (triggerMode == "enabled")
@@ -97,19 +106,22 @@ public sealed class SqlServerSafeMigrationDmlStructuralDeferralIntegrationTests 
     public async Task TypedDelete_CascadeChildTriggerInvalidatesUnrelatedMatchingIndex(bool disabled)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.dml_parent(Id int NOT NULL PRIMARY KEY); "
             + "CREATE TABLE dbo.dml_child(Id int NOT NULL PRIMARY KEY,ParentId int NOT NULL "
             + "REFERENCES dbo.dml_parent(Id) ON DELETE CASCADE); "
             + "CREATE TABLE dbo.dml_other(Value int NOT NULL); CREATE INDEX IX_matching ON dbo.dml_other(Value); "
-            + "INSERT dbo.dml_parent VALUES(1); INSERT dbo.dml_child VALUES(1,1);");
+            + "INSERT dbo.dml_parent VALUES(1); INSERT dbo.dml_child VALUES(1,1);",
+            cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TRIGGER cascade_metadata_mutation ON dbo.dml_child AFTER DELETE AS "
-            + "EXEC sys.sp_executesql N'DROP INDEX IX_matching ON dbo.dml_other;';");
+            + "EXEC sys.sp_executesql N'DROP INDEX IX_matching ON dbo.dml_other;';",
+            cancellationToken: CancellationToken.None);
         if (disabled)
         {
-            await ExecuteSqlAsync(connectionString, "DISABLE TRIGGER cascade_metadata_mutation ON dbo.dml_child;");
+            await ExecuteSqlAsync(connectionString, "DISABLE TRIGGER cascade_metadata_mutation ON dbo.dml_child;",
+            cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -120,12 +132,16 @@ public sealed class SqlServerSafeMigrationDmlStructuralDeferralIntegrationTests 
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-dml-cascade-metadata"));
-        await ExecuteOperationsAsync(context, [builder.Operations[0]]);
+            new SafeMigrationRunOptions("sqlserver-dml-cascade-metadata"), cancellationToken: CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, [builder.Operations[0]], cancellationToken: CancellationToken.None);
         var removed = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.dml_other') AND name=N'IX_matching';");
-        await ExecuteOperationsAsync(context, [builder.Operations[1]]);
-        var children = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.dml_child;");
+            "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.dml_other') AND name=N'IX_matching';",
+            cancellationToken: CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, [builder.Operations[1]], cancellationToken: CancellationToken.None);
+        var children = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.dml_child;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(disabled ? SafeMigrationReportStatus.ReadyWithProviderOperations : SafeMigrationReportStatus.RuntimeValidationRequired,
@@ -165,16 +181,20 @@ public sealed class SqlServerSafeMigrationDmlStructuralDeferralIntegrationTests 
     public async Task TypedAlter_DefaultBackfillTriggerInvalidatesUnrelatedMatchingIndex(bool disabled)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.backfill_source(Value int NULL); INSERT dbo.backfill_source VALUES(NULL); "
-            + "CREATE TABLE dbo.dml_other(Value int NOT NULL); CREATE INDEX IX_matching ON dbo.dml_other(Value);");
+            + "CREATE TABLE dbo.dml_other(Value int NOT NULL); CREATE INDEX IX_matching ON dbo.dml_other(Value);",
+                cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TRIGGER backfill_metadata_mutation ON dbo.backfill_source AFTER UPDATE AS "
-            + "EXEC sys.sp_executesql N'DROP INDEX IX_matching ON dbo.dml_other;';");
+            + "EXEC sys.sp_executesql N'DROP INDEX IX_matching ON dbo.dml_other;';",
+            cancellationToken: CancellationToken.None);
         if (disabled)
         {
-            await ExecuteSqlAsync(connectionString, "DISABLE TRIGGER backfill_metadata_mutation ON dbo.backfill_source;");
+            await ExecuteSqlAsync(connectionString,
+                "DISABLE TRIGGER backfill_metadata_mutation ON dbo.backfill_source;",
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -185,12 +205,18 @@ public sealed class SqlServerSafeMigrationDmlStructuralDeferralIntegrationTests 
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-typed-backfill-metadata"));
-        await ExecuteOperationsAsync(context, [builder.Operations[0]]);
+            new SafeMigrationRunOptions("sqlserver-typed-backfill-metadata"),
+            cancellationToken: CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, [builder.Operations[0]], cancellationToken: CancellationToken.None);
         var removed = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.dml_other') AND name=N'IX_matching';");
-        await ExecuteOperationsAsync(context, [builder.Operations[1]]);
-        var backfilled = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.backfill_source WHERE Value=0;");
+            "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.dml_other') AND name=N'IX_matching';",
+            cancellationToken: CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, [builder.Operations[1]], cancellationToken: CancellationToken.None);
+        var backfilled = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM dbo.backfill_source WHERE Value=0;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(disabled ? 1 : 0, removed);

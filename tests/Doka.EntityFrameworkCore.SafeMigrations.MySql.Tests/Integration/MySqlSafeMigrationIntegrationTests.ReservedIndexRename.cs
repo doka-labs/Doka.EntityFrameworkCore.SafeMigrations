@@ -23,7 +23,7 @@ public sealed partial class MySqlReservedIndexRenameIntegrationTests : MySqlSafe
         await ExecuteSqlAsync(connectionString, "CREATE TABLE reserved_index_rows (id int NOT NULL"
             + (source == "PRIMARY" ? ", PRIMARY KEY (id)" : string.Empty) + "); "
             + (source == "PRIMARY" ? string.Empty : "CREATE INDEX source_index ON reserved_index_rows (id); ")
-            + "INSERT INTO reserved_index_rows (id) VALUES (7);");
+            + "INSERT INTO reserved_index_rows (id) VALUES (7);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -31,14 +31,18 @@ public sealed partial class MySqlReservedIndexRenameIntegrationTests : MySqlSafe
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("reserved-index-rename"));
+            new SafeMigrationRunOptions("reserved-index-rename"), CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM reserved_index_rows WHERE id = 7;");
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM reserved_index_rows WHERE id = 7;",
+            cancellationToken: CancellationToken.None);
+
         var sourceCount = await ScalarIntAsync(connectionString,
             "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
             + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reserved_index_rows' "
-            + $"AND INDEX_NAME = '{source}';");
+            + $"AND INDEX_NAME = '{source}';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(reserved ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready, report.Status);

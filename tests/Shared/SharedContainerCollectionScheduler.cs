@@ -50,11 +50,11 @@ internal sealed class SharedContainerCollectionScheduler : IDisposable
 
     /// <summary>Runs one collection after acquiring capacity, and always returns that capacity.</summary>
     /// <typeparam name="TResult">The collection runner's result type.</typeparam>
-    /// <param name="runCollection">The asynchronous collection execution.</param>
-    /// <param name="cancellationToken">The runner's cancellation while waiting for capacity.</param>
+    /// <param name="runCollection">The asynchronous collection execution receiving the runner token.</param>
+    /// <param name="cancellationToken">The runner token while waiting for capacity and executing the callback.</param>
     /// <returns>The collection execution result.</returns>
     public async Task<TResult> RunAsync<TResult>(
-        Func<Task<TResult>> runCollection,
+        Func<CancellationToken, Task<TResult>> runCollection,
         CancellationToken cancellationToken
     )
     {
@@ -62,14 +62,14 @@ internal sealed class SharedContainerCollectionScheduler : IDisposable
 
         if (_semaphore is null)
         {
-            return await runCollection().ConfigureAwait(false);
+            return await runCollection(cancellationToken).ConfigureAwait(false);
         }
 
         await _semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
 
         try
         {
-            return await runCollection().ConfigureAwait(false);
+            return await runCollection(cancellationToken).ConfigureAwait(false);
         }
         finally
         {

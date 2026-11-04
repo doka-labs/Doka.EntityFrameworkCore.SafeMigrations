@@ -14,7 +14,7 @@ public sealed partial class SqlServerModelManagedDataCancellationTests
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var resource = "doka_identity_ready_" + Guid.NewGuid().ToString("N");
         var interceptor = new SqlServerIdentityInsertPauseInterceptor(resource);
         await using var owner = new SqlConnection(connectionString);
@@ -45,7 +45,7 @@ public sealed partial class SqlServerModelManagedDataCancellationTests
         var clrType = reader.GetFieldType(0);
         var scalar = reader.GetValue(0);
         await reader.CloseAsync();
-        var available = await interceptor.CanAcquireMarkerAsync(observer);
+        var available = await interceptor.CanAcquireMarkerAsync(observer, cancellationToken: CancellationToken.None);
         var observerLockMode = await observerLock.ExecuteScalarAsync();
 
         // Assert

@@ -21,7 +21,8 @@ public sealed partial class MySqlDiagnosticsIntegrationTests : MySqlSafeMigratio
             + "PRIMARY KEY (`id`), "
             + "CONSTRAINT `fk_diagnostic_dependent_principal` FOREIGN KEY (`principal_id`) "
             + "REFERENCES `diagnostic_principal` (`id`) ON UPDATE CASCADE ON DELETE CASCADE, "
-            + "INDEX `ix_diagnostic_dependent_values` (`second_value`(4), `first_value`));");
+            + "INDEX `ix_diagnostic_dependent_values` (`second_value`(4), `first_value`));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -103,7 +104,7 @@ public sealed partial class MySqlDiagnosticsIntegrationTests : MySqlSafeMigratio
             + "PRIMARY KEY (`id`), "
             + "CONSTRAINT `fk_long_diagnostic` FOREIGN KEY "
             + $"({reversedDependentKeys}) REFERENCES `long_diagnostic_principal` ({reversedPrincipalKeys}), "
-            + $"INDEX `ix_long_diagnostic` ({reversedDependentKeys}));");
+            + $"INDEX `ix_long_diagnostic` ({reversedDependentKeys}));", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -156,7 +157,8 @@ public sealed partial class MySqlDiagnosticsIntegrationTests : MySqlSafeMigratio
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `diagnostic_defaults` (`value` varchar(40) NULL DEFAULT '{liveDefault}');");
+            $"CREATE TABLE `diagnostic_defaults` (`value` varchar(40) NULL DEFAULT '{liveDefault}');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);

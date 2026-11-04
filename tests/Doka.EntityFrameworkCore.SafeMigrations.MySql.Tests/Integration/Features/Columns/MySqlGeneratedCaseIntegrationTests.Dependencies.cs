@@ -14,7 +14,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` "
             + "(`id` int NOT NULL PRIMARY KEY, `right_bound` bigint NOT NULL); "
-            + $"INSERT INTO `{Table}` VALUES (1, 3);");
+            + $"INSERT INTO `{Table}` VALUES (1, 3);", cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn(Table, new ExpectedColumnDefinition("left_bound", typeof(long), false, "bigint",
             defaultValue: sourceAccepted ? SafeMigrationDefaultValue.Literal(1L) : SafeMigrationDefaultValue.None),
@@ -26,11 +26,13 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             new SafeMigrationRunOptions("mixed-generated-source-bindings"), CancellationToken.None);
 
         var exception = sourceAccepted
-            ? await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations)) : null;
+            ? await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+                CancellationToken.None)) : null;
 
         var generated = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'has_descendants';");
+            + $"AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'has_descendants';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(sourceAccepted ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
@@ -51,7 +53,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` "
             + "(`id` int NOT NULL PRIMARY KEY, `left_bound` bigint NOT NULL, `right_bound` bigint NOT NULL); "
-            + $"INSERT INTO `{Table}` VALUES (1, 1, 3);");
+            + $"INSERT INTO `{Table}` VALUES (1, 1, 3);", cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn(Table, CaseColumn(stored: false), SafeMigrationPolicy.ThrowIfDifferent);
 
@@ -60,7 +62,8 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             new SafeMigrationRunOptions("generated-case-metadata-race"), CancellationToken.None);
 
         var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
-        await ExecuteSqlAsync(connectionString, $"ALTER TABLE `{Table}` MODIFY COLUMN `left_bound` bigint NULL;");
+        await ExecuteSqlAsync(connectionString, $"ALTER TABLE `{Table}` MODIFY COLUMN `left_bound` bigint NULL;",
+            cancellationToken: CancellationToken.None);
         var exception = await Record.ExceptionAsync(async () =>
         {
             foreach (var command in commands)
@@ -72,7 +75,8 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var generated = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'has_descendants';");
+            + $"AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'has_descendants';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -101,7 +105,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         else
         {
             await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY); "
-                + $"INSERT INTO `{Table}` VALUES (17);");
+                + $"INSERT INTO `{Table}` VALUES (17);", cancellationToken: CancellationToken.None);
             builder.EnsureColumn(Table, definition, SafeMigrationPolicy.ThrowIfDifferent);
         }
 
@@ -109,10 +113,13 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("missing-generated-case-condition"), CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
         var generated = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'has_descendants';");
+            + $"AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'has_descendants';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -133,7 +140,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` "
             + "(`id` int NOT NULL PRIMARY KEY, `nullable_condition` bigint NULL); "
-            + $"INSERT INTO `{Table}` VALUES (1, NULL), (2, 1), (3, 0);");
+            + $"INSERT INTO `{Table}` VALUES (1, NULL), (2, 1), (3, 0);", cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn(Table, LiteralResultCaseColumn("nullable_condition", booleanResults),
             SafeMigrationPolicy.ThrowIfDifferent);
@@ -144,13 +151,14 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var exception = await Record.ExceptionAsync(async () =>
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         });
 
         var rows = exception is null ? await ScalarIntAsync(connectionString,
             $"SELECT COUNT(*) FROM `{Table}` WHERE (id = 1 AND has_descendants = 0) "
-            + "OR (id = 2 AND has_descendants = 1) OR (id = 3 AND has_descendants = 0);") : -1;
+            + "OR (id = 2 AND has_descendants = 1) OR (id = 3 AND has_descendants = 0);",
+            cancellationToken: CancellationToken.None) : -1;
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -196,7 +204,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var tables = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{Table}';");
+            + $"AND TABLE_NAME = '{Table}';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -215,7 +223,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` "
             + "(`id` int NOT NULL PRIMARY KEY, `left_bound` bigint NULL, `right_bound` bigint NOT NULL); "
-            + $"INSERT INTO `{Table}` VALUES (1, 1, 3);");
+            + $"INSERT INTO `{Table}` VALUES (1, 1, 3);", cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn(Table, CaseColumn(stored: false), SafeMigrationPolicy.ThrowIfDifferent);
 
@@ -223,12 +231,17 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("nullable-generated-dependency"), CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
         var generated = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'has_descendants';");
+            + $"AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'has_descendants';",
+            cancellationToken: CancellationToken.None);
+
         var originalRows = await ScalarIntAsync(connectionString,
-            $"SELECT COUNT(*) FROM `{Table}` WHERE id = 1 AND left_bound = 1 AND right_bound = 3;");
+            $"SELECT COUNT(*) FROM `{Table}` WHERE id = 1 AND left_bound = 1 AND right_bound = 3;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -256,12 +269,13 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` "
-            + "(`id` int NOT NULL PRIMARY KEY, `left_bound` bigint NOT NULL, `right_bound` bigint NOT NULL);");
+            + "(`id` int NOT NULL PRIMARY KEY, `left_bound` bigint NOT NULL, `right_bound` bigint NOT NULL);",
+            cancellationToken: CancellationToken.None);
         if (matchingTarget)
         {
             var initial = new MigrationBuilder(context.Database.ProviderName!);
             initial.EnsureColumn(Table, CaseColumn(stored: false), SafeMigrationPolicy.ThrowIfDifferent);
-            await ExecuteOperationsAsync(context, initial.Operations);
+            await ExecuteOperationsAsync(context, initial.Operations, CancellationToken.None);
         }
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -321,7 +335,9 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("created-generated-owner"), CancellationToken.None);
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);

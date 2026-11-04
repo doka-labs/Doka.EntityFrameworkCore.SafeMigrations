@@ -5,7 +5,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     /// <inheritdoc />
     public async Task<SafeMigrationProviderEnvironment> GetEnvironmentAsync(
         DbContext context,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ValidateContext(context);

@@ -22,7 +22,7 @@ public sealed class SqlServerSafeMigrationProjectedFiltersIntegrationTests : Sql
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists("projected_filter_values", table => new
@@ -40,10 +40,11 @@ public sealed class SqlServerSafeMigrationProjectedFiltersIntegrationTests : Sql
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-projected-filter-value"));
+            new SafeMigrationRunOptions("sqlserver-projected-filter-value"), cancellationToken: CancellationToken.None);
 
         var tableCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.projected_filter_values');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.projected_filter_values');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(expected, report.Status);
@@ -58,7 +59,7 @@ public sealed class SqlServerSafeMigrationProjectedFiltersIntegrationTests : Sql
     public async Task ProjectedCharacterFilter_RejectsColumnSideConversion()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists("projected_filter_precedence", table => new
@@ -77,7 +78,8 @@ public sealed class SqlServerSafeMigrationProjectedFiltersIntegrationTests : Sql
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-projected-filter-precedence"));
+            new SafeMigrationRunOptions("sqlserver-projected-filter-precedence"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -90,7 +92,7 @@ public sealed class SqlServerSafeMigrationProjectedFiltersIntegrationTests : Sql
     public async Task ProjectedNumericFilter_ValidConstantCreatesThePhysicalIndex()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists("projected_filter_runtime", table => new
@@ -107,10 +109,10 @@ public sealed class SqlServerSafeMigrationProjectedFiltersIntegrationTests : Sql
             SafeMigrationPolicy.ThrowIfDifferent));
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var indexCount = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.projected_filter_runtime') "
-            + "AND name = N'IX_projected_filter_runtime_Code';");
+            + "AND name = N'IX_projected_filter_runtime_Code';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, indexCount);

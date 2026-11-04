@@ -16,7 +16,7 @@ public sealed class PostgreSqlIndexPrerequisiteInterningTests
         await using var connection = new CatalogStatementTestConnection(native, Results);
 
         // Act
-        var states = await ReadPrerequisitesAsync(context, connection, operations);
+        var states = await ReadPrerequisitesAsync(context, connection, operations, CancellationToken.None);
 
         // Assert
         Assert.Equal(2, connection.Submissions.Count);
@@ -205,7 +205,7 @@ public sealed class PostgreSqlIndexPrerequisiteInterningTests
         await using var connection = new CatalogStatementTestConnection(native, Results);
 
         // Act
-        var states = await ReadPrerequisitesAsync(context, connection, operations);
+        var states = await ReadPrerequisitesAsync(context, connection, operations, CancellationToken.None);
 
         // Assert
         Assert.Equal(20, connection.Submissions.Count);
@@ -246,7 +246,7 @@ public sealed class PostgreSqlIndexPrerequisiteInterningTests
         });
 
         // Act
-        var states = await ReadPrerequisitesAsync(context, connection, operations);
+        var states = await ReadPrerequisitesAsync(context, connection, operations, CancellationToken.None);
 
         // Assert
         var submission = Assert.Single(connection.Submissions);
@@ -298,7 +298,8 @@ public sealed class PostgreSqlIndexPrerequisiteInterningTests
         // Assert
         if (fault == "cancel")
         {
-            Assert.IsAssignableFrom<OperationCanceledException>(exception);
+            var canceled = Assert.IsAssignableFrom<OperationCanceledException>(exception);
+            Assert.Equal(cancellation.Token, canceled.CancellationToken);
         }
         else
         {
@@ -309,9 +310,14 @@ public sealed class PostgreSqlIndexPrerequisiteInterningTests
     }
 
     /// <summary>Captures actual prerequisite packets without constructing or modifying native index state.</summary>
+    /// <param name="context">The configured provider context supplying catalog services.</param>
+    /// <param name="connection">The deterministic catalog transport used by the probe.</param>
+    /// <param name="operations">The ordered operations whose prerequisites are classified.</param>
+    /// <param name="cancellationToken">The explicit token forwarded to the provider probe.</param>
+    /// <returns>The per-operation prerequisite states observed by the probe.</returns>
     internal static async Task<SafeMigrationObservedState?[]> ReadPrerequisitesAsync(SafeMigrationDbContext context,
         DbConnection connection, IReadOnlyList<SafeMigrationOperation> operations,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken)
     {
         var analyzer = new PostgreSqlSafeMigrationProviderAnalyzer(context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());

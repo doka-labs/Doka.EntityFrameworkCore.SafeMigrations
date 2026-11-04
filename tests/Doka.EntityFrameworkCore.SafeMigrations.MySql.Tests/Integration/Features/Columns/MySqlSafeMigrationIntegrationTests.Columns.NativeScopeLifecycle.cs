@@ -18,12 +18,14 @@ public sealed partial class MySqlColumnsNativeScopeLifecycleIntegrationTests : M
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, NativeScopeLifecycleFixtureSql);
+        await ExecuteSqlAsync(connectionString, NativeScopeLifecycleFixtureSql,
+            cancellationToken: CancellationToken.None);
         var observer = new NativeScopeLifecycleObserver();
         await using var context = CreateRuntimeContext(connectionString, observer);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await NativeScopeLifecycleSessionSqlAsync(context.Database.GetDbConnection(),
-            "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; SET @__doka_previous_sql_mode = NULL;");
+            "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; SET @__doka_previous_sql_mode = NULL;",
+            cancellationToken: CancellationToken.None);
         if (leaveStaleSnapshot)
         {
             // WHY: A real earlier native scope, not a fabricated variable assignment,
@@ -33,8 +35,10 @@ public sealed partial class MySqlColumnsNativeScopeLifecycleIntegrationTests : M
         }
 
         await NativeScopeLifecycleSessionSqlAsync(context.Database.GetDbConnection(),
-            "SET SESSION sql_mode = 'NO_ENGINE_SUBSTITUTION';");
-        var before = await ReadNativeScopeLifecycleSessionAsync(context.Database.GetDbConnection());
+            "SET SESSION sql_mode = 'NO_ENGINE_SUBSTITUTION';", cancellationToken: CancellationToken.None);
+        var before = await ReadNativeScopeLifecycleSessionAsync(context.Database.GetDbConnection(),
+            cancellationToken: CancellationToken.None);
+
         var operation = NativeScopeLifecycleOperation(rejectModeDomain: true);
 
         // Act
@@ -42,12 +46,17 @@ public sealed partial class MySqlColumnsNativeScopeLifecycleIntegrationTests : M
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
         var failedConnectionState = context.Database.GetDbConnection().State;
-        var after = await ReadNativeScopeLifecycleSessionAsync(context.Database.GetDbConnection());
+        // WHY: Readback verifies mandatory cleanup after caller cancellation, not a continuation of canceled DDL.
+        var after = await ReadNativeScopeLifecycleSessionAsync(context.Database.GetDbConnection(),
+            cancellationToken: CancellationToken.None);
+
         var targetColumns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'native_scope_items' AND COLUMN_NAME = 'rejected_value';");
+            + "AND TABLE_NAME = 'native_scope_items' AND COLUMN_NAME = 'rejected_value';",
+            cancellationToken: CancellationToken.None);
+
         var preservedRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `native_scope_items` WHERE `key` = 1;");
+            "SELECT COUNT(*) FROM `native_scope_items` WHERE `key` = 1;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(exception).Message,
@@ -83,14 +92,18 @@ public sealed partial class MySqlColumnsNativeScopeLifecycleIntegrationTests : M
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, NativeScopeLifecycleFixtureSql);
+        await ExecuteSqlAsync(connectionString, NativeScopeLifecycleFixtureSql,
+            cancellationToken: CancellationToken.None);
         using var cancellation = new CancellationTokenSource();
         var observer = new NativeScopeLifecycleObserver(faultPoint, failureMode, cancellation);
         await using var context = CreateRuntimeContext(connectionString, observer);
-        await context.Database.OpenConnectionAsync(CancellationToken.None);
+        await context.Database.OpenConnectionAsync(cancellation.Token);
         await NativeScopeLifecycleSessionSqlAsync(context.Database.GetDbConnection(),
-            "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; SET @__doka_previous_sql_mode = NULL;");
-        var before = await ReadNativeScopeLifecycleSessionAsync(context.Database.GetDbConnection());
+            "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; SET @__doka_previous_sql_mode = NULL;",
+            cancellationToken: cancellation.Token);
+        var before = await ReadNativeScopeLifecycleSessionAsync(context.Database.GetDbConnection(),
+            cancellationToken: cancellation.Token);
+
         var operation = NativeScopeLifecycleOperation(rejectModeDomain: false);
 
         // Act
@@ -98,12 +111,16 @@ public sealed partial class MySqlColumnsNativeScopeLifecycleIntegrationTests : M
             ExecuteOperationsAsync(context, [operation], cancellation.Token));
 
         var failedConnectionState = context.Database.GetDbConnection().State;
-        var after = await ReadNativeScopeLifecycleSessionAsync(context.Database.GetDbConnection());
+        var after = await ReadNativeScopeLifecycleSessionAsync(context.Database.GetDbConnection(),
+            cancellationToken: CancellationToken.None);
+
         var targetColumns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'native_scope_items' AND COLUMN_NAME = 'prior_value';");
+            + "AND TABLE_NAME = 'native_scope_items' AND COLUMN_NAME = 'prior_value';",
+            cancellationToken: CancellationToken.None);
+
         var preservedRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `native_scope_items` WHERE `key` = 1;");
+            "SELECT COUNT(*) FROM `native_scope_items` WHERE `key` = 1;", cancellationToken: CancellationToken.None);
 
         // Assert
         if (failureMode == "cancellation")
@@ -148,13 +165,17 @@ public sealed partial class MySqlColumnsNativeScopeLifecycleIntegrationTests : M
         }.ConnectionString;
         TrackOwnedPool(pooledConnectionString);
 
-        await ExecuteSqlAsync(pooledConnectionString, NativeScopeLifecycleFixtureSql);
+        await ExecuteSqlAsync(pooledConnectionString, NativeScopeLifecycleFixtureSql,
+            cancellationToken: CancellationToken.None);
         var observer = new NativeScopeLifecycleObserver(failRestore: true);
         await using var context = CreateRuntimeContext(pooledConnectionString, observer);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await NativeScopeLifecycleSessionSqlAsync(context.Database.GetDbConnection(),
-            "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; SET @__doka_previous_sql_mode = NULL;");
-        var before = await ReadNativeScopeLifecycleSessionAsync(context.Database.GetDbConnection());
+            "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; SET @__doka_previous_sql_mode = NULL;",
+            cancellationToken: CancellationToken.None);
+        var before = await ReadNativeScopeLifecycleSessionAsync(context.Database.GetDbConnection(),
+            cancellationToken: CancellationToken.None);
+
         var operation = NativeScopeLifecycleOperation(rejectModeDomain: false);
 
         // Act
@@ -166,13 +187,17 @@ public sealed partial class MySqlColumnsNativeScopeLifecycleIntegrationTests : M
         var failedConnectionState = context.Database.GetDbConnection().State;
         await using var replacement = new MySqlConnection(pooledConnectionString);
         await replacement.OpenAsync(CancellationToken.None);
-        var replacementSession = await ReadNativeScopeLifecycleSessionAsync(replacement);
+        var replacementSession = await ReadNativeScopeLifecycleSessionAsync(replacement,
+            cancellationToken: CancellationToken.None);
+
         var targetColumns = await ScalarIntAsync(pooledConnectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'native_scope_items' AND COLUMN_NAME = 'prior_value' "
-            + "AND COLUMN_COMMENT = " + AtomicRequiredAddLiteral(NativeScopeLifecycleComment) + ";");
+            + "AND COLUMN_COMMENT = " + AtomicRequiredAddLiteral(NativeScopeLifecycleComment) + ";",
+            cancellationToken: CancellationToken.None);
+
         var preservedRows = await ScalarIntAsync(pooledConnectionString,
-            "SELECT COUNT(*) FROM `native_scope_items` WHERE `key` = 1;");
+            "SELECT COUNT(*) FROM `native_scope_items` WHERE `key` = 1;", cancellationToken: CancellationToken.None);
 
         // Assert
         var cleanupException = Assert.IsType<InvalidOperationException>(exception, exactMatch: false);
@@ -231,20 +256,31 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     /// <summary>Executes test-owned session setup directly without reentering the EF interceptor.</summary>
     /// <param name="connection">The already open migration connection.</param>
     /// <param name="sql">The closed fixture or native fault statement.</param>
-    protected static async Task NativeScopeLifecycleSessionSqlAsync(DbConnection connection, string sql)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    protected static async Task NativeScopeLifecycleSessionSqlAsync(
+        DbConnection connection,
+        string sql,
+        CancellationToken cancellationToken
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
-        await command.ExecuteNonQueryAsync(CancellationToken.None);
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>Captures native state without opening or replacing a closed migration connection.</summary>
     /// <param name="connection">The connection whose existing session must be observed.</param>
     /// <returns>The original open-session evidence, or NULL when cleanup has already closed it.</returns>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     protected static async Task<NativeScopeLifecycleSession?> ReadNativeScopeLifecycleSessionAsync(
-        DbConnection connection
+        DbConnection connection,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (connection.State != ConnectionState.Open)
         {
             return null;
@@ -254,8 +290,8 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         command.CommandText = "SELECT @@SESSION.sql_mode, CONNECTION_ID(), @__doka_previous_sql_mode, "
             + "@doka_sm_provider_setup_entered IS NULL, @doka_sm_state IS NULL AND @doka_sm_action IS NULL;";
 
-        await using var reader = await command.ExecuteReaderAsync(CancellationToken.None);
-        if (!await reader.ReadAsync(CancellationToken.None))
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
         {
             throw new InvalidOperationException("The native lifecycle proof returned no row.");
         }
@@ -346,7 +382,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
                 FaultCheckpointObserved = Convert.ToInt32(
                     await checkpoint.ExecuteScalarAsync(CancellationToken.None), CultureInfo.InvariantCulture) == 1;
 
-                await InjectFaultAsync(connection);
+                await InjectFaultAsync(connection, cancellationToken: cancellationToken);
             }
 
             if (text.Contains("SET @doka_sm_post_ok", StringComparison.Ordinal))
@@ -380,7 +416,9 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             if (text.StartsWith(CapturePrefix, StringComparison.Ordinal))
             {
                 CompletedCaptures++;
-                var acquired = await ReadNativeScopeLifecycleSessionAsync(connection);
+                var acquired = await ReadNativeScopeLifecycleSessionAsync(connection,
+                    cancellationToken: cancellationToken);
+
                 AcquiredSqlMode = acquired?.SavedSqlMode;
             }
 
@@ -397,7 +435,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 
                     // WHY: The real snapshot and real mode mutation have both
                     // completed before interruption; cleanup must restore despite cancellation.
-                    await InjectFaultAsync(connection);
+                    await InjectFaultAsync(connection, cancellationToken: cancellationToken);
                 }
             }
 
@@ -408,7 +446,8 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 
             if (text.Contains("SET @doka_sm_state = NULL, @doka_sm_action = NULL", StringComparison.Ordinal))
             {
-                FinalCleanupSession = await ReadNativeScopeLifecycleSessionAsync(connection);
+                FinalCleanupSession = await ReadNativeScopeLifecycleSessionAsync(connection,
+                    cancellationToken: cancellationToken);
             }
 
             return result;
@@ -416,8 +455,11 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 
         /// <summary>Raises one native error or deterministic caller cancellation at the observed boundary.</summary>
         /// <param name="connection">The original already open native session.</param>
-        private async Task InjectFaultAsync(DbConnection connection)
+        /// <param name="cancellationToken">The caller's operation cancellation.</param>
+        private async Task InjectFaultAsync(DbConnection connection, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             FaultInjected = true;
             if (failureMode == "cancellation")
             {
@@ -429,7 +471,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             }
 
             await NativeScopeLifecycleSessionSqlAsync(connection,
-                "SELECT * FROM `native_scope_missing_fault_probe`;");
+                "SELECT * FROM `native_scope_missing_fault_probe`;", cancellationToken: cancellationToken);
         }
     }
 }

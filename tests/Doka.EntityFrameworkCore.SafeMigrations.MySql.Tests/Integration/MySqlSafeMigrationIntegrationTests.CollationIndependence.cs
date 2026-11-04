@@ -29,7 +29,7 @@ public sealed partial class MySqlCollationIndependenceIntegrationTests : MySqlSa
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `collation_guard` (`plain` int NOT NULL, "
-            + "`escaped` int NOT NULL COMMENT 'a\\\\b');");
+            + "`escaped` int NOT NULL COMMENT 'a\\\\b');", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);

@@ -210,10 +210,14 @@ public sealed class SqlServerTemporaryScopeCleanupTests
         var failures = new[]
         {
             Record.Exception(() => analyzer.ValidateContext(context)),
-            await Record.ExceptionAsync(() => analyzer.GetEnvironmentAsync(context)),
-            await Record.ExceptionAsync(() => analyzer.AnalyzeAsync(context, [])),
-            await Record.ExceptionAsync(() => analyzer.FindUnexpectedObjectsAsync(context, [])),
-            await Record.ExceptionAsync(() => analyzer.AcquireAnalysisScopeAsync(context)),
+            await Record.ExceptionAsync(() => analyzer.GetEnvironmentAsync(context,
+                cancellationToken: CancellationToken.None)),
+            await Record.ExceptionAsync(() => analyzer.AnalyzeAsync(context, [],
+                cancellationToken: CancellationToken.None)),
+            await Record.ExceptionAsync(() => analyzer.FindUnexpectedObjectsAsync(context, [],
+                cancellationToken: CancellationToken.None)),
+            await Record.ExceptionAsync(() => analyzer.AcquireAnalysisScopeAsync(context,
+                cancellationToken: CancellationToken.None)),
         };
 
         var replacementFailure = Record.Exception(() => replacement.ValidateContext(replacementContext));
@@ -270,7 +274,9 @@ public sealed class SqlServerTemporaryScopeCleanupTests
         // Act
         var observed = await Record.ExceptionAsync(async () =>
         {
-            await using var scope = await analyzer.AcquireAnalysisScopeAsync(context);
+            await using var scope = await analyzer.AcquireAnalysisScopeAsync(context,
+                cancellationToken: callerCancellation.Token);
+
             await analyzer.AnalyzeAsync(context, builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
                 callerCancellation.Token);
         });

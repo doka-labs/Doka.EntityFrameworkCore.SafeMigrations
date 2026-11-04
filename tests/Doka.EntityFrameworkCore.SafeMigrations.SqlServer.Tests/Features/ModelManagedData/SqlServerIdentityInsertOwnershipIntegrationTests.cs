@@ -19,7 +19,7 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString, TablesSql
             + "SET IDENTITY_INSERT dbo.identity_roles ON; "
             + "INSERT INTO dbo.identity_roles (Id, Caption) VALUES (7, N'Actual'); "
@@ -27,7 +27,7 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
             + "CREATE USER identity_reader WITHOUT LOGIN; "
             + "GRANT VIEW DEFINITION TO identity_reader; "
             + "GRANT SELECT, INSERT ON dbo.identity_roles TO identity_reader; "
-            + "DENY ALTER ON dbo.identity_roles TO identity_reader;");
+            + "DENY ALTER ON dbo.identity_roles TO identity_reader;", cancellationToken: CancellationToken.None);
         await using var session = new SqlConnection(connectionString);
         await session.OpenAsync();
         var originalConnectionId = session.ClientConnectionId;
@@ -35,24 +35,31 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
         var seed = CreateSeedCommand(context);
         var connection = context.GetService<IRelationalConnection>();
         await RunSessionSqlAsync(session, "SET IDENTITY_INSERT dbo.identity_roles ON; "
-            + (withoutAlterPermission ? "EXECUTE AS USER = N'identity_reader';" : string.Empty));
+            + (withoutAlterPermission ? "EXECUTE AS USER = N'identity_reader';" : string.Empty),
+            cancellationToken: CancellationToken.None);
 
         // Act
         var rejected = await Record.ExceptionAsync(() => seed.ExecuteNonQueryAsync(connection));
         var inheritedInsert = await Record.ExceptionAsync(() => RunSessionSqlAsync(session,
-            "INSERT INTO dbo.identity_roles (Id, Caption) VALUES (8, N'Caller-owned identity');"));
-        var ownershipReleased = await ReadMarkerIsNullAsync(session);
+            "INSERT INTO dbo.identity_roles (Id, Caption) VALUES (8, N'Caller-owned identity');",
+            cancellationToken: CancellationToken.None));
+
+        var ownershipReleased = await ReadMarkerIsNullAsync(session, cancellationToken: CancellationToken.None);
         var quarantine = Record.Exception(() =>
             context.GetService<IMigrationsSqlGenerator>().Generate([], context.Model));
 
         if (withoutAlterPermission)
         {
-            await RunSessionSqlAsync(session, "REVERT;");
+            await RunSessionSqlAsync(session, "REVERT;", cancellationToken: CancellationToken.None);
         }
 
         var otherOn = await Record.ExceptionAsync(() => RunSessionSqlAsync(session,
-            "SET IDENTITY_INSERT dbo.identity_probe ON;"));
-        await RunSessionSqlAsync(session, "SET IDENTITY_INSERT dbo.identity_roles OFF;");
+            "SET IDENTITY_INSERT dbo.identity_probe ON;", cancellationToken: CancellationToken.None));
+
+        await RunSessionSqlAsync(
+            session,
+            "SET IDENTITY_INSERT dbo.identity_roles OFF;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(51001, Assert.IsType<SqlException>(rejected).Number);
@@ -70,28 +77,34 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
     public async Task NativeOnPermissionFailure_DoesNotClaimInheritedIdentityOrQuarantine()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString, TablesSql
             + "CREATE USER identity_reader WITHOUT LOGIN; "
             + "GRANT VIEW DEFINITION TO identity_reader; "
             + "GRANT SELECT, INSERT ON dbo.identity_roles TO identity_reader; "
-            + "DENY ALTER ON dbo.identity_roles TO identity_reader;");
+            + "DENY ALTER ON dbo.identity_roles TO identity_reader;", cancellationToken: CancellationToken.None);
         await using var session = new SqlConnection(connectionString);
         await session.OpenAsync();
         await using var context = CreateRetainedContext(session);
         var seed = CreateSeedCommand(context);
         var connection = context.GetService<IRelationalConnection>();
         await RunSessionSqlAsync(session,
-            "SET IDENTITY_INSERT dbo.identity_roles ON; EXECUTE AS USER = N'identity_reader';");
+            "SET IDENTITY_INSERT dbo.identity_roles ON; EXECUTE AS USER = N'identity_reader';",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var rejected = await Record.ExceptionAsync(() => seed.ExecuteNonQueryAsync(connection));
         var inheritedInsert = await Record.ExceptionAsync(() => RunSessionSqlAsync(session,
-            "INSERT INTO dbo.identity_roles (Id, Caption) VALUES (8, N'Caller-owned identity');"));
-        var ownershipReleased = await ReadMarkerIsNullAsync(session);
+            "INSERT INTO dbo.identity_roles (Id, Caption) VALUES (8, N'Caller-owned identity');",
+            cancellationToken: CancellationToken.None));
+
+        var ownershipReleased = await ReadMarkerIsNullAsync(session, cancellationToken: CancellationToken.None);
         var quarantine = Record.Exception(() =>
             context.GetService<IMigrationsSqlGenerator>().Generate([], context.Model));
-        await RunSessionSqlAsync(session, "REVERT; SET IDENTITY_INSERT dbo.identity_roles OFF;");
+        await RunSessionSqlAsync(
+            session,
+            "REVERT; SET IDENTITY_INSERT dbo.identity_roles OFF;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var providerFailure = Assert.IsType<SqlException>(rejected);
@@ -109,8 +122,8 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
     public async Task AlreadyCanceledSeed_DoesNotClearNativeCallerState()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, TablesSql);
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, TablesSql, cancellationToken: CancellationToken.None);
         await using var session = new SqlConnection(connectionString);
         await session.OpenAsync();
         await using var context = CreateRetainedContext(session);
@@ -118,19 +131,25 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
         var connection = context.GetService<IRelationalConnection>();
         await RunSessionSqlAsync(session, "SET IDENTITY_INSERT dbo.identity_roles ON; "
             + $"EXEC sys.sp_set_session_context @key = N'{SqlServerSafeMigrationIdentityInsertScope.ContextKey}', "
-            + "@value = N'caller-owned marker', @read_only = 1;");
+            + "@value = N'caller-owned marker', @read_only = 1;", cancellationToken: CancellationToken.None);
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
 
         // Act
         var canceled = await Record.ExceptionAsync(() => seed.ExecuteNonQueryAsync(
             connection, cancellationToken: cancellation.Token));
+
         var inheritedInsert = await Record.ExceptionAsync(() => RunSessionSqlAsync(session,
-            "INSERT INTO dbo.identity_roles (Id, Caption) VALUES (8, N'Caller-owned identity');"));
+            "INSERT INTO dbo.identity_roles (Id, Caption) VALUES (8, N'Caller-owned identity');",
+            cancellationToken: CancellationToken.None));
+
         await using var observation = session.CreateCommand();
         observation.CommandText = $"SELECT SESSION_CONTEXT(N'{SqlServerSafeMigrationIdentityInsertScope.ContextKey}');";
         var marker = await observation.ExecuteScalarAsync();
-        await RunSessionSqlAsync(session, "SET IDENTITY_INSERT dbo.identity_roles OFF;");
+        await RunSessionSqlAsync(
+            session,
+            "SET IDENTITY_INSERT dbo.identity_roles OFF;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.IsAssignableFrom<OperationCanceledException>(canceled);
@@ -145,23 +164,30 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
     public async Task OtherTableAlreadyOn_FailedAcquisitionPreservesCallerState()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, TablesSql);
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, TablesSql, cancellationToken: CancellationToken.None);
         await using var session = new SqlConnection(connectionString);
         await session.OpenAsync();
         await using var context = CreateRetainedContext(session);
         var seed = CreateSeedCommand(context);
         var connection = context.GetService<IRelationalConnection>();
-        await RunSessionSqlAsync(session, "SET IDENTITY_INSERT dbo.identity_probe ON;");
+        await RunSessionSqlAsync(
+            session,
+            "SET IDENTITY_INSERT dbo.identity_probe ON;",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var rejected = await Record.ExceptionAsync(() => seed.ExecuteNonQueryAsync(connection));
         var inheritedInsert = await Record.ExceptionAsync(() => RunSessionSqlAsync(session,
-            "INSERT INTO dbo.identity_probe (Id) VALUES (8);"));
-        var markerReleased = await ReadMarkerIsNullAsync(session);
+            "INSERT INTO dbo.identity_probe (Id) VALUES (8);", cancellationToken: CancellationToken.None));
+
+        var markerReleased = await ReadMarkerIsNullAsync(session, cancellationToken: CancellationToken.None);
         var quarantine = Record.Exception(() =>
             context.GetService<IMigrationsSqlGenerator>().Generate([], context.Model));
-        await RunSessionSqlAsync(session, "SET IDENTITY_INSERT dbo.identity_probe OFF;");
+        await RunSessionSqlAsync(
+            session,
+            "SET IDENTITY_INSERT dbo.identity_probe OFF;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(8107, Assert.IsType<SqlException>(rejected).Number);
@@ -181,8 +207,8 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
     public async Task ExistingMarker_CannotAuthorizeOrBeClearedByNewInvocation(bool readOnly)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, TablesSql);
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, TablesSql, cancellationToken: CancellationToken.None);
         await using var session = new SqlConnection(connectionString);
         await session.OpenAsync();
         await using var context = CreateRetainedContext(session);
@@ -190,18 +216,24 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
         var connection = context.GetService<IRelationalConnection>();
         await RunSessionSqlAsync(session, "SET IDENTITY_INSERT dbo.identity_roles ON; "
             + $"EXEC sys.sp_set_session_context @key = N'{SqlServerSafeMigrationIdentityInsertScope.ContextKey}', "
-            + "@value = N'caller-owned marker', @read_only = " + (readOnly ? "1;" : "0;"));
+            + "@value = N'caller-owned marker', @read_only = " + (readOnly ? "1;" : "0;"),
+            cancellationToken: CancellationToken.None);
 
         // Act
         var rejected = await Record.ExceptionAsync(() => seed.ExecuteNonQueryAsync(connection));
         var inheritedInsert = await Record.ExceptionAsync(() => RunSessionSqlAsync(session,
-            "INSERT INTO dbo.identity_roles (Id, Caption) VALUES (8, N'Caller-owned identity');"));
+            "INSERT INTO dbo.identity_roles (Id, Caption) VALUES (8, N'Caller-owned identity');",
+            cancellationToken: CancellationToken.None));
+
         await using var observation = session.CreateCommand();
         observation.CommandText = $"SELECT SESSION_CONTEXT(N'{SqlServerSafeMigrationIdentityInsertScope.ContextKey}');";
         var marker = await observation.ExecuteScalarAsync();
         var quarantine = Record.Exception(() =>
             context.GetService<IMigrationsSqlGenerator>().Generate([], context.Model));
-        await RunSessionSqlAsync(session, "SET IDENTITY_INSERT dbo.identity_roles OFF;");
+        await RunSessionSqlAsync(
+            session,
+            "SET IDENTITY_INSERT dbo.identity_roles OFF;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(51007, Assert.IsType<SqlException>(rejected).Number);
@@ -219,8 +251,8 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
     public async Task SameCommand_ReplayReleasesOwnershipAndPreservesLaterCallerOn()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, TablesSql);
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, TablesSql, cancellationToken: CancellationToken.None);
         await using var session = new SqlConnection(connectionString);
         await session.OpenAsync();
         await using var context = CreateRetainedContext(session);
@@ -229,13 +261,21 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
 
         // Act
         await seed.ExecuteNonQueryAsync(connection);
-        var firstReleased = await ReadMarkerIsNullAsync(session);
-        await RunSessionSqlAsync(session, "SET IDENTITY_INSERT dbo.identity_roles ON;");
+        var firstReleased = await ReadMarkerIsNullAsync(session, cancellationToken: CancellationToken.None);
+        await RunSessionSqlAsync(
+            session,
+            "SET IDENTITY_INSERT dbo.identity_roles ON;",
+            cancellationToken: CancellationToken.None);
         await seed.ExecuteNonQueryAsync(connection);
-        var replayReleased = await ReadMarkerIsNullAsync(session);
+        var replayReleased = await ReadMarkerIsNullAsync(session, cancellationToken: CancellationToken.None);
         var inheritedInsert = await Record.ExceptionAsync(() => RunSessionSqlAsync(session,
-            "INSERT INTO dbo.identity_roles (Id, Caption) VALUES (8, N'Caller-owned identity');"));
-        await RunSessionSqlAsync(session, "SET IDENTITY_INSERT dbo.identity_roles OFF;");
+            "INSERT INTO dbo.identity_roles (Id, Caption) VALUES (8, N'Caller-owned identity');",
+            cancellationToken: CancellationToken.None));
+
+        await RunSessionSqlAsync(
+            session,
+            "SET IDENTITY_INSERT dbo.identity_roles OFF;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.True(firstReleased);
@@ -258,28 +298,34 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
     {
         // Arrange
         const string markerHex = "000123456789ABCDEF0123456789ABCDEF";
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString, TablesSql + (matching
             ? "SET IDENTITY_INSERT dbo.identity_roles ON; "
                 + "INSERT INTO dbo.identity_roles (Id, Caption) VALUES (7, N'Expected'); "
                 + "SET IDENTITY_INSERT dbo.identity_roles OFF;"
-            : string.Empty));
+            : string.Empty), cancellationToken: CancellationToken.None);
         await using var session = new SqlConnection(connectionString);
         await session.OpenAsync();
         await using var context = CreateRetainedContext(session);
         var script = CreateSeedScript(context);
         await RunSessionSqlAsync(session, "SET IDENTITY_INSERT dbo.identity_roles ON; "
             + $"EXEC sys.sp_set_session_context @key = N'{SqlServerSafeMigrationIdentityInsertScope.ContextKey}', "
-            + "@value = 0x" + markerHex + ", @read_only = " + (readOnly ? "1;" : "0;"));
+            + "@value = 0x" + markerHex + ", @read_only = " + (readOnly ? "1;" : "0;"),
+            cancellationToken: CancellationToken.None);
 
         // Act
         var execution = await Record.ExceptionAsync(() => context.Database.ExecuteSqlRawAsync(script));
         var inheritedInsert = await Record.ExceptionAsync(() => RunSessionSqlAsync(session,
-            "INSERT INTO dbo.identity_roles (Id, Caption) VALUES (8, N'Caller-owned identity');"));
+            "INSERT INTO dbo.identity_roles (Id, Caption) VALUES (8, N'Caller-owned identity');",
+            cancellationToken: CancellationToken.None));
+
         await using var observation = session.CreateCommand();
         observation.CommandText = $"SELECT SESSION_CONTEXT(N'{SqlServerSafeMigrationIdentityInsertScope.ContextKey}');";
         var marker = await observation.ExecuteScalarAsync();
-        await RunSessionSqlAsync(session, "SET IDENTITY_INSERT dbo.identity_roles OFF;");
+        await RunSessionSqlAsync(
+            session,
+            "SET IDENTITY_INSERT dbo.identity_roles OFF;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         if (matching)
@@ -301,8 +347,8 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
     public async Task FreshScript_AppliesAndReplaysWithNoRetainedMarker()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, TablesSql);
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, TablesSql, cancellationToken: CancellationToken.None);
         await using var session = new SqlConnection(connectionString);
         await session.OpenAsync();
         await using var context = CreateRetainedContext(session);
@@ -311,11 +357,13 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
         // Act
         await context.Database.ExecuteSqlRawAsync(script);
         await context.Database.ExecuteSqlRawAsync(script);
-        var markerReleased = await ReadMarkerIsNullAsync(session);
+        var markerReleased = await ReadMarkerIsNullAsync(session, cancellationToken: CancellationToken.None);
         await RunSessionSqlAsync(session, "SET IDENTITY_INSERT dbo.identity_probe ON; "
-            + "INSERT INTO dbo.identity_probe (Id) VALUES (8); SET IDENTITY_INSERT dbo.identity_probe OFF;");
+            + "INSERT INTO dbo.identity_probe (Id) VALUES (8); SET IDENTITY_INSERT dbo.identity_probe OFF;",
+            cancellationToken: CancellationToken.None);
         var count = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.identity_roles WHERE Id = 7 AND Caption = N'Expected';");
+            "SELECT COUNT(*) FROM dbo.identity_roles WHERE Id = 7 AND Caption = N'Expected';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.True(markerReleased);
@@ -330,8 +378,8 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
     public async Task AttentionInAcquisitionGap_QuarantinesInsteadOfGuessingIdentityOwnership()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, TablesSql);
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, TablesSql, cancellationToken: CancellationToken.None);
         await using var session = new SqlConnection(connectionString);
         await session.OpenAsync();
         var originalConnectionId = session.ClientConnectionId;
@@ -359,7 +407,9 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
             context.GetService<IMigrationsSqlGenerator>().Generate([], context.Model));
         await using var newLease = new SqlConnection(connectionString);
         await newLease.OpenAsync();
-        var newLeaseMarkerIsNull = await ReadMarkerIsNullAsync(newLease);
+        // WHY: The readiness deadline belongs to the earlier admission phase and may expire during attention.
+        // Recovery observation must remain independent of both that deadline and the canceled execution token.
+        var newLeaseMarkerIsNull = await ReadMarkerIsNullAsync(newLease, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.NotNull(attention);
@@ -409,22 +459,28 @@ public sealed class SqlServerIdentityInsertOwnershipIntegrationTests : SqlServer
     }
 
     /// <summary>Executes a caller-state probe directly so provider recovery cannot hide the assertion.</summary>
-    private static async Task RunSessionSqlAsync(SqlConnection session, string sql)
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
+    private static async Task RunSessionSqlAsync(SqlConnection session, string sql, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var command = session.CreateCommand();
         command.CommandText = sql;
 
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync(cancellationToken: cancellationToken);
     }
 
     /// <summary>Reads only the ownership marker, without modifying it or testing unrelated session settings.</summary>
-    private static async Task<bool> ReadMarkerIsNullAsync(SqlConnection session)
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
+    private static async Task<bool> ReadMarkerIsNullAsync(SqlConnection session, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var command = session.CreateCommand();
         command.CommandText = "SELECT CASE WHEN SESSION_CONTEXT("
             + $"N'{SqlServerSafeMigrationIdentityInsertScope.ContextKey}') "
             + "IS NULL THEN 1 ELSE 0 END;";
 
-        return (int)(await command.ExecuteScalarAsync())! == 1;
+        return (int)(await command.ExecuteScalarAsync(cancellationToken: cancellationToken))! == 1;
     }
 }

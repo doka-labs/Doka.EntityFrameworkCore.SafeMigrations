@@ -34,10 +34,10 @@ public sealed class SqlServerTestLocalCleanupTests
 
         var owner = new DatabaseOwner(fixture);
         var peer = new DatabaseOwner(fixture);
-        await owner.CreateAsync();
-        await owner.CreateAsync();
-        await owner.CreateAsync();
-        await peer.CreateAsync();
+        await owner.CreateAsync(cancellationToken: CancellationToken.None);
+        await owner.CreateAsync(cancellationToken: CancellationToken.None);
+        await owner.CreateAsync(cancellationToken: CancellationToken.None);
+        await peer.CreateAsync(cancellationToken: CancellationToken.None);
         failures.Add(created[0], firstFailure);
         failures.Add(created[2], lastFailure);
 
@@ -83,8 +83,8 @@ public sealed class SqlServerTestLocalCleanupTests
         }, () => Task.CompletedTask);
 
         var owner = new DatabaseOwner(fixture);
-        await owner.CreateAsync();
-        await owner.CreateAsync();
+        await owner.CreateAsync(cancellationToken: CancellationToken.None);
+        await owner.CreateAsync(cancellationToken: CancellationToken.None);
 
         // Act
         var observed = await Record.ExceptionAsync(owner.DisposeAsync);
@@ -126,8 +126,8 @@ public sealed class SqlServerTestLocalCleanupTests
         }, () => Task.CompletedTask);
 
         var owner = new DatabaseOwner(fixture);
-        await owner.CreateAsync();
-        await owner.CreateAsync();
+        await owner.CreateAsync(cancellationToken: CancellationToken.None);
+        await owner.CreateAsync(cancellationToken: CancellationToken.None);
 
         // Act
         var observed = await Record.ExceptionAsync(owner.DisposeAsync);
@@ -163,13 +163,13 @@ public sealed class SqlServerTestLocalCleanupTests
 
         var owner = new DatabaseOwner(fixture);
         var peer = new DatabaseOwner(fixture);
-        await owner.CreateAsync();
-        await peer.CreateAsync();
+        await owner.CreateAsync(cancellationToken: CancellationToken.None);
+        await peer.CreateAsync(cancellationToken: CancellationToken.None);
 
         // Act
         await owner.DisposeAsync();
         await owner.DisposeAsync();
-        await peer.CreateAsync();
+        await peer.CreateAsync(cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(3, created.Count);
@@ -194,7 +194,7 @@ public sealed class SqlServerTestLocalCleanupTests
 
         var owner = new DatabaseOwner(fixture);
         var peer = new DatabaseOwner(fixture);
-        await peer.CreateAsync();
+        await peer.CreateAsync(cancellationToken: CancellationToken.None);
 
         // Act
         await owner.DisposeAsync();
@@ -207,7 +207,10 @@ public sealed class SqlServerTestLocalCleanupTests
     private sealed class DatabaseOwner(SqlServerContainerFixture fixture) : SqlServerIntegrationTestBase(fixture)
     {
         /// <summary>Creates a database lease through the same path used by live test classes.</summary>
+        /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
         /// <returns>The unpooled connection string owned by this test instance.</returns>
-        public Task<string> CreateAsync() => CreateDatabaseAsync();
+        public Task<string> CreateAsync(
+            CancellationToken cancellationToken) => CreateDatabaseAsync(
+            cancellationToken: cancellationToken);
     }
 }

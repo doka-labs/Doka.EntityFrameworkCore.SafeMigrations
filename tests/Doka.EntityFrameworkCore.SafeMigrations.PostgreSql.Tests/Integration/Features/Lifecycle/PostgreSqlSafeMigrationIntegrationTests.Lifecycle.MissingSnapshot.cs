@@ -54,9 +54,10 @@ public sealed class PostgreSqlLifecycleMissingSnapshotIntegrationTests : Postgre
             System.Data.ConnectionState.Closed,
             context.Database.GetDbConnection()
                 .State);
-        Assert.Equal(0, await ScalarIntAsync(connectionString, SnapshotFreeCatalogCountSql));
+        Assert.Equal(0, await ScalarIntAsync(connectionString, SnapshotFreeCatalogCountSql,
+            cancellationToken: CancellationToken.None));
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // The SQL helper opens the raw connection, outside EF's connection-ownership counter.
         await context
@@ -78,7 +79,8 @@ public sealed class PostgreSqlLifecycleMissingSnapshotIntegrationTests : Postgre
             System.Data.ConnectionState.Closed,
             context.Database.GetDbConnection()
                 .State);
-        Assert.Equal(1, await ScalarIntAsync(connectionString, SnapshotFreeCatalogCountSql));
+        Assert.Equal(1, await ScalarIntAsync(connectionString, SnapshotFreeCatalogCountSql,
+            cancellationToken: CancellationToken.None));
     }
 
     [Theory]
@@ -126,7 +128,8 @@ public sealed class PostgreSqlLifecycleMissingSnapshotIntegrationTests : Postgre
         Assert.Equal(actual, exception.ActualFingerprint);
         Assert.Equal(0, connectionTransitions);
         Assert.Equal(System.Data.ConnectionState.Closed, connection.State);
-        Assert.Equal(0, await ScalarIntAsync(connectionString, SnapshotFreeCatalogCountSql));
+        Assert.Equal(0, await ScalarIntAsync(connectionString, SnapshotFreeCatalogCountSql,
+            cancellationToken: CancellationToken.None));
     }
 
     private static SnapshotFreeContext CreateSnapshotFreeContext(

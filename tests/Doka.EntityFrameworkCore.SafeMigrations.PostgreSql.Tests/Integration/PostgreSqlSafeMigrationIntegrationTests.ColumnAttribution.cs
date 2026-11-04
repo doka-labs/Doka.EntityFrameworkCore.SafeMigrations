@@ -52,7 +52,8 @@ public sealed class PostgreSqlColumnAttributionIntegrationTests : PostgreSqlSafe
                 {
                     var table = $"attribution_{count}_{mixed}_{drift}";
                     var columns = AttributionColumns(count, mixed);
-                    await ExecuteSqlAsync(connectionString, AttributionSetupSql(table, columns, drift));
+                    await ExecuteSqlAsync(connectionString, AttributionSetupSql(table, columns, drift),
+                        cancellationToken: CancellationToken.None);
                     var tableOperation = new SafeMigrationOperation(new EnsureTableIntent(
                         new ExpectedTableDefinition(table, columns), SafeMigrationTableMode.StrictDefinition),
                         SafeMigrationPolicy.ThrowIfDifferent);
@@ -170,15 +171,16 @@ public sealed class PostgreSqlColumnAttributionIntegrationTests : PostgreSqlSafe
                         RuntimeSamples = runtimeSamples,
                         ExplainJson = explanation,
                     });
-                    await ExecuteOperationsAsync(context, repairs);
-                    await ExecuteOperationsAsync(context, repairs);
+                    await ExecuteOperationsAsync(context, repairs, CancellationToken.None);
+                    await ExecuteOperationsAsync(context, repairs, CancellationToken.None);
                     var replay = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
                         context, repairs.Cast<SafeMigrationOperation>().ToArray(), CancellationToken.None);
 
                     convergedStates.AddRange(replay.Select(result => result.ObservedState));
                     preservedRows.Add(await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM "
                         + PostgreSqlIdentifier(table) + " WHERE " + string.Join(" AND ",
-                            columns.Select(column => PostgreSqlIdentifier(column.Name) + " = 'preserved'")) + ";"));
+                            columns.Select(column => PostgreSqlIdentifier(column.Name) + " = 'preserved'")) + ";",
+                        cancellationToken: CancellationToken.None));
                 }
             }
         }

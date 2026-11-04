@@ -257,15 +257,22 @@ internal static class ModelManagedDataLargeExecutionEvidence
         WriteIndented = true,
     };
 
+    /// <summary>Measures one asynchronous action while retaining its result and caller cancellation.</summary>
+    /// <typeparam name="T">The action's functional result.</typeparam>
+    /// <param name="action">The measured operation receiving the caller token.</param>
+    /// <param name="cancellationToken">The caller token, checked before measurement and passed unchanged.</param>
+    /// <returns>The functional result and informational measurement.</returns>
     public static async Task<ModelManagedDataMeasuredResult<T>> MeasureAsync<T>(
-        Func<Task<T>> action
+        Func<CancellationToken, Task<T>> action,
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(action);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
         var started = Stopwatch.GetTimestamp();
-        var result = await action();
+        var result = await action(cancellationToken);
         var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         var allocated = GC.GetTotalAllocatedBytes(precise: true) - allocatedBefore;
 
@@ -274,15 +281,21 @@ internal static class ModelManagedDataLargeExecutionEvidence
             new ModelManagedDataPhaseMeasurement(elapsed, allocated));
     }
 
+    /// <summary>Measures one asynchronous operation without making its duration a correctness gate.</summary>
+    /// <param name="action">The measured operation receiving the caller token.</param>
+    /// <param name="cancellationToken">The caller token, checked before measurement and passed unchanged.</param>
+    /// <returns>The informational phase measurement.</returns>
     public static async Task<ModelManagedDataPhaseMeasurement> MeasureAsync(
-        Func<Task> action
+        Func<CancellationToken, Task> action,
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(action);
+        cancellationToken.ThrowIfCancellationRequested();
 
         var allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
         var started = Stopwatch.GetTimestamp();
-        await action();
+        await action(cancellationToken);
 
         return new ModelManagedDataPhaseMeasurement(
             Stopwatch.GetElapsedTime(started).TotalMilliseconds,

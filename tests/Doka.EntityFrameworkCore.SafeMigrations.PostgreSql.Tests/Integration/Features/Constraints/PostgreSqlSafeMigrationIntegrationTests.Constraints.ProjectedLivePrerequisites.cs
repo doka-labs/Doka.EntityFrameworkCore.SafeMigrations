@@ -24,7 +24,7 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); "
-            + "INSERT INTO live_child VALUES (1), (2);");
+            + "INSERT INTO live_child VALUES (1), (2);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -50,7 +50,7 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
             new SafeMigrationRunOptions("sparse-live-fk-replay"), CancellationToken.None);
 
         var nullRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM live_child WHERE parent_id IS NULL;");
+            "SELECT COUNT(*) FROM live_child WHERE parent_id IS NULL;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -84,7 +84,7 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, parentSql
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); "
-            + "INSERT INTO live_child VALUES (1), (2);");
+            + "INSERT INTO live_child VALUES (1), (2);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -99,7 +99,7 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
 
         var createdColumns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'live_child'::regclass "
-            + "AND attname = 'parent_id' AND NOT attisdropped;");
+            + "AND attname = 'parent_id' AND NOT attisdropped;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -117,7 +117,7 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); "
-            + "INSERT INTO live_child VALUES (1), (2);");
+            + "INSERT INTO live_child VALUES (1), (2);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -147,7 +147,7 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE mixed_columns (id integer NOT NULL PRIMARY KEY); "
-            + "INSERT INTO mixed_columns VALUES (1), (2);");
+            + "INSERT INTO mixed_columns VALUES (1), (2);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -160,10 +160,11 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
             new SafeMigrationRunOptions("sparse-live-index"), CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var indexCount = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_index WHERE indrelid = 'mixed_columns'::regclass "
-            + "AND indexrelid = 'ix_mixed_columns'::regclass AND indisvalid;");
+            + "AND indexrelid = 'ix_mixed_columns'::regclass AND indisvalid;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -180,7 +181,7 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); "
-            + "INSERT INTO live_child VALUES (1), (2);");
+            + "INSERT INTO live_child VALUES (1), (2);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -194,18 +195,20 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
             new SafeMigrationRunOptions("sparse-live-fk-runtime-write"), CancellationToken.None);
 
         preflight.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, [builder.Operations[0]]);
+        await ExecuteOperationsAsync(context, [builder.Operations[0]], CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "UPDATE live_child SET parent_id = '00000000-0000-0000-0000-000000000000' WHERE id = 1;");
+            "UPDATE live_child SET parent_id = '00000000-0000-0000-0000-000000000000' WHERE id = 1;",
+            cancellationToken: CancellationToken.None);
 
         var exception = await Assert.ThrowsAsync<PostgresException>(
-            () => ExecuteOperationsAsync(context, [builder.Operations[1]]));
+            () => ExecuteOperationsAsync(context, [builder.Operations[1]], CancellationToken.None));
 
         var foreignKeys = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE conrelid = 'live_child'::regclass "
-            + "AND conname = 'fk_live_child_parent';");
+            + "AND conname = 'fk_live_child_parent';", cancellationToken: CancellationToken.None);
 
-        var retainedRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM live_child;");
+        var retainedRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM live_child;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -225,7 +228,8 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);");
+            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var childSchema = qualifyChild ? "public" : null;
@@ -242,7 +246,7 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
             new SafeMigrationRunOptions("sparse-live-fk-schema"), CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -259,7 +263,8 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (id integer NOT NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (id integer NOT NULL);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -286,10 +291,10 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
             new SafeMigrationRunOptions("sparse-live-empty-key"), CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var constraints = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE conrelid = 'mixed_columns'::regclass "
-            + "AND conname IN ('pk_mixed', 'uq_mixed', 'ck_mixed');");
+            + "AND conname IN ('pk_mixed', 'uq_mixed', 'ck_mixed');", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -305,7 +310,7 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE mixed_columns (id integer NOT NULL PRIMARY KEY); "
-            + "INSERT INTO mixed_columns VALUES (1), (2);");
+            + "INSERT INTO mixed_columns VALUES (1), (2);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -338,7 +343,8 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE live_parent (id uuid NOT NULL, CONSTRAINT pk_native PRIMARY KEY (id)); "
             + (survivingAlias ? "CREATE UNIQUE INDEX ux_surviving ON live_parent (id); " : "")
-            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);");
+            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -355,7 +361,7 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
         if (survivingAlias)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         // Assert
@@ -377,7 +383,8 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE live_parent (id text COLLATE \"C\" NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);");
+            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -394,7 +401,7 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
         if (compatible)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         // Assert
@@ -413,7 +420,7 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
             "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY, old_parent_id uuid NULL, "
             + "CONSTRAINT fk_live_child_parent FOREIGN KEY (old_parent_id) REFERENCES live_parent (id)); "
-            + "INSERT INTO live_child VALUES (1, NULL), (2, NULL);");
+            + "INSERT INTO live_child VALUES (1, NULL), (2, NULL);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -430,14 +437,15 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
             new SafeMigrationRunOptions("sparse-live-fk-owned-replacement"), CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var postflight = await runner.VerifyAsync(context, builder.Operations,
             new SafeMigrationRunOptions("sparse-live-fk-owned-replacement-final"), CancellationToken.None);
 
         var endpoint = await ScalarStringAsync(connectionString,
             "SELECT a.attname FROM pg_catalog.pg_constraint co JOIN pg_catalog.pg_attribute a "
             + "ON a.attrelid = co.conrelid AND a.attnum = co.conkey[1] "
-            + "WHERE co.conrelid = 'live_child'::regclass AND co.conname = 'fk_live_child_parent';");
+            + "WHERE co.conrelid = 'live_child'::regclass AND co.conname = 'fk_live_child_parent';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -456,7 +464,8 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
             "CREATE COLLATION nd_parent (provider = icu, locale = 'und-u-ks-level2', deterministic = false); "
             + "CREATE COLLATION nd_child (provider = icu, locale = 'und-u-ks-level2', deterministic = false); "
             + "CREATE TABLE live_parent (id text COLLATE nd_parent NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);");
+            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -499,14 +508,15 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1); "
-            + "CREATE TABLE unrelated_owner (old_member integer NULL);");
+            + "CREATE TABLE unrelated_owner (old_member integer NULL);", cancellationToken: CancellationToken.None);
 
         if (callbacks)
         {
             await ExecuteSqlAsync(connectionString,
                 "CREATE FUNCTION fk_rename_callback() RETURNS event_trigger LANGUAGE plpgsql "
                 + "AS $$ BEGIN PERFORM 1; END $$; CREATE EVENT TRIGGER fk_rename_callback "
-                + "ON ddl_command_end EXECUTE FUNCTION fk_rename_callback();");
+                + "ON ddl_command_end EXECUTE FUNCTION fk_rename_callback();",
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -526,7 +536,7 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
         SafeMigrationRunReport? verified = null;
         if (report.Status == SafeMigrationReportStatus.Ready)
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
             verified = await runner.VerifyAsync(context, builder.Operations,
                 new SafeMigrationRunOptions("sparse-live-fk-unrelated-rename-final"), CancellationToken.None);
         }
@@ -558,11 +568,11 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
             Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
             Assert.All(postflight.Assessments, static item => Assert.True(item.PostconditionSatisfied));
             Assert.Equal(1, await ScalarIntAsync(connectionString,
-                "SELECT COUNT(*) FROM live_child WHERE parent_id IS NULL;"));
+                "SELECT COUNT(*) FROM live_child WHERE parent_id IS NULL;", cancellationToken: CancellationToken.None));
 
             Assert.Equal(1, await ScalarIntAsync(connectionString,
                 "SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE conrelid='live_child'::regclass "
-                + "AND conname='fk_live_child_parent' AND contype='f';"));
+                + "AND conname='fk_live_child_parent' AND contype='f';", cancellationToken: CancellationToken.None));
         }
     }
 
@@ -574,7 +584,8 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE live_parent (id bigint NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);");
+            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -587,7 +598,7 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
             new SafeMigrationRunOptions("sparse-live-fk-integer-family"), CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -600,7 +611,8 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -620,7 +632,7 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
             new SafeMigrationRunOptions("sparse-new-child"), CancellationToken.None);
 
         preflight.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var postflight = await runner.VerifyAsync(context, builder.Operations,
             new SafeMigrationRunOptions("sparse-new-child-final"), CancellationToken.None);
 
@@ -641,7 +653,8 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (id text NOT NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (id text NOT NULL);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -657,9 +670,9 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("sparse-mixed-check-invalid-type"), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, [builder.Operations[0]]);
+        await ExecuteOperationsAsync(context, [builder.Operations[0]], CancellationToken.None);
         var exception = await Assert.ThrowsAsync<PostgresException>(
-            () => ExecuteOperationsAsync(context, [builder.Operations[1]]));
+            () => ExecuteOperationsAsync(context, [builder.Operations[1]], CancellationToken.None));
 
         // Assert
         Assert.Equal("42883", exception.SqlState);

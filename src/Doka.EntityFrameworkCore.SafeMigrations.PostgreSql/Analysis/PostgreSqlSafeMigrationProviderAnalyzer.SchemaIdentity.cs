@@ -135,7 +135,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         DbContext context,
         IReadOnlyList<MigrationOperation> operations,
         IReadOnlyList<IModel?>? targetModels,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(context);

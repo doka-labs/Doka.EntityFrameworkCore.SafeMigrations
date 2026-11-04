@@ -59,12 +59,16 @@ public abstract partial class MySqlSafeMigrationIntegrationTests : MySqlIntegrat
     }
 
     /// <summary>Requires the owned guard wrapper on the asynchronous provider execution path.</summary>
-    /// <param name="action">The generated safe migration command to execute.</param>
+    /// <param name="action">The generated safe migration command receiving the caller's cancellation.</param>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     protected static async Task<MySqlException> AssertOwnedGuardFailureAsync(
-        Func<Task> action
+        Func<CancellationToken, Task> action,
+        CancellationToken cancellationToken
     )
     {
-        var exception = await Assert.ThrowsAsync<SafeMigrationExecutionException>(action);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var exception = await Assert.ThrowsAsync<SafeMigrationExecutionException>(() => action(cancellationToken));
 
         return AssertOwnedGuardFailure(exception);
     }

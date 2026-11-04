@@ -147,6 +147,28 @@ and before returns except in tiny return-only blocks. Follow `.editorconfig`
 without running `dotnet format whitespace`; use the verify-only style/import
 checks below.
 
+Require explicit `CancellationToken` arguments on ordinary repository-owned
+asynchronous methods and interfaces, including test helpers and doubles.
+Own asynchronous action delegates must receive the same token. Forward an
+available operation token instead of substituting `CancellationToken.None`;
+select `None` explicitly at roots that deliberately have no cancellation source.
+Do not add tokenless overloads. Audit actual EF/ADO.NET overrides and
+external-interface contracts
+separately and retain their framework-owned signatures. Recovery cleanup beyond
+the cancellation boundary must not inherit an already-canceled operation token.
+Keep the shared cancellation contract tests and public API baselines aligned.
+Deliberately uninterruptible cleanup/recovery helpers are an audited exception:
+leave them tokenless where required, and never cancel only their waiter while
+they still own resources. Framework-controlled xUnit and BenchmarkDotNet entry
+points retain their signatures; only the adapter chooses an explicit root token.
+Neither a familiar method name nor an unused parameter establishes compliance.
+
+Local functions within the same operation may capture its existing token or
+token source instead of accepting a redundant parameter. Token-aware callbacks
+still receive their invocation's token, and independent operations retain
+explicit arguments. Captured scope availability does not by itself prove
+correct propagation; cancellation behavior must remain covered by tests.
+
 Keep synchronous lifecycle tests synchronous when that is the behavior under
 test. If an IDE inspection suggests replacing that intentional path, use only a
 documented, single-use test-local inspection annotation such as

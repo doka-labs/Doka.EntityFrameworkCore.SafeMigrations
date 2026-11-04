@@ -134,7 +134,7 @@ public sealed class PostgreSqlTestParallelismTests
             typeof(PostgreSqlTestParallelismTests), skipReason: null);
 
         // Act
-        await lifecycle.InitializeAsync(required);
+        await lifecycle.InitializeAsync(required, cancellationToken: CancellationToken.None);
         await lifecycle.DisposeAsync();
 
         // Assert

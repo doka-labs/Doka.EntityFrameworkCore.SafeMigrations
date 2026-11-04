@@ -8,6 +8,7 @@ global using System.Runtime.InteropServices;
 global using System.Security.Cryptography;
 global using System.Text;
 global using System.Text.Json;
+global using System.Threading;
 global using Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 global using Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks;
 global using Microsoft.Data.SqlClient;

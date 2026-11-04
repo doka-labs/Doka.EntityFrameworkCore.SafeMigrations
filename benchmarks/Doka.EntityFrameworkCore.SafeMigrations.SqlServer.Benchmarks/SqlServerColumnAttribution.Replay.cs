@@ -14,7 +14,7 @@ public partial class SqlServerColumnAttribution
     )
     {
         var before = Snapshot(connection, scenario);
-        var analyses = analyzer.AnalyzeAsync(context, operations).GetAwaiter().GetResult();
+        var analyses = analyzer.AnalyzeAsync(context, operations, CancellationToken.None).GetAwaiter().GetResult();
         if (analyses.Count != 1
             || analyses[0].ObservedState != SafeMigrationObservedState.Different
             || analyses[0].RepairCapability != SafeMigrationRepairCapability.Safe)
@@ -30,7 +30,9 @@ public partial class SqlServerColumnAttribution
             throw new InvalidOperationException("The initial safe repair changed fixture row data.");
         }
 
-        ValidateAnalyses(analyzer.AnalyzeAsync(context, operations).GetAwaiter().GetResult(), scenario);
+        ValidateAnalyses(
+            analyzer.AnalyzeAsync(context, operations, CancellationToken.None).GetAwaiter().GetResult(),
+            scenario);
         var fingerprints = new
         {
             Before = before,

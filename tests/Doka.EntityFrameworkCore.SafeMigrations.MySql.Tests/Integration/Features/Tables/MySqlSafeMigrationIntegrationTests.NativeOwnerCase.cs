@@ -34,7 +34,7 @@ public sealed partial class MySqlNativeOwnerCaseIntegrationTests : MySqlSafeMigr
             var connectionString = await dedicated.CreateDatabaseAsync(CancellationToken.None);
             await ExecuteSqlAsync(connectionString,
                 "CREATE TABLE `mixed_owner` (`id` int NOT NULL PRIMARY KEY, `value` int NULL, "
-                + "UNIQUE KEY `uq_slot` (`value`)) ENGINE=InnoDB;");
+                + "UNIQUE KEY `uq_slot` (`value`)) ENGINE=InnoDB;", cancellationToken: CancellationToken.None);
 
             await using var context = new SafeMigrationDbContext(connectionString, dedicated.ServerVersion);
             var operations = NativeMixedOwnerContract(context, kind, mixedOwner);
@@ -66,7 +66,8 @@ public sealed partial class MySqlNativeOwnerCaseIntegrationTests : MySqlSafeMigr
                 Assert.Null(failure);
                 Assert.Equal(1, await ScalarIntAsync(connectionString,
                     "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA=DATABASE() "
-                    + "AND TABLE_NAME='mixed_owner' AND INDEX_NAME='uq_slot';"));
+                    + "AND TABLE_NAME='mixed_owner' AND INDEX_NAME='uq_slot';",
+                    cancellationToken: CancellationToken.None));
             }
 
         }
@@ -89,7 +90,7 @@ public sealed partial class MySqlNativeOwnerCaseIntegrationTests : MySqlSafeMigr
             "CREATE TABLE `Mixed_Owner` (`id` int NOT NULL PRIMARY KEY, `value` int NULL, "
             + "UNIQUE KEY `uq_unmodeled` (`value`)) ENGINE=InnoDB; "
             + "CREATE TABLE `MIXED_OWNER` (`id` int NOT NULL PRIMARY KEY, `value` int NULL, "
-            + "UNIQUE KEY `uq_slot` (`value`)) ENGINE=InnoDB;");
+            + "UNIQUE KEY `uq_slot` (`value`)) ENGINE=InnoDB;", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operations = NativeMixedOwnerContract(context, kind);
@@ -109,7 +110,8 @@ public sealed partial class MySqlNativeOwnerCaseIntegrationTests : MySqlSafeMigr
             StringComparison.Ordinal);
         Assert.Equal(2, await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() "
-            + "AND BINARY TABLE_NAME IN (BINARY 'Mixed_Owner', BINARY 'MIXED_OWNER');"));
+            + "AND BINARY TABLE_NAME IN (BINARY 'Mixed_Owner', BINARY 'MIXED_OWNER');",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>A future unique declaration forbids a lossy default backfill across native owner spelling.</summary>
@@ -133,7 +135,8 @@ public sealed partial class MySqlNativeOwnerCaseIntegrationTests : MySqlSafeMigr
             var connectionString = await dedicated.CreateDatabaseAsync(CancellationToken.None);
             await ExecuteSqlAsync(connectionString,
                 "CREATE TABLE `backfill_owner` (`id` int NOT NULL PRIMARY KEY, `value` varchar(10) NULL) "
-                + "ENGINE=InnoDB; INSERT INTO `backfill_owner` VALUES (1,NULL),(2,NULL);");
+                + "ENGINE=InnoDB; INSERT INTO `backfill_owner` VALUES (1,NULL),(2,NULL);",
+                cancellationToken: CancellationToken.None);
 
             await using var context = new SafeMigrationDbContext(connectionString, dedicated.ServerVersion);
             var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -160,7 +163,8 @@ public sealed partial class MySqlNativeOwnerCaseIntegrationTests : MySqlSafeMigr
                     CancellationToken.None));
 
             var nullRows = await ScalarIntAsync(connectionString,
-                "SELECT COUNT(*) FROM `backfill_owner` WHERE `value` IS NULL;");
+                "SELECT COUNT(*) FROM `backfill_owner` WHERE `value` IS NULL;",
+                cancellationToken: CancellationToken.None);
 
             // Assert
             Assert.Equal(2, nullRows);
@@ -238,7 +242,8 @@ public sealed partial class MySqlNativeOwnerCaseIntegrationTests : MySqlSafeMigr
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE `Rows` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;");
+            "CREATE TABLE `Rows` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -262,11 +267,11 @@ public sealed partial class MySqlNativeOwnerCaseIntegrationTests : MySqlSafeMigr
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var requested = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() "
-            + "AND BINARY TABLE_NAME=BINARY 'rows';");
+            + "AND BINARY TABLE_NAME=BINARY 'rows';", cancellationToken: CancellationToken.None);
 
         var originalColumn = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() "
-            + "AND BINARY TABLE_NAME=BINARY 'Rows' AND COLUMN_NAME='id';");
+            + "AND BINARY TABLE_NAME=BINARY 'Rows' AND COLUMN_NAME='id';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -287,7 +292,8 @@ public sealed partial class MySqlNativeOwnerCaseIntegrationTests : MySqlSafeMigr
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `backfill_owner` (`id` int NOT NULL PRIMARY KEY, `value` varchar(10) NULL) "
             + "ENGINE=InnoDB; INSERT INTO `backfill_owner` VALUES (1,NULL),(2,NULL); "
-            + "CREATE TABLE `BACKFILL_OWNER` (`id` int NOT NULL PRIMARY KEY, `value` varchar(20) NULL) ENGINE=InnoDB;");
+            + "CREATE TABLE `BACKFILL_OWNER` (`id` int NOT NULL PRIMARY KEY, `value` varchar(20) NULL) ENGINE=InnoDB;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -302,11 +308,12 @@ public sealed partial class MySqlNativeOwnerCaseIntegrationTests : MySqlSafeMigr
         // Act
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var replacedRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `backfill_owner` WHERE `value`='x';");
+            "SELECT COUNT(*) FROM `backfill_owner` WHERE `value`='x';", cancellationToken: CancellationToken.None);
 
         var nativeIndex = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA=DATABASE() "
-            + "AND BINARY TABLE_NAME=BINARY 'BACKFILL_OWNER' AND INDEX_NAME='uq_future';");
+            + "AND BINARY TABLE_NAME=BINARY 'BACKFILL_OWNER' AND INDEX_NAME='uq_future';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(2, replacedRows);
@@ -344,7 +351,8 @@ public sealed partial class MySqlNativeOwnerCaseIntegrationTests : MySqlSafeMigr
                 CancellationToken.None));
 
             var tables = await ScalarIntAsync(connectionString,
-                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE();");
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE();",
+                cancellationToken: CancellationToken.None);
 
             // Assert
             if (fold)
@@ -359,7 +367,8 @@ public sealed partial class MySqlNativeOwnerCaseIntegrationTests : MySqlSafeMigr
                 Assert.Equal(2, tables);
                 Assert.Equal(0, await ScalarIntAsync(connectionString,
                     "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() "
-                    + "AND BINARY TABLE_NAME=BINARY 'rows' AND COLUMN_NAME='value';"));
+                    + "AND BINARY TABLE_NAME=BINARY 'rows' AND COLUMN_NAME='value';",
+                    cancellationToken: CancellationToken.None));
             }
 
         }

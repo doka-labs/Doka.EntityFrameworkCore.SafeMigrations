@@ -28,14 +28,15 @@ public sealed class SqliteIndexDropColumnTransitionIntegrationTests : SqliteInte
     public async Task AcceptedIndexDropPreservesSupportedTransitionAndReplay(string transition, bool indexExists)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         var sourceNullable = transition == "nullability";
         await ExecuteSqlAsync(connection,
             "CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER "
             + (sourceNullable ? "NULL" : "NOT NULL")
             + ", CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); "
             + "INSERT INTO lossless_alter_records VALUES (1, -2147483648), (2, 2147483647);"
-            + (indexExists ? " CREATE INDEX ix_upgrade_value ON lossless_alter_records (Value);" : string.Empty));
+            + (indexExists ? " CREATE INDEX ix_upgrade_value ON lossless_alter_records (Value);" : string.Empty),
+            cancellationToken: CancellationToken.None);
 
         await using DbContext context = transition == "default"
             ? new SqliteDefaultAlterTestContext(connection, _internalServices)
@@ -53,30 +54,36 @@ public sealed class SqliteIndexDropColumnTransitionIntegrationTests : SqliteInte
 
         // Act
         var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlite-index-drop-column-upgrade"));
+            new SafeMigrationRunOptions("sqlite-index-drop-column-upgrade"), cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var replay = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlite-index-drop-column-replay"));
+            new SafeMigrationRunOptions("sqlite-index-drop-column-replay"), cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var verified = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlite-index-drop-column-postflight"));
+            new SafeMigrationRunOptions("sqlite-index-drop-column-postflight"),
+            cancellationToken: CancellationToken.None);
 
         var retained = await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM lossless_alter_records WHERE (Id=1 AND Value=-2147483648) "
-            + "OR (Id=2 AND Value=2147483647);");
+            + "OR (Id=2 AND Value=2147483647);", cancellationToken: CancellationToken.None);
 
         var indexes = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM sqlite_schema WHERE type='index' AND name='ix_upgrade_value';");
+            "SELECT COUNT(*) FROM sqlite_schema WHERE type='index' AND name='ix_upgrade_value';",
+            cancellationToken: CancellationToken.None);
 
         if (transition == "default")
         {
-            await ExecuteSqlAsync(connection, "INSERT INTO lossless_alter_records (Id) VALUES (3);");
+            await ExecuteSqlAsync(
+                connection,
+                "INSERT INTO lossless_alter_records (Id) VALUES (3);",
+                cancellationToken: CancellationToken.None);
         }
 
         var futureDefault = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM lossless_alter_records WHERE Id=3 AND Value=7;");
+            "SELECT COUNT(*) FROM lossless_alter_records WHERE Id=3 AND Value=7;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -103,7 +110,7 @@ public sealed class SqliteIndexDropColumnTransitionIntegrationTests : SqliteInte
     public async Task IndexDropDoesNotEraseInvalidSourceOrRebuildBoundaries(string control)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER NULL, "
             + "CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); "
@@ -112,7 +119,7 @@ public sealed class SqliteIndexDropColumnTransitionIntegrationTests : SqliteInte
             + "CREATE INDEX ix_upgrade_value ON lossless_alter_records (Value);"
             + (control == "unmanaged-trigger"
                 ? " CREATE TRIGGER caller_trigger AFTER UPDATE ON lossless_alter_records BEGIN SELECT 1; END;"
-                : string.Empty));
+                : string.Empty), cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteLosslessAlterTestContext<long>(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -127,16 +134,20 @@ public sealed class SqliteIndexDropColumnTransitionIntegrationTests : SqliteInte
 
         // Act
         var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlite-index-drop-invalid-upgrade"));
+            new SafeMigrationRunOptions("sqlite-index-drop-invalid-upgrade"),
+            cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var retained = await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM lossless_alter_records WHERE Id=1 AND "
-            + (control == "null-row" ? "Value IS NULL;" : "Value=9007199254740993;"));
+            + (control == "null-row" ? "Value IS NULL;" : "Value=9007199254740993;"),
+            cancellationToken: CancellationToken.None);
 
         var source = await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('lossless_alter_records') "
-            + "WHERE name='Value' AND type='INTEGER' AND \"notnull\"=0;");
+            + "WHERE name='Value' AND type='INTEGER' AND \"notnull\"=0;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -151,11 +162,11 @@ public sealed class SqliteIndexDropColumnTransitionIntegrationTests : SqliteInte
     public async Task ConstraintBackedIndexDropCannotAuthorizeColumnProofReuse()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER NOT NULL UNIQUE, "
             + "CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); "
-            + "INSERT INTO lossless_alter_records VALUES (1, 2147483647);");
+            + "INSERT INTO lossless_alter_records VALUES (1, 2147483647);", cancellationToken: CancellationToken.None);
         await using var context = new SqliteLosslessAlterTestContext<long>(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropIndexIfExists("sqlite_autoindex_lossless_alter_records_1", "lossless_alter_records");
@@ -165,14 +176,19 @@ public sealed class SqliteIndexDropColumnTransitionIntegrationTests : SqliteInte
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlite-index-drop-constraint-boundary"));
+            new SafeMigrationRunOptions("sqlite-index-drop-constraint-boundary"),
+            cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var retained = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM lossless_alter_records WHERE Id=1 AND Value=2147483647;");
+            "SELECT COUNT(*) FROM lossless_alter_records WHERE Id=1 AND Value=2147483647;",
+            cancellationToken: CancellationToken.None);
 
         var constraint = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM pragma_index_list('lossless_alter_records') WHERE origin='u';");
+            "SELECT COUNT(*) FROM pragma_index_list('lossless_alter_records') WHERE origin='u';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -187,12 +203,13 @@ public sealed class SqliteIndexDropColumnTransitionIntegrationTests : SqliteInte
     public async Task OpaqueSqlAfterIndexDropCannotReviveStaleNullabilityProof()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER NULL, "
             + "CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); "
             + "INSERT INTO lossless_alter_records VALUES (1, 2147483647); "
-            + "CREATE INDEX ix_upgrade_value ON lossless_alter_records (Value);");
+            + "CREATE INDEX ix_upgrade_value ON lossless_alter_records (Value);",
+            cancellationToken: CancellationToken.None);
         await using var context = new SqliteLosslessAlterTestContext<long>(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropIndexIfExists("ix_upgrade_value", "lossless_alter_records");
@@ -203,15 +220,19 @@ public sealed class SqliteIndexDropColumnTransitionIntegrationTests : SqliteInte
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlite-index-drop-opaque-boundary"));
+            new SafeMigrationRunOptions("sqlite-index-drop-opaque-boundary"),
+            cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var retained = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM lossless_alter_records WHERE Id=1 AND Value IS NULL;");
+            "SELECT COUNT(*) FROM lossless_alter_records WHERE Id=1 AND Value IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         var nullable = await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('lossless_alter_records') "
-            + "WHERE name='Value' AND \"notnull\"=0;");
+            + "WHERE name='Value' AND \"notnull\"=0;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
@@ -235,10 +256,11 @@ public sealed class SqliteIndexDropColumnTransitionIntegrationTests : SqliteInte
     public async Task IndexDropCertificateRequiresCapturedStandaloneIdentity(string control, bool expected)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER NOT NULL UNIQUE); "
-            + "CREATE INDEX ix_upgrade_value ON lossless_alter_records (Value);");
+            + "CREATE INDEX ix_upgrade_value ON lossless_alter_records (Value);",
+            cancellationToken: CancellationToken.None);
         await using var context = new SqliteLosslessAlterTestContext<long>(connection, _internalServices);
         var analyzer = (SqliteSafeMigrationProviderAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
         var initial = new SafeMigrationOperation(new DropIndexIntent("ix_upgrade_value", "lossless_alter_records"),
@@ -246,7 +268,7 @@ public sealed class SqliteIndexDropColumnTransitionIntegrationTests : SqliteInte
 
         if (control != "uncaptured")
         {
-            await analyzer.AnalyzeAsync(context, [initial]);
+            await analyzer.AnalyzeAsync(context, [initial], CancellationToken.None);
         }
 
         var intent = new DropIndexIntent(control switch

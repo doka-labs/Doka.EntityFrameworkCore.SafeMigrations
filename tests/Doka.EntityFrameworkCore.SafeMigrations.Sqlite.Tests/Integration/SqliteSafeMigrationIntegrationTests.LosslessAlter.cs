@@ -20,11 +20,12 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
     public async Task IntegerToRealRepairDoesNotRoundPersistedValues()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER NOT NULL, "
             + "CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); "
-            + "INSERT INTO lossless_alter_records VALUES (1, 9007199254740993);");
+            + "INSERT INTO lossless_alter_records VALUES (1, 9007199254740993);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteLosslessAlterTestContext<double>(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -36,15 +37,18 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-lossless-integer-real"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-lossless-integer-real"),
+            cancellationToken: CancellationToken.None);
 
-        var executionError = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var executionError = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT printf('%lld', Value) FROM lossless_alter_records WHERE Id = 1;";
         var persistedValue = await command.ExecuteScalarAsync(CancellationToken.None);
         var originalColumn = await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('lossless_alter_records') "
-            + "WHERE name = 'Value' AND type = 'INTEGER';");
+            + "WHERE name = 'Value' AND type = 'INTEGER';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal("9007199254740993", persistedValue);
@@ -75,11 +79,11 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
         string valueSql)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             $"CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value {sourceStoreType} NOT NULL, "
             + "CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); "
-            + $"INSERT INTO lossless_alter_records VALUES (1, {valueSql});");
+            + $"INSERT INTO lossless_alter_records VALUES (1, {valueSql});", cancellationToken: CancellationToken.None);
 
         await using DbContext context = targetClrType == typeof(long)
             ? new SqliteLosslessAlterTestContext<long>(connection, _internalServices)
@@ -100,9 +104,12 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-lossless-affinity"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-lossless-affinity"),
+            cancellationToken: CancellationToken.None);
 
-        var executionError = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var executionError = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var persistedValue = await command.ExecuteScalarAsync(CancellationToken.None);
 
         // Assert
@@ -123,12 +130,13 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
     public async Task SameShapeNullabilityRepairsPreserveInt64Boundaries(bool targetNullable, long value)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER "
             + (targetNullable ? "NOT NULL" : "NULL")
             + ", CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); "
-            + $"INSERT INTO lossless_alter_records VALUES (1, {value.ToString(CultureInfo.InvariantCulture)});");
+            + $"INSERT INTO lossless_alter_records VALUES (1, {value.ToString(CultureInfo.InvariantCulture)});",
+            cancellationToken: CancellationToken.None);
 
         await using DbContext context = targetNullable
             ? new SqliteLosslessAlterTestContext<long?>(connection, _internalServices)
@@ -143,14 +151,16 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-lossless-nullability"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-lossless-nullability"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT Value FROM lossless_alter_records WHERE Id = 1;";
         var persistedValue = await command.ExecuteScalarAsync(CancellationToken.None);
         var postflight = await context.GetService<ISafeMigrationRunner>().VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-lossless-nullability-postflight"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-lossless-nullability-postflight"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Repair, report.Assessments[0].Action);
@@ -168,12 +178,13 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
     public async Task MissingSourceOrRowProofRetainsRowsAndSchema(string sourceCondition)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER NULL, "
             + "CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); "
             + "INSERT INTO lossless_alter_records VALUES (1, "
-            + (sourceCondition == "null-value" ? "NULL" : "9007199254740993") + ");");
+            + (sourceCondition == "null-value" ? "NULL" : "9007199254740993") + ");",
+            cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteLosslessAlterTestContext<long>(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -186,14 +197,20 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-lossless-source-proof"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-lossless-source-proof"),
+            cancellationToken: CancellationToken.None);
 
-        var executionError = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var executionError = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var nullableColumn = await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('lossless_alter_records') "
-            + "WHERE name = 'Value' AND \"notnull\" = 0;");
+            + "WHERE name = 'Value' AND \"notnull\" = 0;", cancellationToken: CancellationToken.None);
 
-        var retainedRows = await ScalarIntAsync(connection, "SELECT COUNT(*) FROM lossless_alter_records;");
+        var retainedRows = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM lossless_alter_records;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(sourceCondition == "null-value" ? SafeMigrationAction.RejectDataBlocked
@@ -212,11 +229,12 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
     public async Task SameShapeDefaultRepairPreservesRowsAndReplays(long value)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER NOT NULL, "
             + "CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); "
-            + $"INSERT INTO lossless_alter_records VALUES (1, {value.ToString(CultureInfo.InvariantCulture)});");
+            + $"INSERT INTO lossless_alter_records VALUES (1, {value.ToString(CultureInfo.InvariantCulture)});",
+            cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteDefaultAlterTestContext(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -229,19 +247,25 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-lossless-default"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-lossless-default"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-lossless-default-replay"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-lossless-default-replay"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteSqlAsync(connection, "INSERT INTO lossless_alter_records (Id) VALUES (2);");
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "INSERT INTO lossless_alter_records (Id) VALUES (2);",
+            cancellationToken: CancellationToken.None);
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT Value FROM lossless_alter_records WHERE Id = 1;";
         var persistedValue = await command.ExecuteScalarAsync(CancellationToken.None);
         var defaultRows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM lossless_alter_records WHERE Id = 2 AND Value = 7;");
+            "SELECT COUNT(*) FROM lossless_alter_records WHERE Id = 2 AND Value = 7;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Repair, report.Assessments[0].Action);
@@ -258,13 +282,14 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
     public async Task ProjectedGenerationChangesDoNotAuthorizeRepairs(bool tableExists)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         if (tableExists)
         {
             await ExecuteSqlAsync(connection,
                 "CREATE TABLE lossless_alter_records (Id INTEGER NOT NULL, Value INTEGER NOT NULL, "
                 + "CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); "
-                + "INSERT INTO lossless_alter_records VALUES (1, 9007199254740993);");
+                + "INSERT INTO lossless_alter_records VALUES (1, 9007199254740993);",
+                cancellationToken: CancellationToken.None);
         }
 
         var ddlCounter = new SqliteLosslessAlterDdlCounter();
@@ -296,15 +321,19 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-lossless-projected-generation"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-lossless-projected-generation"),
+            cancellationToken: CancellationToken.None);
 
-        var executionError = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var executionError = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var tableCount = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'lossless_alter_records' AND type = 'table';");
+            "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'lossless_alter_records' AND type = 'table';",
+            cancellationToken: CancellationToken.None);
 
         var autoincrementTables = await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'lossless_alter_records' "
-            + "AND instr(sql, 'AUTOINCREMENT') > 0;");
+            + "AND instr(sql, 'AUTOINCREMENT') > 0;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(true, modelGeneration);
@@ -324,7 +353,7 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
     public async Task BaselineDdlCounterObservesAcceptedTableCreation()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         var ddlCounter = new SqliteLosslessAlterDdlCounter();
         await using var context = new SqliteAutoincrementAlterTestContext(connection, _internalServices, ddlCounter);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -338,10 +367,10 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
             constraints: table => table.PrimaryKey("pk_lossless_alter_records", value => value.Id));
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var createdTable = await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'lossless_alter_records' "
-            + "AND instr(sql, 'AUTOINCREMENT') > 0;");
+            + "AND instr(sql, 'AUTOINCREMENT') > 0;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.True(ddlCounter.Count > 0);
@@ -361,7 +390,7 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
     public async Task GeneratedChangesDoNotAuthorizeDirectRepairs(string change, bool stored)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         var sourceGenerated = change != "add";
         var targetGenerated = change != "remove";
         await ExecuteSqlAsync(connection,
@@ -370,7 +399,8 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
             + ", CONSTRAINT pk_lossless_alter_records PRIMARY KEY (Id)); "
             + (sourceGenerated
                 ? "INSERT INTO lossless_alter_records (Id) VALUES (1);"
-                : "INSERT INTO lossless_alter_records VALUES (1, 9007199254740993);"));
+                : "INSERT INTO lossless_alter_records VALUES (1, 9007199254740993);"),
+            cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteLosslessAlterTestContext<long>(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -390,9 +420,12 @@ public sealed class SqliteSafeMigrationLosslessAlterIntegrationTests : SqliteInt
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-lossless-generated-change"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-lossless-generated-change"),
+            cancellationToken: CancellationToken.None);
 
-        var executionError = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var executionError = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var retainedSchema = await command.ExecuteScalarAsync(CancellationToken.None);
         command.CommandText = "SELECT Value FROM lossless_alter_records WHERE Id = 1;";
         var persistedValue = await command.ExecuteScalarAsync(CancellationToken.None);

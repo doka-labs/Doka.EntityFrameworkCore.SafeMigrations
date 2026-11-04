@@ -19,7 +19,8 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE `required_default_items` (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;");
+            "CREATE TABLE `required_default_items` (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var storeType = useSetStorage ? "set('first','second')" : "enum('first','second')";
         var operation = new SafeMigrationOperation(
@@ -44,8 +45,10 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'required_default_items' AND COLUMN_NAME = 'value' "
             + "AND IS_NULLABLE = 'NO' AND COLUMN_DEFAULT IS NULL AND LOWER(COLUMN_TYPE) = "
-            + AtomicRequiredAddLiteral(storeType) + ";");
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `required_default_items`;");
+            + AtomicRequiredAddLiteral(storeType) + ";", cancellationToken: CancellationToken.None);
+
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `required_default_items`;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, Assert.Single(preflight.Assessments).Action);
@@ -88,7 +91,8 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `required_default_items` (`key` int NOT NULL PRIMARY KEY, `value` char(36) NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `required_default_items` VALUES (1, '00000000-0000-0000-0000-000000000001');");
+            + "INSERT INTO `required_default_items` VALUES (1, '00000000-0000-0000-0000-000000000001');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -117,10 +121,12 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
 
         var required = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'required_default_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';");
+            + "AND TABLE_NAME = 'required_default_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';",
+            cancellationToken: CancellationToken.None);
+
         var preserved = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM `required_default_items` WHERE `key` = 1 "
-            + "AND `value` = '00000000-0000-0000-0000-000000000001';");
+            + "AND `value` = '00000000-0000-0000-0000-000000000001';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(Fixture.IsMariaDb ? SafeMigrationAction.RejectUnsupported : SafeMigrationAction.Repair,
@@ -174,12 +180,14 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `required_default_items` (`key` int NOT NULL PRIMARY KEY, `value` timestamp(6) NULL) "
             + "ENGINE=InnoDB; INSERT INTO `required_default_items` VALUES (1, "
-            + (approvedDefault && !ensure ? "NULL" : "'2000-01-02 03:04:05'") + ");");
+            + (approvedDefault && !ensure ? "NULL" : "'2000-01-02 03:04:05'") + ");",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; "
-            + "SET SESSION explicit_defaults_for_timestamp = " + (explicitDefaults ? "ON" : "OFF") + ";");
+            + "SET SESSION explicit_defaults_for_timestamp = " + (explicitDefaults ? "ON" : "OFF") + ";",
+            cancellationToken: CancellationToken.None);
         var operation = RequiredDefaultsTimestampOperation(ensure, approvedDefault);
         var originalFingerprint = SafeMigrationContractFingerprint.Create([operation]);
 
@@ -192,11 +200,14 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
 
         var required = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'required_default_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';");
+            + "AND TABLE_NAME = 'required_default_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';",
+            cancellationToken: CancellationToken.None);
+
         var preserved = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM `required_default_items` WHERE `key` = 1 AND `value` "
             + (approvedDefault && !ensure && !explicitDefaults ? "IS NULL" : "= '"
-                + (approvedDefault && !ensure ? "2001-01-02 03:04:05" : "2000-01-02 03:04:05") + "'") + ";");
+                + (approvedDefault && !ensure ? "2001-01-02 03:04:05" : "2000-01-02 03:04:05") + "'") + ";",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(explicitDefaults ? SafeMigrationAction.Repair : SafeMigrationAction.RejectDifferent,
@@ -242,7 +253,7 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
             + "CREATE TABLE `required_default_items` (`key` int NOT NULL PRIMARY KEY, `value` timestamp(6) NOT NULL"
             + (approvedDefault ? " DEFAULT '2001-01-02 03:04:05'" : "") + ") ENGINE=InnoDB; "
             + "INSERT INTO `required_default_items` VALUES (1, '2000-01-02 03:04:05'); "
-            + "SET SESSION explicit_defaults_for_timestamp = OFF;");
+            + "SET SESSION explicit_defaults_for_timestamp = OFF;", cancellationToken: CancellationToken.None);
         var operation = RequiredDefaultsTimestampOperation(ensure, approvedDefault);
 
         // Act
@@ -251,7 +262,8 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
 
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
         var preserved = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `required_default_items` WHERE `key` = 1 AND `value` = '2000-01-02 03:04:05';");
+            "SELECT COUNT(*) FROM `required_default_items` WHERE `key` = 1 AND `value` = '2000-01-02 03:04:05';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(report.Assessments).Action);
@@ -278,7 +290,8 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; "
-            + "SET SESSION explicit_defaults_for_timestamp = " + (explicitDefaults ? "ON" : "OFF") + ";");
+            + "SET SESSION explicit_defaults_for_timestamp = " + (explicitDefaults ? "ON" : "OFF") + ";",
+            cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(
             new ExpectedTableDefinition("required_default_items",
@@ -297,8 +310,11 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
 
         var required = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'required_default_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';");
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `required_default_items`;");
+            + "AND TABLE_NAME = 'required_default_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';",
+            cancellationToken: CancellationToken.None);
+
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `required_default_items`;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
@@ -330,7 +346,8 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql());
+        await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql(),
+            cancellationToken: CancellationToken.None);
         await using var observer = new RequiredAddCatalogTransportObserver(connectionString);
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>()
             .UseMySql(observer, Fixture.ServerVersion)

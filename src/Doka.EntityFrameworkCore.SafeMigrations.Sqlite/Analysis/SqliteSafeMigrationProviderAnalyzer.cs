@@ -78,7 +78,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
     /// <inheritdoc />
     public Task<SafeMigrationProviderEnvironment> GetEnvironmentAsync(
         DbContext context,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -104,7 +104,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
     /// <inheritdoc />
     public Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
         DbContext context,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -136,7 +136,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
     public Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
         DbContext context,
         IReadOnlyList<SafeMigrationOperation> operations,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -159,7 +159,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
         DbContext context,
         IReadOnlyList<MigrationOperation> operations,
         IReadOnlyList<IModel?>? targetModels,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(context);

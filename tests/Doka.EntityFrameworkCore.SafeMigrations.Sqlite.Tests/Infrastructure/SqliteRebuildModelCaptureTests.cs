@@ -207,8 +207,8 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
     public async Task AnalyzerKeepsDistinctInitializedModelsIndependent(bool additionalFirst)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateWindowTableAsync(connection);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateWindowTableAsync(connection, cancellationToken: CancellationToken.None);
         await using var basic = new WindowModelContext<BasicModel>(connection);
         await using var additional = new WindowModelContext<AdditionalColumnModel>(connection);
         var basicModel = basic.GetService<IDesignTimeModel>().Model;
@@ -223,7 +223,7 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
 
         // Act
         var analyses = await analyzer.AnalyzeAsync(
-            basic, builder.Operations, [firstModel, firstModel, secondModel]);
+            basic, builder.Operations, [firstModel, firstModel, secondModel], CancellationToken.None);
 
         // Assert
         Assert.Equal(2, analyses.Count);
@@ -239,19 +239,22 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
     public async Task AnalyzerRefreshesItsCatalogBetweenModelSharingInvocations()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateWindowTableAsync(connection);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateWindowTableAsync(connection, cancellationToken: CancellationToken.None);
         await using var context = new WindowModelContext<BasicModel>(connection);
         var model = context.GetService<IDesignTimeModel>().Model;
         var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.Sqlite");
         builder.DropColumnIfExists("Legacy", "window_entities");
         var analyzer = CreateAnalyzer(context);
-        var captures = await ObserveCatalogCapturesAsync(connection);
+        var captures = await ObserveCatalogCapturesAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
-        var before = await analyzer.AnalyzeAsync(context, builder.Operations, [model]);
-        await ExecuteSqlAsync(connection, "ALTER TABLE window_entities ADD COLUMN Independent TEXT NULL;");
-        var after = await analyzer.AnalyzeAsync(context, builder.Operations, [model]);
+        var before = await analyzer.AnalyzeAsync(context, builder.Operations, [model], CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "ALTER TABLE window_entities ADD COLUMN Independent TEXT NULL;",
+            cancellationToken: CancellationToken.None);
+        var after = await analyzer.AnalyzeAsync(context, builder.Operations, [model], CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(before).ObservedState);
@@ -271,8 +274,8 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
     public async Task SingleStructuralWindowPreservesTrailingBoundaryBehavior(string trailing)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateWindowTableAsync(connection);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateWindowTableAsync(connection, cancellationToken: CancellationToken.None);
         await using var context = new WindowModelContext<BasicModel>(connection);
         var model = context.GetService<IDesignTimeModel>().Model;
         var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.Sqlite");
@@ -290,11 +293,11 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
         }
 
         var analyzer = CreateAnalyzer(context);
-        var captures = await ObserveCatalogCapturesAsync(connection);
+        var captures = await ObserveCatalogCapturesAsync(connection, cancellationToken: CancellationToken.None);
         var models = builder.Operations.Select(_ => (IModel?)model).ToArray();
 
         // Act
-        var analyses = await analyzer.AnalyzeAsync(context, builder.Operations, models);
+        var analyses = await analyzer.AnalyzeAsync(context, builder.Operations, models, CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);
@@ -302,17 +305,23 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
         Assert.Equal("classified_matching", analysis.Code);
         Assert.Equal(1, captures());
         Assert.Equal(1, await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM pragma_table_xinfo('window_entities') WHERE name = 'Legacy';"));
+            "SELECT COUNT(*) FROM pragma_table_xinfo('window_entities') WHERE name = 'Legacy';",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Observes the catalog boundary on this connection without changing production instrumentation.</summary>
-    private static async Task<Func<int>> ObserveCatalogCapturesAsync(SqliteConnection connection)
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
+    private static async Task<Func<int>> ObserveCatalogCapturesAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         string version;
         await using (var command = connection.CreateCommand())
         {
             command.CommandText = "SELECT sqlite_version();";
-            version = Assert.IsType<string>(await command.ExecuteScalarAsync(CancellationToken.None));
+            version = Assert.IsType<string>(await command.ExecuteScalarAsync(cancellationToken));
         }
 
         var count = 0;
@@ -378,10 +387,11 @@ public sealed class SqliteRebuildModelCaptureTests : SqliteIntegrationTestBase
         => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     /// <summary>Creates one small table whose legacy column is deliberately absent from the target model.</summary>
-    private static Task CreateWindowTableAsync(SqliteConnection connection)
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
+    private static Task CreateWindowTableAsync(SqliteConnection connection, CancellationToken cancellationToken)
         => ExecuteSqlAsync(connection,
             "CREATE TABLE window_entities (Id INTEGER NOT NULL, Legacy TEXT NULL, "
-            + "CONSTRAINT pk_window_entities PRIMARY KEY (Id));");
+            + "CONSTRAINT pk_window_entities PRIMARY KEY (Id));", cancellationToken: cancellationToken);
 
     /// <summary>Owns a distinct immutable EF model identity without changing physical test setup.</summary>
     /// <typeparam name="TModel">The marker selecting a distinct target-model identity.</typeparam>

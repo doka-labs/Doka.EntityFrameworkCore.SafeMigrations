@@ -20,7 +20,7 @@ public sealed class PostgreSqlModelManagedDataJsonIntegrationTests : PostgreSqlS
             + "json_null_payload json NULL, sql_null_payload jsonb NULL, json_like_text text NOT NULL);"
             + "INSERT INTO json_model_rows VALUES ("
             + "1, '{ \"b\": 2, \"a\": 1 }', '{ \"b\": 2, \"a\": 1 }', 'null', NULL, "
-            + "'{\"a\":1,\"b\":2}');");
+            + "'{\"a\":1,\"b\":2}');", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var columns = new[]
@@ -91,7 +91,7 @@ public sealed class PostgreSqlModelManagedDataJsonIntegrationTests : PostgreSqlS
             connectionString,
             "UPDATE json_model_rows SET "
             + "json_payload = '{ \"b\": 4, \"a\": 3 }', "
-            + "jsonb_payload = '{ \"b\": 4, \"a\": 3 }' WHERE id = 1;");
+            + "jsonb_payload = '{ \"b\": 4, \"a\": 3 }' WHERE id = 1;", cancellationToken: CancellationToken.None);
 
         var updateReplay = await runner.AnalyzeAsync(
             context,
@@ -156,7 +156,8 @@ public sealed class PostgreSqlModelManagedDataJsonIntegrationTests : PostgreSqlS
             Assert.Single(deletePreflight.Assessments).ObservedState);
         Assert.Equal(SafeMigrationObservedState.Missing, Assert.Single(deleteReplay.Assessments).ObservedState);
         Assert.True(Assert.Single(deletePostflight.Assessments).PostconditionSatisfied);
-        Assert.Equal(0, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM json_model_rows;"));
+        Assert.Equal(0, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM json_model_rows;",
+            cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -172,7 +173,7 @@ public sealed class PostgreSqlModelManagedDataJsonIntegrationTests : PostgreSqlS
             + "json_null_payload json NULL, sql_null_payload jsonb NULL, json_like_text text NOT NULL);"
             + "INSERT INTO json_comparison_boundaries VALUES ("
             + "1, '1', '{ \"b\": 2, \"a\": 1 }', '{ \"b\": 2, \"a\": 1 }', "
-            + "'[ 1, 2 ]', '[ 1, 1 ]', 'null', NULL, '{\"a\":1,\"b\":2}');");
+            + "'[ 1, 2 ]', '[ 1, 1 ]', 'null', NULL, '{\"a\":1,\"b\":2}');", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var ensure = new MigrationBuilder(context.Database.ProviderName!);
@@ -244,7 +245,8 @@ public sealed class PostgreSqlModelManagedDataJsonIntegrationTests : PostgreSqlS
         {
             await ExecuteSqlAsync(
                 connectionString,
-                $"UPDATE json_comparison_boundaries SET {mutations[index]} WHERE id = 1;");
+                $"UPDATE json_comparison_boundaries SET {mutations[index]} WHERE id = 1;",
+                cancellationToken: CancellationToken.None);
 
             var different = await runner.AnalyzeAsync(
                 context,
@@ -258,7 +260,8 @@ public sealed class PostgreSqlModelManagedDataJsonIntegrationTests : PostgreSqlS
 
             await ExecuteSqlAsync(
                 connectionString,
-                $"UPDATE json_comparison_boundaries SET {resets[index]} WHERE id = 1;");
+                $"UPDATE json_comparison_boundaries SET {resets[index]} WHERE id = 1;",
+                cancellationToken: CancellationToken.None);
         }
 
         Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(matching.Assessments).ObservedState);

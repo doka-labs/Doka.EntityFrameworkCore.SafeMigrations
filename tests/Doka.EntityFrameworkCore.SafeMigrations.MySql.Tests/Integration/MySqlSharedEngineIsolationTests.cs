@@ -20,35 +20,47 @@ public sealed class MySqlSharedEngineIsolationTests : MySqlIntegrationTestBase
         {
             // Act
             var results = await Task.WhenAll(
-                first.SeedAndObserveAsync(11, rendezvous),
-                second.SeedAndObserveAsync(22, rendezvous));
+                first.SeedAndObserveAsync(11, rendezvous, cancellationToken: CancellationToken.None),
+                second.SeedAndObserveAsync(22, rendezvous, cancellationToken: CancellationToken.None));
+
             var firstLogin = await Fixture.CreateLeastPrivilegeConnectionStringAsync(results[0].ConnectionString,
                 CancellationToken.None);
+
             var secondLogin = await Fixture.CreateLeastPrivilegeConnectionStringAsync(results[1].ConnectionString,
                 CancellationToken.None);
+
             var foreignLogin = new MySqlConnectionStringBuilder(firstLogin)
             {
                 Database = new MySqlConnectionStringBuilder(secondLogin).Database,
             }.ConnectionString;
             var denied = await Record.ExceptionAsync(() => ScalarIntAsync(foreignLogin,
-                "SELECT `value` FROM `parallel_owner_probe`;"));
+                "SELECT `value` FROM `parallel_owner_probe`;", cancellationToken: CancellationToken.None));
+
             var foreignLease = new MySqlConnectionStringBuilder(results[0].ConnectionString)
             {
                 Database = "bootstrap",
             }.ConnectionString;
             var rejectedLease = await Record.ExceptionAsync(() => Fixture.ReleaseDatabaseAsync(foreignLease,
                 CancellationToken.None));
+
             using var cancelledCleanup = new CancellationTokenSource();
             cancelledCleanup.Cancel();
             var cancelledRelease = await Record.ExceptionAsync(() => Fixture.ReleaseDatabaseAsync(
                 results[0].ConnectionString, cancelledCleanup.Token));
-            var retainedValue = await ScalarIntAsync(firstLogin, "SELECT `value` FROM `parallel_owner_probe`;");
+            var retainedValue = await ScalarIntAsync(firstLogin, "SELECT `value` FROM `parallel_owner_probe`;",
+                cancellationToken: CancellationToken.None);
+
             await first.DisposeAsync();
-            var survivingValue = await ScalarIntAsync(secondLogin, "SELECT `value` FROM `parallel_owner_probe`;");
+            var survivingValue = await ScalarIntAsync(secondLogin, "SELECT `value` FROM `parallel_owner_probe`;",
+                cancellationToken: CancellationToken.None);
+
             var released = await ScalarIntAsync(results[1].ConnectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '"
-                + new MySqlConnectionStringBuilder(results[0].ConnectionString).Database + "';");
-            var releasedLogin = await Record.ExceptionAsync(() => ScalarIntAsync(firstLogin, "SELECT 1;"));
+                + new MySqlConnectionStringBuilder(results[0].ConnectionString).Database + "';",
+                cancellationToken: CancellationToken.None);
+
+            var releasedLogin = await Record.ExceptionAsync(() => ScalarIntAsync(firstLogin, "SELECT 1;",
+                cancellationToken: CancellationToken.None));
 
             // Assert
             Assert.NotEqual(first.GetType(), second.GetType());
@@ -73,17 +85,64 @@ public sealed class MySqlSharedEngineIsolationTests : MySqlIntegrationTestBase
         }
     }
 
+    /// <summary>Pre-cancellation cannot bypass the owner's mandatory rendezvous arrival and strand its peer.</summary>
+    [Fact]
+    public async Task PreCanceledClassOwnerStillReleasesItsPeerRendezvous()
+    {
+        // Arrange
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var owner = new FirstDatabaseOwner(Fixture);
+        var rendezvous = new DatabaseRendezvous();
+        Exception? failure;
+        bool peerWasReleased;
+        int arrivals;
+
+        try
+        {
+            // Act
+            failure = await Record.ExceptionAsync(() => owner.SeedAndObserveAsync(1, rendezvous, cancellation.Token));
+            rendezvous.Arrive();
+            peerWasReleased = rendezvous.Ready.IsCompletedSuccessfully;
+            arrivals = rendezvous.Arrivals;
+        }
+        finally
+        {
+            await owner.DisposeAsync();
+        }
+
+        // Assert
+        var canceled = Assert.IsAssignableFrom<OperationCanceledException>(failure);
+        Assert.Equal(cancellation.Token, canceled.CancellationToken);
+        Assert.Equal(2, arrivals);
+        Assert.True(peerWasReleased);
+    }
+
     private abstract class DatabaseOwner(MySqlEngineContainerFixture fixture) : MySqlIntegrationTestBase(fixture)
     {
-        internal async Task<DatabaseObservation> SeedAndObserveAsync(int value, DatabaseRendezvous rendezvous)
+        /// <summary>Performs the seed and observe test operation with explicit cancellation.</summary>
+        /// <param name="value">The value for this operation.</param>
+        /// <param name="rendezvous">The rendezvous for this operation.</param>
+        /// <param name="cancellationToken">The caller's operation cancellation.</param>
+        internal async Task<DatabaseObservation> SeedAndObserveAsync(
+            int value,
+            DatabaseRendezvous rendezvous,
+            CancellationToken cancellationToken
+        )
         {
             var connectionString = string.Empty;
 
             try
             {
-                connectionString = await CreateDatabaseAsync(CancellationToken.None);
+                // WHY: The rendezvous obligation exists before I/O, so pre-cancellation
+                // must still execute the finally that releases the waiting peer.
+                cancellationToken.ThrowIfCancellationRequested();
+
+                connectionString = await CreateDatabaseAsync(cancellationToken);
                 await ExecuteSqlAsync(connectionString, "CREATE TABLE `parallel_owner_probe` (`value` int NOT NULL); "
-                    + "INSERT INTO `parallel_owner_probe` VALUES (" + value.ToString(CultureInfo.InvariantCulture) + ");");
+                    + "INSERT INTO `parallel_owner_probe` VALUES ("
+                    + value.ToString(CultureInfo.InvariantCulture) + ");",
+                    cancellationToken: cancellationToken);
             }
             finally
             {
@@ -91,11 +150,12 @@ public sealed class MySqlSharedEngineIsolationTests : MySqlIntegrationTestBase
                 rendezvous.Arrive();
             }
 
-            await rendezvous.Ready;
+            await rendezvous.Ready.WaitAsync(cancellationToken);
 
             return new DatabaseObservation(connectionString,
-                await ScalarStringAsync(connectionString, "SELECT DATABASE();"),
-                await ScalarIntAsync(connectionString, "SELECT `value` FROM `parallel_owner_probe`;"));
+                await ScalarStringAsync(connectionString, "SELECT DATABASE();", cancellationToken: cancellationToken),
+                await ScalarIntAsync(connectionString, "SELECT `value` FROM `parallel_owner_probe`;",
+                    cancellationToken: cancellationToken));
         }
     }
 

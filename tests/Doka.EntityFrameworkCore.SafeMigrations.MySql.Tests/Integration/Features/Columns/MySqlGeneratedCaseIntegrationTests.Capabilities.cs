@@ -52,12 +52,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL); "
-            + "CREATE TABLE native_function_probe (`id` int NOT NULL);");
+            + "CREATE TABLE native_function_probe (`id` int NOT NULL);", cancellationToken: CancellationToken.None);
         if (routineExists)
         {
             await ExecuteSqlAsync(connectionString,
                 "CREATE FUNCTION source_only_function(value_input int) RETURNS int DETERMINISTIC NO SQL "
-                + "RETURN value_input;");
+                + "RETURN value_input;", cancellationToken: CancellationToken.None);
         }
 
         const string expression = "source_only_function(`id`)";
@@ -71,7 +71,8 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         // Act
         var nativeFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString,
             "ALTER TABLE native_function_probe ADD COLUMN function_result int GENERATED ALWAYS AS ("
-            + expression + ") VIRTUAL;"));
+            + expression + ") VIRTUAL;", cancellationToken: CancellationToken.None));
+
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-unverified-function"), CancellationToken.None);
 
@@ -96,7 +97,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL, name varchar(20) NULL); "
-            + $"INSERT INTO `{Table}` VALUES (-1, 'Alpha');");
+            + $"INSERT INTO `{Table}` VALUES (-1, 'Alpha');", cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn(Table, SafeMigrationExpectedDefinitionFactory.From(new AddColumnOperation
         {
@@ -111,14 +112,16 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var failure = await Record.ExceptionAsync(async () =>
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         });
 
         var postflight = await context.GetService<ISafeMigrationRunner>().VerifyAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-deterministic-builtin-verify"), CancellationToken.None);
+
         var value = failure is null
-            ? await ScalarStringAsync(connectionString, $"SELECT CAST(function_result AS CHAR) FROM `{Table}`;") : null;
+            ? await ScalarStringAsync(connectionString, $"SELECT CAST(function_result AS CHAR) FROM `{Table}`;",
+                cancellationToken: CancellationToken.None) : null;
 
         // Assert
         Assert.True(preflight.Status == SafeMigrationReportStatus.Ready, DescribeGeneratedReport(preflight));
@@ -141,7 +144,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL); "
-            + "CREATE TABLE native_clock_probe (`id` int NOT NULL);");
+            + "CREATE TABLE native_clock_probe (`id` int NOT NULL);", cancellationToken: CancellationToken.None);
         var definition = SafeMigrationExpectedDefinitionFactory.From(new AddColumnOperation
         {
             Name = "clock_result", Table = Table, ClrType = typeof(DateTime), ColumnType = "datetime(6)",
@@ -154,7 +157,8 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         // Act
         var nativeFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString,
             "ALTER TABLE native_clock_probe ADD COLUMN clock_result datetime(6) GENERATED ALWAYS AS ("
-            + sql + ") " + (stored ? "STORED" : "VIRTUAL") + ";"));
+            + sql + ") " + (stored ? "STORED" : "VIRTUAL") + ";", cancellationToken: CancellationToken.None));
+
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-clock-capability"), CancellationToken.None);
 
@@ -176,7 +180,8 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` "
             + "(`id` int NOT NULL AUTO_INCREMENT PRIMARY KEY); "
-            + "CREATE TABLE native_identity_probe (`id` int NOT NULL AUTO_INCREMENT PRIMARY KEY);");
+            + "CREATE TABLE native_identity_probe (`id` int NOT NULL AUTO_INCREMENT PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
         const string expression = "CASE WHEN `id` > 0 THEN 1 ELSE 0 END";
         var definition = SafeMigrationExpectedDefinitionFactory.From(new AddColumnOperation
         {
@@ -190,7 +195,8 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         // Act
         var nativeFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString,
             "ALTER TABLE native_identity_probe ADD COLUMN identity_result int GENERATED ALWAYS AS ("
-            + expression + ") VIRTUAL;"));
+            + expression + ") VIRTUAL;", cancellationToken: CancellationToken.None));
+
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-identity-capability"), CancellationToken.None);
 

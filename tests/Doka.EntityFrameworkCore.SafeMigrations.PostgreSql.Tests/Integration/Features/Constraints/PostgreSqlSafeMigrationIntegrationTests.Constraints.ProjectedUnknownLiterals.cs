@@ -19,7 +19,8 @@ public sealed class PostgreSqlConstraintsProjectedUnknownLiteralsIntegrationTest
             "CREATE FUNCTION metadata_equal(smallint, text) RETURNS boolean LANGUAGE sql IMMUTABLE "
             + "AS 'SELECT TRUE'; CREATE OPERATOR public.= (LEFTARG = smallint, RIGHTARG = text, "
             + "FUNCTION = metadata_equal); CREATE TABLE mixed_columns (id smallint NOT NULL, "
-            + "CONSTRAINT ck_integer_input CHECK (id = CAST('40000' AS text)));");
+            + "CONSTRAINT ck_integer_input CHECK (id = CAST('40000' AS text)));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -67,7 +68,8 @@ public sealed class PostgreSqlConstraintsProjectedUnknownLiteralsIntegrationTest
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (old_int integer NOT NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (old_int integer NOT NULL);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -98,7 +100,7 @@ public sealed class PostgreSqlConstraintsProjectedUnknownLiteralsIntegrationTest
         if (approved)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
             postflight = await runner.VerifyAsync(context, builder.Operations,
                 new SafeMigrationRunOptions("sparse-check-unknown-integer-final"), CancellationToken.None);
 

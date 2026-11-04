@@ -19,7 +19,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
             connectionString,
             $"CREATE TABLE `{table}` ("
             + "`id` int NOT NULL, `code` int NOT NULL, PRIMARY KEY (`id`), "
-            + $"CONSTRAINT `{constraint}` UNIQUE (`code`));");
+            + $"CONSTRAINT `{constraint}` UNIQUE (`code`));", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -30,9 +30,9 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("constraint-to-index"));
+            new SafeMigrationRunOptions("constraint-to-index"), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[^1].Action);
@@ -42,7 +42,8 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
                 + "WHERE TABLE_SCHEMA = DATABASE() "
-                + $"AND TABLE_NAME = '{table}' AND INDEX_NAME = '{index}' AND NON_UNIQUE = 0;"));
+                + $"AND TABLE_NAME = '{table}' AND INDEX_NAME = '{index}' AND NON_UNIQUE = 0;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -57,7 +58,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
             connectionString,
             $"CREATE TABLE `{table}` ("
             + "`id` int NOT NULL, `code` int NOT NULL, PRIMARY KEY (`id`), "
-            + $"UNIQUE INDEX `{index}` (`code`));");
+            + $"UNIQUE INDEX `{index}` (`code`));", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -68,9 +69,9 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("index-to-constraint"));
+            new SafeMigrationRunOptions("index-to-constraint"), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[^1].Action);
@@ -81,7 +82,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
                 + "WHERE CONSTRAINT_SCHEMA = DATABASE() "
                 + $"AND TABLE_NAME = '{table}' AND CONSTRAINT_NAME = '{constraint}' "
-                + "AND CONSTRAINT_TYPE = 'UNIQUE';"));
+                + "AND CONSTRAINT_TYPE = 'UNIQUE';", cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -96,7 +97,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
             $"CREATE TABLE `{table}` ("
             + "`id` int NOT NULL, `code` int NOT NULL, PRIMARY KEY (`id`), "
             + $"CONSTRAINT `{physicalName}` UNIQUE (`code`)); "
-            + $"INSERT INTO `{table}` VALUES (1, 7);");
+            + $"INSERT INTO `{table}` VALUES (1, 7);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -117,7 +118,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("cross-kind-constraint-drop"));
+                new SafeMigrationRunOptions("cross-kind-constraint-drop"), CancellationToken.None);
 
         var replacement = report.Assessments[^1];
 
@@ -131,7 +132,8 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
                 + "WHERE CONSTRAINT_SCHEMA = DATABASE() "
-                + $"AND TABLE_NAME = '{table}' AND CONSTRAINT_NAME = '{physicalName}';"));
+                + $"AND TABLE_NAME = '{table}' AND CONSTRAINT_NAME = '{physicalName}';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -146,7 +148,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
             $"CREATE TABLE `{table}` ("
             + "`id` int NOT NULL, `code` int NOT NULL, PRIMARY KEY (`id`), "
             + $"UNIQUE INDEX `{physicalName}` (`code`)); "
-            + $"INSERT INTO `{table}` VALUES (1, 7);");
+            + $"INSERT INTO `{table}` VALUES (1, 7);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -167,7 +169,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("cross-kind-index-drop"));
+                new SafeMigrationRunOptions("cross-kind-index-drop"), CancellationToken.None);
 
         var replacement = report.Assessments[^1];
 
@@ -181,7 +183,8 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
                 + "WHERE TABLE_SCHEMA = DATABASE() "
-                + $"AND TABLE_NAME = '{table}' AND INDEX_NAME = '{physicalName}';"));
+                + $"AND TABLE_NAME = '{table}' AND INDEX_NAME = '{physicalName}';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -193,7 +196,8 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{table}` (`id` int NOT NULL, PRIMARY KEY (`id`));");
+            $"CREATE TABLE `{table}` (`id` int NOT NULL, PRIMARY KEY (`id`));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -203,9 +207,9 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("primary-is-not-index-alias"));
+            new SafeMigrationRunOptions("primary-is-not-index-alias"), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var assessment = Assert.Single(preflight.Assessments);
 
@@ -218,7 +222,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
                 connectionString,
                 "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
                 + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{table}' "
-                + $"AND INDEX_NAME IN ('PRIMARY', '{index}');"));
+                + $"AND INDEX_NAME IN ('PRIMARY', '{index}');", cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -229,7 +233,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
 
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE `{table}` (`id` int NOT NULL);");
+            $"CREATE TABLE `{table}` (`id` int NOT NULL);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -240,7 +244,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("reserved-primary-index-name"));
+                new SafeMigrationRunOptions("reserved-primary-index-name"), CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
 
@@ -261,7 +265,8 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
             connectionString,
             $"CREATE TABLE `{table}` ("
             + "`id` int NOT NULL, `code` int NOT NULL, PRIMARY KEY (`id`), "
-            + $"INDEX `{requestedName}` (`code`), CONSTRAINT `uq_existing_code` UNIQUE (`code`));");
+            + $"INDEX `{requestedName}` (`code`), CONSTRAINT `uq_existing_code` UNIQUE (`code`));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -272,7 +277,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("unique-constraint-name-collision"));
+                new SafeMigrationRunOptions("unique-constraint-name-collision"), CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
 
@@ -293,7 +298,8 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
             $"CREATE TABLE `{table}` ("
             + "`id` int NOT NULL, `legacy_value` int NOT NULL, `wide_value` varchar(192) NOT NULL, "
             + $"PRIMARY KEY (`id`), INDEX `{index}` (`legacy_value`)) "
-            + "ENGINE=InnoDB ROW_FORMAT=COMPACT DEFAULT CHARACTER SET utf8mb4;");
+            + "ENGINE=InnoDB ROW_FORMAT=COMPACT DEFAULT CHARACTER SET utf8mb4;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -305,7 +311,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("wide-index-replacement"));
+                new SafeMigrationRunOptions("wide-index-replacement"), CancellationToken.None);
 
         var replacement = report.Assessments[^1];
 
@@ -320,7 +326,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
                 + "WHERE TABLE_SCHEMA = DATABASE() "
                 + $"AND TABLE_NAME = '{table}' AND INDEX_NAME = '{index}' "
-                + "AND COLUMN_NAME = 'legacy_value';"));
+                + "AND COLUMN_NAME = 'legacy_value';", cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -335,7 +341,8 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
             $"CREATE TABLE `{table}` ("
             + "`id` int NOT NULL, `legacy_value` int NOT NULL, `wide_value` varchar(192) NOT NULL, "
             + $"PRIMARY KEY (`id`), INDEX `{keyName}` (`legacy_value`)) "
-            + "ENGINE=InnoDB ROW_FORMAT=COMPACT DEFAULT CHARACTER SET utf8mb4;");
+            + "ENGINE=InnoDB ROW_FORMAT=COMPACT DEFAULT CHARACTER SET utf8mb4;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -347,7 +354,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("wide-cross-kind-replacement"));
+                new SafeMigrationRunOptions("wide-cross-kind-replacement"), CancellationToken.None);
 
         var replacement = report.Assessments[^1];
 
@@ -362,7 +369,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
                 + "WHERE TABLE_SCHEMA = DATABASE() "
                 + $"AND TABLE_NAME = '{table}' AND INDEX_NAME = '{keyName}' "
-                + "AND COLUMN_NAME = 'legacy_value';"));
+                + "AND COLUMN_NAME = 'legacy_value';", cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -377,7 +384,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
             $"CREATE TABLE `{table}` ("
             + "`id` int NOT NULL, `legacy_value` int NOT NULL, `target_value` int NOT NULL, "
             + $"PRIMARY KEY (`id`), CONSTRAINT `{constraint}` UNIQUE (`legacy_value`)); "
-            + $"INSERT INTO `{table}` VALUES (1, 10, 7), (2, 20, 7);");
+            + $"INSERT INTO `{table}` VALUES (1, 10, 7), (2, 20, 7);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -389,7 +396,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("unique-replacement-duplicates"));
+                new SafeMigrationRunOptions("unique-replacement-duplicates"), CancellationToken.None);
 
         var replacement = report.Assessments[^1];
 
@@ -404,7 +411,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
                 + "WHERE CONSTRAINT_SCHEMA = DATABASE() "
                 + $"AND TABLE_NAME = '{table}' AND CONSTRAINT_NAME = '{constraint}' "
-                + "AND CONSTRAINT_TYPE = 'UNIQUE';"));
+                + "AND CONSTRAINT_TYPE = 'UNIQUE';", cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -419,7 +426,8 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
             $"CREATE TABLE `{primaryTable}` (`value` varchar(192) NOT NULL) "
             + "ENGINE=InnoDB ROW_FORMAT=COMPACT DEFAULT CHARACTER SET utf8mb4; "
             + $"CREATE TABLE `{uniqueTable}` (`id` int NOT NULL, `value` varchar(192) NOT NULL, "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=COMPACT DEFAULT CHARACTER SET utf8mb4;");
+            + "PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=COMPACT DEFAULT CHARACTER SET utf8mb4;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -431,7 +439,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("wide-physical-keys"));
+                new SafeMigrationRunOptions("wide-physical-keys"), CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Collection(
@@ -453,7 +461,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
                 + "WHERE CONSTRAINT_SCHEMA = DATABASE() "
                 + $"AND TABLE_NAME IN ('{primaryTable}', '{uniqueTable}') "
-                + "AND CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE');"));
+                + "AND CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE');", cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -468,7 +476,8 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
             $"CREATE TABLE `{primaryTable}` (`value` varchar(191) NOT NULL) "
             + "ENGINE=InnoDB ROW_FORMAT=COMPACT DEFAULT CHARACTER SET utf8mb4; "
             + $"CREATE TABLE `{uniqueTable}` (`id` int NOT NULL, `value` varchar(191) NOT NULL, "
-            + "PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=COMPACT DEFAULT CHARACTER SET utf8mb4;");
+            + "PRIMARY KEY (`id`)) ENGINE=InnoDB ROW_FORMAT=COMPACT DEFAULT CHARACTER SET utf8mb4;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -479,9 +488,9 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("narrow-physical-keys"));
+            new SafeMigrationRunOptions("narrow-physical-keys"), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.All(
@@ -494,7 +503,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
                 + "WHERE CONSTRAINT_SCHEMA = DATABASE() "
                 + $"AND TABLE_NAME IN ('{primaryTable}', '{uniqueTable}') "
-                + "AND CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE');"));
+                + "AND CONSTRAINT_TYPE IN ('PRIMARY KEY', 'UNIQUE');", cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -518,7 +527,8 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
             connectionString,
             $"CREATE TABLE `{indexTable}` (`id` int NOT NULL, {columnDefinitions}, PRIMARY KEY (`id`)); "
             + $"CREATE TABLE `{primaryTable}` ({columnDefinitions}); "
-            + $"CREATE TABLE `{uniqueTable}` (`id` int NOT NULL, {columnDefinitions}, PRIMARY KEY (`id`));");
+            + $"CREATE TABLE `{uniqueTable}` (`id` int NOT NULL, {columnDefinitions}, PRIMARY KEY (`id`));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -531,7 +541,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("excessive-key-parts"));
+                new SafeMigrationRunOptions("excessive-key-parts"), CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Collection(
@@ -575,7 +585,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
             connectionString,
             $"CREATE TABLE `{primaryTable}` ({columnDefinitions}, PRIMARY KEY ({keyColumns})); "
             + $"CREATE TABLE `{uniqueTable}` (`id` int NOT NULL, {columnDefinitions}, PRIMARY KEY (`id`), "
-            + $"CONSTRAINT `{uniqueName}` UNIQUE ({keyColumns}));");
+            + $"CONSTRAINT `{uniqueName}` UNIQUE ({keyColumns}));", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var matching = new MigrationBuilder(context.Database.ProviderName!);
@@ -586,7 +596,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
         var matchingReport = await runner.AnalyzeAsync(
             context,
             matching.Operations,
-            new SafeMigrationRunOptions("long-composite-matching"));
+            new SafeMigrationRunOptions("long-composite-matching"), CancellationToken.None);
 
         var reversed = columns.Reverse().ToArray();
         var different = new MigrationBuilder(context.Database.ProviderName!);
@@ -596,7 +606,7 @@ public sealed partial class MySqlConstraintsPhysicalKeysIntegrationTests : MySql
         var differentReport = await runner.AnalyzeAsync(
             context,
             different.Operations,
-            new SafeMigrationRunOptions("long-composite-different"));
+            new SafeMigrationRunOptions("long-composite-different"), CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, matchingReport.Status);
         Assert.All(

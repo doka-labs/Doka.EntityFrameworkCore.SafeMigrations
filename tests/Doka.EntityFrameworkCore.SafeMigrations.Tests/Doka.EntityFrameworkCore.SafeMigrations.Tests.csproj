@@ -11,6 +11,10 @@
              Link="Infrastructure\SafeMigrationStateSpaceGenerator.cs" />
     <Compile Include="..\Shared\LargeMigrationStressContract.cs"
              Link="Infrastructure\LargeMigrationStressContract.cs" />
+    <Compile Include="..\Shared\LivePerformanceEvidence.cs"
+             Link="Infrastructure\LivePerformanceEvidence.cs" />
+    <Compile Include="..\Shared\ModelManagedDataLargeExecutionContract.cs"
+             Link="Infrastructure\ModelManagedDataLargeExecutionContract.cs" />
     <None Include="..\..\schemas\safe-migration-report-view-v1.schema.json"
           Link="schemas\safe-migration-report-view-v1.schema.json"
           CopyToOutputDirectory="PreserveNewest" />

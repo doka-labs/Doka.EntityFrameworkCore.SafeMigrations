@@ -30,7 +30,7 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
             "CREATE SCHEMA alter_scope; CREATE TABLE alter_rows (value integer); "
             + $"CREATE TABLE alter_scope.alter_rows (value {liveType} NULL); "
             + "CREATE INDEX ix_alter_rows_value ON alter_scope.alter_rows (value); "
-            + "INSERT INTO alter_scope.alter_rows VALUES ('preserved');");
+            + "INSERT INTO alter_scope.alter_rows VALUES ('preserved');", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var storeType = alias ? "varchar" : "character varying";
@@ -46,26 +46,28 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
 
         // Act
         var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("alter-transition"));
+            new SafeMigrationRunOptions("alter-transition"), CancellationToken.None);
 
         var provider = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context,
-            builder.Operations.Cast<SafeMigrationOperation>().ToArray());
+            builder.Operations.Cast<SafeMigrationOperation>().ToArray(), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var replay = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("alter-transition-replay"));
+            new SafeMigrationRunOptions("alter-transition-replay"), CancellationToken.None);
 
         var length = await ScalarIntAsync(connectionString,
             "SELECT character_maximum_length FROM information_schema.columns "
-            + "WHERE table_schema = 'alter_scope' AND table_name = 'alter_rows' AND column_name = 'value';");
+            + "WHERE table_schema = 'alter_scope' AND table_name = 'alter_rows' AND column_name = 'value';",
+            cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM alter_scope.alter_rows WHERE value = 'preserved';");
+            "SELECT COUNT(*) FROM alter_scope.alter_rows WHERE value = 'preserved';",
+            cancellationToken: CancellationToken.None);
 
         var indexes = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_indexes WHERE schemaname = 'alter_scope' "
-            + "AND indexname = 'ix_alter_rows_value';");
+            + "AND indexname = 'ix_alter_rows_value';", cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(preflight.Assessments);
@@ -94,20 +96,22 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE alter_rows (value character varying(40) NULL); "
-            + $"INSERT INTO alter_rows VALUES ('{value}');");
+            + $"INSERT INTO alter_rows VALUES ('{value}');", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operation = AlterLengthOperation(40, 10);
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("alter-transition-overlong"));
+            new SafeMigrationRunOptions("alter-transition-overlong"), CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
         var preserved = await ScalarIntAsync(connectionString,
-            $"SELECT COUNT(*) FROM alter_rows WHERE value = '{value}';");
+            $"SELECT COUNT(*) FROM alter_rows WHERE value = '{value}';", cancellationToken: CancellationToken.None);
 
-        var length = await ReadAlterLengthAsync(connectionString);
+        var length = await ReadAlterLengthAsync(connectionString, cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
@@ -136,7 +140,8 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE alter_rows (value character varying(40) NULL); "
-            + $"INSERT INTO alter_rows VALUES ('{(overlong ? "longer-than-ten" : "fits")}');");
+            + $"INSERT INTO alter_rows VALUES ('{(overlong ? "longer-than-ten" : "fits")}');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var valid = AlterLengthOperation(40, 10);
@@ -152,9 +157,13 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
         SafeMigrationOperation[] operations = invalidFirst ? [invalid, valid, ensure] : [valid, invalid, ensure];
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations);
-        var invalidException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [invalid]));
-        var length = await ReadAlterLengthAsync(connectionString);
+        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations,
+            CancellationToken.None);
+
+        var invalidException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [invalid],
+            CancellationToken.None));
+
+        var length = await ReadAlterLengthAsync(connectionString, cancellationToken: CancellationToken.None);
 
         // Assert
         var validAnalysis = analyses[invalidFirst ? 1 : 0];
@@ -191,7 +200,8 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
         var liveType = drift == "text" ? "text" : "character varying(40)";
         var collation = drift == "collation" ? " COLLATE \"C\"" : string.Empty;
         await ExecuteSqlAsync(connectionString,
-            $"CREATE TABLE alter_rows (value {liveType}{collation} NULL); INSERT INTO alter_rows VALUES ('fits');");
+            $"CREATE TABLE alter_rows (value {liveType}{collation} NULL); INSERT INTO alter_rows VALUES ('fits');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var sourceType = drift == "length" ? "character varying(30)" : liveType;
@@ -206,11 +216,16 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("alter-transition-source"));
+            new SafeMigrationRunOptions("alter-transition-source"), CancellationToken.None);
 
-        var provider = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation]);
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM alter_rows WHERE value = 'fits';");
+        var provider = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation],
+            CancellationToken.None);
+
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM alter_rows WHERE value = 'fits';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -233,7 +248,8 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE alter_rows (value character varying(10) NULL); "
-            + $"INSERT INTO alter_rows VALUES ({(containsNull ? "NULL" : "'fits'")});");
+            + $"INSERT INTO alter_rows VALUES ({(containsNull ? "NULL" : "'fits'")});",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operation = new SafeMigrationOperation(new AlterColumnIntent("alter_rows",
@@ -243,10 +259,16 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var provider = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation]);
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var nullRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM alter_rows WHERE value IS NULL;");
-        var length = await ReadAlterLengthAsync(connectionString);
+        var provider = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation],
+            CancellationToken.None);
+
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
+        var nullRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM alter_rows WHERE value IS NULL;",
+            cancellationToken: CancellationToken.None);
+
+        var length = await ReadAlterLengthAsync(connectionString, cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(provider);
@@ -279,19 +301,21 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             exists ? "CREATE TABLE alter_rows (value character varying(10) NULL);"
-                : "CREATE TABLE alter_rows (id integer);");
+                : "CREATE TABLE alter_rows (id integer);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operation = AlterLengthOperation(40, 10);
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("alter-transition-existence"));
+            new SafeMigrationRunOptions("alter-transition-existence"), CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
         var columns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = current_schema() "
-            + "AND table_name = 'alter_rows' AND column_name = 'value';");
+            + "AND table_name = 'alter_rows' AND column_name = 'value';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(exists ? SafeMigrationAction.NoOp : SafeMigrationAction.RejectDifferent,
@@ -316,15 +340,19 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE alter_rows (value character varying(10) NULL); "
-            + "INSERT INTO alter_rows VALUES ('preserved'); CREATE VIEW alter_view AS SELECT value FROM alter_rows;");
+            + "INSERT INTO alter_rows VALUES ('preserved'); CREATE VIEW alter_view AS SELECT value FROM alter_rows;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operation = AlterLengthOperation(10, 40);
 
         // Act
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var length = await ReadAlterLengthAsync(connectionString);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM alter_view WHERE value = 'preserved';");
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
+        var length = await ReadAlterLengthAsync(connectionString, cancellationToken: CancellationToken.None);
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM alter_view WHERE value = 'preserved';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal("0A000", Assert.IsType<PostgresException>(exception).SqlState);
@@ -340,16 +368,19 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE alter_rows (value character varying(40) NULL); "
-            + "INSERT INTO alter_rows VALUES (repeat(chr(233), 9));");
+            + "INSERT INTO alter_rows VALUES (repeat(chr(233), 9));", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operation = AlterLengthOperation(40, 10);
 
         // Act
-        var analysis = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation]);
-        await ExecuteOperationsAsync(context, [operation]);
+        var analysis = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation],
+            CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
         var rows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM alter_rows WHERE value = repeat(chr(233), 9) AND octet_length(value) = 18;");
+            "SELECT COUNT(*) FROM alter_rows WHERE value = repeat(chr(233), 9) AND octet_length(value) = 18;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationRepairCapability.Safe, Assert.Single(analysis).RepairCapability);
@@ -368,7 +399,8 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE alter_rows (value character varying(40) NULL); INSERT INTO alter_rows VALUES ('fits');");
+            "CREATE TABLE alter_rows (value character varying(40) NULL); INSERT INTO alter_rows VALUES ('fits');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operation = AlterLengthOperation(40, 10);
@@ -377,17 +409,20 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, operations,
-            new SafeMigrationRunOptions("alter-transition-fresh-proof"));
+            new SafeMigrationRunOptions("alter-transition-fresh-proof"), CancellationToken.None);
 
         if (!opaque)
         {
-            await ExecuteSqlAsync(connectionString, mutation);
+            await ExecuteSqlAsync(connectionString, mutation, cancellationToken: CancellationToken.None);
         }
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, operations));
-        var length = await ReadAlterLengthAsync(connectionString);
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, operations,
+            CancellationToken.None));
+
+        var length = await ReadAlterLengthAsync(connectionString, cancellationToken: CancellationToken.None);
         var rows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM alter_rows WHERE value = 'longer-than-ten';");
+            "SELECT COUNT(*) FROM alter_rows WHERE value = 'longer-than-ten';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(opaque ? SafeMigrationReportStatus.RuntimeValidationRequired : SafeMigrationReportStatus.Ready,
@@ -420,7 +455,7 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
         {
             await ExecuteSqlAsync(connectionString,
                 $"CREATE TABLE alter_rows (value character varying({sourceLength}) NULL); "
-                + "INSERT INTO alter_rows VALUES ('fits');");
+                + "INSERT INTO alter_rows VALUES ('fits');", cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -444,10 +479,10 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("alter-transition-ordered-source"));
+            new SafeMigrationRunOptions("alter-transition-ordered-source"), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var length = await ReadAlterLengthAsync(connectionString);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var length = await ReadAlterLengthAsync(connectionString, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -472,7 +507,7 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("alter-transition-empty-unsupported"));
+            new SafeMigrationRunOptions("alter-transition-empty-unsupported"), CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -485,7 +520,8 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE source_rows (value character varying(40) NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE source_rows (value character varying(40) NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("source_rows", "alter_rows");
@@ -493,7 +529,7 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("alter-transition-unbound-rename"));
+            new SafeMigrationRunOptions("alter-transition-unbound-rename"), CancellationToken.None);
 
         // Assert
         Assert.NotEqual(SafeMigrationReportStatus.Ready, report.Status);
@@ -511,10 +547,14 @@ public sealed class PostgreSqlColumnsAlterTransitionsIntegrationTests : PostgreS
             maxLength: sourceLength)), SafeMigrationPolicy.RepairIfSafe);
 
     /// <summary>Reads the physical limit after a successful or rejected operation.</summary>
+    /// <param name="connectionString">The isolated fixture database connection string.</param>
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
+    /// <returns>The asynchronous fixture operation or observation.</returns>
     private static Task<int> ReadAlterLengthAsync(
-        string connectionString
+        string connectionString,
+        CancellationToken cancellationToken
     ) => ScalarIntAsync(connectionString,
         "SELECT character_maximum_length FROM information_schema.columns WHERE table_schema = current_schema() "
-        + "AND table_name = 'alter_rows' AND column_name = 'value';");
+        + "AND table_name = 'alter_rows' AND column_name = 'value';", cancellationToken: cancellationToken);
 
 }

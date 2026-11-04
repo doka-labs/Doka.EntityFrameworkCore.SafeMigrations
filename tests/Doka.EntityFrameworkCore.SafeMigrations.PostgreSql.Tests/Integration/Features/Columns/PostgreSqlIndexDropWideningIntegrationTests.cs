@@ -19,17 +19,20 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzePendingMigrationsAsync(
-            context, new SafeMigrationRunOptions("pending-integer-upgrade"));
+            context, new SafeMigrationRunOptions("pending-integer-upgrade"), CancellationToken.None);
+
         var initialHistory = (await context.Database.GetAppliedMigrationsAsync(CancellationToken.None)).ToArray();
         var initialType = await ScalarStringAsync(connectionString,
             "SELECT data_type FROM information_schema.columns WHERE table_schema = 'public' "
-            + "AND table_name = 'pending_integer_rows' AND column_name = 'coordinate';");
+            + "AND table_name = 'pending_integer_rows' AND column_name = 'coordinate';",
+            cancellationToken: CancellationToken.None);
+
         report.ThrowIfBlocked();
         await context.Database.MigrateAsync(CancellationToken.None);
         await context.Database.MigrateAsync(CancellationToken.None);
         var script = migrator.GenerateScript(options: MigrationsSqlGenerationOptions.Idempotent);
-        await ExecuteSqlAsync(connectionString, script);
-        await ExecuteSqlAsync(connectionString, script);
+        await ExecuteSqlAsync(connectionString, script, cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, script, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal([IntegerBaseline.MigrationId], initialHistory);
@@ -38,9 +41,11 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
             await context.Database.GetAppliedMigrationsAsync(CancellationToken.None));
         Assert.Equal("bigint", await ScalarStringAsync(connectionString,
             "SELECT data_type FROM information_schema.columns WHERE table_schema = 'public' "
-            + "AND table_name = 'pending_integer_rows' AND column_name = 'coordinate';"));
+            + "AND table_name = 'pending_integer_rows' AND column_name = 'coordinate';",
+            cancellationToken: CancellationToken.None));
         Assert.Equal("2147483647:retained", await ScalarStringAsync(connectionString,
-            "SELECT coordinate::text || ':' || payload FROM pending_integer_rows;"));
+            "SELECT coordinate::text || ':' || payload FROM pending_integer_rows;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Rejects widening proofs with unsupported index roles, callbacks or stale sources.</summary>
@@ -90,7 +95,8 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
 
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE boundary_rows (value {sourceType} NOT NULL{defaultClause}, payload text NOT NULL); "
-            + "INSERT INTO boundary_rows VALUES (7, 'retained'); " + indexSql + dependentSql);
+            + "INSERT INTO boundary_rows VALUES (7, 'retained'); " + indexSql + dependentSql,
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropIndexIfExists("ix_boundary", "boundary_rows");
@@ -106,7 +112,8 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("index-drop-widening-boundary"));
+            context, builder.Operations, new SafeMigrationRunOptions("index-drop-widening-boundary"),
+            CancellationToken.None);
 
         // Assert
         var expectedAction = caseId switch
@@ -119,9 +126,10 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
         Assert.Equal(expectedAction, report.Assessments[^1].Action);
         Assert.Equal("7:retained", await ScalarStringAsync(connectionString,
-            "SELECT value::text || ':' || payload FROM boundary_rows;"));
+            "SELECT value::text || ':' || payload FROM boundary_rows;", cancellationToken: CancellationToken.None));
         Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT count(*) FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'ix_boundary';"));
+            "SELECT count(*) FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'ix_boundary';",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Rechecks source facets at execution instead of trusting a successful earlier preflight.</summary>
@@ -132,7 +140,8 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE stale_runtime_rows (value integer NOT NULL); INSERT INTO stale_runtime_rows VALUES (7); "
-            + "CREATE INDEX ix_stale_runtime ON stale_runtime_rows (value);");
+            + "CREATE INDEX ix_stale_runtime ON stale_runtime_rows (value);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropIndexIfExists("ix_stale_runtime", "stale_runtime_rows");
@@ -141,20 +150,24 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
             new ExpectedColumnDefinition("value", typeof(int), false, "integer"),
             SafeMigrationPolicy.RepairIfSafe);
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("stale-runtime-integer"));
+            context, builder.Operations, new SafeMigrationRunOptions("stale-runtime-integer"), CancellationToken.None);
+
         report.ThrowIfBlocked();
-        await ExecuteSqlAsync(connectionString, "ALTER TABLE stale_runtime_rows ALTER COLUMN value SET DEFAULT 7;");
+        await ExecuteSqlAsync(connectionString, "ALTER TABLE stale_runtime_rows ALTER COLUMN value SET DEFAULT 7;",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var exception = await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(context,
-            builder.Operations));
+            builder.Operations, CancellationToken.None));
 
         // Assert
         Assert.Equal("P1001", exception.SqlState);
         Assert.Equal("integer", await ScalarStringAsync(connectionString,
             "SELECT data_type FROM information_schema.columns WHERE table_schema = 'public' "
-            + "AND table_name = 'stale_runtime_rows' AND column_name = 'value';"));
-        Assert.Equal(7, await ScalarIntAsync(connectionString, "SELECT value FROM stale_runtime_rows;"));
+            + "AND table_name = 'stale_runtime_rows' AND column_name = 'value';",
+            cancellationToken: CancellationToken.None));
+        Assert.Equal(7, await ScalarIntAsync(connectionString, "SELECT value FROM stale_runtime_rows;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Does not confuse installed DML callbacks with a callback actually reachable from the prefix.</summary>
@@ -173,7 +186,7 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
             + "CREATE FUNCTION integer_dml_callback() RETURNS trigger LANGUAGE plpgsql AS $$ "
             + "BEGIN RAISE EXCEPTION USING ERRCODE = 'P1991', MESSAGE = 'unexpected_integer_backfill'; END $$; "
             + "CREATE TRIGGER integer_dml_callback AFTER UPDATE ON trigger_integer_rows "
-            + "FOR EACH STATEMENT EXECUTE FUNCTION integer_dml_callback();");
+            + "FOR EACH STATEMENT EXECUTE FUNCTION integer_dml_callback();", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropIndexIfExists("ix_trigger_integer", "trigger_integer_rows");
@@ -194,19 +207,21 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("integer-dml-callback"));
+            context, builder.Operations, new SafeMigrationRunOptions("integer-dml-callback"), CancellationToken.None);
+
         if (!precedingDml)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         // Assert
         Assert.Equal(precedingDml ? SafeMigrationAction.ValidateAtRuntime : SafeMigrationAction.Repair,
             report.Assessments[^1].Action);
         Assert.Equal("7:retained", await ScalarStringAsync(connectionString,
-            "SELECT value::text || ':' || payload FROM trigger_integer_rows;"));
+            "SELECT value::text || ':' || payload FROM trigger_integer_rows;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Does not apply built-in owner proofs to domains, recursive owners or opaque dependents.</summary>
@@ -242,7 +257,7 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
 
         await ExecuteSqlAsync(connectionString, before + "CREATE TABLE dependency_integer_rows (" + columns
             + ")" + inheritance + "; INSERT INTO dependency_integer_rows(value,payload) VALUES (7, 'retained'); "
-            + dependent);
+            + dependent, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AlterColumnIfDifferent("dependency_integer_rows",
@@ -252,15 +267,18 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("integer-native-dependency-boundary"));
+            context, builder.Operations, new SafeMigrationRunOptions("integer-native-dependency-boundary"),
+            CancellationToken.None);
+
         var failure = await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(context,
-            builder.Operations));
+            builder.Operations, CancellationToken.None));
 
         // Assert
         Assert.Equal(SafeMigrationAction.RejectDifferent, Assert.Single(report.Assessments).Action);
         Assert.Equal("P1001", failure.SqlState);
         Assert.Equal("7:retained", await ScalarStringAsync(connectionString,
-            "SELECT value::text || ':' || payload FROM ONLY dependency_integer_rows;"));
+            "SELECT value::text || ':' || payload FROM ONLY dependency_integer_rows;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Widens both smaller signed widths using the real engine while preserving boundary values.</summary>
@@ -274,7 +292,7 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE smaller_integer_rows (value smallint NOT NULL); "
-            + "INSERT INTO smaller_integer_rows VALUES (-32768), (32767);");
+            + "INSERT INTO smaller_integer_rows VALUES (-32768), (32767);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AlterColumnIfDifferent("smaller_integer_rows",
@@ -285,18 +303,22 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("smaller-integer-upgrade"));
+            context, builder.Operations, new SafeMigrationRunOptions("smaller-integer-upgrade"),
+            CancellationToken.None);
+
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Repair, Assert.Single(report.Assessments).Action);
         Assert.Equal("-32768:32767", await ScalarStringAsync(connectionString,
-            "SELECT min(value)::text || ':' || max(value)::text FROM smaller_integer_rows;"));
+            "SELECT min(value)::text || ':' || max(value)::text FROM smaller_integer_rows;",
+            cancellationToken: CancellationToken.None));
         Assert.Equal(targetType, await ScalarStringAsync(connectionString,
             "SELECT data_type FROM information_schema.columns WHERE table_schema = 'public' "
-            + "AND table_name = 'smaller_integer_rows' AND column_name = 'value';"));
+            + "AND table_name = 'smaller_integer_rows' AND column_name = 'value';",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>A mismatched replacement index remains an independent blocker after the old index disappears.</summary>
@@ -309,7 +331,8 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
             "CREATE TABLE replacement_integer_rows (value integer NOT NULL, payload text NOT NULL); "
             + "INSERT INTO replacement_integer_rows VALUES (7, 'retained'); "
             + "CREATE INDEX ix_old_integer ON replacement_integer_rows (value); "
-            + "CREATE INDEX ix_new_integer ON replacement_integer_rows (payload);");
+            + "CREATE INDEX ix_new_integer ON replacement_integer_rows (payload);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropIndexIfExists("ix_old_integer", "replacement_integer_rows");
@@ -321,7 +344,8 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("integer-replacement-index-drift"));
+            context, builder.Operations, new SafeMigrationRunOptions("integer-replacement-index-drift"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
@@ -330,9 +354,10 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(1, await ScalarIntAsync(connectionString,
             "SELECT count(*) FROM pg_catalog.pg_indexes WHERE schemaname = 'public' "
-            + "AND indexname = 'ix_old_integer';"));
+            + "AND indexname = 'ix_old_integer';", cancellationToken: CancellationToken.None));
         Assert.Equal("7:retained", await ScalarStringAsync(connectionString,
-            "SELECT value::text || ':' || payload FROM replacement_integer_rows;"));
+            "SELECT value::text || ':' || payload FROM replacement_integer_rows;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Retains unchanged column evidence across an index-only boundary without mutating preflight.</summary>
@@ -369,7 +394,8 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
                 : $"CREATE INDEX ix_upgrade_rows ON {owner} (left_value"
                     + (threeDrops ? string.Empty : ", right_value") + "); "
                     + (threeDrops ? $"CREATE INDEX ix_upgrade_rows_right ON {owner} (right_value); "
-                        + $"CREATE INDEX ix_upgrade_rows_position ON {owner} (position_value);" : string.Empty)));
+                        + $"CREATE INDEX ix_upgrade_rows_position ON {owner} (position_value);" : string.Empty)),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (dropIndex)
@@ -401,21 +427,27 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("index-drop-widening"));
+            context, builder.Operations, new SafeMigrationRunOptions("index-drop-widening"), CancellationToken.None);
+
         var before = await ScalarStringAsync(connectionString,
             $"SELECT left_value::text || ':' || right_value::text || ':' || position_value::text || ':' || payload "
-            + $"FROM {owner};");
+            + $"FROM {owner};", cancellationToken: CancellationToken.None);
+
         var beforeType = await ScalarStringAsync(connectionString,
             "SELECT data_type FROM information_schema.columns WHERE table_schema = '"
-            + (schema ?? "public") + "' AND table_name = 'upgrade_rows' AND column_name = 'left_value';");
+            + (schema ?? "public") + "' AND table_name = 'upgrade_rows' AND column_name = 'left_value';",
+            cancellationToken: CancellationToken.None);
+
         var beforeIndex = await ScalarIntAsync(connectionString,
             "SELECT count(*) FROM pg_catalog.pg_indexes WHERE schemaname = '" + (schema ?? "public")
-            + "' AND indexname = 'ix_upgrade_rows';");
+            + "' AND indexname = 'ix_upgrade_rows';", cancellationToken: CancellationToken.None);
+
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("index-drop-widening-replay"));
+            context, builder.Operations, new SafeMigrationRunOptions("index-drop-widening-replay"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal("integer", beforeType);
@@ -423,24 +455,28 @@ public sealed class PostgreSqlIndexDropWideningIntegrationTests : PostgreSqlInte
         Assert.Equal("-2147483648:2147483647:42:retained", before);
         Assert.Equal(before, await ScalarStringAsync(connectionString,
             $"SELECT left_value::text || ':' || right_value::text || ':' || position_value::text || ':' || payload "
-            + $"FROM {owner};"));
+            + $"FROM {owner};", cancellationToken: CancellationToken.None));
         Assert.Equal(names.Length, await ScalarIntAsync(connectionString,
             "SELECT count(*) FROM information_schema.columns WHERE table_schema = '" + (schema ?? "public")
-            + "' AND table_name = 'upgrade_rows' AND data_type = 'bigint' AND is_nullable = 'NO';"));
+            + "' AND table_name = 'upgrade_rows' AND data_type = 'bigint' AND is_nullable = 'NO';",
+            cancellationToken: CancellationToken.None));
         if (dropIndex)
         {
             Assert.Equal(0, await ScalarIntAsync(connectionString,
                 "SELECT count(*) FROM pg_catalog.pg_indexes WHERE schemaname = '" + (schema ?? "public")
-                + "' AND indexname IN ('ix_upgrade_rows', 'ix_upgrade_rows_right', 'ix_upgrade_rows_position');"));
+                + "' AND indexname IN ('ix_upgrade_rows', 'ix_upgrade_rows_right', 'ix_upgrade_rows_position');",
+                cancellationToken: CancellationToken.None));
             Assert.Equal(2, await ScalarIntAsync(connectionString,
                 "SELECT count(*) FROM pg_catalog.pg_indexes WHERE schemaname = '" + (schema ?? "public")
-                + "' AND tablename = 'upgrade_rows' AND indexname IN ('ix_upgrade_left', 'ix_upgrade_right');"));
+                + "' AND tablename = 'upgrade_rows' AND indexname IN ('ix_upgrade_left', 'ix_upgrade_right');",
+                cancellationToken: CancellationToken.None));
             Assert.Equal(4, await ScalarIntAsync(connectionString,
                 "SELECT count(*) FROM pg_catalog.pg_constraint co "
                 + "JOIN pg_catalog.pg_class tbl ON tbl.oid = co.conrelid "
                 + "JOIN pg_catalog.pg_namespace ns ON ns.oid = tbl.relnamespace "
                 + "WHERE ns.nspname = '" + (schema ?? "public")
-                + "' AND tbl.relname = 'upgrade_rows' AND co.contype = 'c';"));
+                + "' AND tbl.relname = 'upgrade_rows' AND co.contype = 'c';",
+                cancellationToken: CancellationToken.None));
         }
 
         Assert.All(replay.Assessments, assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));

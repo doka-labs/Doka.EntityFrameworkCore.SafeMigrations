@@ -25,7 +25,8 @@ public sealed partial class MySqlPerformanceIntegrationTests : MySqlSafeMigratio
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, BuildLargeMigrationStressCatalog());
+        await ExecuteSqlAsync(connectionString, BuildLargeMigrationStressCatalog(),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var expectation = LargeMigrationStressContract.Populate(
@@ -33,7 +34,8 @@ public sealed partial class MySqlPerformanceIntegrationTests : MySqlSafeMigratio
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("bounded-mixed-migration"));
+            context, builder.Operations, new SafeMigrationRunOptions("bounded-mixed-migration"),
+            CancellationToken.None);
 
         // Assert
         expectation.AssertReport(report);
@@ -46,7 +48,7 @@ public sealed partial class MySqlPerformanceIntegrationTests : MySqlSafeMigratio
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            BuildLargeMigrationStressCatalog());
+            BuildLargeMigrationStressCatalog(), cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -81,7 +83,7 @@ public sealed partial class MySqlProcessWidePerformanceIntegrationTests : MySqlS
             connectionString,
             "CREATE TABLE `large_model_managed_rows` ("
             + "`id` int NOT NULL, `managed_value` varchar(32) NOT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB;"
-            + BuildMySqlModelManagedInitialRows());
+            + BuildMySqlModelManagedInitialRows(), cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         context.Database.SetCommandTimeout(PerformanceFixtureCommandTimeoutSeconds);
@@ -96,23 +98,23 @@ public sealed partial class MySqlProcessWidePerformanceIntegrationTests : MySqlS
             .GetService<IMigrationsSqlGenerator>()
             .Generate(builder.Operations, context.Model);
 
-        var initial = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() => runner.AnalyzeAsync(
+        var initial = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(operationToken => runner.AnalyzeAsync(
                 context,
                 builder.Operations,
                 new SafeMigrationRunOptions("large-model-managed-data"),
-                CancellationToken.None));
+                operationToken), CancellationToken.None);
 
-        var initialExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() =>
-            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
+        var initialExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(operationToken =>
+            ExecuteOperationsAsync(context, builder.Operations, operationToken), CancellationToken.None);
 
-        var replayExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() =>
-            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
+        var replayExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(operationToken =>
+            ExecuteOperationsAsync(context, builder.Operations, operationToken), CancellationToken.None);
 
-        var replay = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(() => runner.AnalyzeAsync(
+        var replay = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(operationToken => runner.AnalyzeAsync(
                 context,
                 builder.Operations,
                 new SafeMigrationRunOptions("large-model-managed-data-replay"),
-                CancellationToken.None));
+                operationToken), CancellationToken.None);
 
         ModelManagedDataLargeExecutionEvidence.Write(
             Fixture.IsMariaDb ? "mariadb" : "mysql",
@@ -127,17 +129,20 @@ public sealed partial class MySqlProcessWidePerformanceIntegrationTests : MySqlS
         expectation.AssertReplayReport(replay.Result);
         Assert.Equal(
             expectation.FinalRowCount,
-            await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `large_model_managed_rows`;"));
+            await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `large_model_managed_rows`;",
+                cancellationToken: CancellationToken.None));
         Assert.Equal(
             expectation.FinalRowCount,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM `large_model_managed_rows` WHERE `managed_value` = 'target';"));
+                "SELECT COUNT(*) FROM `large_model_managed_rows` WHERE `managed_value` = 'target';",
+                cancellationToken: CancellationToken.None));
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM `large_model_managed_rows` WHERE `id` >= 3000000;"));
+                "SELECT COUNT(*) FROM `large_model_managed_rows` WHERE `id` >= 3000000;",
+                cancellationToken: CancellationToken.None));
     }
 }
 
@@ -151,7 +156,7 @@ public sealed partial class MySqlPerformanceIntegrationTests : MySqlSafeMigratio
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `catalog_timeout` (`id` int NOT NULL); "
-            + "INSERT INTO `catalog_timeout` (`id`) VALUES (1);");
+            + "INSERT INTO `catalog_timeout` (`id`) VALUES (1);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         context.Database.SetCommandTimeout(1);
@@ -196,19 +201,25 @@ public sealed partial class MySqlPerformanceIntegrationTests : MySqlSafeMigratio
 
         await ExecuteSqlAsync(
             fixtureConnectionString,
-            BuildMySqlPerformanceTables("expected_perf_", ExpectedPerformanceTableCount, includeIndex: false));
+            BuildMySqlPerformanceTables("expected_perf_", ExpectedPerformanceTableCount, includeIndex: false),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operations = BuildMySqlPerformanceOperations(context.Database.ProviderName!);
         var runner = context.GetService<ISafeMigrationRunner>();
         var options = new SafeMigrationRunOptions("live-performance");
-        var clean = await LivePerformanceEvidence.MeasureAsync(() => runner.AnalyzeAsync(context, operations, options));
+        var clean = await LivePerformanceEvidence.MeasureAsync(operationToken => runner.AnalyzeAsync(
+            context, operations, options,
+            operationToken), cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             fixtureConnectionString,
-            BuildMySqlPerformanceTables("foreign_perf_", ForeignPerformanceTableCount, includeIndex: true));
+            BuildMySqlPerformanceTables("foreign_perf_", ForeignPerformanceTableCount, includeIndex: true),
+            cancellationToken: CancellationToken.None);
 
-        var noisy = await LivePerformanceEvidence.MeasureAsync(() => runner.AnalyzeAsync(context, operations, options));
+        var noisy = await LivePerformanceEvidence.MeasureAsync(operationToken => runner.AnalyzeAsync(
+            context, operations, options,
+            operationToken), cancellationToken: CancellationToken.None);
 
         LivePerformanceEvidence.Write(
             Fixture.IsMariaDb ? "mariadb" : "mysql",

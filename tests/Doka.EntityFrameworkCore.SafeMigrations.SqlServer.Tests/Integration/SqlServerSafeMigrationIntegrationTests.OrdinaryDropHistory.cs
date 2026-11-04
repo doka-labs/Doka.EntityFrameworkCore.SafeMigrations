@@ -19,7 +19,7 @@ public sealed class SqlServerSafeMigrationOrdinaryDropHistoryIntegrationTests : 
     public async Task NativeBlockerRejectsRealMigrationWithoutRecordingHistory(bool asynchronous, bool check)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = HistoryContext(connectionString, check);
         await context.GetService<IMigrator>().MigrateAsync(InitialIdentifier(check));
 
@@ -31,15 +31,15 @@ public sealed class SqlServerSafeMigrationOrdinaryDropHistoryIntegrationTests : 
 
         var rows = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM dbo.ordinary_drop_history WHERE (Id=1 AND L=1 AND R=4) "
-            + "OR (Id=2 AND L=2 AND R=8);");
+            + "OR (Id=2 AND L=2 AND R=8);", cancellationToken: CancellationToken.None);
 
-        var history = await UpgradeHistoryAsync(connectionString, check);
+        var history = await UpgradeHistoryAsync(connectionString, check, cancellationToken: CancellationToken.None);
         var dependency = await ScalarIntAsync(connectionString, check
             ? "SELECT COUNT(*) FROM sys.check_constraints "
                 + "WHERE parent_object_id=OBJECT_ID(N'dbo.ordinary_drop_history') "
                 + "AND name=N'CK_ordinary_drop_history_L';"
             : "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ordinary_drop_history') "
-                + "AND name=N'IX_ordinary_drop_history_L';");
+                + "AND name=N'IX_ordinary_drop_history_L';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(51001, Assert.IsType<SqlException>(failure).Number);
@@ -56,22 +56,29 @@ public sealed class SqlServerSafeMigrationOrdinaryDropHistoryIntegrationTests : 
     public async Task CorrectedNativePrerequisitePermitsUnchangedRetryAndHistoryReplay(bool check)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = HistoryContext(connectionString, check);
         await context.GetService<IMigrator>().MigrateAsync(InitialIdentifier(check));
         var firstFailure = await Record.ExceptionAsync(() => context.Database.MigrateAsync());
-        var rejectedHistory = await UpgradeHistoryAsync(connectionString, check);
-        await ExecuteSqlAsync(connectionString, CorrectPrerequisiteSql(check));
+        var rejectedHistory = await UpgradeHistoryAsync(
+            connectionString,
+            check,
+            cancellationToken: CancellationToken.None);
+
+        await ExecuteSqlAsync(connectionString, CorrectPrerequisiteSql(check),
+            cancellationToken: CancellationToken.None);
 
         // Act
         await context.Database.MigrateAsync();
         context.Database.Migrate();
-        var history = await UpgradeHistoryAsync(connectionString, check);
+        var history = await UpgradeHistoryAsync(connectionString, check, cancellationToken: CancellationToken.None);
         var columns = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.ordinary_drop_history') AND name=N'L';");
+            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.ordinary_drop_history') AND name=N'L';",
+            cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.ordinary_drop_history WHERE (Id=1 AND R=4) OR (Id=2 AND R=8);");
+            "SELECT COUNT(*) FROM dbo.ordinary_drop_history WHERE (Id=1 AND R=4) OR (Id=2 AND R=8);",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(51001, Assert.IsType<SqlException>(firstFailure).Number);
@@ -92,7 +99,7 @@ public sealed class SqlServerSafeMigrationOrdinaryDropHistoryIntegrationTests : 
     public async Task CompleteScriptRejectsBlockerAndCorrectedUpgradeReplays(bool idempotent, bool check)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = HistoryContext(connectionString, check);
         var options = idempotent ? MigrationsSqlGenerationOptions.Idempotent : MigrationsSqlGenerationOptions.Default;
         var migrator = context.GetService<IMigrator>();
@@ -100,21 +107,28 @@ public sealed class SqlServerSafeMigrationOrdinaryDropHistoryIntegrationTests : 
         var upgrade = migrator.GenerateScript(InitialIdentifier(check), null, options);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteScriptAsync(connectionString, complete));
-        var before = await UpgradeHistoryAsync(connectionString, check);
-        var retained = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.ordinary_drop_history WHERE L=1 AND R=4;");
+        var failure = await Record.ExceptionAsync(() => ExecuteScriptAsync(
+            connectionString,
+            complete,
+            cancellationToken: CancellationToken.None));
 
-        await ExecuteSqlAsync(connectionString, CorrectPrerequisiteSql(check));
-        await ExecuteScriptAsync(connectionString, upgrade);
+        var before = await UpgradeHistoryAsync(connectionString, check, cancellationToken: CancellationToken.None);
+        var retained = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM dbo.ordinary_drop_history WHERE L=1 AND R=4;",
+            cancellationToken: CancellationToken.None);
+
+        await ExecuteSqlAsync(connectionString, CorrectPrerequisiteSql(check),
+            cancellationToken: CancellationToken.None);
+        await ExecuteScriptAsync(connectionString, upgrade, cancellationToken: CancellationToken.None);
         if (idempotent)
         {
-            await ExecuteScriptAsync(connectionString, complete);
+            await ExecuteScriptAsync(connectionString, complete, cancellationToken: CancellationToken.None);
         }
 
-        var history = await UpgradeHistoryAsync(connectionString, check);
+        var history = await UpgradeHistoryAsync(connectionString, check, cancellationToken: CancellationToken.None);
         var rows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.ordinary_drop_history WHERE (Id=1 AND R=4) OR (Id=2 AND R=8);");
+            "SELECT COUNT(*) FROM dbo.ordinary_drop_history WHERE (Id=1 AND R=4) OR (Id=2 AND R=8);",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(51001, Assert.IsType<SqlException>(failure).Number);
@@ -124,10 +138,14 @@ public sealed class SqlServerSafeMigrationOrdinaryDropHistoryIntegrationTests : 
         Assert.Equal(2, rows);
     }
 
-    private static Task<int> UpgradeHistoryAsync(string connectionString, bool check)
+    private static Task<int> UpgradeHistoryAsync(
+        string connectionString,
+        bool check,
+        CancellationToken cancellationToken)
         => ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.__EFMigrationsHistory WHERE MigrationId=N'"
             + (check ? SqlServerOrdinaryDropCheckBlockedMigration.Identifier
-                : SqlServerOrdinaryDropBlockedMigration.MigrationIdentifier) + "';");
+                : SqlServerOrdinaryDropBlockedMigration.MigrationIdentifier) + "';",
+            cancellationToken: cancellationToken);
 
     private static string InitialIdentifier(bool check)
         => check ? SqlServerOrdinaryDropCheckInitialMigration.Identifier
@@ -141,10 +159,15 @@ public sealed class SqlServerSafeMigrationOrdinaryDropHistoryIntegrationTests : 
         => check ? "ALTER TABLE dbo.ordinary_drop_history DROP CONSTRAINT CK_ordinary_drop_history_L;"
             : "DROP INDEX IX_ordinary_drop_history_L ON dbo.ordinary_drop_history;";
 
-    private static async Task ExecuteScriptAsync(string connectionString, string script)
+    private static async Task ExecuteScriptAsync(
+        string connectionString,
+        string script,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var connection = new SqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(cancellationToken: cancellationToken);
 
         // WHY: GO is a client batch separator, not T-SQL. One connection preserves script transactions and variables.
         foreach (var batch in System.Text.RegularExpressions.Regex.Split(script, @"(?m)^GO\s*$"))
@@ -157,7 +180,7 @@ public sealed class SqlServerSafeMigrationOrdinaryDropHistoryIntegrationTests : 
             await using var command = connection.CreateCommand();
             command.CommandText = batch;
             command.CommandTimeout = SafeMigrationDbContext.CommandTimeoutSeconds;
-            await command.ExecuteNonQueryAsync();
+            await command.ExecuteNonQueryAsync(cancellationToken: cancellationToken);
         }
     }
 }

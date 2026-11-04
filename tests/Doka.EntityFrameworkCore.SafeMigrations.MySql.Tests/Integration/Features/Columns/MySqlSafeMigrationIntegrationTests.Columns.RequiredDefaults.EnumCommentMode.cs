@@ -26,7 +26,8 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumCommentModeIntegrati
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql("enum_comment_items"));
+        await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql("enum_comment_items"),
+            cancellationToken: CancellationToken.None);
 
         // WHY: MySqlConnector's string-parameter escaping must match the
         // explicitly selected server mode or replay compares altered domains.
@@ -38,10 +39,12 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumCommentModeIntegrati
         await using var context = CreateContext(migrationConnectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES"
-            + (noBackslashEscapes ? ",NO_BACKSLASH_ESCAPES" : "") + "';");
+            + (noBackslashEscapes ? ",NO_BACKSLASH_ESCAPES" : "") + "';", cancellationToken: CancellationToken.None);
         var operation = RequiredDefaultsEnumCommentOperation(useSetStorage);
         var originalFingerprint = SafeMigrationContractFingerprint.Create([operation]);
-        var originalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context);
+        var originalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context,
+            cancellationToken: CancellationToken.None);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
@@ -57,7 +60,7 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumCommentModeIntegrati
         {
             await AtomicRequiredAddSessionSqlAsync(context,
                 "INSERT INTO `enum_comment_items` (`key`, `value`) VALUES (1, "
-                + AtomicRequiredAddLiteral(@"slash\\tail") + ");");
+                + AtomicRequiredAddLiteral(@"slash\\tail") + ");", cancellationToken: CancellationToken.None);
             replay = await runner.AnalyzeAsync(context, [operation],
                 new SafeMigrationRunOptions("required-enum-comment-replay"), CancellationToken.None);
 
@@ -65,13 +68,22 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumCommentModeIntegrati
                 ExecuteOperationsAsync(context, [operation], CancellationToken.None));
         }
 
-        var finalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context);
-        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
-        var physicalType = await RequiredDefaultsEnumCommentPhysicalTypeAsync(connectionString);
-        var commentHex = await RequiredDefaultsEnumCommentPhysicalCommentHexAsync(connectionString);
+        var finalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context,
+            cancellationToken: CancellationToken.None);
+
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: CancellationToken.None);
+
+        var physicalType = await RequiredDefaultsEnumCommentPhysicalTypeAsync(connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var commentHex = await RequiredDefaultsEnumCommentPhysicalCommentHexAsync(connectionString,
+            cancellationToken: CancellationToken.None);
+
         var storedHex = noBackslashEscapes && failure is null
             ? await ScalarStringAsync(connectionString,
-                "SELECT HEX(`value`) FROM `enum_comment_items` WHERE `key` = 1;")
+                "SELECT HEX(`value`) FROM `enum_comment_items` WHERE `key` = 1;",
+                cancellationToken: CancellationToken.None)
             : "absent";
 
         // Assert
@@ -120,10 +132,12 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumCommentModeIntegrati
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; "
-            + RequiredDefaultsEnumCommentStandardFixtureSql(useSetStorage, matchingComment: true));
+            + RequiredDefaultsEnumCommentStandardFixtureSql(useSetStorage, matchingComment: true),
+            cancellationToken: CancellationToken.None);
         var operation = RequiredDefaultsEnumCommentOperation(useSetStorage);
         var originalFingerprint = SafeMigrationContractFingerprint.Create([operation]);
-        var originalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context);
+        var originalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context,
+            cancellationToken: CancellationToken.None);
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
@@ -132,13 +146,21 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumCommentModeIntegrati
         var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var finalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context);
-        var physicalType = await RequiredDefaultsEnumCommentPhysicalTypeAsync(connectionString);
-        var commentHex = await RequiredDefaultsEnumCommentPhysicalCommentHexAsync(connectionString);
-        var storedHex = await ScalarStringAsync(connectionString,
-            "SELECT HEX(`value`) FROM `enum_comment_items` WHERE `key` = 1;");
+        var finalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context,
+            cancellationToken: CancellationToken.None);
 
-        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+        var physicalType = await RequiredDefaultsEnumCommentPhysicalTypeAsync(connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var commentHex = await RequiredDefaultsEnumCommentPhysicalCommentHexAsync(connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var storedHex = await ScalarStringAsync(connectionString,
+            "SELECT HEX(`value`) FROM `enum_comment_items` WHERE `key` = 1;",
+            cancellationToken: CancellationToken.None);
+
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -166,10 +188,12 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumCommentModeIntegrati
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; "
-            + RequiredDefaultsEnumCommentStandardFixtureSql(useSetStorage, matchingComment: false));
+            + RequiredDefaultsEnumCommentStandardFixtureSql(useSetStorage, matchingComment: false),
+            cancellationToken: CancellationToken.None);
         var operation = RequiredDefaultsEnumCommentOperation(useSetStorage);
         var originalFingerprint = SafeMigrationContractFingerprint.Create([operation]);
-        var originalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context);
+        var originalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context,
+            cancellationToken: CancellationToken.None);
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
@@ -178,13 +202,21 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumCommentModeIntegrati
         var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var finalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context);
-        var physicalType = await RequiredDefaultsEnumCommentPhysicalTypeAsync(connectionString);
-        var commentHex = await RequiredDefaultsEnumCommentPhysicalCommentHexAsync(connectionString);
-        var storedHex = await ScalarStringAsync(connectionString,
-            "SELECT HEX(`value`) FROM `enum_comment_items` WHERE `key` = 1;");
+        var finalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context,
+            cancellationToken: CancellationToken.None);
 
-        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+        var physicalType = await RequiredDefaultsEnumCommentPhysicalTypeAsync(connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var commentHex = await RequiredDefaultsEnumCommentPhysicalCommentHexAsync(connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var storedHex = await ScalarStringAsync(connectionString,
+            "SELECT HEX(`value`) FROM `enum_comment_items` WHERE `key` = 1;",
+            cancellationToken: CancellationToken.None);
+
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -214,10 +246,13 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumCommentModeIntegrati
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; "
-            + RequiredDefaultsEnumCommentStandardOnlyFixtureSql(useSetStorage));
+            + RequiredDefaultsEnumCommentStandardOnlyFixtureSql(useSetStorage),
+            cancellationToken: CancellationToken.None);
         var operation = RequiredDefaultsEnumCommentStandardOnlyOperation(useSetStorage);
         var originalFingerprint = SafeMigrationContractFingerprint.Create([operation]);
-        var originalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context);
+        var originalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context,
+            cancellationToken: CancellationToken.None);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
@@ -230,13 +265,21 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumCommentModeIntegrati
         var postflight = await runner.VerifyAsync(context, [operation],
             new SafeMigrationRunOptions("required-enum-comment-standard-only-final"), CancellationToken.None);
 
-        var finalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context);
-        var physicalType = await RequiredDefaultsEnumCommentPhysicalTypeAsync(connectionString);
-        var commentHex = await RequiredDefaultsEnumCommentPhysicalCommentHexAsync(connectionString);
-        var storedHex = await ScalarStringAsync(connectionString,
-            "SELECT HEX(`value`) FROM `enum_comment_items` WHERE `key` = 1;");
+        var finalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context,
+            cancellationToken: CancellationToken.None);
 
-        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+        var physicalType = await RequiredDefaultsEnumCommentPhysicalTypeAsync(connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var commentHex = await RequiredDefaultsEnumCommentPhysicalCommentHexAsync(connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var storedHex = await ScalarStringAsync(connectionString,
+            "SELECT HEX(`value`) FROM `enum_comment_items` WHERE `key` = 1;",
+            cancellationToken: CancellationToken.None);
+
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -262,13 +305,16 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumCommentModeIntegrati
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql("enum_comment_items"));
+        await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql("enum_comment_items"),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
-        await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES';");
+        await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES';",
+            cancellationToken: CancellationToken.None);
         var operation = RequiredDefaultsEnumCommentStandardOnlyOperation(useSetStorage);
         var originalFingerprint = SafeMigrationContractFingerprint.Create([operation]);
-        var originalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context);
+        var originalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context,
+            cancellationToken: CancellationToken.None);
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
@@ -277,8 +323,11 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumCommentModeIntegrati
         var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var finalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context);
-        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+        var finalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context,
+            cancellationToken: CancellationToken.None);
+
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -350,12 +399,18 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     /// <summary>Reads the caller's retained native session mode before and after actual scoped execution.</summary>
     /// <param name="context">The already-open migration context.</param>
     /// <returns>The server's exact mode text without normalizing or changing it.</returns>
-    protected static async Task<string> RequiredDefaultsEnumCommentSessionModeAsync(DbContext context)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    protected static async Task<string> RequiredDefaultsEnumCommentSessionModeAsync(
+        DbContext context,
+        CancellationToken cancellationToken
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var command = context.Database.GetDbConnection().CreateCommand();
         command.CommandText = "SELECT @@SESSION.sql_mode;";
 
-        return Convert.ToString(await command.ExecuteScalarAsync(CancellationToken.None),
+        return Convert.ToString(await command.ExecuteScalarAsync(cancellationToken),
             CultureInfo.InvariantCulture) ?? "<null>";
     }
 }
@@ -366,16 +421,24 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumCommentModeIntegrati
     /// <summary>Reads the complete physical domain display without case folding or mode reinterpretation.</summary>
     /// <param name="connectionString">The isolated test owner.</param>
     /// <returns>The exact stored type display, or the scalar helper's missing sentinel.</returns>
-    private static Task<string> RequiredDefaultsEnumCommentPhysicalTypeAsync(string connectionString)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static Task<string> RequiredDefaultsEnumCommentPhysicalTypeAsync(
+        string connectionString,
+        CancellationToken cancellationToken
+    )
         => ScalarStringAsync(connectionString,
             "SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'enum_comment_items' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'enum_comment_items' AND COLUMN_NAME = 'value';", cancellationToken: cancellationToken);
 
     /// <summary>Reads exact comment bytes so a fixture escaping error cannot impersonate target ownership.</summary>
     /// <param name="connectionString">The isolated test owner.</param>
     /// <returns>The hexadecimal comment bytes, or the scalar helper's missing sentinel.</returns>
-    private static Task<string> RequiredDefaultsEnumCommentPhysicalCommentHexAsync(string connectionString)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static Task<string> RequiredDefaultsEnumCommentPhysicalCommentHexAsync(
+        string connectionString,
+        CancellationToken cancellationToken
+    )
         => ScalarStringAsync(connectionString,
             "SELECT HEX(COLUMN_COMMENT) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'enum_comment_items' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'enum_comment_items' AND COLUMN_NAME = 'value';", cancellationToken: cancellationToken);
 }

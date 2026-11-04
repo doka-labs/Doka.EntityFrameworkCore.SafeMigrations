@@ -109,10 +109,15 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
         bool registerSafeMigrations = true
     ) => new(connectionString, registerSafeMigrations);
 
+    /// <summary>Executes generated migration commands with the caller's explicit cancellation scope.</summary>
+    /// <param name="context">The context supplying SQL generation and the execution connection.</param>
+    /// <param name="operations">The ordered migration operations to execute.</param>
+    /// <param name="cancellationToken">The token forwarded to connection opening and every command.</param>
+    /// <returns>A task completing when all generated commands have executed.</returns>
     protected static async Task ExecuteOperationsAsync(
         DbContext context,
         IReadOnlyList<MigrationOperation> operations,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         var generator = context.GetService<IMigrationsSqlGenerator>();
@@ -131,58 +136,90 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
         }
     }
 
+    /// <summary>Executes fixture SQL using the caller's cancellation scope.</summary>
+    /// <param name="connectionString">The isolated fixture database connection string.</param>
+    /// <param name="sql">The source-controlled fixture SQL.</param>
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
+    /// <returns>The asynchronous fixture operation or observation.</returns>
     protected static async Task ExecuteSqlAsync(
         string connectionString,
-        string sql
+        string sql,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync(CancellationToken.None);
+        await connection.OpenAsync(cancellationToken);
 
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
 
-        await command.ExecuteNonQueryAsync(CancellationToken.None);
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    /// <summary>Reads an integer scalar from the isolated fixture database.</summary>
+    /// <param name="connectionString">The isolated fixture database connection string.</param>
+    /// <param name="sql">The source-controlled fixture SQL.</param>
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
+    /// <returns>The asynchronous fixture operation or observation.</returns>
     protected static async Task<int> ScalarIntAsync(
         string connectionString,
-        string sql
+        string sql,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync(CancellationToken.None);
+        await connection.OpenAsync(cancellationToken);
 
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
 
-        return Convert.ToInt32(await command.ExecuteScalarAsync(CancellationToken.None), CultureInfo.InvariantCulture);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture);
     }
 
+    /// <summary>Reads a text scalar from the isolated fixture database.</summary>
+    /// <param name="connectionString">The isolated fixture database connection string.</param>
+    /// <param name="sql">The source-controlled fixture SQL.</param>
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
+    /// <returns>The asynchronous fixture operation or observation.</returns>
     protected static async Task<string> ScalarStringAsync(
         string connectionString,
-        string sql
+        string sql,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync(CancellationToken.None);
+        await connection.OpenAsync(cancellationToken);
 
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
 
         return Convert.ToString(
-                await command.ExecuteScalarAsync(CancellationToken.None),
+                await command.ExecuteScalarAsync(cancellationToken),
                 CultureInfo.InvariantCulture)
             ?? "<null>";
     }
 
+    /// <summary>Reads the native CHECK expression from the fixture catalog.</summary>
+    /// <param name="connectionString">The isolated fixture database connection string.</param>
+    /// <param name="constraintName">The fixture constraint's authored name.</param>
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
+    /// <returns>The asynchronous fixture operation or observation.</returns>
     protected static async Task<string> ReadCheckExpressionAsync(
         string connectionString,
-        string constraintName
+        string constraintName,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync(CancellationToken.None);
+        await connection.OpenAsync(cancellationToken);
 
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT pg_catalog.pg_get_expr(co.conbin, co.conrelid) "
@@ -190,7 +227,7 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
         command.Parameters.AddWithValue("name", constraintName);
 
         return Convert.ToString(
-                await command.ExecuteScalarAsync(CancellationToken.None),
+                await command.ExecuteScalarAsync(cancellationToken),
                 CultureInfo.InvariantCulture)
             ?? "<null>";
     }

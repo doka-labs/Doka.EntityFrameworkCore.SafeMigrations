@@ -26,16 +26,18 @@ public sealed class SqlServerSafeMigrationProjectedSeedKeysIntegrationTests : Sq
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = AuthoredSeedKeyBuilder(context, collation, first, second);
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-authored-seed-key"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-authored-seed-key"),
+            cancellationToken: CancellationToken.None);
 
         var tableCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.authored_seed_keys');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.authored_seed_keys');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(expected, report.Status);
@@ -57,21 +59,24 @@ public sealed class SqlServerSafeMigrationProjectedSeedKeysIntegrationTests : Sq
     public async Task ProjectedAuthoredUniqueKey_AppliesReplaysAndVerifies()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = AuthoredSeedKeyBuilder(context, collation: null, "alpha", "beta");
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
         var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-authored-seed-lifecycle"));
+            new SafeMigrationRunOptions("sqlserver-authored-seed-lifecycle"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-authored-seed-postflight"));
+            new SafeMigrationRunOptions("sqlserver-authored-seed-postflight"),
+            cancellationToken: CancellationToken.None);
 
-        var rowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.authored_seed_keys;");
+        var rowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.authored_seed_keys;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -87,7 +92,7 @@ public sealed class SqlServerSafeMigrationProjectedSeedKeysIntegrationTests : Sq
     public async Task ProjectedAuthoredUniqueKey_TypedPrecisionCollisionIsBlocked()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists("authored_precision", table => new
@@ -102,7 +107,8 @@ public sealed class SqlServerSafeMigrationProjectedSeedKeysIntegrationTests : Sq
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-authored-seed-precision"));
+            new SafeMigrationRunOptions("sqlserver-authored-seed-precision"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -117,7 +123,7 @@ public sealed class SqlServerSafeMigrationProjectedSeedKeysIntegrationTests : Sq
     public async Task ProjectedAuthoredUniqueKey_OpaqueMutationInvalidatesTheLineage()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = AuthoredSeedKeyBuilder(context, collation: null, "alpha", "beta");
         builder.Operations.Insert(3, new SqlOperation
@@ -127,7 +133,8 @@ public sealed class SqlServerSafeMigrationProjectedSeedKeysIntegrationTests : Sq
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-authored-seed-opaque-boundary"));
+            new SafeMigrationRunOptions("sqlserver-authored-seed-opaque-boundary"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, report.Assessments[^1].Action);
@@ -139,7 +146,7 @@ public sealed class SqlServerSafeMigrationProjectedSeedKeysIntegrationTests : Sq
     public async Task ProjectedAuthoredUniqueKey_RepeatedIdenticalEnsureRemainsSafe()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = AuthoredSeedKeyBuilder(context, collation: null, "alpha", "beta");
         var initialOperations = builder.Operations.Take(3).ToArray();
@@ -147,20 +154,22 @@ public sealed class SqlServerSafeMigrationProjectedSeedKeysIntegrationTests : Sq
 
         // Act
         var initial = await runner.AnalyzeAsync(context, initialOperations,
-            new SafeMigrationRunOptions("sqlserver-authored-seed-initial"));
+            new SafeMigrationRunOptions("sqlserver-authored-seed-initial"), cancellationToken: CancellationToken.None);
 
         // WHY: A published migration may transition each typed key only once.
         // Repetition belongs to the next migration after the initial rows exist.
-        await ExecuteOperationsAsync(context, initialOperations);
+        await ExecuteOperationsAsync(context, initialOperations, cancellationToken: CancellationToken.None);
         var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-authored-seed-repeat"));
+            new SafeMigrationRunOptions("sqlserver-authored-seed-repeat"), cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var rowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.authored_seed_keys;");
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        var rowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.authored_seed_keys;",
+            cancellationToken: CancellationToken.None);
+
         var indexCount = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.authored_seed_keys') "
-            + "AND name = N'IX_authored_seed_keys_Code' AND is_unique = 1;");
+            + "AND name = N'IX_authored_seed_keys_Code' AND is_unique = 1;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, initial.Status);
@@ -181,7 +190,7 @@ public sealed class SqlServerSafeMigrationProjectedSeedKeysIntegrationTests : Sq
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = AuthoredSeedKeyBuilder(context, collation: null, "alpha", "beta");
         var initialOperations = builder.Operations.Take(2).ToArray();
@@ -208,21 +217,23 @@ public sealed class SqlServerSafeMigrationProjectedSeedKeysIntegrationTests : Sq
 
         // Act
         var initial = await runner.AnalyzeAsync(context, initialOperations,
-            new SafeMigrationRunOptions("sqlserver-authored-seed-mutation-initial"));
+            new SafeMigrationRunOptions("sqlserver-authored-seed-mutation-initial"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, initialOperations);
+        await ExecuteOperationsAsync(context, initialOperations, cancellationToken: CancellationToken.None);
         var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-authored-seed-mutation"));
+            new SafeMigrationRunOptions("sqlserver-authored-seed-mutation"), cancellationToken: CancellationToken.None);
 
         var originalCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.authored_seed_keys WHERE Id = 1 AND Code = N'alpha';");
+            "SELECT COUNT(*) FROM dbo.authored_seed_keys WHERE Id = 1 AND Code = N'alpha';",
+            cancellationToken: CancellationToken.None);
 
         var plannedSeedCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.authored_seed_keys WHERE Id = 2;");
+            "SELECT COUNT(*) FROM dbo.authored_seed_keys WHERE Id = 2;", cancellationToken: CancellationToken.None);
 
         var indexCount = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.authored_seed_keys') "
-            + "AND name = N'IX_authored_seed_keys_Code';");
+            + "AND name = N'IX_authored_seed_keys_Code';", cancellationToken: CancellationToken.None);
 
         var origin = report.Assessments[2].DeferredOrigin;
 
@@ -253,7 +264,7 @@ public sealed class SqlServerSafeMigrationProjectedSeedKeysIntegrationTests : Sq
     public async Task ProjectedAuthoredUniqueKey_CapturedStoreTypeMismatchIsUnproven()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = AuthoredSeedKeyBuilder(context, collation: null, "alpha", "beta");
         var seed = new MigrationBuilder(context.Database.ProviderName!);
@@ -264,7 +275,8 @@ public sealed class SqlServerSafeMigrationProjectedSeedKeysIntegrationTests : Sq
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-authored-seed-captured-type"));
+            new SafeMigrationRunOptions("sqlserver-authored-seed-captured-type"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -277,8 +289,9 @@ public sealed class SqlServerSafeMigrationProjectedSeedKeysIntegrationTests : Sq
     public async Task ProjectedAuthoredUniqueKey_AnsiRuntimeCollationBoundaryRemainsBlocked()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, "ALTER DATABASE CURRENT COLLATE Latin1_General_100_CI_AS;");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "ALTER DATABASE CURRENT COLLATE Latin1_General_100_CI_AS;",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists("authored_ansi", table => new
@@ -294,10 +307,12 @@ public sealed class SqlServerSafeMigrationProjectedSeedKeysIntegrationTests : Sq
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-authored-seed-ansi-boundary"));
+            new SafeMigrationRunOptions("sqlserver-authored-seed-ansi-boundary"),
+            cancellationToken: CancellationToken.None);
 
         var tableCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.authored_ansi');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.authored_ansi');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);

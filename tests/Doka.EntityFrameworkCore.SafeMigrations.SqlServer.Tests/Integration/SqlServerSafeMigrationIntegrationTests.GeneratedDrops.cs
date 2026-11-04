@@ -24,7 +24,7 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
     public async Task ComputedSourceDropPreservesOrderedDependencyLifetimes(int scenario)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var fresh = scenario == 7;
         var missing = scenario is 4 or 5 or 6;
         var released = scenario is 1 or 6;
@@ -35,7 +35,7 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
         {
             await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.drop_nodes(R bigint NOT NULL,Payload int NULL"
                 + (missing ? string.Empty : ",L bigint NOT NULL") + "); INSERT dbo.drop_nodes VALUES"
-                + (missing ? "(4,10);" : "(4,10,1);"));
+                + (missing ? "(4,10);" : "(4,10,1);"), cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -56,7 +56,7 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
         {
             var setup = new MigrationBuilder(context.Database.ProviderName!);
             setup.EnsureColumn("drop_nodes", flag, SafeMigrationPolicy.ThrowIfDifferent);
-            await ExecuteOperationsAsync(context, setup.Operations);
+            await ExecuteOperationsAsync(context, setup.Operations, cancellationToken: CancellationToken.None);
         }
 
         if (fresh)
@@ -87,14 +87,17 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-drop-lifetimes"));
+            new SafeMigrationRunOptions("generated-drop-lifetimes"), cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var remaining = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.drop_nodes') "
-            + "AND name=N'" + target + "';");
+            + "AND name=N'" + target + "';", cancellationToken: CancellationToken.None);
+
         var preservedRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.drop_nodes WHERE R=4;");
+            "SELECT COUNT(*) FROM dbo.drop_nodes WHERE R=4;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(dependent || rejected ? SafeMigrationReportStatus.Blocked
@@ -138,9 +141,10 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
     public async Task ComputedSourceDropUsesNativeMemberIdentity(bool sensitive, string target, bool dependent)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "ALTER DATABASE CURRENT COLLATE Latin1_General_100_" + (sensitive ? "CS_AS" : "CI_AS") + ";");
+            "ALTER DATABASE CURRENT COLLATE Latin1_General_100_" + (sensitive ? "CS_AS" : "CI_AS") + ";",
+            cancellationToken: CancellationToken.None);
 
         // WHY: SQL Server compiles a complete batch before ALTER DATABASE runs.
         // A separate command must acquire the new identifier collation before
@@ -148,7 +152,7 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.drop_nodes(L bigint NOT NULL,R bigint NOT NULL"
             + (sensitive ? ",l bigint NOT NULL" : string.Empty) + "); INSERT dbo.drop_nodes VALUES"
-            + (sensitive ? "(1,4,99);" : "(1,4);"));
+            + (sensitive ? "(1,4,99);" : "(1,4);"), cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn("drop_nodes", SqlServerGeneratedColumnSqlTests.Flag(),
@@ -157,11 +161,13 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-drop-native-member"));
+            new SafeMigrationRunOptions("generated-drop-native-member"), cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var preservedRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.drop_nodes WHERE L=1 AND R=4;");
+            "SELECT COUNT(*) FROM dbo.drop_nodes WHERE L=1 AND R=4;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(dependent ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready, report.Status);
@@ -190,12 +196,13 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.drop_nodes(L bigint NOT NULL,R bigint NOT NULL,"
             + "HasChildren AS CONVERT(bit,CASE WHEN R>L THEN 1 ELSE 0 END));"
             + "INSERT dbo.drop_nodes(L,R) VALUES(1,4);"
-            + (independentIndex ? "CREATE INDEX IX_L ON dbo.drop_nodes(L);" : string.Empty));
+            + (independentIndex ? "CREATE INDEX IX_L ON dbo.drop_nodes(L);" : string.Empty),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (removeGenerated)
@@ -214,13 +221,17 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-native-discharge"));
+            new SafeMigrationRunOptions("generated-native-discharge"), cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var remaining = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.drop_nodes') AND name=N'L';");
+            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.drop_nodes') AND name=N'L';",
+            cancellationToken: CancellationToken.None);
 
-        var preservedRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.drop_nodes WHERE R=4;");
+        var preservedRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.drop_nodes WHERE R=4;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(blocked ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready, report.Status);
@@ -250,7 +261,7 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
     public async Task NativeNamedIndexDischargePreservesIndependentBlockerLifetimes(int scenario)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var failed = scenario == 6;
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.drop_nodes(L bigint NOT NULL,R bigint NOT NULL,"
@@ -259,7 +270,8 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
             + "INSERT dbo.drop_nodes(L,R) VALUES(1,4);"
             + (failed ? string.Empty : "CREATE INDEX IX_L ON dbo.drop_nodes(L);")
             + (scenario == 2 ? "CREATE INDEX IX_L_other ON dbo.drop_nodes(L);" : string.Empty)
-            + (scenario == 3 ? "CREATE STATISTICS S_L ON dbo.drop_nodes(L);" : string.Empty));
+            + (scenario == 3 ? "CREATE STATISTICS S_L ON dbo.drop_nodes(L);" : string.Empty),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (scenario == 1)
@@ -278,12 +290,17 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-index-discharge"));
+            new SafeMigrationRunOptions("generated-index-discharge"), cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var remaining = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.drop_nodes') AND name=N'L';");
-        var preservedRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.drop_nodes WHERE R=4;");
+            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.drop_nodes') AND name=N'L';",
+            cancellationToken: CancellationToken.None);
+
+        var preservedRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.drop_nodes WHERE R=4;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(safe ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked, report.Status);
@@ -315,11 +332,12 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
     public async Task RecreatedIndexRejectsContradictorySourceDropBeforeAnyDdl()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.drop_nodes(L bigint NOT NULL,R bigint NOT NULL,"
             + "HasChildren AS CONVERT(bit,CASE WHEN R>L THEN 1 ELSE 0 END));"
-            + "INSERT dbo.drop_nodes(L,R) VALUES(1,4);CREATE INDEX IX_L ON dbo.drop_nodes(L);");
+            + "INSERT dbo.drop_nodes(L,R) VALUES(1,4);CREATE INDEX IX_L ON dbo.drop_nodes(L);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropIndexIfExists("IX_L", "drop_nodes");
@@ -329,17 +347,22 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
 
         // Act
         var analysisFailure = await Record.ExceptionAsync(() => context.GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("recreated-index-plan")));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("recreated-index-plan"),
+                          cancellationToken: CancellationToken.None));
 
         var scriptFailure = Record.Exception(() => context.GetService<IMigrationsSqlGenerator>()
             .Generate(builder.Operations, context.GetService<IDesignTimeModel>().Model));
 
-        var executionFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var executionFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var preserved = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.drop_nodes WHERE L=1 AND R=4 AND HasChildren=1;");
+            "SELECT COUNT(*) FROM dbo.drop_nodes WHERE L=1 AND R=4 AND HasChildren=1;",
+            cancellationToken: CancellationToken.None);
 
         var indexes = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.drop_nodes') AND name=N'IX_L';");
+            "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.drop_nodes') AND name=N'IX_L';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         foreach (var failure in new[] { analysisFailure, scriptFailure, executionFailure })
@@ -363,11 +386,11 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
     public async Task NativeGeneratedDropRespectsRenamedAndRecreatedOwnerLifetimes(bool recreated)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.drop_nodes(L bigint NOT NULL,R bigint NOT NULL,"
             + "HasChildren AS CONVERT(bit,CASE WHEN R>L THEN 1 ELSE 0 END));"
-            + "INSERT dbo.drop_nodes(L,R) VALUES(1,4);");
+            + "INSERT dbo.drop_nodes(L,R) VALUES(1,4);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var owner = recreated ? "drop_nodes" : "renamed_nodes";
@@ -387,13 +410,17 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-drop-owner-lifetime"));
+            new SafeMigrationRunOptions("generated-drop-owner-lifetime"), cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var remaining = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo." + owner + "') AND name=N'L';");
+            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo." + owner + "') AND name=N'L';",
+            cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo." + owner + ";");
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo." + owner + ";",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(recreated ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked, report.Status);
@@ -419,17 +446,19 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
     public async Task SharedComputedDefinitionKeepsNativeOwnerPrecisionIndependent(bool differentSchema)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var preciseTable = differentSchema ? "nodes" : "precise_nodes";
         var impreciseTable = differentSchema ? "nodes" : "imprecise_nodes";
         var schema = differentSchema ? "other_schema" : "dbo";
         var preciseName = "dbo." + preciseTable;
         var impreciseName = schema + "." + impreciseTable;
-        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA other_schema;");
+        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA other_schema;",
+            cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE " + preciseName + "(L bigint NOT NULL,R bigint NOT NULL);"
             + "CREATE TABLE " + impreciseName + "(L float NOT NULL,R bigint NOT NULL);"
-            + "INSERT " + preciseName + " VALUES(1,4);INSERT " + impreciseName + " VALUES(1,4);");
+            + "INSERT " + preciseName + " VALUES(1,4);INSERT " + impreciseName + " VALUES(1,4);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var flag = SqlServerGeneratedColumnSqlTests.Flag();
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -440,22 +469,31 @@ public sealed class SqlServerSafeMigrationGeneratedDropIntegrationTests : SqlSer
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-native-owner-precision"));
+            new SafeMigrationRunOptions("generated-native-owner-precision"), cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var precise = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'" + preciseName + "') "
-            + "AND name=N'IX_owner_flag';");
+            + "AND name=N'IX_owner_flag';", cancellationToken: CancellationToken.None);
+
         var imprecise = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'" + impreciseName + "') "
-            + "AND name=N'IX_owner_flag';");
+            + "AND name=N'IX_owner_flag';", cancellationToken: CancellationToken.None);
+
         var preciseMetadata = await ScalarIntAsync(connectionString,
-            "SELECT COLUMNPROPERTY(OBJECT_ID(N'" + preciseName + "'),N'HasChildren',N'IsPrecise');");
+            "SELECT COLUMNPROPERTY(OBJECT_ID(N'" + preciseName + "'),N'HasChildren',N'IsPrecise');",
+            cancellationToken: CancellationToken.None);
+
         var impreciseMetadata = await ScalarIntAsync(connectionString,
-            "SELECT COLUMNPROPERTY(OBJECT_ID(N'" + impreciseName + "'),N'HasChildren',N'IsPrecise');");
+            "SELECT COLUMNPROPERTY(OBJECT_ID(N'" + impreciseName + "'),N'HasChildren',N'IsPrecise');",
+            cancellationToken: CancellationToken.None);
+
         var preservedRows = await ScalarIntAsync(connectionString,
             "SELECT (SELECT COUNT(*) FROM " + preciseName + " WHERE L=1 AND R=4)"
-            + "+(SELECT COUNT(*) FROM " + impreciseName + " WHERE L=1 AND R=4);");
+            + "+(SELECT COUNT(*) FROM " + impreciseName + " WHERE L=1 AND R=4);",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Same(((EnsureColumnIntent)((SafeMigrationOperation)builder.Operations[0]).Intent).Definition,

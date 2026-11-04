@@ -20,12 +20,14 @@ public sealed partial class MySqlColumnsApprovedBackfillConcurrencyIntegrationTe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ApprovedBackfillFixtureSql(storageContract));
+        await ExecuteSqlAsync(connectionString, ApprovedBackfillFixtureSql(storageContract),
+            cancellationToken: CancellationToken.None);
         var operation = ApprovedBackfillOperation(storageContract);
         var observer = new ApprovedBackfillCheckpointInterceptor(injectCheckpoint: false);
         await using var context = CreateRuntimeContext(connectionString, observer);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
-        await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = '';");
+        await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = '';",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
@@ -33,13 +35,17 @@ public sealed partial class MySqlColumnsApprovedBackfillConcurrencyIntegrationTe
 
         var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
+
         var originalNulls = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `approved_backfill_items` WHERE `key` = 1 AND `required_value` IS NULL;");
+            "SELECT COUNT(*) FROM `approved_backfill_items` WHERE `key` = 1 AND `required_value` IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         var preserved = await ScalarStringAsync(connectionString,
-            "SELECT `required_value` FROM `approved_backfill_items` WHERE `key` = 2;");
+            "SELECT `required_value` FROM `approved_backfill_items` WHERE `key` = 2;",
+            cancellationToken: CancellationToken.None);
 
-        var nullable = await ApprovedBackfillNullableCountAsync(connectionString);
+        var nullable = await ApprovedBackfillNullableCountAsync(connectionString,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -62,12 +68,14 @@ public sealed partial class MySqlColumnsApprovedBackfillConcurrencyIntegrationTe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ApprovedBackfillFixtureSql(storageContract));
+        await ExecuteSqlAsync(connectionString, ApprovedBackfillFixtureSql(storageContract),
+            cancellationToken: CancellationToken.None);
         var operation = ApprovedBackfillOperation(storageContract);
         var observer = new ApprovedBackfillCheckpointInterceptor(injectCheckpoint: false);
         await using var context = CreateRuntimeContext(connectionString, observer);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
-        await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_TRANS_TABLES';");
+        await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_TRANS_TABLES';",
+            cancellationToken: CancellationToken.None);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
@@ -80,13 +88,18 @@ public sealed partial class MySqlColumnsApprovedBackfillConcurrencyIntegrationTe
             new SafeMigrationRunOptions("approved-backfill-strict-final"), CancellationToken.None);
 
         var approved = await ScalarStringAsync(connectionString,
-            "SELECT `required_value` FROM `approved_backfill_items` WHERE `key` = 1;");
+            "SELECT `required_value` FROM `approved_backfill_items` WHERE `key` = 1;",
+            cancellationToken: CancellationToken.None);
 
         var preserved = await ScalarStringAsync(connectionString,
-            "SELECT `required_value` FROM `approved_backfill_items` WHERE `key` = 2;");
+            "SELECT `required_value` FROM `approved_backfill_items` WHERE `key` = 2;",
+            cancellationToken: CancellationToken.None);
 
-        var nullable = await ApprovedBackfillNullableCountAsync(connectionString);
-        var targetWidth = await ApprovedBackfillCharacterWidthAsync(connectionString);
+        var nullable = await ApprovedBackfillNullableCountAsync(connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var targetWidth = await ApprovedBackfillCharacterWidthAsync(connectionString,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -112,13 +125,15 @@ public sealed partial class MySqlColumnsApprovedBackfillConcurrencyIntegrationTe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ApprovedBackfillFixtureSql(storageContract) + ApprovedBackfillGateSql);
+        await ExecuteSqlAsync(connectionString, ApprovedBackfillFixtureSql(storageContract) + ApprovedBackfillGateSql,
+            cancellationToken: CancellationToken.None);
         var operation = ApprovedBackfillOperation(storageContract);
         var checkpoint = new ApprovedBackfillCheckpointInterceptor(injectCheckpoint: true);
         await using var context = CreateRuntimeContext(connectionString, checkpoint);
         context.Database.SetCommandTimeout(60);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
-        await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_TRANS_TABLES';");
+        await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_TRANS_TABLES';",
+            cancellationToken: CancellationToken.None);
         await using var writer = new MySqlConnection(connectionString);
         await writer.OpenAsync(CancellationToken.None);
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -145,16 +160,22 @@ public sealed partial class MySqlColumnsApprovedBackfillConcurrencyIntegrationTe
         }
 
         var approved = await ScalarStringAsync(connectionString,
-            "SELECT `required_value` FROM `approved_backfill_items` WHERE `key` = 1;");
+            "SELECT `required_value` FROM `approved_backfill_items` WHERE `key` = 1;",
+            cancellationToken: deadline.Token);
 
         var preserved = await ScalarStringAsync(connectionString,
-            "SELECT `required_value` FROM `approved_backfill_items` WHERE `key` = 2;");
+            "SELECT `required_value` FROM `approved_backfill_items` WHERE `key` = 2;",
+            cancellationToken: deadline.Token);
 
         var lateNulls = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `approved_backfill_items` WHERE `key` = 3 AND `required_value` IS NULL;");
+            "SELECT COUNT(*) FROM `approved_backfill_items` WHERE `key` = 3 AND `required_value` IS NULL;",
+            cancellationToken: deadline.Token);
 
-        var nullable = await ApprovedBackfillNullableCountAsync(connectionString);
-        var sourceWidth = await ApprovedBackfillCharacterWidthAsync(connectionString);
+        var nullable = await ApprovedBackfillNullableCountAsync(connectionString,
+            cancellationToken: deadline.Token);
+
+        var sourceWidth = await ApprovedBackfillCharacterWidthAsync(connectionString,
+            cancellationToken: deadline.Token);
 
         // Assert
         Assert.True(checkpoint.BodyWasObserved);
@@ -181,12 +202,14 @@ public sealed partial class MySqlColumnsApprovedBackfillConcurrencyIntegrationTe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ApprovedBackfillFixtureSql(storageContract, alreadyMatching: true));
+        await ExecuteSqlAsync(connectionString, ApprovedBackfillFixtureSql(storageContract, alreadyMatching: true),
+            cancellationToken: CancellationToken.None);
         var operation = ApprovedBackfillOperation(storageContract);
         var observer = new ApprovedBackfillCheckpointInterceptor(injectCheckpoint: false);
         await using var context = CreateRuntimeContext(connectionString, observer);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
-        await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = '';");
+        await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = '';",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
@@ -195,12 +218,15 @@ public sealed partial class MySqlColumnsApprovedBackfillConcurrencyIntegrationTe
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
         var approved = await ScalarStringAsync(connectionString,
-            "SELECT `required_value` FROM `approved_backfill_items` WHERE `key` = 1;");
+            "SELECT `required_value` FROM `approved_backfill_items` WHERE `key` = 1;",
+            cancellationToken: CancellationToken.None);
 
         var preserved = await ScalarStringAsync(connectionString,
-            "SELECT `required_value` FROM `approved_backfill_items` WHERE `key` = 2;");
+            "SELECT `required_value` FROM `approved_backfill_items` WHERE `key` = 2;",
+            cancellationToken: CancellationToken.None);
 
-        var nullable = await ApprovedBackfillNullableCountAsync(connectionString);
+        var nullable = await ApprovedBackfillNullableCountAsync(connectionString,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -332,19 +358,28 @@ public sealed partial class MySqlColumnsApprovedBackfillConcurrencyIntegrationTe
     /// <summary>Reads current physical nullability without using cached operation state.</summary>
     /// <param name="connectionString">The isolated test database.</param>
     /// <returns>One while the source still permits NULL, otherwise zero.</returns>
-    private static Task<int> ApprovedBackfillNullableCountAsync(string connectionString)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static Task<int> ApprovedBackfillNullableCountAsync(
+        string connectionString,
+        CancellationToken cancellationToken
+    )
         => ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'approved_backfill_items' AND COLUMN_NAME = 'required_value' AND IS_NULLABLE = 'YES';");
+            + "AND TABLE_NAME = 'approved_backfill_items' AND COLUMN_NAME = 'required_value' AND IS_NULLABLE = 'YES';",
+            cancellationToken: cancellationToken);
 
     /// <summary>Reads current character width so failed widening cannot masquerade as completed DDL.</summary>
     /// <param name="connectionString">The isolated test database.</param>
     /// <returns>The physical character width, or zero for integer storage.</returns>
-    private static Task<int> ApprovedBackfillCharacterWidthAsync(string connectionString)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static Task<int> ApprovedBackfillCharacterWidthAsync(
+        string connectionString,
+        CancellationToken cancellationToken
+    )
         => ScalarIntAsync(connectionString,
             "SELECT COALESCE(CHARACTER_MAXIMUM_LENGTH, 0) FROM INFORMATION_SCHEMA.COLUMNS "
             + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'approved_backfill_items' "
-            + "AND COLUMN_NAME = 'required_value';");
+            + "AND COLUMN_NAME = 'required_value';", cancellationToken: cancellationToken);
 
     /// <summary>Waits for a committed marker after the real UPDATE and before the real ALTER.</summary>
     /// <param name="writer">The independent writer session.</param>

@@ -30,7 +30,11 @@ public sealed class SqlServerFullCatalogCaptureTests
             // WHY: Local emulation is useful for SQL correctness and relative experiments, not native
             // qualification. Ordinary test runs stay offline; only this explicit opt-in creates databases.
             await SqlServerLocalCatalogDiagnostics.RunAsync(
-                diagnosticRoot, connection.RecordedStatements, standalone, connection.RecordedParameters);
+                diagnosticRoot,
+                connection.RecordedStatements,
+                standalone,
+                connection.RecordedParameters,
+                cancellationToken: CancellationToken.None);
         }
 
         // Assert

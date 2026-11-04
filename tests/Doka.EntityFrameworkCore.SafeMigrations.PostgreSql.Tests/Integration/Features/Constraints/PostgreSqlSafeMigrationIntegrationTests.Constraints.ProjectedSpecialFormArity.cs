@@ -25,9 +25,12 @@ public sealed class PostgreSqlConstraintsProjectedSpecialFormArityIntegrationTes
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var limit = await ScalarIntAsync(connectionString, "SELECT current_setting('max_function_args')::integer;");
+        var limit = await ScalarIntAsync(connectionString, "SELECT current_setting('max_function_args')::integer;",
+            cancellationToken: CancellationToken.None);
+
         var count = empty ? 0 : limit + 1;
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (id integer NOT NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (id integer NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("added", "mixed_columns", type: "integer", nullable: false);
@@ -54,7 +57,7 @@ public sealed class PostgreSqlConstraintsProjectedSpecialFormArityIntegrationTes
         if (!empty)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
             postflight = await runner.VerifyAsync(context, builder.Operations,
                 new SafeMigrationRunOptions("sparse-check-special-form-final"), CancellationToken.None);
 
@@ -64,7 +67,8 @@ public sealed class PostgreSqlConstraintsProjectedSpecialFormArityIntegrationTes
         else
         {
             nativeError = await Assert.ThrowsAsync<PostgresException>(() => ExecuteSqlAsync(connectionString,
-                $"ALTER TABLE mixed_columns ADD CONSTRAINT native_probe CHECK ({function}() >= 0);"));
+                $"ALTER TABLE mixed_columns ADD CONSTRAINT native_probe CHECK ({function}() >= 0);",
+                cancellationToken: CancellationToken.None));
         }
 
         // Assert

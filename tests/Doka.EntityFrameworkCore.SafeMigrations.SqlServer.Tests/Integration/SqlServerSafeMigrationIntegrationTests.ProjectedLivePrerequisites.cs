@@ -17,9 +17,10 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
     public async Task ForeignKey_NewContainerComputedOperandRemainsBlocked()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.sparse_parent (Id int NOT NULL CONSTRAINT PK_sparse_parent PRIMARY KEY);");
+            "CREATE TABLE dbo.sparse_parent (Id int NOT NULL CONSTRAINT PK_sparse_parent PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.Operations.Add(new SafeMigrationOperation(new EnsureTableIntent(
@@ -32,7 +33,8 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-sparse-computed-negative"));
+            new SafeMigrationRunOptions("sqlserver-sparse-computed-negative"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -45,9 +47,10 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
     public async Task ForeignKey_NewContainerThenNullableOperandAppliesAndVerifies()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.sparse_parent (Id int NOT NULL CONSTRAINT PK_sparse_parent PRIMARY KEY);");
+            "CREATE TABLE dbo.sparse_parent (Id int NOT NULL CONSTRAINT PK_sparse_parent PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.Operations.Add(new SafeMigrationOperation(new EnsureTableIntent(
@@ -61,12 +64,13 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
 
         // Act
         var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-sparse-new-container"));
+            new SafeMigrationRunOptions("sqlserver-sparse-new-container"), cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-sparse-new-container-postflight"));
+            new SafeMigrationRunOptions("sqlserver-sparse-new-container-postflight"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -86,11 +90,11 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.sparse_parent (Id int NOT NULL CONSTRAINT PK_sparse_parent PRIMARY KEY); "
             + "CREATE TABLE dbo.sparse_child (Id int NOT NULL CONSTRAINT PK_sparse_child PRIMARY KEY); "
-            + "INSERT INTO dbo.sparse_child VALUES (1), (2);");
+            + "INSERT INTO dbo.sparse_child VALUES (1), (2);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("ParentId", "sparse_child", type: "int", nullable: true);
@@ -102,17 +106,18 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-sparse-accepted-definition"));
+            new SafeMigrationRunOptions("sqlserver-sparse-accepted-definition"),
+            cancellationToken: CancellationToken.None);
 
         if (existenceOnly)
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         }
 
         var physicalColumns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.columns c JOIN sys.types ty ON ty.user_type_id = c.user_type_id "
             + "WHERE c.object_id = OBJECT_ID(N'dbo.sparse_child', N'U') AND c.name = N'ParentId' "
-            + "AND ty.name = N'int';");
+            + "AND ty.name = N'int';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(existenceOnly ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
@@ -128,30 +133,32 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
     public async Task ForeignKey_NewNullableColumnAndLiveParentApplyReplayAndVerify()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.sparse_parent (Id int NOT NULL CONSTRAINT PK_sparse_parent PRIMARY KEY); "
             + "CREATE TABLE dbo.sparse_child (Id int NOT NULL CONSTRAINT PK_sparse_child PRIMARY KEY); "
-            + "INSERT INTO dbo.sparse_parent VALUES (7); INSERT INTO dbo.sparse_child VALUES (1), (2);");
+            + "INSERT INTO dbo.sparse_parent VALUES (7); INSERT INTO dbo.sparse_child VALUES (1), (2);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = SparseForeignKeyOperations(context);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
         var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-sparse-live-parent"));
+            new SafeMigrationRunOptions("sqlserver-sparse-live-parent"), cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-sparse-live-parent-postflight"));
+            new SafeMigrationRunOptions("sqlserver-sparse-live-parent-postflight"),
+            cancellationToken: CancellationToken.None);
 
         var nullRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.sparse_child WHERE ParentId IS NULL;");
+            "SELECT COUNT(*) FROM dbo.sparse_child WHERE ParentId IS NULL;", cancellationToken: CancellationToken.None);
 
         var trusted = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.foreign_keys WHERE name = N'FK_sparse_child_parent' "
-            + "AND is_disabled = 0 AND is_not_trusted = 0;");
+            + "AND is_disabled = 0 AND is_not_trusted = 0;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -176,22 +183,22 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var key = hasKey ? " CONSTRAINT PK_sparse_parent PRIMARY KEY" : string.Empty;
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE dbo.sparse_parent (Id {parentType} NOT NULL{key}); "
             + "CREATE TABLE dbo.sparse_child (Id int NOT NULL CONSTRAINT PK_sparse_child PRIMARY KEY); "
-            + "INSERT INTO dbo.sparse_child VALUES (1), (2);");
+            + "INSERT INTO dbo.sparse_child VALUES (1), (2);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = SparseForeignKeyOperations(context);
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-sparse-parent-negative"));
+            new SafeMigrationRunOptions("sqlserver-sparse-parent-negative"), cancellationToken: CancellationToken.None);
 
         var addedColumns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.sparse_child', N'U') "
-            + "AND name = N'ParentId';");
+            + "AND name = N'ParentId';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -204,24 +211,30 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
     public async Task ForeignKey_SparseNullableProofRechecksRowsWrittenAfterPreflight()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.sparse_parent (Id int NOT NULL CONSTRAINT PK_sparse_parent PRIMARY KEY); "
             + "CREATE TABLE dbo.sparse_child (Id int NOT NULL CONSTRAINT PK_sparse_child PRIMARY KEY); "
-            + "INSERT INTO dbo.sparse_child VALUES (1);");
+            + "INSERT INTO dbo.sparse_child VALUES (1);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = SparseForeignKeyOperations(context);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
         var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-sparse-concurrent-orphan"));
+            new SafeMigrationRunOptions("sqlserver-sparse-concurrent-orphan"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations.Take(2).ToArray());
-        await ExecuteSqlAsync(connectionString, "UPDATE dbo.sparse_child SET ParentId = 999 WHERE Id = 1;");
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        await ExecuteOperationsAsync(context, builder.Operations.Take(2).ToArray(),
+            cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "UPDATE dbo.sparse_child SET ParentId = 999 WHERE Id = 1;",
+            cancellationToken: CancellationToken.None);
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var foreignKeys = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.foreign_keys WHERE name = N'FK_sparse_child_parent';");
+            "SELECT COUNT(*) FROM sys.foreign_keys WHERE name = N'FK_sparse_child_parent';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -234,12 +247,12 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
     public async Task ForeignKey_SparseCompositeCombinesLiveAndProjectedDependentColumns()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.sparse_parent (TenantId int NOT NULL, Id int NOT NULL, "
             + "CONSTRAINT PK_sparse_parent PRIMARY KEY (TenantId, Id)); "
             + "CREATE TABLE dbo.sparse_child (Id int NOT NULL PRIMARY KEY, TenantId int NOT NULL); "
-            + "INSERT INTO dbo.sparse_child VALUES (1, 123), (2, 456);");
+            + "INSERT INTO dbo.sparse_child VALUES (1, 123), (2, 456);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("ParentId", "sparse_child", type: "int", nullable: true);
@@ -250,11 +263,12 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
 
         // Act
         var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-sparse-composite"));
+            new SafeMigrationRunOptions("sqlserver-sparse-composite"), cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-sparse-composite-postflight"));
+            new SafeMigrationRunOptions("sqlserver-sparse-composite-postflight"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -275,10 +289,10 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.sparse_index (Id int NOT NULL PRIMARY KEY, TenantId int NOT NULL); "
-            + "INSERT INTO dbo.sparse_index VALUES (1, 7), (2, 7);");
+            + "INSERT INTO dbo.sparse_index VALUES (1, 7), (2, 7);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("Code", "sparse_index", type: "int", nullable: true);
@@ -287,7 +301,7 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-sparse-mixed-index"));
+            new SafeMigrationRunOptions("sqlserver-sparse-mixed-index"), cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(unique && !filtered ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready,
@@ -305,10 +319,10 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
     public async Task SparseCheck_MixesRequestedLiveAndNewNullOperands()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.sparse_check (Id int NOT NULL PRIMARY KEY, Value int NOT NULL); "
-            + "INSERT INTO dbo.sparse_check VALUES (1, -7), (2, -9);");
+            + "INSERT INTO dbo.sparse_check VALUES (1, -7), (2, -9);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("Code", "sparse_check", type: "int", nullable: true);
@@ -316,7 +330,7 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-sparse-check"));
+            new SafeMigrationRunOptions("sqlserver-sparse-check"), cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -336,9 +350,10 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            $"CREATE TABLE dbo.sparse_check (Id int NOT NULL PRIMARY KEY, Value {liveType} NOT NULL);");
+            $"CREATE TABLE dbo.sparse_check (Id int NOT NULL PRIMARY KEY, Value {liveType} NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("Code", "sparse_check", type: "int", nullable: false);
@@ -346,7 +361,7 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-sparse-empty-check"));
+            new SafeMigrationRunOptions("sqlserver-sparse-empty-check"), cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(supported ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked, report.Status);
@@ -368,7 +383,7 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (supported)
@@ -392,7 +407,7 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-new-owner-check"));
+            new SafeMigrationRunOptions("sqlserver-new-owner-check"), cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(supported ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked, report.Status);
@@ -410,12 +425,12 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.sparse_parent (Id char(36) COLLATE Latin1_General_100_BIN2 NOT NULL "
             + "CONSTRAINT PK_sparse_parent PRIMARY KEY); "
             + "CREATE TABLE dbo.sparse_child (Id int NOT NULL PRIMARY KEY); "
-            + "INSERT INTO dbo.sparse_child VALUES (1), (2);");
+            + "INSERT INTO dbo.sparse_child VALUES (1), (2);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExistsFromModel(operation => operation.AddColumn<string>("ParentId", "sparse_child",
@@ -427,7 +442,7 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-sparse-collation"));
+            new SafeMigrationRunOptions("sqlserver-sparse-collation"), cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(compatible ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked, report.Status);
@@ -445,11 +460,12 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.sparse_parent (Id int NOT NULL CONSTRAINT K_sparse_parent "
             + (unique ? "UNIQUE" : "PRIMARY KEY") + "); "
-            + "CREATE TABLE dbo.sparse_child (Id int NOT NULL PRIMARY KEY); INSERT dbo.sparse_child VALUES (1);");
+            + "CREATE TABLE dbo.sparse_child (Id int NOT NULL PRIMARY KEY); INSERT dbo.sparse_child VALUES (1);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("ParentId", "sparse_child", type: "int", nullable: true);
@@ -467,7 +483,8 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-sparse-dropped-candidate"));
+            new SafeMigrationRunOptions("sqlserver-sparse-dropped-candidate"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -479,10 +496,10 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
     public async Task ForeignKey_SparseSelfReferenceUsesTheUntouchedNativeKey()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.sparse_self (Id int NOT NULL CONSTRAINT PK_sparse_self PRIMARY KEY); "
-            + "INSERT INTO dbo.sparse_self VALUES (1), (2);");
+            + "INSERT INTO dbo.sparse_self VALUES (1), (2);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("ParentId", "sparse_self", type: "int", nullable: true);
@@ -492,11 +509,11 @@ public sealed class SqlServerSafeMigrationProjectedLivePrerequisitesIntegrationT
 
         // Act
         var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-sparse-self"));
+            new SafeMigrationRunOptions("sqlserver-sparse-self"), cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-sparse-self-postflight"));
+            new SafeMigrationRunOptions("sqlserver-sparse-self-postflight"), cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);

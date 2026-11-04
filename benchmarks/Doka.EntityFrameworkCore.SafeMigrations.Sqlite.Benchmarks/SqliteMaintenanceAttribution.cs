@@ -69,7 +69,8 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
             .ToArray();
 
         ObserveCaptures(_connection);
-        var observed = _analyzer.AnalyzeAsync(_first, _operations, _models).GetAwaiter().GetResult();
+        var observed = _analyzer.AnalyzeAsync(_first, _operations, _models, CancellationToken.None)
+            .GetAwaiter().GetResult();
         MaintenanceAttribution.Require(
             observed.Count == windows
             && observed.All(static result => result.ObservedState == SafeMigrationObservedState.Missing)
@@ -82,7 +83,8 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
             "\n", observed.Select(static result => $"{result.ObservedState}:{result.Code}")));
 
         _captureCount = 0;
-        var replay = _analyzer.AnalyzeAsync(_first, _operations, _models).GetAwaiter().GetResult();
+        var replay = _analyzer.AnalyzeAsync(_first, _operations, _models, CancellationToken.None)
+            .GetAwaiter().GetResult();
         var replayHash = MaintenanceAttribution.Hash(string.Join(
             "\n", replay.Select(static result => $"{result.ObservedState}:{result.Code}")));
 
@@ -133,7 +135,8 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
         // WHY: BDN owns invocation counts; fixture observations must stay bounded during calibration too.
         _captureCount = 0;
 
-        return _analyzer.AnalyzeAsync(_first, _operations, _models).GetAwaiter().GetResult().Count;
+        return _analyzer.AnalyzeAsync(_first, _operations, _models, CancellationToken.None)
+            .GetAwaiter().GetResult().Count;
     }
 
     /// <inheritdoc />

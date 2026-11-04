@@ -17,7 +17,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, AtomicAddConcurrencyFixtureSql);
+        await ExecuteSqlAsync(connectionString, AtomicAddConcurrencyFixtureSql,
+            cancellationToken: CancellationToken.None);
         var operation = AtomicRequiredAddOperation();
         var guardName = AtomicRequiredAddGuardName(operation);
         var checkpoint = new AtomicAddCheckpointInterceptor(guardName, betweenStages: false);
@@ -49,12 +50,14 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
             await FinishAtomicAddConcurrentAttemptAsync(execution, executionCancellation, gate, gateReleased);
         }
 
-        var interrupted = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+        var interrupted = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: deadline.Token);
+
         var retry = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("atomic-add-raced-existing-row"), CancellationToken.None);
+            new SafeMigrationRunOptions("atomic-add-raced-existing-row"), deadline.Token);
 
         var retryFailure = await Record.ExceptionAsync(() =>
-            ExecuteOperationsAsync(context, [operation], CancellationToken.None));
+            ExecuteOperationsAsync(context, [operation], deadline.Token));
 
         // Assert
         Assert.True(checkpoint.CheckpointWasReached);
@@ -79,7 +82,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, AtomicAddConcurrencyFixtureSql);
+        await ExecuteSqlAsync(connectionString, AtomicAddConcurrencyFixtureSql,
+            cancellationToken: CancellationToken.None);
         var operation = AtomicRequiredAddOperation(useGuidStorage);
         var guardName = AtomicRequiredAddGuardName(operation);
         var checkpoint = new AtomicAddCheckpointInterceptor(guardName, betweenStages: true);
@@ -116,11 +120,14 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
             await FinishAtomicAddConcurrentAttemptAsync(execution, executionCancellation, gate, gateReleased);
         }
 
-        var final = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
-        var suppliedValue = await ScalarStringAsync(connectionString,
-            "SELECT `required_value` FROM `atomic_required_items` WHERE `key` = 2;");
+        var final = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: deadline.Token);
 
-        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
+        var suppliedValue = await ScalarStringAsync(connectionString,
+            "SELECT `required_value` FROM `atomic_required_items` WHERE `key` = 2;",
+            cancellationToken: deadline.Token);
+
+        await ExecuteOperationsAsync(context, [operation], deadline.Token);
 
         // Assert
         Assert.True(checkpoint.CheckpointWasReached);
@@ -145,7 +152,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, AtomicAddConcurrencyFixtureSql);
+        await ExecuteSqlAsync(connectionString, AtomicAddConcurrencyFixtureSql,
+            cancellationToken: CancellationToken.None);
         var operation = AtomicRequiredAddOperation();
         var guardName = AtomicRequiredAddGuardName(operation);
         var checkpoint = new AtomicAddCheckpointInterceptor(guardName, betweenStages: true);
@@ -181,17 +189,23 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
             await FinishAtomicAddConcurrentAttemptAsync(execution, executionCancellation, gate, gateReleased);
         }
 
-        var interrupted = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+        var interrupted = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: deadline.Token);
+
         var nullRowsBeforeRetry = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `atomic_required_items` WHERE `key` = 1 AND `required_value` IS NULL;");
+            "SELECT COUNT(*) FROM `atomic_required_items` WHERE `key` = 1 AND `required_value` IS NULL;",
+            cancellationToken: deadline.Token);
 
         await ExecuteAtomicAddWriterSqlAsync(writer, transaction: null,
             "UPDATE `atomic_required_items` SET `required_value` = '" + AtomicAddExplicitGuid + "' WHERE `key` = 1;",
-            CancellationToken.None);
-        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
-        var recovered = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+            deadline.Token);
+        await ExecuteOperationsAsync(context, [operation], deadline.Token);
+        var recovered = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: deadline.Token);
+
         var preserved = await ScalarStringAsync(connectionString,
-            "SELECT `required_value` FROM `atomic_required_items` WHERE `key` = 1;");
+            "SELECT `required_value` FROM `atomic_required_items` WHERE `key` = 1;",
+            cancellationToken: deadline.Token);
 
         // Assert
         Assert.True(checkpoint.CheckpointWasReached);
@@ -219,7 +233,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, AtomicAddConcurrencyFixtureSql);
+        await ExecuteSqlAsync(connectionString, AtomicAddConcurrencyFixtureSql,
+            cancellationToken: CancellationToken.None);
         var operation = AtomicRequiredAddOperation();
         var guardName = AtomicRequiredAddGuardName(operation);
         var checkpoint = new AtomicAddCheckpointInterceptor(guardName, betweenStages: true);
@@ -232,7 +247,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
         using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
         await using var gate = await AcquireAtomicAddWriterGateAsync(writer, deadline.Token);
         var gateReleased = false;
-        var sessionBefore = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();");
+        var sessionBefore = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();",
+            cancellationToken: deadline.Token);
 
         // Act
         var execution = Record.ExceptionAsync(() =>
@@ -256,15 +272,23 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
             await FinishAtomicAddConcurrentAttemptAsync(execution, executionCancellation, gate, gateReleased);
         }
 
-        var interrupted = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+        var interrupted = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: CancellationToken.None);
+
         var valueBeforeRetry = await ScalarStringAsync(connectionString,
-            "SELECT `required_value` FROM `atomic_required_items` WHERE `key` = 1;");
+            "SELECT `required_value` FROM `atomic_required_items` WHERE `key` = 1;",
+            cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
-        var recovered = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
-        var sessionAfter = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();");
+        var recovered = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: CancellationToken.None);
+
+        var sessionAfter = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();",
+            cancellationToken: CancellationToken.None);
+
         var preserved = await ScalarStringAsync(connectionString,
-            "SELECT `required_value` FROM `atomic_required_items` WHERE `key` = 1;");
+            "SELECT `required_value` FROM `atomic_required_items` WHERE `key` = 1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.True(checkpoint.CheckpointWasReached);

@@ -44,7 +44,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     /// <inheritdoc />
     public async Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
         DbContext context,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ValidateContext(context);

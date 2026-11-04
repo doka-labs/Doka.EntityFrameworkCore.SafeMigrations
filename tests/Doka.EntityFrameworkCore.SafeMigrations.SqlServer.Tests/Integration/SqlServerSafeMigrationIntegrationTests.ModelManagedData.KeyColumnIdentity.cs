@@ -17,11 +17,12 @@ public sealed class SqlServerSafeMigrationModelManagedDataKeyColumnIdentityInteg
     public async Task ManagedRowSameExactKey_SeparateStreamsVerifyEachTransition()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.managed_key_identity (Id int NOT NULL "
             + "CONSTRAINT PK_managed_key_identity PRIMARY KEY, Caption nvarchar(80) NOT NULL); "
-            + "INSERT INTO dbo.managed_key_identity (Id, Caption) VALUES (7, N'old');");
+            + "INSERT INTO dbo.managed_key_identity (Id, Caption) VALUES (7, N'old');",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var ensure = new MigrationBuilder(context.Database.ProviderName!);
         ensure.EnsureModelManagedDataFromModel("managed_key_identity", ["Id"], ["int"],
@@ -34,24 +35,29 @@ public sealed class SqlServerSafeMigrationModelManagedDataKeyColumnIdentityInteg
 
         // Act
         var ensurePreflight = await runner.AnalyzeAsync(context, ensure.Operations,
-            new SafeMigrationRunOptions("sqlserver-managed-key-exact-ensure-preflight"));
+            new SafeMigrationRunOptions("sqlserver-managed-key-exact-ensure-preflight"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, ensure.Operations);
+        await ExecuteOperationsAsync(context, ensure.Operations, cancellationToken: CancellationToken.None);
         var ensurePostflight = await runner.VerifyAsync(context, ensure.Operations,
-            new SafeMigrationRunOptions("sqlserver-managed-key-exact-ensure-postflight"));
+            new SafeMigrationRunOptions("sqlserver-managed-key-exact-ensure-postflight"),
+            cancellationToken: CancellationToken.None);
 
         // WHY: A migration owns at most one transition for a typed seed key.
         // Verify that authored boundary before the next migration changes it;
         // standalone VerifyAsync does not accept invented migration-ID groups.
         var updatePreflight = await runner.AnalyzeAsync(context, update.Operations,
-            new SafeMigrationRunOptions("sqlserver-managed-key-exact-update-preflight"));
+            new SafeMigrationRunOptions("sqlserver-managed-key-exact-update-preflight"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, update.Operations);
+        await ExecuteOperationsAsync(context, update.Operations, cancellationToken: CancellationToken.None);
         var updatePostflight = await runner.VerifyAsync(context, update.Operations,
-            new SafeMigrationRunOptions("sqlserver-managed-key-exact-update-postflight"));
+            new SafeMigrationRunOptions("sqlserver-managed-key-exact-update-postflight"),
+            cancellationToken: CancellationToken.None);
 
         var finalRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.managed_key_identity WHERE Id = 7 AND Caption = N'new';");
+            "SELECT COUNT(*) FROM dbo.managed_key_identity WHERE Id = 7 AND Caption = N'new';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, ensurePreflight.Status);
@@ -72,11 +78,12 @@ public sealed class SqlServerSafeMigrationModelManagedDataKeyColumnIdentityInteg
     public async Task ManagedRowSameExactKey_CombinedStandaloneStreamRemainsRejected()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.managed_key_duplicate (Id int NOT NULL "
             + "CONSTRAINT PK_managed_key_duplicate PRIMARY KEY, Caption nvarchar(80) NOT NULL); "
-            + "INSERT INTO dbo.managed_key_duplicate (Id, Caption) VALUES (7, N'old');");
+            + "INSERT INTO dbo.managed_key_duplicate (Id, Caption) VALUES (7, N'old');",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel("managed_key_duplicate", ["Id"], ["int"],
@@ -87,10 +94,12 @@ public sealed class SqlServerSafeMigrationModelManagedDataKeyColumnIdentityInteg
 
         // Act
         var rejected = await Record.ExceptionAsync(() => context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-managed-key-duplicate")));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-managed-key-duplicate"),
+            cancellationToken: CancellationToken.None));
 
         var unchangedRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.managed_key_duplicate WHERE Id = 7 AND Caption = N'old';");
+            "SELECT COUNT(*) FROM dbo.managed_key_duplicate WHERE Id = 7 AND Caption = N'old';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Contains("same typed model-managed key", Assert.IsType<InvalidOperationException>(rejected).Message,
@@ -105,13 +114,16 @@ public sealed class SqlServerSafeMigrationModelManagedDataKeyColumnIdentityInteg
     public async Task ManagedRowCaseAliasedKey_RemainsRejectedBeforeMutation()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.managed_key_alias (Id int NOT NULL "
             + "CONSTRAINT PK_managed_key_alias PRIMARY KEY, Caption nvarchar(80) NOT NULL); "
-            + "INSERT INTO dbo.managed_key_alias (Id, Caption) VALUES (7, N'old');");
+            + "INSERT INTO dbo.managed_key_alias (Id, Caption) VALUES (7, N'old');",
+            cancellationToken: CancellationToken.None);
         var catalogAliasesCase = await ScalarIntAsync(connectionString,
-            "SELECT CASE WHEN N'Id' COLLATE CATALOG_DEFAULT = N'ID' COLLATE CATALOG_DEFAULT THEN 1 ELSE 0 END;");
+            "SELECT CASE WHEN N'Id' COLLATE CATALOG_DEFAULT = N'ID' COLLATE CATALOG_DEFAULT THEN 1 ELSE 0 END;",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel("managed_key_alias", ["Id"], ["int"],
@@ -122,11 +134,15 @@ public sealed class SqlServerSafeMigrationModelManagedDataKeyColumnIdentityInteg
 
         // Act
         var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-managed-key-alias-preflight"));
+            new SafeMigrationRunOptions("sqlserver-managed-key-alias-preflight"),
+            cancellationToken: CancellationToken.None);
 
-        var rejectedExecution = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var rejectedExecution = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var unchangedRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.managed_key_alias WHERE Id = 7 AND Caption = N'old';");
+            "SELECT COUNT(*) FROM dbo.managed_key_alias WHERE Id = 7 AND Caption = N'old';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, catalogAliasesCase);

@@ -33,8 +33,12 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
     )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateConstraintShapeOwnerAsync(connection, kind, ["physical_constraint"]);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateConstraintShapeOwnerAsync(
+            connection,
+            kind,
+            ["physical_constraint"],
+            cancellationToken: CancellationToken.None);
         await using var context = CreateConstraintShapeContext(connection, kind);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(ConstraintShapeTable(kind, ["logical_constraint"]),
@@ -46,22 +50,31 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
         }
 
         var runner = context.GetService<ISafeMigrationRunner>();
-        var schemaVersion = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var schemaVersion = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-strict-table-constraint-alias"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-strict-table-constraint-alias"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-strict-table-constraint-postflight"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-strict-table-constraint-postflight"),
+            cancellationToken: CancellationToken.None);
 
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
         var names = ConstraintShapeNames(snapshot.Tables["shape_items"], kind);
         var rows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM shape_items WHERE Id = 1 AND Code = 5 AND ParentId = 1;");
+            "SELECT COUNT(*) FROM shape_items WHERE Id = 1 AND Code = 5 AND ParentId = 1;",
+            cancellationToken: CancellationToken.None);
 
-        var finalSchemaVersion = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var finalSchemaVersion = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -87,9 +100,9 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
     public async Task StandaloneUniqueAliasDropAndReensureUsesConstraintSymbolInsteadOfBackingIndex()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateConstraintShapeOwnerAsync(connection, SafeMigrationOperationKind.EnsureUniqueConstraint,
-            ["physical_constraint"]);
+            ["physical_constraint"], cancellationToken: CancellationToken.None);
 
         await using var context = CreateConstraintShapeContext(connection,
             SafeMigrationOperationKind.EnsureUniqueConstraint);
@@ -102,17 +115,22 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var live = await analyzer.AnalyzeAsync(context, builder.Operations.OfType<SafeMigrationOperation>().ToArray());
-        var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-standalone-unique-symbol"));
+        var live = await analyzer.AnalyzeAsync(context, builder.Operations.OfType<SafeMigrationOperation>().ToArray(),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        var report = await runner.AnalyzeAsync(
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-standalone-unique-symbol"),
+            cancellationToken: CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-standalone-unique-symbol-postflight"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-standalone-unique-symbol-postflight"),
+            cancellationToken: CancellationToken.None);
 
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
         var rows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM shape_items WHERE Id = 1 AND Code = 5 AND ParentId = 1;");
+            "SELECT COUNT(*) FROM shape_items WHERE Id = 1 AND Code = 5 AND ParentId = 1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal("physical_constraint", live[0].MatchedObjectName);
@@ -138,8 +156,8 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
     public async Task StrictTableAnonymousConstraintDoesNotCertifyPhysicalAlias(SafeMigrationOperationKind kind)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateConstraintShapeOwnerAsync(connection, kind, [null]);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateConstraintShapeOwnerAsync(connection, kind, [null], cancellationToken: CancellationToken.None);
         await using var context = CreateConstraintShapeContext(connection, kind);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(ConstraintShapeTable(kind, ["logical_constraint"]),
@@ -149,7 +167,8 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
 
         // Act
         var analyses = await analyzer.AnalyzeAsync(
-            context, builder.Operations.OfType<SafeMigrationOperation>().ToArray());
+            context, builder.Operations.OfType<SafeMigrationOperation>().ToArray(),
+            cancellationToken: CancellationToken.None);
 
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
 
@@ -170,8 +189,12 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
     public async Task StrictTableAmbiguousConstraintWitnessesDoNotCertifyPhysicalAlias(SafeMigrationOperationKind kind)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateConstraintShapeOwnerAsync(connection, kind, ["physical_first", "physical_second"]);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateConstraintShapeOwnerAsync(
+            connection,
+            kind,
+            ["physical_first", "physical_second"],
+            cancellationToken: CancellationToken.None);
         await using var context = CreateConstraintShapeContext(connection, kind);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(ConstraintShapeTable(kind, ["logical_first", "logical_second"]),
@@ -181,7 +204,8 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
 
         // Act
         var analyses = await analyzer.AnalyzeAsync(
-            context, builder.Operations.OfType<SafeMigrationOperation>().ToArray());
+            context, builder.Operations.OfType<SafeMigrationOperation>().ToArray(),
+            cancellationToken: CancellationToken.None);
 
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
 
@@ -207,8 +231,12 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
     )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateConstraintShapeOwnerAsync(connection, kind, ["logical_constraint", "physical_second"]);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateConstraintShapeOwnerAsync(
+            connection,
+            kind,
+            ["logical_constraint", "physical_second"],
+            cancellationToken: CancellationToken.None);
         await using var context = CreateConstraintShapeContext(connection, kind);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(ConstraintShapeTable(kind, ["logical_constraint", "other_alias"]),
@@ -218,7 +246,8 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
 
         // Act
         var analyses = await analyzer.AnalyzeAsync(
-            context, builder.Operations.OfType<SafeMigrationOperation>().ToArray());
+            context, builder.Operations.OfType<SafeMigrationOperation>().ToArray(),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);
@@ -243,8 +272,12 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
     )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateConstraintShapeOwnerAsync(connection, kind, ["logical_constraint"]);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateConstraintShapeOwnerAsync(
+            connection,
+            kind,
+            ["logical_constraint"],
+            cancellationToken: CancellationToken.None);
         await using var context = CreateConstraintShapeContext(connection, kind);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(ConstraintShapeTable(kind, ["logical_constraint"]),
@@ -253,18 +286,28 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
         AddConstraintShapeEnsure(builder, kind, "logical_constraint");
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
         var runner = context.GetService<ISafeMigrationRunner>();
-        var schemaVersion = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var schemaVersion = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Act
-        var live = await analyzer.AnalyzeAsync(context, builder.Operations.OfType<SafeMigrationOperation>().ToArray());
+        var live = await analyzer.AnalyzeAsync(context, builder.Operations.OfType<SafeMigrationOperation>().ToArray(),
+            cancellationToken: CancellationToken.None);
+
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-exact-constraint-name"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-exact-constraint-name"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-exact-constraint-postflight"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-exact-constraint-postflight"),
+            cancellationToken: CancellationToken.None);
 
-        var finalSchemaVersion = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var finalSchemaVersion = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var binding = Assert.Single(live[0].TableConstraintIdentities ?? [],
@@ -289,10 +332,10 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
     public async Task CreatedTableConstraintNamesRemainPhysicalProofs(SafeMigrationOperationKind kind)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE shape_parents (Id INTEGER NOT NULL, CONSTRAINT pk_shape_parents PRIMARY KEY (Id)); "
-            + "INSERT INTO shape_parents (Id) VALUES (1);");
+            + "INSERT INTO shape_parents (Id) VALUES (1);", cancellationToken: CancellationToken.None);
         await using var context = CreateConstraintShapeContext(connection, kind);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(ConstraintShapeTable(kind, ["logical_constraint"]),
@@ -303,11 +346,13 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-created-constraint-identity"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-created-constraint-identity"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-created-constraint-postflight"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-created-constraint-postflight"),
+            cancellationToken: CancellationToken.None);
 
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
 
@@ -323,13 +368,17 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
     /// <param name="connection">The independent in-memory connection.</param>
     /// <param name="kind">The fixture's native constraint family.</param>
     /// <param name="names">The declared symbols, or null for anonymous constraints.</param>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     /// <returns>The completion of fixture creation before the Act section.</returns>
     private static async Task CreateConstraintShapeOwnerAsync(
         DbConnection connection,
         SafeMigrationOperationKind kind,
-        IReadOnlyList<string?> names
+        IReadOnlyList<string?> names,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var constraints = string.Join(", ", names.Select(name =>
             (name is null ? string.Empty : "CONSTRAINT " + name + " ")
             + (kind switch
@@ -347,7 +396,7 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
             + (kind == SafeMigrationOperationKind.EnsureForeignKey
                 ? "CREATE INDEX ix_shape_items_parent ON shape_items (ParentId); " : string.Empty)
             + "INSERT INTO shape_parents (Id) VALUES (1); "
-            + "INSERT INTO shape_items (Id, Code, ParentId) VALUES (1, 5, 1);");
+            + "INSERT INTO shape_items (Id, Code, ParentId) VALUES (1, 5, 1);", cancellationToken: cancellationToken);
     }
 
     /// <summary>Builds a strict table contract without changing physical naming requirements.</summary>

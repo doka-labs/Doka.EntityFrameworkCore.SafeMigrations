@@ -27,7 +27,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         var fingerprint = SafeMigrationContractFingerprint.Create(operations);
 
         // Act
-        var report = await VerifyAsync(operations, analyzer);
+        var report = await VerifyAsync(operations, analyzer, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -82,7 +82,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         ];
 
         // Act
-        var report = await VerifyAsync(operations, analyzer);
+        var report = await VerifyAsync(operations, analyzer, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -108,7 +108,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         ];
 
         // Act
-        var report = await VerifyAsync(operations, analyzer);
+        var report = await VerifyAsync(operations, analyzer, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -148,7 +148,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         operations.Add(Safe(new RenameColumnIntent("source", "source_nodes", "renamed")));
 
         // Act
-        var report = await VerifyAsync(operations, analyzer);
+        var report = await VerifyAsync(operations, analyzer, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);

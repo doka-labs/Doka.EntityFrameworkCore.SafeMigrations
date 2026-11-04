@@ -33,24 +33,25 @@ public sealed partial class MySqlColumnsNullDefaultIdentityIntegrationTests : My
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE `null_defaults` (`value` {storeType} NULL DEFAULT {defaultSql}) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `null_defaults` VALUES ('kept'), (NULL);");
+            + "INSERT INTO `null_defaults` VALUES ('kept'), (NULL);", cancellationToken: CancellationToken.None);
 
         var operation = NullDefaultTransition(literalNull);
         await using var context = CreateContext(connectionString);
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
 
         // Act
-        var before = await analyzer.AnalyzeAsync(context, [operation]);
+        var before = await analyzer.AnalyzeAsync(context, [operation], CancellationToken.None);
         var catalog = await ScalarStringAsync(connectionString,
             "SELECT CONCAT(COLUMN_DEFAULT IS NULL, '|', COALESCE(HEX(COLUMN_DEFAULT), '-'), '|', EXTRA) "
             + "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'null_defaults' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'null_defaults' AND COLUMN_NAME = 'value';", cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, [operation]);
-        await ExecuteOperationsAsync(context, [operation]);
-        var after = await analyzer.AnalyzeAsync(context, [operation]);
+        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
+        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
+        var after = await analyzer.AnalyzeAsync(context, [operation], CancellationToken.None);
         var rows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `null_defaults` WHERE `value` IS NULL OR BINARY `value` = BINARY 'kept';");
+            "SELECT COUNT(*) FROM `null_defaults` WHERE `value` IS NULL OR BINARY `value` = BINARY 'kept';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(alreadyTarget ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
@@ -96,20 +97,27 @@ public sealed partial class MySqlColumnsNullDefaultIdentityIntegrationTests : My
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE `null_defaults` (`value` varchar({width}) NULL DEFAULT {defaultSql}) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `null_defaults` () VALUES ();");
+            + "INSERT INTO `null_defaults` () VALUES ();", cancellationToken: CancellationToken.None);
 
         var operation = NullDefaultTransition(literalNull);
         await using var context = CreateContext(connectionString);
 
         // Act
-        var results = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation]);
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var replayFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+        var results = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation],
+            CancellationToken.None);
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
+        var replayFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
         var unchangedWidth = await ScalarIntAsync(connectionString,
             "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'null_defaults' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'null_defaults' AND COLUMN_NAME = 'value';", cancellationToken: CancellationToken.None);
 
-        var value = await ScalarStringAsync(connectionString, "SELECT HEX(`value`) FROM `null_defaults`;");
+        var value = await ScalarStringAsync(connectionString, "SELECT HEX(`value`) FROM `null_defaults`;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(results);
@@ -132,7 +140,8 @@ public sealed partial class MySqlColumnsNullDefaultIdentityIntegrationTests : My
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `null_defaults` (`id` int NOT NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE `null_defaults` (`id` int NOT NULL);",
+            cancellationToken: CancellationToken.None);
         var operation = new SafeMigrationOperation(
             new EnsureColumnIntent("null_defaults", NullDefaultColumn("varchar(40)", literalNull)),
             SafeMigrationPolicy.ThrowIfDifferent);
@@ -140,12 +149,15 @@ public sealed partial class MySqlColumnsNullDefaultIdentityIntegrationTests : My
         await using var context = CreateContext(connectionString);
 
         // Act
-        await ExecuteOperationsAsync(context, [operation]);
-        await ExecuteOperationsAsync(context, [operation]);
-        var results = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation]);
-        await ExecuteSqlAsync(connectionString, "INSERT INTO `null_defaults` (`id`) VALUES (1);");
+        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
+        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
+        var results = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation],
+            CancellationToken.None);
+
+        await ExecuteSqlAsync(connectionString, "INSERT INTO `null_defaults` (`id`) VALUES (1);",
+            cancellationToken: CancellationToken.None);
         var nullRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `null_defaults` WHERE `value` IS NULL;");
+            "SELECT COUNT(*) FROM `null_defaults` WHERE `value` IS NULL;", cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(results);
@@ -173,22 +185,26 @@ public sealed partial class MySqlColumnsNullDefaultIdentityIntegrationTests : My
         // Act
         var creationFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString,
             "CREATE TABLE `null_defaults` (`value` varchar(40) NOT NULL DEFAULT (NULL)); "
-            + "INSERT INTO `null_defaults` VALUES ('kept');"));
+            + "INSERT INTO `null_defaults` VALUES ('kept');", cancellationToken: CancellationToken.None));
 
         if (creationFailure is null)
         {
-            results = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation]);
-            failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-            replayFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+            results = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation],
+                CancellationToken.None);
+            failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+                CancellationToken.None));
+            replayFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+                CancellationToken.None));
         }
 
         var required = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'null_defaults' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';");
+            + "AND TABLE_NAME = 'null_defaults' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';",
+            cancellationToken: CancellationToken.None);
 
         var tables = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'null_defaults';");
+            + "AND TABLE_NAME = 'null_defaults';", cancellationToken: CancellationToken.None);
 
         // Assert
         if (Fixture.IsMariaDb)

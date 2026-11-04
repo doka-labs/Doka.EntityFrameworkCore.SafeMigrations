@@ -14,13 +14,19 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
     )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         for (var table = 0; table < tableCount; table++)
         {
-            await ExecuteSqlAsync(connection, $"CREATE TABLE counted_{table} (Id INTEGER, Code TEXT);");
+            await ExecuteSqlAsync(
+                connection,
+                $"CREATE TABLE counted_{table} (Id INTEGER, Code TEXT);",
+                cancellationToken: CancellationToken.None);
             for (var index = 0; index < indexesPerTable; index++)
             {
-                await ExecuteSqlAsync(connection, $"CREATE INDEX ix_counted_{table}_{index} ON counted_{table}(Code);");
+                await ExecuteSqlAsync(
+                    connection,
+                    $"CREATE INDEX ix_counted_{table}_{index} ON counted_{table}(Code);",
+                    cancellationToken: CancellationToken.None);
             }
         }
 
@@ -48,10 +54,11 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
     )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
-            $"PRAGMA foreign_keys = {foreignKeys}; PRAGMA legacy_alter_table = {legacyAlterTable};");
+            $"PRAGMA foreign_keys = {foreignKeys}; PRAGMA legacy_alter_table = {legacyAlterTable};",
+            cancellationToken: CancellationToken.None);
         using var versionCommand = connection.CreateCommand();
         versionCommand.CommandText = "SELECT sqlite_version();";
         var version = versionCommand.ExecuteScalar();
@@ -70,7 +77,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
     public async Task CatalogStreaming_MatchesLegacyPragmasForCompleteMetadata()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         const string parent = "p\"ar\u00e9nt";
         const string child = "child\u00f6";
         await ExecuteSqlAsync(
@@ -93,7 +100,8 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             + "WHERE ParentB IS NOT NULL /* filter trivia */; "
             + $"CREATE INDEX \"ix inherited\" ON {QuoteCatalogIdentifier(child)} (Code); "
             + $"CREATE VIEW \"v quoted\" AS SELECT Code FROM {QuoteCatalogIdentifier(child)}; "
-            + $"CREATE TRIGGER \"tr quoted\" AFTER INSERT ON {QuoteCatalogIdentifier(child)} BEGIN SELECT 1; END;");
+            + $"CREATE TRIGGER \"tr quoted\" AFTER INSERT ON {QuoteCatalogIdentifier(child)} BEGIN SELECT 1; END;",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
@@ -159,8 +167,11 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
     public async Task CatalogStreaming_PreservesVirtualTableHiddenColumns()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection, "CREATE VIRTUAL TABLE search_items USING fts5(Value);");
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE VIRTUAL TABLE search_items USING fts5(Value);",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
@@ -184,8 +195,11 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
     )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection, $"CREATE VIRTUAL TABLE keyword_module USING fts5({arguments});");
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            $"CREATE VIRTUAL TABLE keyword_module USING fts5({arguments});",
+            cancellationToken: CancellationToken.None);
         using var counter = new SnapshotCountingConnection(connection);
 
         // Act
@@ -205,7 +219,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
     public async Task CatalogStreaming_IsolatesMainFromTempAndAttachedSchemas()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "ATTACH DATABASE ':memory:' AS other; "
@@ -216,7 +230,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             + "CREATE TABLE other.isolated (AttachedColumn INTEGER); "
             + "CREATE INDEX other.shared_index ON isolated(AttachedColumn); "
             + "CREATE TABLE other.attached_only (Id INTEGER); "
-            + "CREATE TEMP TABLE temporary_only (Id INTEGER);");
+            + "CREATE TEMP TABLE temporary_only (Id INTEGER);", cancellationToken: CancellationToken.None);
 
         // Act
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
@@ -243,8 +257,11 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
     public async Task CatalogStreaming_PreservesTransactionLifetimeAndFreshness()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection, "CREATE TABLE changing (Id INTEGER);");
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE changing (Id INTEGER);",
+            cancellationToken: CancellationToken.None);
         using var transaction = connection.BeginTransaction();
         using var counter = new SnapshotCountingConnection(connection);
         var first = SqliteSafeMigrationCatalog.Read(counter, transaction);
@@ -274,8 +291,11 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
     public async Task CatalogStreaming_LeavesTransactionUsableAfterCommandFailure()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection, "CREATE TABLE failure_items (Id INTEGER);");
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE failure_items (Id INTEGER);",
+            cancellationToken: CancellationToken.None);
         using var transaction = connection.BeginTransaction();
         using var counter = new SnapshotCountingConnection(connection, "pragma_index_list", "execute");
 
@@ -315,13 +335,13 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
     )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE owner_parent (Id INTEGER PRIMARY KEY); "
             + "CREATE TABLE owner_child (Id INTEGER, "
             + "CONSTRAINT fk_owner_child FOREIGN KEY(Id) REFERENCES owner_parent(Id)); "
-            + "CREATE INDEX ix_owner_child ON owner_child(Id);");
+            + "CREATE INDEX ix_owner_child ON owner_child(Id);", cancellationToken: CancellationToken.None);
         using var counter = new SnapshotCountingConnection(connection, segment, fault);
 
         // Act
@@ -347,8 +367,8 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
     )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection, sql);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connection, sql, cancellationToken: CancellationToken.None);
         using var counter = new SnapshotCountingConnection(connection, "pragma_index_list", "empty_collection");
 
         // Act
@@ -374,11 +394,11 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
     )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE declared_parent (Id INTEGER PRIMARY KEY); "
-            + $"CREATE TABLE declared_child ({declaration});");
+            + $"CREATE TABLE declared_child ({declaration});", cancellationToken: CancellationToken.None);
         using var counter = new SnapshotCountingConnection(connection, "pragma_foreign_key_list", "empty_collection");
 
         // Act
@@ -402,8 +422,11 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
     )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection, $"CREATE TABLE empty_collections ({columns});");
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            $"CREATE TABLE empty_collections ({columns});",
+            cancellationToken: CancellationToken.None);
         using var counter = new SnapshotCountingConnection(connection);
 
         // Act
@@ -423,7 +446,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
     public async Task CatalogStreaming_PreservesAllForeignKeyDeclarationForms()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE all_parent (Id INTEGER PRIMARY KEY); "
@@ -432,7 +455,8 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             + "Named INTEGER CONSTRAINT fk_inline REFERENCES all_parent(Id) ON UPDATE RESTRICT, "
             + "Repeated INTEGER CONSTRAINT fk_first REFERENCES all_parent(Id) "
             + "CONSTRAINT fk_second REFERENCES all_parent(Id), "
-            + "TableReference INTEGER, FOREIGN KEY(TableReference) REFERENCES all_parent(Id));");
+            + "TableReference INTEGER, FOREIGN KEY(TableReference) REFERENCES all_parent(Id));",
+            cancellationToken: CancellationToken.None);
         using var counter = new SnapshotCountingConnection(connection);
 
         // Act
@@ -471,11 +495,11 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
     )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             $"CREATE TABLE {QuoteCatalogIdentifier(parent)} (Id INTEGER CONSTRAINT pk_parent PRIMARY KEY); "
-            + $"CREATE TABLE quoted_child ({declaration});");
+            + $"CREATE TABLE quoted_child ({declaration});", cancellationToken: CancellationToken.None);
         using var counter = new SnapshotCountingConnection(connection);
 
         // Act
@@ -502,13 +526,14 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
     )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE quoted_name_parent (Id INTEGER PRIMARY KEY); "
             + "CREATE TABLE quoted_name_child (ParentId INTEGER "
             + $"CONSTRAINT {quotedName} REFERENCES quoted_name_parent(Id), "
-            + "Literal TEXT DEFAULT 'CONSTRAINT phantom REFERENCES missing(Id)');");
+            + "Literal TEXT DEFAULT 'CONSTRAINT phantom REFERENCES missing(Id)');",
+            cancellationToken: CancellationToken.None);
         using var counter = new SnapshotCountingConnection(connection);
 
         // Act
@@ -533,11 +558,11 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
     )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE parent (Id INTEGER PRIMARY KEY); "
-            + $"CREATE TABLE token_child ({declaration});");
+            + $"CREATE TABLE token_child ({declaration});", cancellationToken: CancellationToken.None);
         using var counter = new SnapshotCountingConnection(connection);
 
         // Act

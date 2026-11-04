@@ -25,7 +25,7 @@ public sealed class SqlServerSafeMigrationUniqueKeySemanticsIntegrationTests : S
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var name = family switch
         {
             "primary" => "PK_unique_key_semantics",
@@ -49,14 +49,17 @@ public sealed class SqlServerSafeMigrationUniqueKeySemanticsIntegrationTests : S
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.unique_key_semantics (Id int NOT NULL); "
             + "INSERT INTO dbo.unique_key_semantics VALUES (1); "
-            + "CREATE TABLE dbo.unique_key_ddl_audit (Id int IDENTITY NOT NULL); " + keySql);
+            + "CREATE TABLE dbo.unique_key_ddl_audit (Id int IDENTITY NOT NULL); " + keySql,
+            cancellationToken: CancellationToken.None);
         var indexQuery = "SELECT index_id FROM sys.indexes "
             + $"WHERE object_id = OBJECT_ID(N'dbo.unique_key_semantics', N'U') AND name = N'{name}';";
 
-        var originalIndexId = await ScalarIntAsync(connectionString, indexQuery);
+        var originalIndexId = await ScalarIntAsync(connectionString, indexQuery,
+            cancellationToken: CancellationToken.None);
+
         await ExecuteSqlAsync(connectionString,
             "CREATE TRIGGER unique_key_semantics_ddl_audit ON DATABASE FOR ALTER_TABLE, CREATE_INDEX, DROP_INDEX "
-            + "AS INSERT INTO dbo.unique_key_ddl_audit DEFAULT VALUES;");
+            + "AS INSERT INTO dbo.unique_key_ddl_audit DEFAULT VALUES;", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         SafeMigrationIntent intent = family switch
         {
@@ -72,19 +75,29 @@ public sealed class SqlServerSafeMigrationUniqueKeySemanticsIntegrationTests : S
         var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation]);
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var observedIndexId = await ScalarIntAsync(connectionString, indexQuery);
+        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation],
+            cancellationToken: CancellationToken.None);
+
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            cancellationToken: CancellationToken.None));
+
+        var observedIndexId = await ScalarIntAsync(connectionString, indexQuery,
+            cancellationToken: CancellationToken.None);
+
         var physicalKeyCount = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.indexes "
             + $"WHERE object_id = OBJECT_ID(N'dbo.unique_key_semantics', N'U') AND name = N'{name}' "
-            + $"AND is_unique = 1 AND ignore_dup_key = {(ignoreDuplicateKey ? 1 : 0)};");
+            + $"AND is_unique = 1 AND ignore_dup_key = {(ignoreDuplicateKey ? 1 : 0)};",
+            cancellationToken: CancellationToken.None);
 
         var unchangedRowCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.unique_key_semantics WHERE Id = 1;");
+            "SELECT COUNT(*) FROM dbo.unique_key_semantics WHERE Id = 1;", cancellationToken: CancellationToken.None);
 
-        var totalRowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.unique_key_semantics;");
-        var ddlEventCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.unique_key_ddl_audit;");
+        var totalRowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.unique_key_semantics;",
+            cancellationToken: CancellationToken.None);
+
+        var ddlEventCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.unique_key_ddl_audit;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(ignoreDuplicateKey ? SafeMigrationObservedState.Different : SafeMigrationObservedState.Matching,

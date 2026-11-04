@@ -19,7 +19,8 @@ public sealed class PostgreSqlPerformanceIntegrationTests : PostgreSqlSafeMigrat
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, BuildLargeMigrationStressCatalog());
+        await ExecuteSqlAsync(connectionString, BuildLargeMigrationStressCatalog(),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var expectation = LargeMigrationStressContract.Populate(
@@ -27,7 +28,8 @@ public sealed class PostgreSqlPerformanceIntegrationTests : PostgreSqlSafeMigrat
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("bounded-mixed-migration"));
+            context, builder.Operations, new SafeMigrationRunOptions("bounded-mixed-migration"),
+            CancellationToken.None);
 
         // Assert
         expectation.AssertReport(report);
@@ -40,7 +42,7 @@ public sealed class PostgreSqlPerformanceIntegrationTests : PostgreSqlSafeMigrat
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            BuildLargeMigrationStressCatalog());
+            BuildLargeMigrationStressCatalog(), cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -64,7 +66,7 @@ public sealed class PostgreSqlPerformanceIntegrationTests : PostgreSqlSafeMigrat
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE catalog_timeout (id integer NOT NULL); "
-            + "INSERT INTO catalog_timeout (id) VALUES (1);");
+            + "INSERT INTO catalog_timeout (id) VALUES (1);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         context.Database.SetCommandTimeout(1);
@@ -105,19 +107,23 @@ public sealed class PostgreSqlPerformanceIntegrationTests : PostgreSqlSafeMigrat
 
         await ExecuteSqlAsync(
             fixtureConnectionString,
-            BuildPostgreSqlPerformanceTables("expected_perf_", ExpectedPerformanceTableCount, includeIndex: false));
+            BuildPostgreSqlPerformanceTables("expected_perf_", ExpectedPerformanceTableCount, includeIndex: false),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operations = BuildPostgreSqlPerformanceOperations(context.Database.ProviderName!);
         var runner = context.GetService<ISafeMigrationRunner>();
         var options = new SafeMigrationRunOptions("live-performance");
-        var clean = await LivePerformanceEvidence.MeasureAsync(() => runner.AnalyzeAsync(context, operations, options));
+        var clean = await LivePerformanceEvidence.MeasureAsync(
+            token => runner.AnalyzeAsync(context, operations, options, token), CancellationToken.None);
 
         await ExecuteSqlAsync(
             fixtureConnectionString,
-            BuildPostgreSqlPerformanceTables("foreign_perf_", ForeignPerformanceTableCount, includeIndex: true));
+            BuildPostgreSqlPerformanceTables("foreign_perf_", ForeignPerformanceTableCount, includeIndex: true),
+            cancellationToken: CancellationToken.None);
 
-        var noisy = await LivePerformanceEvidence.MeasureAsync(() => runner.AnalyzeAsync(context, operations, options));
+        var noisy = await LivePerformanceEvidence.MeasureAsync(
+            token => runner.AnalyzeAsync(context, operations, options, token), CancellationToken.None);
 
         LivePerformanceEvidence.Write(
             "postgresql",

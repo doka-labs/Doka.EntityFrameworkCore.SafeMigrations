@@ -14,10 +14,11 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
         string nativeKeyColumn,
         bool bindsInitial)
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE transition_items (Id INTEGER NOT NULL, OtherId INTEGER NOT NULL, "
-            + $"CONSTRAINT physical_current_pk PRIMARY KEY({nativeKeyColumn}));");
+            + $"CONSTRAINT physical_current_pk PRIMARY KEY({nativeKeyColumn}));",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists("transition_items", table => new
@@ -29,7 +30,8 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
         builder.AddPrimaryKeyIfNotExists("logical_terminal_pk", "transition_items", ["OtherId"]);
 
         var results = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
-            context, builder.Operations.OfType<SafeMigrationOperation>().ToArray());
+            context, builder.Operations.OfType<SafeMigrationOperation>().ToArray(),
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationObservedState.Matching, results[0].ObservedState);
         Assert.Equal(bindsInitial, results[0].TableConstraintIdentities?.Any(binding =>
@@ -49,10 +51,11 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
     [InlineData("missing_fk")]
     public async Task StrictConstraintTransition_PostflightRetainsExactNativeContract(string scenario)
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE constraint_parents (Id INTEGER NOT NULL, CONSTRAINT pk_constraint_parents PRIMARY KEY(Id)); "
-            + "CREATE TABLE other_parents (Id INTEGER NOT NULL PRIMARY KEY);");
+            + "CREATE TABLE other_parents (Id INTEGER NOT NULL PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
         var type = scenario == "column_type" ? "TEXT" : "INTEGER";
         var principal = scenario == "wrong_principal" ? "other_parents" : "constraint_parents";
         var action = scenario == "wrong_action" ? "RESTRICT" : "CASCADE";
@@ -67,12 +70,14 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
         await ExecuteSqlAsync(connection,
             $"CREATE TABLE constraint_children (Id {type} NOT NULL, ParentId INTEGER NULL, "
             + $"CONSTRAINT pk_constraint_children PRIMARY KEY(Id){foreignKey}{extra}); "
-            + "CREATE INDEX ix_constraint_children_parent_id ON constraint_children(ParentId);");
+            + "CREATE INDEX ix_constraint_children_parent_id ON constraint_children(ParentId);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = CreateProjectedForeignKeyNewOwnerBuilder(context, strict: true);
 
         var report = await context.GetService<ISafeMigrationRunner>().VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-strict-constraint-negative"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-strict-constraint-negative"),
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.False(report.Assessments[scenario == "missing_fk" ? 2 : 0].PostconditionSatisfied);
@@ -86,7 +91,7 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
     [Fact]
     public async Task StrictConstraintTransition_RejectsReversedNativeForeignKeyOrder()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE constraint_parents (Id INTEGER NOT NULL, OtherId INTEGER NOT NULL, "
             + "PRIMARY KEY(Id, OtherId)); "
@@ -94,7 +99,8 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
             + "CONSTRAINT pk_constraint_children PRIMARY KEY(Id), "
             + "CONSTRAINT fk_constraint_children_parent FOREIGN KEY(Id, ParentId) "
             + "REFERENCES constraint_parents(Id, OtherId) ON DELETE CASCADE); "
-            + "CREATE INDEX ix_constraint_children_parent_id ON constraint_children(ParentId);");
+            + "CREATE INDEX ix_constraint_children_parent_id ON constraint_children(ParentId);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = CreateProjectedForeignKeyNewOwnerBuilder(context, strict: true);
         builder.Operations.RemoveAt(2);
@@ -103,7 +109,8 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
             "constraint_parents", ["Id", "OtherId"], onDelete: ReferentialAction.Cascade);
 
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-strict-fk-member-order"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-strict-fk-member-order"),
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[0].Action);
@@ -114,14 +121,15 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
     [Fact]
     public async Task StrictConstraintTransition_UsesSqlitePhysicalTableIdentity()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE constraint_parents (Id INTEGER NOT NULL PRIMARY KEY); "
             + "CREATE TABLE constraint_children (Id INTEGER NOT NULL, ParentId INTEGER NULL, "
             + "CONSTRAINT pk_constraint_children PRIMARY KEY(Id), "
             + "CONSTRAINT fk_constraint_children_parent FOREIGN KEY(ParentId) "
             + "REFERENCES constraint_parents(Id) ON DELETE CASCADE); "
-            + "CREATE INDEX ix_constraint_children_parent_id ON constraint_children(ParentId);");
+            + "CREATE INDEX ix_constraint_children_parent_id ON constraint_children(ParentId);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = CreateProjectedForeignKeyNewOwnerBuilder(context, strict: true);
         builder.Operations.RemoveAt(2);
@@ -131,7 +139,8 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
             onDelete: ReferentialAction.Cascade);
 
         var report = await context.GetService<ISafeMigrationRunner>().VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-strict-constraint-aliases"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-strict-constraint-aliases"),
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(report.Assessments, item => Assert.True(item.PostconditionSatisfied));
@@ -146,14 +155,15 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
     [InlineData("repeated")]
     public async Task StrictConstraintTransition_NativeForeignKeyCannotCrossCreatorBoundary(string boundary)
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE constraint_parents (Id INTEGER NOT NULL PRIMARY KEY); "
             + "CREATE TABLE constraint_children (Id INTEGER NOT NULL, ParentId INTEGER NULL, "
             + "CONSTRAINT pk_constraint_children PRIMARY KEY(Id), "
             + "CONSTRAINT fk_constraint_children_parent FOREIGN KEY(ParentId) "
             + "REFERENCES constraint_parents(Id) ON DELETE CASCADE); "
-            + "CREATE INDEX ix_constraint_children_parent_id ON constraint_children(ParentId);");
+            + "CREATE INDEX ix_constraint_children_parent_id ON constraint_children(ParentId);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = CreateProjectedForeignKeyNewOwnerBuilder(context, strict: true);
         var originalCreator = builder.Operations[0];
@@ -183,7 +193,8 @@ public sealed partial class SqliteSafeMigrationProjectedForeignKeyNewOwnerIntegr
             ["ParentId"], "constraint_parents", ["Id"], onDelete: ReferentialAction.Cascade);
 
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-strict-native-boundary"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-strict-native-boundary"),
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[0].Action);

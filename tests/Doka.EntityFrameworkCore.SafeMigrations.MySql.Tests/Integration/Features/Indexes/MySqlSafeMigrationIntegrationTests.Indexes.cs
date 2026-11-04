@@ -11,13 +11,15 @@ public sealed partial class MySqlIndexesIntegrationTests : MySqlSafeMigrationInt
     public async Task UnsupportedFilteredIndex_FailsBeforeTargetDdl()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `events` (`id` int NOT NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE `events` (`id` int NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexIfNotExists("ix_events_filtered", "events", ["id"], filter: "id > 0");
 
         var exception =
-            await AssertOwnedGuardFailureAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+            await AssertOwnedGuardFailureAsync(operationToken => ExecuteOperationsAsync(context, builder.Operations,
+                operationToken), cancellationToken: CancellationToken.None);
 
         Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(
@@ -26,7 +28,7 @@ public sealed partial class MySqlIndexesIntegrationTests : MySqlSafeMigrationInt
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'events' "
-                + "AND INDEX_NAME = 'ix_events_filtered';"));
+                + "AND INDEX_NAME = 'ix_events_filtered';", cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -35,7 +37,8 @@ public sealed partial class MySqlIndexesIntegrationTests : MySqlSafeMigrationInt
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE `advanced_indexes` (`id` int NOT NULL, `value` varchar(80) NULL);");
+            "CREATE TABLE `advanced_indexes` (`id` int NOT NULL, `value` varchar(80) NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var definition = new ExpectedIndexDefinition(
             "ix_advanced_value",
@@ -51,8 +54,8 @@ public sealed partial class MySqlIndexesIntegrationTests : MySqlSafeMigrationInt
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureIndex(definition, SafeMigrationPolicy.ThrowIfDifferent);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var drift = new MigrationBuilder(context.Database.ProviderName!);
         drift.EnsureIndex(
@@ -64,7 +67,8 @@ public sealed partial class MySqlIndexesIntegrationTests : MySqlSafeMigrationInt
             SafeMigrationPolicy.ThrowIfDifferent);
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, drift.Operations, new SafeMigrationRunOptions("test-instance"));
+            .AnalyzeAsync(context, drift.Operations, new SafeMigrationRunOptions("test-instance"),
+                          CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(
@@ -77,7 +81,8 @@ public sealed partial class MySqlIndexesIntegrationTests : MySqlSafeMigrationInt
     public async Task FunctionalIndexCreation_FailsClosedWhenPhysicalWidthCannotBeProven()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `functional_indexes` (`value` varchar(80) NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE `functional_indexes` (`value` varchar(80) NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureIndex(
@@ -89,7 +94,9 @@ public sealed partial class MySqlIndexesIntegrationTests : MySqlSafeMigrationInt
 
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"),
+                          CancellationToken.None);
+
         var assessment = Assert.Single(preflight.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
@@ -104,6 +111,6 @@ public sealed partial class MySqlIndexesIntegrationTests : MySqlSafeMigrationInt
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'functional_indexes' "
-                + "AND INDEX_NAME = 'ix_functional_lower_value';"));
+                + "AND INDEX_NAME = 'ix_functional_lower_value';", cancellationToken: CancellationToken.None));
     }
 }

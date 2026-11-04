@@ -21,7 +21,8 @@ public sealed partial class MySqlColumnsForeignKeyNullabilityIntegrationTests : 
             + (matchingSibling ? "NULL;" : "NOT NULL;")
             + " UPDATE `proof_child` SET `second_owner_id` = `owner_id`;"
             + " ALTER TABLE `proof_child` ADD CONSTRAINT `fk_proof_second_parent` "
-            + "FOREIGN KEY (`second_owner_id`) REFERENCES `proof_parent` (`id`) ON DELETE CASCADE;");
+            + "FOREIGN KEY (`second_owner_id`) REFERENCES `proof_parent` (`id`) ON DELETE CASCADE;",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_proof_child_parent", "proof_child");
@@ -52,9 +53,11 @@ public sealed partial class MySqlColumnsForeignKeyNullabilityIntegrationTests : 
         var postflight = await runner.VerifyAsync(context, builder.Operations,
             new SafeMigrationRunOptions("multiple-fk-nullability-final"), CancellationToken.None);
 
-        await ExecuteSqlAsync(connectionString, "DELETE FROM `proof_parent`;");
+        await ExecuteSqlAsync(connectionString, "DELETE FROM `proof_parent`;",
+            cancellationToken: CancellationToken.None);
         var retained = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `proof_child` WHERE `owner_id` IS NULL AND `second_owner_id` IS NULL;");
+            "SELECT COUNT(*) FROM `proof_child` WHERE `owner_id` IS NULL AND `second_owner_id` IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -74,7 +77,8 @@ public sealed partial class MySqlColumnsForeignKeyNullabilityIntegrationTests : 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable));
+        await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operations = ForeignKeyNullabilityOperations();
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -94,9 +98,10 @@ public sealed partial class MySqlColumnsForeignKeyNullabilityIntegrationTests : 
         rerun.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, operations, CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "DELETE FROM `proof_parent` WHERE `id` = "
-            + "'00000000-0000-0000-0000-000000000001';");
+            + "'00000000-0000-0000-0000-000000000001';", cancellationToken: CancellationToken.None);
         var retained = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `proof_child` WHERE `id` = 1 AND `owner_id` IS NULL;");
+            "SELECT COUNT(*) FROM `proof_child` WHERE `id` = 1 AND `owner_id` IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -115,7 +120,8 @@ public sealed partial class MySqlColumnsForeignKeyNullabilityIntegrationTests : 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: true));
+        await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: true),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operations = ForeignKeyNullabilityOperations().Where(
             static operation => operation is not SafeMigrationOperation { Intent: AlterColumnIntent }).ToArray();
@@ -136,7 +142,8 @@ public sealed partial class MySqlColumnsForeignKeyNullabilityIntegrationTests : 
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE `backfill_items` (`value` int NOT NULL); INSERT INTO `backfill_items` VALUES (7);");
+            "CREATE TABLE `backfill_items` (`value` int NOT NULL); INSERT INTO `backfill_items` VALUES (7);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operation = ExplicitBackfillGuidAdd();
 
@@ -158,7 +165,8 @@ public sealed partial class MySqlColumnsForeignKeyNullabilityIntegrationTests : 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `backfill_items` (`value` int NOT NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE `backfill_items` (`value` int NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operation = ExplicitBackfillGuidAdd();
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -175,7 +183,8 @@ public sealed partial class MySqlColumnsForeignKeyNullabilityIntegrationTests : 
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
         var count = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'backfill_items' AND COLUMN_NAME = 'id' AND IS_NULLABLE = 'NO';");
+            + "AND TABLE_NAME = 'backfill_items' AND COLUMN_NAME = 'id' AND IS_NULLABLE = 'NO';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);

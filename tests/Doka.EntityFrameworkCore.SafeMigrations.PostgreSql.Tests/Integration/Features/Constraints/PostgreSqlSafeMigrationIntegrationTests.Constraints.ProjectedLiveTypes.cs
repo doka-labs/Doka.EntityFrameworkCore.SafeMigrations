@@ -29,7 +29,8 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var existingType = shape is "lower-varchar" or "lower-irrelevant-variadic" ? "varchar(32)" : "text";
-        await ExecuteSqlAsync(connectionString, $"CREATE TABLE mixed_columns (id {existingType} NOT NULL);");
+        await ExecuteSqlAsync(connectionString, $"CREATE TABLE mixed_columns (id {existingType} NOT NULL);",
+            cancellationToken: CancellationToken.None);
 
         if (shape == "lower-irrelevant-variadic")
         {
@@ -38,7 +39,7 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
             // merely because its variadic array could be empty when explicit.
             await ExecuteSqlAsync(connectionString,
                 "CREATE FUNCTION public.lower(varchar, VARIADIC integer[]) RETURNS text "
-                + "LANGUAGE sql IMMUTABLE AS 'SELECT upper($1::text)';");
+                + "LANGUAGE sql IMMUTABLE AS 'SELECT upper($1::text)';", cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -91,7 +92,7 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
             new SafeMigrationRunOptions("sparse-check-valid-binding"), CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var postflight = await runner.VerifyAsync(context, builder.Operations,
             new SafeMigrationRunOptions("sparse-check-valid-binding-final"), CancellationToken.None);
 
@@ -118,7 +119,8 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE live_parent (id integer NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);");
+            + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -136,7 +138,7 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
         if (policy == SafeMigrationPolicy.ExistenceOnly)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         // Assert
@@ -159,7 +161,8 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE live_parent (id integer NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY, old_parent_id integer NULL, "
-            + "CONSTRAINT fk_live_child_parent FOREIGN KEY (old_parent_id) REFERENCES live_parent (id));");
+            + "CONSTRAINT fk_live_child_parent FOREIGN KEY (old_parent_id) REFERENCES live_parent (id));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -184,7 +187,7 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
         if (dropReplacement)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         // Assert
@@ -203,7 +206,8 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE live_parent (id integer NOT NULL PRIMARY KEY);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE live_parent (id integer NOT NULL PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -222,7 +226,7 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
             new SafeMigrationRunOptions("sparse-created-child-separate-column"), CancellationToken.None);
 
         preflight.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var postflight = await runner.VerifyAsync(context, builder.Operations,
             new SafeMigrationRunOptions("sparse-created-child-separate-column-final"), CancellationToken.None);
 
@@ -247,7 +251,8 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (id uuid NOT NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (id uuid NOT NULL);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -313,7 +318,8 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
 
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE mixed_columns (id text NOT NULL, added integer NOT NULL, "
-            + "CONSTRAINT ck_mixed CHECK ((" + current + ") AND (added >= 0)));");
+            + "CONSTRAINT ck_mixed CHECK ((" + current + ") AND (added >= 0)));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operand = shape switch
@@ -344,7 +350,7 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
             new SafeMigrationRunOptions("check-native-deparse-different"), CancellationToken.None);
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(context,
-            builder.Operations));
+            builder.Operations, CancellationToken.None));
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -375,7 +381,7 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
             _ => throw new ArgumentOutOfRangeException(nameof(shape)),
         };
 
-        await ExecuteSqlAsync(connectionString, setup);
+        await ExecuteSqlAsync(connectionString, setup, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("added", "mixed_columns", type: "integer", nullable: false);
@@ -405,7 +411,8 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
             new SafeMigrationRunOptions("sparse-check-unresolved-binding"), CancellationToken.None);
 
         var callbackCount = shape == "opaque"
-            ? await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM callback_audit;") : 0;
+            ? await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM callback_audit;",
+                cancellationToken: CancellationToken.None) : 0;
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -427,7 +434,8 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE mixed_columns (id integer); CREATE TABLE callback_audit (id integer); "
             + "CREATE FUNCTION metadata_callback(integer) RETURNS boolean LANGUAGE plpgsql AS $$ "
-            + "BEGIN INSERT INTO callback_audit VALUES (1); RETURN true; END $$;");
+            + "BEGIN INSERT INTO callback_audit VALUES (1); RETURN true; END $$;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -443,8 +451,9 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
             new SafeMigrationRunOptions("sparse-check-catalog-function"), CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var callbackCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM callback_audit;");
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var callbackCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM callback_audit;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -458,7 +467,8 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (id text);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (id text);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -504,7 +514,7 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL, CONSTRAINT fk_live_child_parent "
-            + constraint + "); INSERT INTO live_child VALUES (1);");
+            + constraint + "); INSERT INTO live_child VALUES (1);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -533,7 +543,7 @@ public sealed class PostgreSqlConstraintsProjectedLiveTypesIntegrationTests : Po
         if (correctFamily)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         // Assert

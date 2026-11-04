@@ -11,13 +11,14 @@ public sealed partial class MySqlConstraintsIntegrationTests : MySqlSafeMigratio
     public async Task PrimaryKey_UsesEngineCanonicalNameAndRemainsIdempotent()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `snapshots` (`id` int NOT NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE `snapshots` (`id` int NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddPrimaryKeyIfNotExists("pk_snapshots", "snapshots", ["id"]);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         Assert.Equal(
             1,
@@ -25,7 +26,8 @@ public sealed partial class MySqlConstraintsIntegrationTests : MySqlSafeMigratio
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
                 + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'snapshots' "
-                + "AND CONSTRAINT_NAME = 'PRIMARY' AND CONSTRAINT_TYPE = 'PRIMARY KEY';"));
+                + "AND CONSTRAINT_NAME = 'PRIMARY' AND CONSTRAINT_TYPE = 'PRIMARY KEY';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -36,7 +38,8 @@ public sealed partial class MySqlConstraintsIntegrationTests : MySqlSafeMigratio
             connectionString,
             "CREATE TABLE `parents` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
             + "CREATE TABLE `children` ("
-            + "`id` int NOT NULL, `parent_id` int NULL, `code` varchar(30) NULL, `quantity` int NOT NULL); ");
+            + "`id` int NOT NULL, `parent_id` int NULL, `code` varchar(30) NULL, `quantity` int NOT NULL); ",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var add = new MigrationBuilder(context.Database.ProviderName!);
         add.AddPrimaryKeyIfNotExists("pk_children", "children", ["id"]);
@@ -59,8 +62,8 @@ public sealed partial class MySqlConstraintsIntegrationTests : MySqlSafeMigratio
         {
             try
             {
-                await ExecuteOperationsAsync(context, [operation]);
-                await ExecuteOperationsAsync(context, [operation]);
+                await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
+                await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
             }
             catch (Exception exception)
             {
@@ -74,7 +77,8 @@ public sealed partial class MySqlConstraintsIntegrationTests : MySqlSafeMigratio
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'children';"));
+                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'children';",
+                cancellationToken: CancellationToken.None));
 
         var drop = new MigrationBuilder(context.Database.ProviderName!);
         drop.DropForeignKeyIfExists("fk_children_parents", "children");
@@ -83,8 +87,8 @@ public sealed partial class MySqlConstraintsIntegrationTests : MySqlSafeMigratio
         drop.DropPrimaryKeyIfExists("pk_children", "children");
         foreach (var operation in drop.Operations)
         {
-            await ExecuteOperationsAsync(context, [operation]);
-            await ExecuteOperationsAsync(context, [operation]);
+            await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
+            await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
         }
 
         Assert.Equal(
@@ -92,7 +96,8 @@ public sealed partial class MySqlConstraintsIntegrationTests : MySqlSafeMigratio
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'children';"));
+                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'children';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -110,7 +115,7 @@ public sealed partial class MySqlConstraintsIntegrationTests : MySqlSafeMigratio
             + "CONSTRAINT `uq_constraint_code` UNIQUE (`alternate_code`), "
             + "CONSTRAINT `ck_constraint_quantity` CHECK (`quantity` > 10), "
             + "CONSTRAINT `fk_constraint_parent` FOREIGN KEY (`alternate_parent_id`) "
-            + "REFERENCES `constraint_parents` (`id`));");
+            + "REFERENCES `constraint_parents` (`id`));", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddPrimaryKeyIfNotExists("pk_constraint_drift", "constraint_drift", ["id"]);
@@ -130,7 +135,8 @@ public sealed partial class MySqlConstraintsIntegrationTests : MySqlSafeMigratio
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"),
+                          CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.All(
@@ -143,7 +149,8 @@ public sealed partial class MySqlConstraintsIntegrationTests : MySqlSafeMigratio
         foreach (var operation in builder.Operations)
         {
             var exception =
-                await AssertOwnedGuardFailureAsync(() => ExecuteOperationsAsync(context, [operation]));
+                await AssertOwnedGuardFailureAsync(operationToken => ExecuteOperationsAsync(context, [operation],
+                    operationToken), cancellationToken: CancellationToken.None);
 
             Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
@@ -161,7 +168,7 @@ public sealed partial class MySqlConstraintsIntegrationTests : MySqlSafeMigratio
             + "`parent_id` int NOT NULL); "
             + "INSERT INTO `blocker_parents` VALUES (1); "
             + "INSERT INTO `blocker_children` VALUES "
-            + "(1, 'duplicate', -1, 999), (1, 'duplicate', 1, 999);");
+            + "(1, 'duplicate', -1, 999), (1, 'duplicate', 1, 999);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddPrimaryKeyIfNotExists("pk_blocker_children", "blocker_children", ["id"]);
@@ -182,7 +189,8 @@ public sealed partial class MySqlConstraintsIntegrationTests : MySqlSafeMigratio
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"),
+                          CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.All(
@@ -192,7 +200,8 @@ public sealed partial class MySqlConstraintsIntegrationTests : MySqlSafeMigratio
         foreach (var operation in builder.Operations)
         {
             var exception =
-                await AssertOwnedGuardFailureAsync(() => ExecuteOperationsAsync(context, [operation]));
+                await AssertOwnedGuardFailureAsync(operationToken => ExecuteOperationsAsync(context, [operation],
+                    operationToken), cancellationToken: CancellationToken.None);
 
             Assert.Contains("doka_sm_data_blocked", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
@@ -202,13 +211,14 @@ public sealed partial class MySqlConstraintsIntegrationTests : MySqlSafeMigratio
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
-                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'blocker_children';"));
+                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'blocker_children';",
+                cancellationToken: CancellationToken.None));
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'blocker_children' "
-                + "AND INDEX_NAME = 'ux_blocker_children_code';"));
+                + "AND INDEX_NAME = 'ux_blocker_children_code';", cancellationToken: CancellationToken.None));
     }
 }

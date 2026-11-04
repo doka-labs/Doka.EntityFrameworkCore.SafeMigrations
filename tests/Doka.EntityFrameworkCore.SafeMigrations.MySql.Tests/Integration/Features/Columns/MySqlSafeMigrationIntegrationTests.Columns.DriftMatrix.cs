@@ -11,7 +11,8 @@ public sealed partial class MySqlColumnsDriftMatrixIntegrationTests : MySqlSafeM
     public async Task ObservableColumnFacetDrift_IsRejectedOneFieldAtATime()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `column_facets` (`a` int NOT NULL, `b` int NOT NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE `column_facets` (`a` int NOT NULL, `b` int NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var canonical = new[]
         {
@@ -54,12 +55,13 @@ public sealed partial class MySqlColumnsDriftMatrixIntegrationTests : MySqlSafeM
             create.EnsureColumn("column_facets", definition, SafeMigrationPolicy.ThrowIfDifferent);
         }
 
-        await ExecuteOperationsAsync(context, create.Operations);
-        await ExecuteOperationsAsync(context, create.Operations);
+        await ExecuteOperationsAsync(context, create.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, create.Operations, CancellationToken.None);
 
         var canonicalReport = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, create.Operations, new SafeMigrationRunOptions("column-facets-canonical"));
+            .AnalyzeAsync(context, create.Operations, new SafeMigrationRunOptions("column-facets-canonical"),
+                          CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, canonicalReport.Status);
         Assert.All(
@@ -167,7 +169,8 @@ public sealed partial class MySqlColumnsDriftMatrixIntegrationTests : MySqlSafeM
 
             var report = await context
                 .GetService<ISafeMigrationRunner>()
-                .AnalyzeAsync(context, drift.Operations, new SafeMigrationRunOptions($"column-drift-{variant.Name}"));
+                .AnalyzeAsync(context, drift.Operations, new SafeMigrationRunOptions($"column-drift-{variant.Name}"),
+                              CancellationToken.None);
 
             var assessment = Assert.Single(report.Assessments);
 

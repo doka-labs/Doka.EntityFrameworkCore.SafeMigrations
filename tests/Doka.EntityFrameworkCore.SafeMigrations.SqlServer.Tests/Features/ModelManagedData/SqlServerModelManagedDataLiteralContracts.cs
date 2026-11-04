@@ -23,10 +23,10 @@ public sealed class SqlServerModelManagedDataLiteralContracts : SqlServerIntegra
     public async Task BoundedPayload_AppliesMaximumAndRejectsOverlongWithoutMutation(string storeType)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.bounded_payloads (Id int NOT NULL CONSTRAINT PK_bounded_payloads PRIMARY KEY, "
-            + "Payload " + storeType + " NOT NULL);");
+            + "Payload " + storeType + " NOT NULL);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var binary = storeType.Contains("binary", StringComparison.Ordinal);
         object maximum = binary ? new byte[] { 1, 2, 3, 4, 5 } : "abcde";
@@ -41,20 +41,25 @@ public sealed class SqlServerModelManagedDataLiteralContracts : SqlServerIntegra
             new object?[,] { { 2, overlong } });
 
         // Act
-        await ExecuteOperationsAsync(context, valid.Operations);
-        await ExecuteOperationsAsync(context, valid.Operations);
+        await ExecuteOperationsAsync(context, valid.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, valid.Operations, cancellationToken: CancellationToken.None);
         var validReport = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, valid.Operations, new SafeMigrationRunOptions("sqlserver-payload-boundary"));
+            context, valid.Operations, new SafeMigrationRunOptions("sqlserver-payload-boundary"),
+            cancellationToken: CancellationToken.None);
 
         var invalidReport = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, invalid.Operations, new SafeMigrationRunOptions("sqlserver-payload-overlong"));
+            context, invalid.Operations, new SafeMigrationRunOptions("sqlserver-payload-overlong"),
+            cancellationToken: CancellationToken.None);
 
         var generationFailure = Record.Exception(() =>
             context.GetService<IMigrationsSqlGenerator>().Generate(invalid.Operations, context.Model));
 
-        var rowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.bounded_payloads;");
+        var rowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.bounded_payloads;",
+            cancellationToken: CancellationToken.None);
+
         var actualBytes = await ScalarIntAsync(connectionString,
-            "SELECT DATALENGTH(Payload) FROM dbo.bounded_payloads WHERE Id = 1;");
+            "SELECT DATALENGTH(Payload) FROM dbo.bounded_payloads WHERE Id = 1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(validReport.Assessments).ObservedState);
@@ -78,7 +83,7 @@ public sealed class SqlServerModelManagedDataLiteralContracts : SqlServerIntegra
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var database = new SqlConnectionStringBuilder(connectionString).InitialCatalog;
         var administrativeConnection = new SqlConnectionStringBuilder(connectionString)
         {
@@ -87,10 +92,11 @@ public sealed class SqlServerModelManagedDataLiteralContracts : SqlServerIntegra
 
         await ExecuteSqlAsync(administrativeConnection,
             "ALTER DATABASE [" + database.Replace("]", "]]", StringComparison.Ordinal) + "] COLLATE " + collation
-            + ";");
+            + ";", cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.ansi_payloads (Id int NOT NULL CONSTRAINT PK_ansi_payloads PRIMARY KEY, "
-            + "Payload varchar(" + maximumBytes.ToString(CultureInfo.InvariantCulture) + ") NOT NULL);");
+            + "Payload varchar(" + maximumBytes.ToString(CultureInfo.InvariantCulture) + ") NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel(
@@ -100,14 +106,19 @@ public sealed class SqlServerModelManagedDataLiteralContracts : SqlServerIntegra
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-ansi-value-loss"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-ansi-value-loss"),
+            cancellationToken: CancellationToken.None);
 
-        var mutationFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
-        var rowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.ansi_payloads;");
+        var mutationFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
+        var rowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.ansi_payloads;",
+            cancellationToken: CancellationToken.None);
+
         var exact = supported
             ? await ScalarIntAsync(connectionString,
                 "SELECT COUNT(*) FROM dbo.ansi_payloads WHERE CONVERT(nvarchar(max), Payload) = N'\u4E2D' "
-                + "AND DATALENGTH(Payload) = 3;")
+                + "AND DATALENGTH(Payload) = 3;", cancellationToken: CancellationToken.None)
             : 0;
 
         // Assert
@@ -133,10 +144,11 @@ public sealed class SqlServerModelManagedDataLiteralContracts : SqlServerIntegra
     public async Task DecimalAndTimePrecision_AppliesCanonicalProviderContractAndReplays()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.precision_payloads (Id int NOT NULL CONSTRAINT PK_precision_payloads PRIMARY KEY, "
-            + "Amount decimal(5,2) NOT NULL, RecordedAt datetime2(3) NOT NULL);");
+            + "Amount decimal(5,2) NOT NULL, RecordedAt datetime2(3) NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel(
@@ -145,13 +157,15 @@ public sealed class SqlServerModelManagedDataLiteralContracts : SqlServerIntegra
             new object?[,] { { 1, 12.345m, new DateTime(2026, 9, 30, 12, 0, 0, 123).AddTicks(4567) } });
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-canonical-precision"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-canonical-precision"),
+            cancellationToken: CancellationToken.None);
 
         var exact = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.precision_payloads WHERE Amount = CAST(12.345 AS decimal(5,2));");
+            "SELECT COUNT(*) FROM dbo.precision_payloads WHERE Amount = CAST(12.345 AS decimal(5,2));",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(report.Assessments).ObservedState);

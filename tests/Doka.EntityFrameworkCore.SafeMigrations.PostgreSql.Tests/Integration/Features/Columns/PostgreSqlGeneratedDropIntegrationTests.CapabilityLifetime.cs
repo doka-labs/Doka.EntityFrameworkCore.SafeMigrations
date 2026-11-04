@@ -27,7 +27,7 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
             + "GRANT USAGE, CREATE ON SCHEMA public TO " + role + "; "
             + "CREATE TABLE drop_capability(source integer, unrelated integer); "
             + "INSERT INTO drop_capability VALUES(2,9); ALTER TABLE drop_capability OWNER TO " + role + "; "
-            + restrictionSql);
+            + restrictionSql, cancellationToken: CancellationToken.None);
 
         try
         {
@@ -42,7 +42,8 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
             var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
                 new SafeMigrationRunOptions("generated-drop-native-capability-lifetime"), CancellationToken.None);
 
-            var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [builder.Operations[^1]]));
+            var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [builder.Operations[^1]],
+                CancellationToken.None));
 
             // Assert
             Assert.Equal(SafeMigrationAction.NoOp, report.Assessments[0].Action);
@@ -50,12 +51,14 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
             Assert.Equal("generated_column_drop_unproven", report.Assessments[1].AnalysisCode);
             Assert.Equal("P1002", Assert.IsType<PostgresException>(failure).SqlState);
             Assert.Equal("2:9", await ScalarStringAsync(connectionString,
-                "SELECT source::text || ':' || unrelated::text FROM drop_capability;"));
+                "SELECT source::text || ':' || unrelated::text FROM drop_capability;",
+                cancellationToken: CancellationToken.None));
         }
         finally
         {
             await ExecuteSqlAsync(connectionString, "ALTER TABLE drop_capability OWNER TO postgres; "
-                + "REVOKE USAGE, CREATE ON SCHEMA public FROM " + role + "; DROP ROLE " + role + ";");
+                + "REVOKE USAGE, CREATE ON SCHEMA public FROM " + role + "; DROP ROLE " + role + ";",
+                cancellationToken: CancellationToken.None);
         }
     }
 }

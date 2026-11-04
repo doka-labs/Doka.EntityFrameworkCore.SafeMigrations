@@ -13,7 +13,8 @@ public sealed class PostgreSqlIndexesIntegrationTests : PostgreSqlSafeMigrationI
     public async Task StructuredLiteralFilterMatrix_ConvergesThroughPostgreSqlCatalogNormalization()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE typed_filters (status text NULL, amount numeric NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE typed_filters (status text NULL, amount numeric NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var definitions = new[]
         {
@@ -66,11 +67,12 @@ public sealed class PostgreSqlIndexesIntegrationTests : PostgreSqlSafeMigrationI
             builder.EnsureIndex(definition, SafeMigrationPolicy.ThrowIfDifferent);
         }
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("typed-filter-matrix"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("typed-filter-matrix"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(
@@ -91,7 +93,8 @@ public sealed class PostgreSqlIndexesIntegrationTests : PostgreSqlSafeMigrationI
 
         var driftReport = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, drift.Operations, new SafeMigrationRunOptions("typed-filter-drift"));
+            .AnalyzeAsync(context, drift.Operations, new SafeMigrationRunOptions("typed-filter-drift"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, driftReport.Status);
         Assert.Equal(
@@ -108,7 +111,8 @@ public sealed class PostgreSqlIndexesIntegrationTests : PostgreSqlSafeMigrationI
             connectionString,
             "CREATE TABLE ordered_indexes (value_provider_default integer NULL, "
             + "value_asc_first integer NULL, value_asc_last integer NULL, "
-            + "value_desc_first integer NULL, value_desc_last integer NULL);");
+            + "value_desc_first integer NULL, value_desc_last integer NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var orderings = new[]
         {
@@ -140,11 +144,12 @@ public sealed class PostgreSqlIndexesIntegrationTests : PostgreSqlSafeMigrationI
                 SafeMigrationPolicy.ThrowIfDifferent);
         }
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("ordered-indexes"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("ordered-indexes"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(
@@ -162,7 +167,7 @@ public sealed class PostgreSqlIndexesIntegrationTests : PostgreSqlSafeMigrationI
                     "SELECT CASE WHEN pg_catalog.pg_index_column_has_property(i.indexrelid, 1, "
                     + $"'{expectedProperty}') IS TRUE THEN 1 ELSE 0 END "
                     + "FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid "
-                    + $"WHERE c.relname = 'ix_ordered_{ordering.Name}';"));
+                    + $"WHERE c.relname = 'ix_ordered_{ordering.Name}';", cancellationToken: CancellationToken.None));
         }
     }
 
@@ -170,7 +175,8 @@ public sealed class PostgreSqlIndexesIntegrationTests : PostgreSqlSafeMigrationI
     public async Task ExplicitOrderingOnNonOrderableAccessMethod_IsUnsupportedBeforeTargetDdl()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE unordered_index (value integer NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE unordered_index (value integer NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureIndex(
@@ -183,7 +189,8 @@ public sealed class PostgreSqlIndexesIntegrationTests : PostgreSqlSafeMigrationI
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("unordered-index"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("unordered-index"),
+            CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
 
@@ -194,14 +201,16 @@ public sealed class PostgreSqlIndexesIntegrationTests : PostgreSqlSafeMigrationI
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_class WHERE relname = 'ix_unordered_hash';"));
+                "SELECT COUNT(*) FROM pg_catalog.pg_class WHERE relname = 'ix_unordered_hash';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task AdvancedIndexFacets_ConvergeAndDetectDirectionDrift()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE advanced_indexes (value text NULL, payload text NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE advanced_indexes (value text NULL, payload text NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var definition = new ExpectedIndexDefinition(
             "ix_advanced_value",
@@ -236,22 +245,24 @@ public sealed class PostgreSqlIndexesIntegrationTests : PostgreSqlSafeMigrationI
         {
             var unsupported = await context
                 .GetService<ISafeMigrationRunner>()
-                .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+                .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"),
+                CancellationToken.None);
 
             Assert.Equal(SafeMigrationReportStatus.Blocked, unsupported.Status);
             Assert.Contains(
                 unsupported.Assessments,
                 assessment => assessment.ObservedState == SafeMigrationObservedState.Unsupported);
             var exception =
-                await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(context, builder.Operations));
+                await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(context, builder.Operations,
+                    CancellationToken.None));
 
             Assert.Equal("P1002", exception.SqlState);
             Assert.StartsWith("doka_sm_unsupported:", exception.MessageText, StringComparison.Ordinal);
             return;
         }
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var drift = new MigrationBuilder(context.Database.ProviderName!);
         drift.EnsureIndex(
@@ -267,7 +278,8 @@ public sealed class PostgreSqlIndexesIntegrationTests : PostgreSqlSafeMigrationI
             SafeMigrationPolicy.ThrowIfDifferent);
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, drift.Operations, new SafeMigrationRunOptions("test-instance"));
+            .AnalyzeAsync(context, drift.Operations, new SafeMigrationRunOptions("test-instance"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(

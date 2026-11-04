@@ -37,12 +37,13 @@ public sealed class SqlServerManagedTypeGuardIntegrationTests : SqlServerIntegra
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         if (actualType != "missing_table")
         {
             if (actualType == "alias")
             {
-                await ExecuteSqlAsync(connectionString, "CREATE TYPE dbo.guard_alias FROM int;");
+                await ExecuteSqlAsync(connectionString, "CREATE TYPE dbo.guard_alias FROM int;",
+                    cancellationToken: CancellationToken.None);
             }
 
             var setup = actualType == "alias"
@@ -51,7 +52,7 @@ public sealed class SqlServerManagedTypeGuardIntegrationTests : SqlServerIntegra
                     ? "CREATE TABLE dbo.managed_types (Id int NOT NULL PRIMARY KEY, OtherValue int NULL);"
                     : "CREATE TABLE dbo.managed_types (Id int NOT NULL PRIMARY KEY, Value " + actualType + " NULL);";
 
-            await ExecuteSqlAsync(connectionString, setup);
+            await ExecuteSqlAsync(connectionString, setup, cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -62,7 +63,8 @@ public sealed class SqlServerManagedTypeGuardIntegrationTests : SqlServerIntegra
         var guard = catalog.BuildModelManagedDataAnalysisGuard(intent).Guard;
 
         // Act
-        var result = await ScalarIntAsync(connectionString, "SELECT " + guard + ";");
+        var result = await ScalarIntAsync(connectionString, "SELECT " + guard + ";",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(matches ? 1 : 0, result);
@@ -85,17 +87,18 @@ public sealed class SqlServerManagedTypeGuardIntegrationTests : SqlServerIntegra
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA audit;");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA audit;", cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.type_principals (Id int NOT NULL PRIMARY KEY, Code bigint NOT NULL); "
-            + "CREATE TABLE dbo.type_dependents (ReferenceId int NULL);");
+            + "CREATE TABLE dbo.type_dependents (ReferenceId int NULL);", cancellationToken: CancellationToken.None);
         if (mode != "missing_table")
         {
             var definition = mode == "missing_column" ? "OtherId int"
                 : mode == "wrong_type" ? "ReferenceId bigint" : "ReferenceId int";
 
-            await ExecuteSqlAsync(connectionString, "CREATE TABLE audit.type_dependents (" + definition + " NULL);");
+            await ExecuteSqlAsync(connectionString, "CREATE TABLE audit.type_dependents (" + definition + " NULL);",
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -119,7 +122,8 @@ public sealed class SqlServerManagedTypeGuardIntegrationTests : SqlServerIntegra
         var guard = catalog.BuildModelManagedDataAnalysisGuard(intent).Guard;
 
         // Act
-        var result = await ScalarIntAsync(connectionString, "SELECT " + guard + ";");
+        var result = await ScalarIntAsync(connectionString, "SELECT " + guard + ";",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(matches ? 1 : 0, result);
@@ -140,16 +144,18 @@ public sealed class SqlServerManagedTypeGuardIntegrationTests : SqlServerIntegra
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.identity_types (Id int IDENTITY(1,1) NOT NULL PRIMARY KEY);");
+            "CREATE TABLE dbo.identity_types (Id int IDENTITY(1,1) NOT NULL PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var catalog = CreateCatalog(context);
         var intent = CreateIdentityIntent(kind);
         var guard = catalog.BuildModelManagedDataAnalysisGuard(intent).Guard;
 
         // Act
-        var result = await ScalarIntAsync(connectionString, "SELECT " + guard + ";");
+        var result = await ScalarIntAsync(connectionString, "SELECT " + guard + ";",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(allowed ? 1 : 0, result);
@@ -160,18 +166,19 @@ public sealed class SqlServerManagedTypeGuardIntegrationTests : SqlServerIntegra
     public async Task IdentitySource_ManagedDeleteAppliesWithoutWritableIdentityRequirement()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.identity_types (Id int IDENTITY(1,1) NOT NULL PRIMARY KEY); "
-            + "INSERT INTO dbo.identity_types DEFAULT VALUES;");
+            + "INSERT INTO dbo.identity_types DEFAULT VALUES;", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DeleteModelManagedDataFromModel("identity_types", ["Id"], ["int"],
             new object?[,] { { 1 } }, ["Id"], ["int"], new object?[,] { { 1 } });
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var remaining = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.identity_types;");
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        var remaining = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.identity_types;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(0, remaining);

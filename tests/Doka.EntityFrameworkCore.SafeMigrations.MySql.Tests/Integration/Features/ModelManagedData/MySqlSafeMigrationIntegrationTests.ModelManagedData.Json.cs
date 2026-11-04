@@ -128,7 +128,8 @@ public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSaf
             CancellationToken.None);
 
         await ExecuteOperationsAsync(context, ensure.Operations, CancellationToken.None);
-        await ApplyEquivalentInitialJsonRepresentationAsync(connectionString, identifier, guidFormat);
+        await ApplyEquivalentInitialJsonRepresentationAsync(connectionString, identifier, guidFormat,
+            cancellationToken: CancellationToken.None);
 
         var ensureReplay = await runner.AnalyzeAsync(
             context,
@@ -161,7 +162,8 @@ public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSaf
 
         await ExecuteOperationsAsync(context, update.Operations, CancellationToken.None);
 
-        await ApplyEquivalentUpdatedJsonRepresentationAsync(connectionString, identifier, guidFormat);
+        await ApplyEquivalentUpdatedJsonRepresentationAsync(connectionString, identifier, guidFormat,
+            cancellationToken: CancellationToken.None);
 
         var updateReplay = await runner.AnalyzeAsync(
             context,
@@ -218,7 +220,8 @@ public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSaf
             Assert.Single(deletePreflight.Assessments).ObservedState);
         Assert.Equal(SafeMigrationObservedState.Missing, Assert.Single(deleteReplay.Assessments).ObservedState);
         Assert.True(Assert.Single(deletePostflight.Assessments).PostconditionSatisfied);
-        Assert.Equal(0, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `json_model_rows`;"));
+        Assert.Equal(0, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `json_model_rows`;",
+            cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -247,7 +250,7 @@ public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSaf
             VALUES
                 (1, '1', '{ "b": 2, "a": 1 }', '[ 1, 2 ]', '[ 1, 1 ]', 'null', NULL,
                  '{"a":1,"b":2}');
-            """);
+            """, cancellationToken: CancellationToken.None);
 
         var ensure = new MigrationBuilder(context.Database.ProviderName!);
         _ = ensure.EnsureModelManagedDataFromModel(
@@ -305,7 +308,8 @@ public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSaf
         {
             await ExecuteSqlAsync(
                 connectionString,
-                $"UPDATE `json_comparison_boundaries` SET {mutations[index]} WHERE `id` = 1;");
+                $"UPDATE `json_comparison_boundaries` SET {mutations[index]} WHERE `id` = 1;",
+                cancellationToken: CancellationToken.None);
 
             var different = await runner.AnalyzeAsync(
                 context,
@@ -319,7 +323,8 @@ public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSaf
 
             await ExecuteSqlAsync(
                 connectionString,
-                $"UPDATE `json_comparison_boundaries` SET {resets[index]} WHERE `id` = 1;");
+                $"UPDATE `json_comparison_boundaries` SET {resets[index]} WHERE `id` = 1;",
+                cancellationToken: CancellationToken.None);
         }
 
         Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(matching.Assessments).ObservedState);
@@ -359,10 +364,16 @@ public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSaf
         return result;
     }
 
+    /// <summary>Applies the equivalent initial JSON representation with explicit cancellation.</summary>
+    /// <param name="connectionString">The connection string for this operation.</param>
+    /// <param name="identifier">The identifier for this operation.</param>
+    /// <param name="guidFormat">The guid format for this operation.</param>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static Task ApplyEquivalentInitialJsonRepresentationAsync(
         string connectionString,
         Guid identifier,
-        DokaMySqlGuidFormat guidFormat
+        DokaMySqlGuidFormat guidFormat,
+        CancellationToken cancellationToken
     ) => ExecuteSqlAsync(
         connectionString,
         $$"""
@@ -374,12 +385,18 @@ public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSaf
             `json_object` = '{ "value": 1, "kind": "object" }',
             `json_array` = '[ "array", 5, true ]'
         WHERE `id` = {{GuidLiteral(guidFormat, identifier.ToString())}};
-        """);
+        """, cancellationToken: cancellationToken);
 
+    /// <summary>Applies the equivalent updated JSON representation with explicit cancellation.</summary>
+    /// <param name="connectionString">The connection string for this operation.</param>
+    /// <param name="identifier">The identifier for this operation.</param>
+    /// <param name="guidFormat">The guid format for this operation.</param>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static Task ApplyEquivalentUpdatedJsonRepresentationAsync(
         string connectionString,
         Guid identifier,
-        DokaMySqlGuidFormat guidFormat
+        DokaMySqlGuidFormat guidFormat,
+        CancellationToken cancellationToken
     ) => ExecuteSqlAsync(
         connectionString,
         $$"""
@@ -391,5 +408,5 @@ public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSaf
             `json_object` = '{ "value": 2, "kind": "object" }',
             `json_array` = '[ "array", 6, false ]'
         WHERE `id` = {{GuidLiteral(guidFormat, identifier.ToString())}};
-        """);
+        """, cancellationToken: cancellationToken);
 }

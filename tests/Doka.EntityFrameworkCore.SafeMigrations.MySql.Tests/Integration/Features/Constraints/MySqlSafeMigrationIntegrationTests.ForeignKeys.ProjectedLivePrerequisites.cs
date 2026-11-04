@@ -31,7 +31,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `live_child` (`id`) VALUES (1), (2);");
+            + "INSERT INTO `live_child` (`id`) VALUES (1), (2);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operations = NullableLivePrincipalOperations(context, guidStorage, onDelete);
@@ -52,7 +52,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
             new SafeMigrationRunOptions("sparse-live-fk-replay"), CancellationToken.None);
 
         var nullRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `live_child` WHERE `parent_id` IS NULL;");
+            "SELECT COUNT(*) FROM `live_child` WHERE `parent_id` IS NULL;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -122,7 +122,8 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB "
             + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; INSERT INTO `live_child` VALUES (1), (2);"
-            + (principalSql.Length == 0 ? string.Empty : principalSql + ";"));
+            + (principalSql.Length == 0 ? string.Empty : principalSql + ";"),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -144,7 +145,8 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
         Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[1].Action);
         Assert.Equal(0, await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'live_child' AND COLUMN_NAME = 'parent_id';"));
+            + "AND TABLE_NAME = 'live_child' AND COLUMN_NAME = 'parent_id';",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>A nullable column with a non-NULL default does not materialize the NULL exemption.</summary>
@@ -156,7 +158,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-            + "INSERT INTO `live_child` VALUES (1), (2);");
+            + "INSERT INTO `live_child` VALUES (1), (2);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -191,7 +193,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY"
             + (newMember ? string.Empty : ", `parent_id` varchar(36) NULL") + ") ENGINE=InnoDB "
             + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci; "
-            + "INSERT INTO `live_child` (`id`) VALUES (1), (2);");
+            + "INSERT INTO `live_child` (`id`) VALUES (1), (2);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -227,7 +229,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `code` int NOT NULL) ENGINE=InnoDB; "
-            + "INSERT INTO `live_child` VALUES (1, 7), (2, 7);");
+            + "INSERT INTO `live_child` VALUES (1, 7), (2, 7);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -262,7 +264,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
         Assert.All(replay.Assessments, static assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
         Assert.Equal(2, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `live_child` WHERE `new_value` IS NULL;"));
+            "SELECT COUNT(*) FROM `live_child` WHERE `new_value` IS NULL;", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Removing or replacing the requested live candidate cannot revive its original snapshot.</summary>
@@ -281,7 +283,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL, `code` int NOT NULL, " + keySql + ") ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-            + "INSERT INTO `live_child` VALUES (1), (2);");
+            + "INSERT INTO `live_child` VALUES (1), (2);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -326,7 +328,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-            + "INSERT INTO `live_child` VALUES (1), (2);");
+            + "INSERT INTO `live_child` VALUES (1), (2);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operations = NullableLivePrincipalOperations(context, guidStorage: false, ReferentialAction.NoAction);
@@ -338,9 +340,11 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, operations.Take(2).ToArray(), CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "UPDATE `live_child` SET `parent_id` = 999 WHERE `id` = 1;");
-        var exception = await AssertOwnedGuardFailureAsync(async () =>
-            await ExecuteOperationsAsync(context, [operations[2]], CancellationToken.None));
+        await ExecuteSqlAsync(connectionString, "UPDATE `live_child` SET `parent_id` = 999 WHERE `id` = 1;",
+            cancellationToken: CancellationToken.None);
+        var exception = await AssertOwnedGuardFailureAsync(async operationToken =>
+            await ExecuteOperationsAsync(context, [operations[2]], operationToken),
+            cancellationToken: CancellationToken.None);
 
         var final = await runner.AnalyzeAsync(context, [operations[2]],
             new SafeMigrationRunOptions("sparse-fk-raced-final"), CancellationToken.None);
@@ -351,7 +355,8 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
         Assert.Equal(SafeMigrationAction.RejectDataBlocked, Assert.Single(final.Assessments).Action);
         Assert.Equal(0, await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'live_child' AND CONSTRAINT_NAME = 'fk_live_child_parent';"));
+            + "AND TABLE_NAME = 'live_child' AND CONSTRAINT_NAME = 'fk_live_child_parent';",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>
@@ -364,7 +369,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-            + "INSERT INTO `live_child` VALUES (1), (2);");
+            + "INSERT INTO `live_child` VALUES (1), (2);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -388,7 +393,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
         Assert.Equal(SafeMigrationReportStatus.Ready, final.Status);
         Assert.All(final.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
         Assert.Equal(2, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `live_child` WHERE `parent_id` IS NULL;"));
+            "SELECT COUNT(*) FROM `live_child` WHERE `parent_id` IS NULL;", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>MATCH SIMPLE exempts a composite FK when its accepted newly added member is NULL.</summary>
@@ -401,7 +406,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
             "CREATE TABLE `live_parent` (`tenant_id` int NOT NULL, `id` int NOT NULL, "
             + "PRIMARY KEY (`tenant_id`, `id`)) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `tenant_id` int NOT NULL) ENGINE=InnoDB; "
-            + "INSERT INTO `live_child` VALUES (1, 777), (2, 888);");
+            + "INSERT INTO `live_child` VALUES (1, 777), (2, 888);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -438,7 +443,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
             "CREATE TABLE `live_parent` (`id` int NOT NULL, UNIQUE KEY `uq_removed` (`id`), "
             + "UNIQUE KEY `uq_surviving` (`id`)) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-            + "INSERT INTO `live_child` VALUES (1), (2);");
+            + "INSERT INTO `live_child` VALUES (1), (2);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -475,7 +480,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
             + "CREATE TABLE `other_child` (`id` int NOT NULL, CONSTRAINT `fk_live_child_parent` "
             + "FOREIGN KEY (`id`) REFERENCES `live_parent` (`id`)) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-            + "INSERT INTO `live_child` VALUES (1), (2);");
+            + "INSERT INTO `live_child` VALUES (1), (2);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operations = NullableLivePrincipalOperations(context, guidStorage: false, ReferentialAction.NoAction);
@@ -504,7 +509,8 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-            + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;");
+            + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -533,7 +539,8 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `old_parent_id` int NULL, "
             + "CONSTRAINT `fk_live_child_parent` FOREIGN KEY (`old_parent_id`) REFERENCES `live_parent` (`id`)) "
-            + "ENGINE=InnoDB; INSERT INTO `live_child` (`id`) VALUES (1), (2);");
+            + "ENGINE=InnoDB; INSERT INTO `live_child` (`id`) VALUES (1), (2);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -562,7 +569,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
         Assert.Equal(1, await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE CONSTRAINT_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'live_child' AND CONSTRAINT_NAME = 'fk_live_child_parent' "
-            + "AND COLUMN_NAME = 'parent_id';"));
+            + "AND COLUMN_NAME = 'parent_id';", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>
@@ -589,7 +596,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
             + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` varchar(20) NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `live_child` (`id`) VALUES (1), (2);");
+            + "INSERT INTO `live_child` (`id`) VALUES (1), (2);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -642,7 +649,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `unrelated_before` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-            + "INSERT INTO `live_child` VALUES (1), (2);");
+            + "INSERT INTO `live_child` VALUES (1), (2);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var schema = new MySqlConnectionStringBuilder(connectionString).Database;
@@ -683,7 +690,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-            + "INSERT INTO `live_child` VALUES (1), (2);");
+            + "INSERT INTO `live_child` VALUES (1), (2);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operations = NullableLivePrincipalOperations(context, guidStorage: false, ReferentialAction.NoAction);
@@ -719,7 +726,8 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `live_child` (`id` int NOT NULL) ENGINE=InnoDB;");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE `live_child` (`id` int NOT NULL) ENGINE=InnoDB;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -768,7 +776,8 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;");
+            "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -823,7 +832,8 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `old_parent_id` int NULL, "
             + "CONSTRAINT `fk_live_child_parent` FOREIGN KEY (`old_parent_id`) REFERENCES `live_parent` (`id`)) "
-            + "ENGINE=InnoDB; INSERT INTO `live_child` (`id`) VALUES (1), (2);");
+            + "ENGINE=InnoDB; INSERT INTO `live_child` (`id`) VALUES (1), (2);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -864,7 +874,8 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
             "CREATE TABLE `live_parent` (`id` enum('A','b') COLLATE utf8mb4_unicode_ci NOT NULL PRIMARY KEY) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; INSERT INTO `live_child` VALUES (1);");
+            + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; INSERT INTO `live_child` VALUES (1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -916,14 +927,15 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
         var databaseCollation = shape == "inherited" ? "utf8mb4_unicode_ci" : "utf8mb4_general_ci";
         await ExecuteSqlAsync(connectionString, "ALTER DATABASE `"
             + database.Replace("`", "``", StringComparison.Ordinal)
-            + "` CHARACTER SET utf8mb4 COLLATE " + databaseCollation + ";");
+            + "` CHARACTER SET utf8mb4 COLLATE " + databaseCollation + ";", cancellationToken: CancellationToken.None);
 
         if (shape != "missing_parent")
         {
             await ExecuteSqlAsync(connectionString,
                 "CREATE TABLE `live_parent` (`id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL"
                 + (shape == "missing_key" ? ")" : " PRIMARY KEY)")
-                + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+                + " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -959,7 +971,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
             preflight.Assessments[2].Action);
         Assert.Equal(accepted ? 1 : 0, await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'new_child';"));
+            + "AND TABLE_NAME = 'new_child';", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Native child-index direction and optimizer visibility do not impose parent-key restrictions.</summary>
@@ -975,15 +987,17 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NULL, `old_id` int NULL, "
-            + "INDEX `fk_live_child_parent` (`old_id`)) ENGINE=InnoDB; INSERT INTO `live_child` (`id`) VALUES (1);");
+            + "INDEX `fk_live_child_parent` (`old_id`)) ENGINE=InnoDB; INSERT INTO `live_child` (`id`) VALUES (1);",
+            cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(connectionString, "CREATE INDEX `ix_child_cover` ON `live_child` (`parent_id`"
-            + (shape == "descending" ? " DESC" : shape == "trailing_descending" ? ", `id` DESC" : string.Empty) + ");");
+            + (shape == "descending" ? " DESC" : shape == "trailing_descending" ? ", `id` DESC" : string.Empty) + ");",
+            cancellationToken: CancellationToken.None);
 
         if (shape == "optimizer_hidden")
         {
             await ExecuteSqlAsync(connectionString, "ALTER TABLE `live_child` ALTER INDEX `ix_child_cover` "
-                + (Fixture.IsMariaDb ? "IGNORED" : "INVISIBLE") + ";");
+                + (Fixture.IsMariaDb ? "IGNORED" : "INVISIBLE") + ";", cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -1027,7 +1041,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL, UNIQUE INDEX `uq_parent_desc` (`id` DESC)) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-            + "INSERT INTO `live_child` VALUES (1);");
+            + "INSERT INTO `live_child` VALUES (1);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operations = NullableLivePrincipalOperations(context, guidStorage: false, ReferentialAction.NoAction);
@@ -1041,7 +1055,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
         await ExecuteOperationsAsync(context, operations.Take(2).ToArray(), CancellationToken.None);
         var nativeFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString,
             "ALTER TABLE `live_child` ADD CONSTRAINT `fk_live_child_parent` FOREIGN KEY (`parent_id`) "
-            + "REFERENCES `live_parent` (`id`);"));
+            + "REFERENCES `live_parent` (`id`);", cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -1071,7 +1085,8 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NULL, "
             + "`old_id` int NULL, `values_json` JSON NOT NULL, INDEX `fk_live_child_parent` (`old_id`)) ENGINE=InnoDB; "
-            + "INSERT INTO `live_child` (`id`, `values_json`) VALUES (1, '[]');");
+            + "INSERT INTO `live_child` (`id`, `values_json`) VALUES (1, '[]');",
+            cancellationToken: CancellationToken.None);
 
         if (Fixture.IsMariaDb)
         {
@@ -1079,7 +1094,8 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
             // generated trailing part exercises the same complete-index boundary.
             await ExecuteSqlAsync(connectionString,
                 "ALTER TABLE `live_child` ADD `derived_id` int GENERATED ALWAYS AS (ABS(`id`)) STORED; "
-                + "CREATE INDEX `ix_child_expression` ON `live_child` (`parent_id`, `derived_id`);");
+                + "CREATE INDEX `ix_child_expression` ON `live_child` (`parent_id`, `derived_id`);",
+                cancellationToken: CancellationToken.None);
         }
         else
         {
@@ -1093,7 +1109,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
 
             await ExecuteSqlAsync(connectionString,
                 "CREATE INDEX `ix_child_expression` ON `live_child` (`parent_id`, ("
-                + expression + "));");
+                + expression + "));", cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -1111,7 +1127,8 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
             connectionString, "SELECT JSON_ARRAYAGG(JSON_OBJECT('ordinal', SEQ_IN_INDEX, 'column', COLUMN_NAME, "
             + "'direction', COLLATION, 'expression', EXPRESSION, 'type', INDEX_TYPE)) "
             + "FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'live_child' AND INDEX_NAME = 'ix_child_expression';");
+            + "AND TABLE_NAME = 'live_child' AND INDEX_NAME = 'ix_child_expression';",
+            cancellationToken: CancellationToken.None);
 
         var managedFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context,
             builder.Operations, CancellationToken.None));
@@ -1120,10 +1137,11 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
         if (supported)
         {
             await ExecuteSqlAsync(connectionString,
-                "INSERT INTO `live_parent` VALUES (1); UPDATE `live_child` SET `parent_id` = 1 WHERE `id` = 1;");
+                "INSERT INTO `live_parent` VALUES (1); UPDATE `live_child` SET `parent_id` = 1 WHERE `id` = 1;",
+                cancellationToken: CancellationToken.None);
 
             restrictedDelete = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString,
-                "DELETE FROM `live_parent` WHERE `id` = 1;"));
+                "DELETE FROM `live_parent` WHERE `id` = 1;", cancellationToken: CancellationToken.None));
         }
 
         // Assert
@@ -1148,7 +1166,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
         }
 
         Assert.Equal(!supported || cascade ? 0 : 1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `live_child` WHERE `parent_id` = 1;"));
+            "SELECT COUNT(*) FROM `live_child` WHERE `parent_id` = 1;", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Another index or an existing semantic FK cannot certify unsafe native multi-valued lookup.</summary>
@@ -1175,27 +1193,32 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NULL, "
             + "`old_id` int NULL, `values_json` JSON NOT NULL) ENGINE=InnoDB; "
-            + "INSERT INTO `live_child` (`id`, `values_json`) VALUES (1, '[]');");
+            + "INSERT INTO `live_child` (`id`, `values_json`) VALUES (1, '[]');",
+            cancellationToken: CancellationToken.None);
 
         if (shape == "occupied_symbol")
         {
             await ExecuteSqlAsync(connectionString,
-                "CREATE INDEX `fk_live_child_parent` ON `live_child` (`old_id`);");
+                "CREATE INDEX `fk_live_child_parent` ON `live_child` (`old_id`);",
+                cancellationToken: CancellationToken.None);
         }
 
         if (shape == "ordinary_before")
         {
-            await ExecuteSqlAsync(connectionString, "CREATE INDEX `ix_ordinary` ON `live_child` (`parent_id`);");
+            await ExecuteSqlAsync(connectionString, "CREATE INDEX `ix_ordinary` ON `live_child` (`parent_id`);",
+                cancellationToken: CancellationToken.None);
         }
 
         await ExecuteSqlAsync(connectionString, Fixture.IsMariaDb
             ? "ALTER TABLE `live_child` ADD `derived_id` int GENERATED ALWAYS AS (ABS(`id`)) STORED; "
                 + "CREATE INDEX `ix_child_multi` ON `live_child` (`parent_id`, `derived_id`);"
-            : "CREATE INDEX `ix_child_multi` ON `live_child` (`parent_id`, (CAST(`values_json` AS UNSIGNED ARRAY)));");
+            : "CREATE INDEX `ix_child_multi` ON `live_child` (`parent_id`, (CAST(`values_json` AS UNSIGNED ARRAY)));",
+            cancellationToken: CancellationToken.None);
 
         if (shape == "ordinary_after")
         {
-            await ExecuteSqlAsync(connectionString, "CREATE INDEX `ix_ordinary` ON `live_child` (`parent_id`);");
+            await ExecuteSqlAsync(connectionString, "CREATE INDEX `ix_ordinary` ON `live_child` (`parent_id`);",
+                cancellationToken: CancellationToken.None);
         }
 
         var existing = shape is "matching" or "alias";
@@ -1204,7 +1227,7 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
             var name = shape == "matching" ? "fk_live_child_parent" : "fk_semantic_alias";
             await ExecuteSqlAsync(connectionString, "ALTER TABLE `live_child` ADD CONSTRAINT `" + name
                 + "` FOREIGN KEY (`parent_id`) REFERENCES `live_parent` (`id`)"
-                + (cascade ? " ON DELETE CASCADE" : string.Empty) + ";");
+                + (cascade ? " ON DELETE CASCADE" : string.Empty) + ";", cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -1248,7 +1271,8 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
 
         Assert.Equal(Fixture.IsMariaDb || existing ? 1 : 0, await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'live_child';"));
+            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'live_child';",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>
@@ -1266,16 +1290,18 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NULL, "
             + "`values_json` JSON NOT NULL) ENGINE=InnoDB; "
-            + "INSERT INTO `live_child` (`id`, `values_json`) VALUES (1, '[]');");
+            + "INSERT INTO `live_child` (`id`, `values_json`) VALUES (1, '[]');",
+            cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(connectionString, Fixture.IsMariaDb
             ? "ALTER TABLE `live_child` ADD `derived_id` int GENERATED ALWAYS AS (ABS(`id`)) STORED; "
                 + "CREATE INDEX `ix_child_multi` ON `live_child` (`parent_id`, `derived_id`);"
-            : "CREATE INDEX `ix_child_multi` ON `live_child` (`parent_id`, (CAST(`values_json` AS UNSIGNED ARRAY)));");
+            : "CREATE INDEX `ix_child_multi` ON `live_child` (`parent_id`, (CAST(`values_json` AS UNSIGNED ARRAY)));",
+            cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(connectionString,
             "ALTER TABLE `live_child` ADD CONSTRAINT `fk_live_child_parent` FOREIGN KEY (`parent_id`) "
-            + "REFERENCES `live_parent` (`id`);");
+            + "REFERENCES `live_parent` (`id`);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -1315,7 +1341,8 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[^1].Action);
         Assert.Equal(SafeMigrationReportStatus.Ready, final.Status);
         Assert.Equal(newOwner ? 0 : 1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `live_child` WHERE `" + endpoint + "` IS NULL;"));
+            "SELECT COUNT(*) FROM `live_child` WHERE `" + endpoint + "` IS NULL;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>
@@ -1333,16 +1360,19 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NULL, "
             + "`values_json` JSON NOT NULL) ENGINE=InnoDB; "
-            + "INSERT INTO `live_child` (`id`, `values_json`) VALUES (1, '[]');");
+            + "INSERT INTO `live_child` (`id`, `values_json`) VALUES (1, '[]');",
+            cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(connectionString, Fixture.IsMariaDb
             ? "ALTER TABLE `live_child` ADD `derived_id` int GENERATED ALWAYS AS (ABS(`id`)) STORED; "
                 + "CREATE INDEX `ix_child_multi` ON `live_child` (`parent_id`, `derived_id`);"
-            : "CREATE INDEX `ix_child_multi` ON `live_child` (`parent_id`, (CAST(`values_json` AS UNSIGNED ARRAY)));");
+            : "CREATE INDEX `ix_child_multi` ON `live_child` (`parent_id`, (CAST(`values_json` AS UNSIGNED ARRAY)));",
+            cancellationToken: CancellationToken.None);
 
         var nativeName = alias ? "fk_semantic_alias" : "fk_live_child_parent";
         await ExecuteSqlAsync(connectionString, "ALTER TABLE `live_child` ADD CONSTRAINT `" + nativeName
-            + "` FOREIGN KEY (`parent_id`) REFERENCES `live_parent` (`id`);");
+            + "` FOREIGN KEY (`parent_id`) REFERENCES `live_parent` (`id`);",
+            cancellationToken: CancellationToken.None);
 
         if (!Fixture.IsMariaDb)
         {
@@ -1350,10 +1380,11 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
             // Reproduce that integrity failure without disabling FK checks.
             await ExecuteSqlAsync(connectionString,
                 "INSERT INTO `live_parent` VALUES (999); UPDATE `live_child` SET `parent_id`=999; "
-                + "DELETE FROM `live_parent` WHERE `id`=999;");
+                + "DELETE FROM `live_parent` WHERE `id`=999;", cancellationToken: CancellationToken.None);
         }
 
-        await ExecuteSqlAsync(connectionString, "CREATE INDEX `ix_ordinary` ON `live_child` (`parent_id`);");
+        await ExecuteSqlAsync(connectionString, "CREATE INDEX `ix_ordinary` ON `live_child` (`parent_id`);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -1382,7 +1413,8 @@ public sealed partial class MySqlForeignKeysProjectedLivePrerequisitesIntegratio
                 StringComparison.Ordinal);
             Assert.Equal(1, await ScalarIntAsync(connectionString,
                 "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-                + "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='live_child' AND INDEX_NAME='ix_child_multi';"));
+                + "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='live_child' AND INDEX_NAME='ix_child_multi';",
+                cancellationToken: CancellationToken.None));
         }
     }
 }

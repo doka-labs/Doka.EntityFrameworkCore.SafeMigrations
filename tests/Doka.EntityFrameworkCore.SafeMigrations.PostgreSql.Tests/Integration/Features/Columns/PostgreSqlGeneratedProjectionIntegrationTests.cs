@@ -18,7 +18,8 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE source_lifetime (value integer, unrelated integer);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE source_lifetime (value integer, unrelated integer);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists(referenced ? "value" : "unrelated", "source_lifetime");
@@ -35,7 +36,7 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
         if (!referenced)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         // Assert
@@ -45,7 +46,7 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
 
         Assert.Equal(referenced ? 0 : 1, await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'source_lifetime'::regclass "
-            + "AND attname = 'result' AND NOT attisdropped;"));
+            + "AND attname = 'result' AND NOT attisdropped;", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>A generated source cannot erase occupied native or accepted index namespace identities.</summary>
@@ -63,7 +64,8 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE source_lifetime (value integer NOT NULL, unrelated integer); "
             + (symbol == "index" ? "CREATE INDEX ix_source_result ON source_lifetime(value);"
-                : symbol == "table" ? "CREATE TABLE ix_source_result (id integer);" : string.Empty));
+                : symbol == "table" ? "CREATE TABLE ix_source_result (id integer);" : string.Empty),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -103,7 +105,8 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE source_lifetime (value integer, unrelated integer);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE source_lifetime (value integer, unrelated integer);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("unrelated", "source_lifetime");
@@ -119,13 +122,14 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
             new SafeMigrationRunOptions("generated-index-accepted-identity"), CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[2].Action);
         Assert.Equal(SafeMigrationAction.NoOp, report.Assessments[3].Action);
         Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_class WHERE relname = 'ix_source_result' AND relkind = 'i';"));
+            "SELECT COUNT(*) FROM pg_catalog.pg_class WHERE relname = 'ix_source_result' AND relkind = 'i';",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Replacing a generated member requires explicit removal of its accepted dependent index.</summary>
@@ -137,7 +141,8 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE source_lifetime (value integer, unrelated integer);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE source_lifetime (value integer, unrelated integer);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         AddGenerated();
@@ -159,7 +164,7 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
                 new SafeMigrationRunOptions("generated-index-recreated-source"), CancellationToken.None);
 
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         });
 
         // Assert
@@ -176,7 +181,8 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
         }
 
         Assert.Equal(explicitDrop ? 1 : 0, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_class WHERE relname = 'ix_source_result' AND relkind = 'i';"));
+            "SELECT COUNT(*) FROM pg_catalog.pg_class WHERE relname = 'ix_source_result' AND relkind = 'i';",
+            cancellationToken: CancellationToken.None));
 
         void AddGenerated() => builder.AddColumnIfNotExistsFromModel(operationBuilder =>
             operationBuilder.AddColumn<bool>("result", "source_lifetime", type: "boolean", nullable: true,
@@ -193,7 +199,8 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE source_lifetime (value integer, payload integer, unrelated integer);");
+            "CREATE TABLE source_lifetime (value integer, payload integer, unrelated integer);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -213,7 +220,7 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
         if (!removed)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         // Assert
@@ -228,7 +235,8 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE source_lifetime (value integer, unrelated integer);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE source_lifetime (value integer, unrelated integer);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("unrelated", "source_lifetime");
@@ -257,7 +265,8 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE recreated_source (value uuid);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE recreated_source (value uuid);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropTableIfExists("recreated_source");
@@ -287,7 +296,7 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
         if (compatible)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         // Assert
@@ -305,7 +314,7 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
         await ExecuteSqlAsync(connectionString, "CREATE SCHEMA custom; "
             + "CREATE TABLE custom.a (source integer NOT NULL, derived integer GENERATED ALWAYS AS "
             + "(CASE WHEN source > 0 THEN source ELSE 0 END) STORED); CREATE TABLE custom.b (id integer); "
-            + "INSERT INTO custom.a (source) VALUES (2);");
+            + "INSERT INTO custom.a (source) VALUES (2);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync();
@@ -328,7 +337,7 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var postflight = await runner.VerifyAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-rename-schema-postflight"), CancellationToken.None);
 
@@ -336,11 +345,11 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
         Assert.Equal("2:2", await ScalarStringAsync(connectionString,
-            "SELECT renamed::text || ':' || derived::text FROM custom.a;"));
+            "SELECT renamed::text || ':' || derived::text FROM custom.a;", cancellationToken: CancellationToken.None));
 
         Assert.Equal(0, await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'custom.b'::regclass "
-            + "AND attname = 'extra' AND NOT attisdropped;"));
+            + "AND attname = 'extra' AND NOT attisdropped;", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Native-equivalent CHECK reassertion preserves the complete renamed strict-table lineage.</summary>
@@ -353,7 +362,7 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
             "CREATE TABLE check_lineage (leftbound integer NOT NULL, payload integer NOT NULL DEFAULT 1, "
             + "CONSTRAINT ck_check_lineage CHECK (leftbound >= 0)); "
             + "COMMENT ON COLUMN check_lineage.payload IS 'retained payload'; "
-            + "INSERT INTO check_lineage(leftbound) VALUES(2);");
+            + "INSERT INTO check_lineage(leftbound) VALUES(2);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -373,7 +382,7 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
 
         // WHY: Observe both independent contracts even when the preflight
         // regression rejects this valid isolated native stream prematurely.
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var postflight = await runner.VerifyAsync(context, builder.Operations,
             new SafeMigrationRunOptions("captured-check-renamed-strict-postflight"), CancellationToken.None);
 
@@ -387,7 +396,7 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
         Assert.Equal("23514", Assert.IsType<PostgresException>(violation).SqlState);
         Assert.Equal("2:1:retained payload", await ScalarStringAsync(connectionString,
             "SELECT score::text || ':' || payload::text || ':' || pg_catalog.col_description("
-            + "'check_lineage'::regclass, 2) FROM check_lineage;"));
+            + "'check_lineage'::regclass, 2) FROM check_lineage;", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Active callbacks prevent preflight from certifying unrelated absence through a known rename.</summary>
@@ -400,7 +409,7 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
             "CREATE TABLE check_callback (source integer NOT NULL, CONSTRAINT ck_check_callback CHECK(source>=0)); "
             + "CREATE FUNCTION check_callback_effect() RETURNS event_trigger LANGUAGE plpgsql "
             + "AS $$ BEGIN PERFORM 1; END; $$; CREATE EVENT TRIGGER check_callback_effect ON ddl_command_end "
-            + "EXECUTE FUNCTION check_callback_effect();");
+            + "EXECUTE FUNCTION check_callback_effect();", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -424,7 +433,7 @@ public sealed class PostgreSqlGeneratedProjectionIntegrationTests : PostgreSqlIn
             Assert.IsType<SafeMigrationDeferredOrigin>(report.Assessments[^1].DeferredOrigin).OperationOrdinal);
         Assert.Equal(1, await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='check_callback'::regclass "
-            + "AND attname='source' AND NOT attisdropped;"));
+            + "AND attname='source' AND NOT attisdropped;", cancellationToken: CancellationToken.None));
     }
 
 }

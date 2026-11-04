@@ -124,6 +124,7 @@ public sealed partial class MySqlModelManagedDataTypedLiteralsIntegrationTests :
             SafeMigrationObservedState.TransitionReady,
             Assert.Single(deletePreflight.Assessments).ObservedState);
         Assert.Equal(SafeMigrationObservedState.Missing, Assert.Single(deleteReplay.Assessments).ObservedState);
-        Assert.Equal(0, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `typed_model_rows`;"));
+        Assert.Equal(0, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `typed_model_rows`;",
+            cancellationToken: CancellationToken.None));
     }
 }

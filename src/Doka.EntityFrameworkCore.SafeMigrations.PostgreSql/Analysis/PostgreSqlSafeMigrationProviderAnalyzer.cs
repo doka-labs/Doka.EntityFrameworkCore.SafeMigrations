@@ -79,7 +79,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
     /// <inheritdoc />
     public async Task<SafeMigrationProviderEnvironment> GetEnvironmentAsync(
         DbContext context,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -107,7 +107,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
     /// <inheritdoc />
     public async Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
         DbContext context,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -192,7 +192,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
     public async Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
         DbContext context,
         IReadOnlyList<SafeMigrationOperation> operations,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(context);

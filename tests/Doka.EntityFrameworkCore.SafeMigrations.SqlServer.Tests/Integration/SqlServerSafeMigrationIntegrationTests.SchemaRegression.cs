@@ -16,36 +16,39 @@ public sealed class SqlServerSafeMigrationSchemaRegressionIntegrationTests : Sql
     public async Task ExplicitSchemaRename_NonDboDefaultKeepsSchemaAndReplays()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "EXEC sys.sp_executesql N'CREATE SCHEMA application;'; "
             + "EXEC sys.sp_executesql N'CREATE SCHEMA caller_default;'; "
             + "CREATE USER schema_runner WITHOUT LOGIN WITH DEFAULT_SCHEMA = caller_default; "
             + "GRANT CONTROL TO schema_runner; "
             + "CREATE TABLE application.old_orders (Id int NOT NULL); "
-            + "INSERT INTO application.old_orders VALUES (19);");
+            + "INSERT INTO application.old_orders VALUES (19);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync("EXECUTE AS USER = N'schema_runner';");
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("old_orders", "renamed_orders", schema: "application");
 
         // Act
         var initial = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-qualified-rename"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-qualified-rename"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-qualified-rename-replay"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-qualified-rename-replay"),
+            cancellationToken: CancellationToken.None);
 
         await context.Database.ExecuteSqlRawAsync("REVERT;");
         var rows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM application.renamed_orders WHERE Id = 19;");
+            "SELECT COUNT(*) FROM application.renamed_orders WHERE Id = 19;",
+            cancellationToken: CancellationToken.None);
 
         var wrongSchemaCount = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.tables WHERE name = N'renamed_orders' "
-            + "AND schema_id <> SCHEMA_ID(N'application');");
+            + "AND schema_id <> SCHEMA_ID(N'application');", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, Assert.Single(initial.Assessments).Action);
@@ -59,7 +62,7 @@ public sealed class SqlServerSafeMigrationSchemaRegressionIntegrationTests : Sql
     public async Task ExplicitSchemaTransfer_NonDboDefaultUsesCapturedDestinationAndReplays()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "EXEC sys.sp_executesql N'CREATE SCHEMA application;'; "
             + "EXEC sys.sp_executesql N'CREATE SCHEMA destination;'; "
@@ -67,29 +70,31 @@ public sealed class SqlServerSafeMigrationSchemaRegressionIntegrationTests : Sql
             + "CREATE USER schema_runner WITHOUT LOGIN WITH DEFAULT_SCHEMA = caller_default; "
             + "GRANT CONTROL TO schema_runner; "
             + "CREATE TABLE application.orders (Id int NOT NULL); "
-            + "INSERT INTO application.orders VALUES (19);");
+            + "INSERT INTO application.orders VALUES (19);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync("EXECUTE AS USER = N'schema_runner';");
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("orders", schema: "application", newSchema: "destination");
 
         // Act
         var initial = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-qualified-transfer"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-qualified-transfer"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-qualified-transfer-replay"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-qualified-transfer-replay"),
+            cancellationToken: CancellationToken.None);
 
         await context.Database.ExecuteSqlRawAsync("REVERT;");
         var rows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM destination.orders WHERE Id = 19;");
+            "SELECT COUNT(*) FROM destination.orders WHERE Id = 19;", cancellationToken: CancellationToken.None);
 
         var wrongSchemaCount = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.tables WHERE name = N'orders' "
-            + "AND schema_id <> SCHEMA_ID(N'destination');");
+            + "AND schema_id <> SCHEMA_ID(N'destination');", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, Assert.Single(initial.Assessments).Action);
@@ -107,22 +112,27 @@ public sealed class SqlServerSafeMigrationSchemaRegressionIntegrationTests : Sql
     public async Task IdenticalExplicitRenamePreservesPhysicalObjectKind(bool sourceIsView)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA application;");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA application;",
+            cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString, sourceIsView
             ? "CREATE VIEW application.orders AS SELECT 19 AS Id;"
-            : "CREATE TABLE application.orders (Id int NOT NULL); INSERT INTO application.orders VALUES (19);");
+            : "CREATE TABLE application.orders (Id int NOT NULL); INSERT INTO application.orders VALUES (19);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("orders", "orders", schema: "application", newSchema: "application");
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-unchanged-explicit-identity"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-unchanged-explicit-identity"),
+            cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var rows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM application.orders WHERE Id = 19;");
+            "SELECT COUNT(*) FROM application.orders WHERE Id = 19;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(sourceIsView ? SafeMigrationObservedState.Different : SafeMigrationObservedState.Matching,
@@ -145,15 +155,16 @@ public sealed class SqlServerSafeMigrationSchemaRegressionIntegrationTests : Sql
     public async Task ExplicitTable_ImplicitForeignKeyPrincipalSchemaRejectsBeforeMutation()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "EXEC sys.sp_executesql N'CREATE SCHEMA application;'; "
             + "EXEC sys.sp_executesql N'CREATE SCHEMA caller_default;'; "
             + "CREATE USER schema_runner WITHOUT LOGIN WITH DEFAULT_SCHEMA = caller_default; "
             + "GRANT CONTROL TO schema_runner; "
-            + "CREATE TABLE dbo.parent_items (Id int NOT NULL PRIMARY KEY);");
+            + "CREATE TABLE dbo.parent_items (Id int NOT NULL PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync("EXECUTE AS USER = N'schema_runner';");
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(new ExpectedTableDefinition("child_items",
@@ -167,12 +178,15 @@ public sealed class SqlServerSafeMigrationSchemaRegressionIntegrationTests : Sql
 
         // Act
         var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
-            context, builder.Operations.Cast<SafeMigrationOperation>().ToArray());
+            context, builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
+            cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         await context.Database.ExecuteSqlRawAsync("REVERT;");
         var childCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE name = N'child_items';");
+            "SELECT COUNT(*) FROM sys.tables WHERE name = N'child_items';", cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);
@@ -191,8 +205,9 @@ public sealed class SqlServerSafeMigrationSchemaRegressionIntegrationTests : Sql
     public async Task MissingDestinationSchema_EnsureAndRenameRejectPrerequisiteBeforeDdl(bool rename)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.schema_source (Id int NOT NULL);");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.schema_source (Id int NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (rename)
@@ -208,14 +223,19 @@ public sealed class SqlServerSafeMigrationSchemaRegressionIntegrationTests : Sql
 
         // Act
         var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
-            context, builder.Operations.Cast<SafeMigrationOperation>().ToArray());
+            context, builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
+            cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var sourceCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.schema_source', N'U');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.schema_source', N'U');",
+            cancellationToken: CancellationToken.None);
 
         var targetCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE name = N'schema_target';");
+            "SELECT COUNT(*) FROM sys.tables WHERE name = N'schema_target';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, Assert.Single(analyses).ObservedState);

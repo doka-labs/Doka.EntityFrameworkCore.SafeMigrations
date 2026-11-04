@@ -35,7 +35,8 @@ public sealed partial class MySqlMemberRenameEvidenceIntegrationTests : MySqlSaf
             + (!index && targetExists ? ", target_value int NULL" : string.Empty) + "); "
             + "INSERT INTO member_rows (id) VALUES (7); "
             + (index && sourceExists ? "CREATE INDEX source_index ON member_rows (id); " : string.Empty)
-            + (index && targetExists ? "CREATE INDEX target_index ON member_rows (decoy); " : string.Empty));
+            + (index && targetExists ? "CREATE INDEX target_index ON member_rows (decoy); " : string.Empty),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -55,18 +56,24 @@ public sealed partial class MySqlMemberRenameEvidenceIntegrationTests : MySqlSaf
         var rename = (SafeMigrationOperation)builder.Operations[^1];
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename]);
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("member-rename-brownfield"));
+        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename],
+            CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("member-rename-brownfield"), CancellationToken.None);
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
         var targetCount = await ScalarIntAsync(connectionString, index
             ? "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'member_rows' AND INDEX_NAME = 'target_index';"
             : "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'member_rows' AND COLUMN_NAME = 'target_value';");
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'member_rows' AND COLUMN_NAME = 'target_value';",
+            cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM member_rows WHERE id = 7;");
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM member_rows WHERE id = 7;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);
@@ -102,7 +109,8 @@ public sealed partial class MySqlMemberRenameEvidenceIntegrationTests : MySqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE member_rows (id int NOT NULL, target_value int NULL); "
-            + "INSERT INTO member_rows VALUES (7, 29); CREATE INDEX target_index ON member_rows (id);");
+            + "INSERT INTO member_rows VALUES (7, 29); CREATE INDEX target_index ON member_rows (id);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -117,10 +125,11 @@ public sealed partial class MySqlMemberRenameEvidenceIntegrationTests : MySqlSaf
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("member-rename-replay"));
+            new SafeMigrationRunOptions("member-rename-replay"), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM member_rows WHERE target_value = 29;");
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM member_rows WHERE target_value = 29;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -136,7 +145,7 @@ public sealed partial class MySqlMemberRenameEvidenceIntegrationTests : MySqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE member_rows (id int NOT NULL); CREATE TABLE other_rows (id int NOT NULL); "
-            + "CREATE INDEX target_index ON other_rows (id);");
+            + "CREATE INDEX target_index ON other_rows (id);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -146,12 +155,13 @@ public sealed partial class MySqlMemberRenameEvidenceIntegrationTests : MySqlSaf
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("member-rename-owner-local"));
+            new SafeMigrationRunOptions("member-rename-owner-local"), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var targets = await ScalarIntAsync(connectionString,
             "SELECT COUNT(DISTINCT TABLE_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND INDEX_NAME = 'target_index';");
+            + "WHERE TABLE_SCHEMA = DATABASE() AND INDEX_NAME = 'target_index';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -170,7 +180,7 @@ public sealed partial class MySqlMemberRenameEvidenceIntegrationTests : MySqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE member_rows (id int NOT NULL, decoy int NULL, Target_Value int NULL); "
-            + "CREATE INDEX Target_Index ON member_rows (decoy);");
+            + "CREATE INDEX Target_Index ON member_rows (decoy);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -190,9 +200,11 @@ public sealed partial class MySqlMemberRenameEvidenceIntegrationTests : MySqlSaf
         var rename = (SafeMigrationOperation)builder.Operations[^1];
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename]);
+        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename],
+            CancellationToken.None);
+
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("member-rename-native-case"));
+            new SafeMigrationRunOptions("member-rename-native-case"), CancellationToken.None);
 
         // Assert
         Assert.True(Assert.Single(analyses).RenameTargetExists);
@@ -213,7 +225,7 @@ public sealed partial class MySqlMemberRenameEvidenceIntegrationTests : MySqlSaf
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE member_rows (id int NOT NULL, decoy int NULL, PRIMARY KEY (id)); "
             + (primary ? string.Empty : "CREATE INDEX source_index ON member_rows (id); ")
-            + "CREATE INDEX target_index ON member_rows (decoy);");
+            + "CREATE INDEX target_index ON member_rows (decoy);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -222,18 +234,21 @@ public sealed partial class MySqlMemberRenameEvidenceIntegrationTests : MySqlSaf
         var rename = (SafeMigrationOperation)builder.Operations[^1];
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename]);
+        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename],
+            CancellationToken.None);
+
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("member-rename-source-kind"));
+            new SafeMigrationRunOptions("member-rename-source-kind"), CancellationToken.None);
 
         if (!primary)
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         var primaryCount = await ScalarIntAsync(connectionString,
             "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'member_rows' AND INDEX_NAME = 'PRIMARY';");
+            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'member_rows' AND INDEX_NAME = 'PRIMARY';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);
@@ -264,7 +279,8 @@ public sealed partial class MySqlMemberRenameEvidenceIntegrationTests : MySqlSaf
         var target = reservedTarget ? "PRIMARY" : "destination_index";
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE member_rows (id int NOT NULL); INSERT INTO member_rows VALUES (7); "
-            + (sourceExists ? "CREATE INDEX source_index ON member_rows (id);" : string.Empty));
+            + (sourceExists ? "CREATE INDEX source_index ON member_rows (id);" : string.Empty),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -274,16 +290,22 @@ public sealed partial class MySqlMemberRenameEvidenceIntegrationTests : MySqlSaf
         var rename = (SafeMigrationOperation)builder.Operations[^1];
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename]);
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("member-rename-reserved-destination"));
+        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename],
+            CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("member-rename-reserved-destination"), CancellationToken.None);
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
         var sourceCount = await ScalarIntAsync(connectionString,
             "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'member_rows' AND INDEX_NAME = 'source_index';");
+            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'member_rows' AND INDEX_NAME = 'source_index';",
+            cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM member_rows WHERE id = 7;");
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM member_rows WHERE id = 7;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);
@@ -315,7 +337,8 @@ public sealed partial class MySqlMemberRenameEvidenceIntegrationTests : MySqlSaf
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE member_rows (id int NOT NULL, PRIMARY KEY (id)); INSERT INTO member_rows VALUES (7);");
+            "CREATE TABLE member_rows (id int NOT NULL, PRIMARY KEY (id)); INSERT INTO member_rows VALUES (7);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -323,16 +346,22 @@ public sealed partial class MySqlMemberRenameEvidenceIntegrationTests : MySqlSaf
         var rename = (SafeMigrationOperation)builder.Operations[0];
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename]);
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("member-rename-reserved-replay"));
+        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename],
+            CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("member-rename-reserved-replay"), CancellationToken.None);
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
         var primaryCount = await ScalarIntAsync(connectionString,
             "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'member_rows' AND INDEX_NAME = 'PRIMARY';");
+            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'member_rows' AND INDEX_NAME = 'PRIMARY';",
+            cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM member_rows WHERE id = 7;");
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM member_rows WHERE id = 7;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);

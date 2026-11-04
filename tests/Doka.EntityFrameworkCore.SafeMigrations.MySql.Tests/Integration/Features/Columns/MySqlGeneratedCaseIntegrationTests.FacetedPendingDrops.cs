@@ -8,7 +8,8 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await SeedFacetedPendingDropAsync(connectionString, "candidate-marker", "utf8mb4_bin");
+        await SeedFacetedPendingDropAsync(connectionString, "candidate-marker", "utf8mb4_bin",
+            cancellationToken: CancellationToken.None);
         await using var context = new GeneratedFacetPendingDropDbContext(connectionString, Fixture.ServerVersion);
         var runner = context.GetService<ISafeMigrationRunner>();
         var operations = FacetedPendingDropOperations(context);
@@ -30,9 +31,14 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             new SafeMigrationRunOptions("faceted-generated-pending-drop-verify"), CancellationToken.None);
 
         var applied = await context.Database.GetAppliedMigrationsAsync(CancellationToken.None);
-        var historyRows = await FacetedPendingHistoryRowsAsync(connectionString);
-        var unrelated = await FacetedPendingUnrelatedColumnsAsync(connectionString);
-        var retained = await FacetedPendingRetainedRowsAsync(connectionString, includeUnrelated: false);
+        var historyRows = await FacetedPendingHistoryRowsAsync(connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var unrelated = await FacetedPendingUnrelatedColumnsAsync(connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var retained = await FacetedPendingRetainedRowsAsync(connectionString, includeUnrelated: false,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -58,7 +64,8 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var comment = facet == "comment" ? "drift-marker" : "candidate-marker";
         var collation = facet == "collation" ? "utf8mb4_unicode_ci" : "utf8mb4_bin";
-        await SeedFacetedPendingDropAsync(connectionString, comment, collation);
+        await SeedFacetedPendingDropAsync(connectionString, comment, collation,
+            cancellationToken: CancellationToken.None);
         await using var context = new GeneratedFacetPendingDropDbContext(connectionString, Fixture.ServerVersion);
 
         // Act
@@ -68,13 +75,20 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var failure = await Record.ExceptionAsync(() =>
             context.GetService<IMigrator>().MigrateAsync(cancellationToken: CancellationToken.None));
 
-        var historyRows = await FacetedPendingHistoryRowsAsync(connectionString);
-        var unrelated = await FacetedPendingUnrelatedColumnsAsync(connectionString);
-        var retained = await FacetedPendingRetainedRowsAsync(connectionString, includeUnrelated: !Fixture.IsMariaDb);
+        var historyRows = await FacetedPendingHistoryRowsAsync(connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var unrelated = await FacetedPendingUnrelatedColumnsAsync(connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var retained = await FacetedPendingRetainedRowsAsync(connectionString, includeUnrelated: !Fixture.IsMariaDb,
+            cancellationToken: CancellationToken.None);
+
         var unchanged = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + $"AND TABLE_NAME = '{GeneratedFacetPendingDropDbContext.TableName}' AND COLUMN_NAME = 'result' "
-            + $"AND COLUMN_COMMENT = '{comment}' AND COLLATION_NAME = '{collation}';");
+            + $"AND COLUMN_COMMENT = '{comment}' AND COLLATION_NAME = '{collation}';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(Fixture.IsMariaDb ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
@@ -103,7 +117,8 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await SeedFacetedPendingDropAsync(connectionString, "candidate-marker", "utf8mb4_bin");
+        await SeedFacetedPendingDropAsync(connectionString, "candidate-marker", "utf8mb4_bin",
+            cancellationToken: CancellationToken.None);
         await using var context = new GeneratedFacetPendingDropDbContext(connectionString, Fixture.ServerVersion);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("unrelated", GeneratedFacetPendingDropDbContext.TableName);
@@ -122,13 +137,20 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             }
         });
 
-        var historyRows = await FacetedPendingHistoryRowsAsync(connectionString);
-        var unrelated = await FacetedPendingUnrelatedColumnsAsync(connectionString);
-        var retained = await FacetedPendingRetainedRowsAsync(connectionString, includeUnrelated: !Fixture.IsMariaDb);
+        var historyRows = await FacetedPendingHistoryRowsAsync(connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var unrelated = await FacetedPendingUnrelatedColumnsAsync(connectionString,
+            cancellationToken: CancellationToken.None);
+
+        var retained = await FacetedPendingRetainedRowsAsync(connectionString, includeUnrelated: !Fixture.IsMariaDb,
+            cancellationToken: CancellationToken.None);
+
         var unchanged = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + $"AND TABLE_NAME = '{GeneratedFacetPendingDropDbContext.TableName}' AND COLUMN_NAME = 'result' "
-            + "AND COLUMN_COMMENT = 'candidate-marker' AND COLLATION_NAME = 'utf8mb4_bin';");
+            + "AND COLUMN_COMMENT = 'candidate-marker' AND COLLATION_NAME = 'utf8mb4_bin';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.IsAssignableFrom<Microsoft.EntityFrameworkCore.Metadata.RuntimeModel>(context.Model);
@@ -153,14 +175,20 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     }
 
     /// <summary>Seeds native facets independently of EF's candidate model and migration target.</summary>
-    private static Task SeedFacetedPendingDropAsync(string connectionString, string comment, string collation)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static Task SeedFacetedPendingDropAsync(
+        string connectionString,
+        string comment,
+        string collation,
+        CancellationToken cancellationToken
+    )
         => ExecuteSqlAsync(connectionString,
             $"CREATE TABLE `{GeneratedFacetPendingDropDbContext.TableName}` (id int NOT NULL PRIMARY KEY, "
             + "unrelated int NULL, result varchar(20) CHARACTER SET utf8mb4 COLLATE " + collation
             + " GENERATED ALWAYS AS ('fixed') VIRTUAL COMMENT '" + comment
             + "') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
             + $"INSERT INTO `{GeneratedFacetPendingDropDbContext.TableName}` (id, unrelated) "
-            + "VALUES (1, 7), (2, NULL);");
+            + "VALUES (1, 7), (2, NULL);", cancellationToken: cancellationToken);
 
     /// <summary>Reads the actual migration fixture without constructing replacement operations.</summary>
     private static IReadOnlyList<MigrationOperation> FacetedPendingDropOperations(DbContext context)
@@ -173,27 +201,45 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     }
 
     /// <summary>Counts applied rows without assuming EF has already bootstrapped its history table.</summary>
-    private static async Task<int> FacetedPendingHistoryRowsAsync(string connectionString)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static async Task<int> FacetedPendingHistoryRowsAsync(
+        string connectionString,
+        CancellationToken cancellationToken
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var exists = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{GeneratedFacetPendingDropDbContext.HistoryTable}';");
+            + $"AND TABLE_NAME = '{GeneratedFacetPendingDropDbContext.HistoryTable}';",
+            cancellationToken: cancellationToken);
 
         return exists == 0 ? 0 : await ScalarIntAsync(connectionString,
-            $"SELECT COUNT(*) FROM `{GeneratedFacetPendingDropDbContext.HistoryTable}`;");
+            $"SELECT COUNT(*) FROM `{GeneratedFacetPendingDropDbContext.HistoryTable}`;",
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>Checks that native DDL did or did not remove the unrelated member.</summary>
-    private static Task<int> FacetedPendingUnrelatedColumnsAsync(string connectionString)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static Task<int> FacetedPendingUnrelatedColumnsAsync(
+        string connectionString,
+        CancellationToken cancellationToken
+    )
         => ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{GeneratedFacetPendingDropDbContext.TableName}' AND COLUMN_NAME = 'unrelated';");
+            + $"AND TABLE_NAME = '{GeneratedFacetPendingDropDbContext.TableName}' AND COLUMN_NAME = 'unrelated';",
+            cancellationToken: cancellationToken);
 
     /// <summary>Checks row preservation, including unrelated values when the DROP is refused.</summary>
-    private static Task<int> FacetedPendingRetainedRowsAsync(string connectionString, bool includeUnrelated)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static Task<int> FacetedPendingRetainedRowsAsync(
+        string connectionString,
+        bool includeUnrelated,
+        CancellationToken cancellationToken
+    )
         => ScalarIntAsync(connectionString,
             $"SELECT COUNT(*) FROM `{GeneratedFacetPendingDropDbContext.TableName}` "
             + "WHERE BINARY result = BINARY 'fixed' "
             + (includeUnrelated ? "AND ((id = 1 AND unrelated = 7) OR (id = 2 AND unrelated IS NULL));"
-                : "AND id IN (1, 2);"));
+                : "AND id IN (1, 2);"), cancellationToken: cancellationToken);
 }

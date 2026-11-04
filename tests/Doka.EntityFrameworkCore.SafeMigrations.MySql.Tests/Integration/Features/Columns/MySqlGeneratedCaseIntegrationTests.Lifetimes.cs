@@ -10,8 +10,9 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, "
-            + "left_bound bigint NOT NULL, right_bound bigint NOT NULL, unrelated int NULL);");
-        await SeedCaseRowsAsync(connectionString);
+            + "left_bound bigint NOT NULL, right_bound bigint NOT NULL, unrelated int NULL);",
+            cancellationToken: CancellationToken.None);
+        await SeedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("unrelated", Table);
         builder.EnsureColumn(Table, CaseColumn(stored: false), SafeMigrationPolicy.ThrowIfDifferent);
@@ -24,14 +25,15 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var failure = await Record.ExceptionAsync(async () =>
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         });
 
         var postflight = await context.GetService<ISafeMigrationRunner>().VerifyAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-unrelated-drop-verify"), CancellationToken.None);
 
-        var rows = failure is null ? await CountExpectedCaseRowsAsync(connectionString) : -1;
+        var rows = failure is null ? await CountExpectedCaseRowsAsync(connectionString,
+            cancellationToken: CancellationToken.None) : -1;
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[0].Action);
@@ -54,7 +56,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, "
-            + "left_bound bigint NOT NULL, right_bound bigint NOT NULL);");
+            + "left_bound bigint NOT NULL, right_bound bigint NOT NULL);", cancellationToken: CancellationToken.None);
         var all = CaseTable(stored: false);
         var sources = all.Columns.Where(column => column.Name != "has_descendants"
             && (completeSources || column.Name != "right_bound"));
@@ -98,7 +100,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         // Act
         var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-owner-source-rename"), CancellationToken.None);
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
         var postflight = await context.GetService<ISafeMigrationRunner>().VerifyAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-owner-source-rename-verify"), CancellationToken.None);
 

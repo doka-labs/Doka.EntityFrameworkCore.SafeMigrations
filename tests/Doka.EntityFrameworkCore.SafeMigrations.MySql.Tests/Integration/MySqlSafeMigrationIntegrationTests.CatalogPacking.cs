@@ -12,7 +12,8 @@ public sealed partial class MySqlCatalogPackingIntegrationTests : MySqlSafeMigra
     public async Task Analyzer_PacksAcrossShortCircuitGapsAndCaptureBoundariesWithoutMixingResults()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `catalog_packing` (`id` int NOT NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE `catalog_packing` (`id` int NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(new MySqlConnection(connectionString));
         context.Database.SetDbConnection(connection);
@@ -67,7 +68,8 @@ public sealed partial class MySqlCatalogPackingIntegrationTests : MySqlSafeMigra
     )
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `catalog_ownership` (`id` int NOT NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE `catalog_ownership` (`id` int NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(
             new MySqlConnection(connectionString),
@@ -87,7 +89,8 @@ public sealed partial class MySqlCatalogPackingIntegrationTests : MySqlSafeMigra
         var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations));
+            context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations,
+                CancellationToken.None));
 
         Assert.True(connection.FaultWasInjected);
         Assert.Equal(1, connection.ClassificationStatementCount);

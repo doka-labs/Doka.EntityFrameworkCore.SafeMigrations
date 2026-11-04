@@ -32,13 +32,15 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
             + "INSERT INTO side_effect_rows (id, managed_value) VALUES (1, 'expected');"
             + (writeKind == "INSERT"
                 ? string.Empty
-                : "INSERT INTO side_effect_writes (id, managed_value) VALUES (1, 'source');"));
+                : "INSERT INTO side_effect_writes (id, managed_value) VALUES (1, 'source');"),
+            cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TRIGGER side_effect_trigger AFTER " + writeKind
             + " ON side_effect_writes FOR EACH ROW "
-            + "UPDATE side_effect_rows SET managed_value = 'trigger-change' WHERE id = 1;");
+            + "UPDATE side_effect_rows SET managed_value = 'trigger-change' WHERE id = 1;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
 
@@ -53,21 +55,22 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("mysql-managed-trigger-" + writeKind));
+            new SafeMigrationRunOptions("mysql-managed-trigger-" + writeKind), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, [builder.Operations[0]]);
+        await ExecuteOperationsAsync(context, [builder.Operations[0]], CancellationToken.None);
 
         var actual = await runner.AnalyzeAsync(
             context,
             [builder.Operations[1]],
-            new SafeMigrationRunOptions("mysql-managed-trigger-actual-" + writeKind));
+            new SafeMigrationRunOptions("mysql-managed-trigger-actual-" + writeKind), CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(
-            () => ExecuteOperationsAsync(context, [builder.Operations[1]]));
+            () => ExecuteOperationsAsync(context, [builder.Operations[1]], CancellationToken.None));
 
         var changedRows = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM side_effect_rows WHERE id = 1 AND managed_value = 'trigger-change';");
+            "SELECT COUNT(*) FROM side_effect_rows WHERE id = 1 AND managed_value = 'trigger-change';",
+            cancellationToken: CancellationToken.None);
 
         var origin = preflight.Assessments[1].DeferredOrigin;
 
@@ -96,7 +99,7 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE side_effect_rows (id int NOT NULL PRIMARY KEY, "
-            + "managed_value varchar(64) NOT NULL) ENGINE=InnoDB;");
+            + "managed_value varchar(64) NOT NULL) ENGINE=InnoDB;", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
 
@@ -108,18 +111,19 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
         var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("mysql-managed-immediate-postcondition"));
+            new SafeMigrationRunOptions("mysql-managed-immediate-postcondition"), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("mysql-managed-executed-replay"));
+            new SafeMigrationRunOptions("mysql-managed-executed-replay"), CancellationToken.None);
 
         var rowCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM side_effect_rows WHERE id = 1 AND managed_value = 'expected';");
+            "SELECT COUNT(*) FROM side_effect_rows WHERE id = 1 AND managed_value = 'expected';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -158,13 +162,14 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
         var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("mysql-managed-fresh-table"));
+            new SafeMigrationRunOptions("mysql-managed-fresh-table"), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var rowCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM side_effect_rows WHERE id = 1 AND managed_value = 'expected';");
+            "SELECT COUNT(*) FROM side_effect_rows WHERE id = 1 AND managed_value = 'expected';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -190,7 +195,8 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
             + "parent_id int NOT NULL, CONSTRAINT fk_side_effect_parent FOREIGN KEY (parent_id) "
             + "REFERENCES side_effect_parents (id) ON DELETE CASCADE) ENGINE=InnoDB; "
             + "INSERT INTO side_effect_parents (id) VALUES (1); "
-            + "INSERT INTO side_effect_children (id, parent_id) VALUES (11, 1), (12, 1);");
+            + "INSERT INTO side_effect_children (id, parent_id) VALUES (11, 1), (12, 1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
 
@@ -204,13 +210,15 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
         var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("mysql-managed-two-child-deletes"));
+            new SafeMigrationRunOptions("mysql-managed-two-child-deletes"), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
-        var parents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM side_effect_parents;");
+        var parents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM side_effect_parents;",
+            cancellationToken: CancellationToken.None);
 
-        var children = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM side_effect_children;");
+        var children = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM side_effect_children;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
@@ -244,14 +252,16 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
             + "CREATE TABLE side_effect_writes (id int NOT NULL PRIMARY KEY, "
             + "managed_value varchar(64) NOT NULL) ENGINE=InnoDB; "
             + "INSERT INTO side_effect_parents (id) VALUES (1); "
-            + "INSERT INTO side_effect_children (id, parent_id) VALUES (11, 1);");
+            + "INSERT INTO side_effect_children (id, parent_id) VALUES (11, 1);",
+            cancellationToken: CancellationToken.None);
 
         const string writeKind = "INSERT";
 
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TRIGGER side_effect_trigger AFTER " + writeKind
-            + " ON side_effect_writes FOR EACH ROW INSERT INTO side_effect_children (id, parent_id) VALUES (99, 1);");
+            + " ON side_effect_writes FOR EACH ROW INSERT INTO side_effect_children (id, parent_id) VALUES (99, 1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
 
@@ -267,23 +277,25 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("mysql-managed-recreated-child"));
+            new SafeMigrationRunOptions("mysql-managed-recreated-child"), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, [builder.Operations[0], builder.Operations[1]]);
+        await ExecuteOperationsAsync(context, [builder.Operations[0], builder.Operations[1]], CancellationToken.None);
 
         var actual = await runner.AnalyzeAsync(
             context,
             [builder.Operations[2]],
-            new SafeMigrationRunOptions("mysql-managed-recreated-child-actual"));
+            new SafeMigrationRunOptions("mysql-managed-recreated-child-actual"), CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(
-            () => ExecuteOperationsAsync(context, [builder.Operations[2]]));
+            () => ExecuteOperationsAsync(context, [builder.Operations[2]], CancellationToken.None));
 
-        var parents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM side_effect_parents;");
+        var parents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM side_effect_parents;",
+            cancellationToken: CancellationToken.None);
 
         var recreatedChildren = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM side_effect_children WHERE id = 99 AND parent_id = 1;");
+            "SELECT COUNT(*) FROM side_effect_children WHERE id = 99 AND parent_id = 1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);

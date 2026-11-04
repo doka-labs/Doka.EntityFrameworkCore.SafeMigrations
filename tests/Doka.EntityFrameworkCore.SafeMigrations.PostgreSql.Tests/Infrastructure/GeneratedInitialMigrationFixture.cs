@@ -3,33 +3,80 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 /// <summary>Applies each externally provisioned tooling schema once without imposing test-method order.</summary>
 public sealed class GeneratedInitialMigrationFixture
 {
-    private readonly Lazy<Task<GeneratedInitialMigrationObservation>> _strict = new(() => InitializeAsync(
-        "SAFE_MIGRATIONS_GENERATED_STRICT_CONNECTION_STRING",
-        "StrictScaffoldingProbe",
-        static connectionString => new StrictSafeMigrationScaffoldingDbContext(connectionString)));
+    private readonly Lazy<Task<GeneratedInitialMigrationObservation>> _strict;
+    private readonly Lazy<Task<GeneratedInitialMigrationObservation>> _legacy;
 
-    private readonly Lazy<Task<GeneratedInitialMigrationObservation>> _legacy = new(() => InitializeAsync(
-        "SAFE_MIGRATIONS_GENERATED_LEGACY_CONNECTION_STRING",
-        "LegacyScaffoldingProbe",
-        static connectionString => new LegacySafeMigrationScaffoldingDbContext(connectionString)));
+    /// <summary>
+    /// Creates once-only initializers owned by the shared fixture rather than any one observing fact.
+    /// </summary>
+    public GeneratedInitialMigrationFixture()
+    {
+        // WHY: An observer can stop waiting, but shared schema mutation must retain one owner
+        // until completion; another fact must not restart a partially applied initial migration.
+        _strict = new Lazy<Task<GeneratedInitialMigrationObservation>>(() => InitializeAsync(
+            "SAFE_MIGRATIONS_GENERATED_STRICT_CONNECTION_STRING",
+            "StrictScaffoldingProbe",
+            static connectionString => new StrictSafeMigrationScaffoldingDbContext(connectionString),
+            CancellationToken.None));
+
+        _legacy = new Lazy<Task<GeneratedInitialMigrationObservation>>(() => InitializeAsync(
+            "SAFE_MIGRATIONS_GENERATED_LEGACY_CONNECTION_STRING",
+            "LegacyScaffoldingProbe",
+            static connectionString => new LegacySafeMigrationScaffoldingDbContext(connectionString),
+            CancellationToken.None));
+    }
+
+    /// <summary>
+    /// Injects a resource-free initializer for observer-cancellation and shared-ownership counterprobes.
+    /// </summary>
+    /// <param name="initialize">The once-only profile initializer and its independent fixture-owned token.</param>
+    internal GeneratedInitialMigrationFixture(
+        Func<bool, CancellationToken, Task<GeneratedInitialMigrationObservation>> initialize
+    )
+    {
+        ArgumentNullException.ThrowIfNull(initialize);
+
+        _strict = new Lazy<Task<GeneratedInitialMigrationObservation>>(() => initialize(false, CancellationToken.None));
+        _legacy = new Lazy<Task<GeneratedInitialMigrationObservation>>(() => initialize(true, CancellationToken.None));
+    }
 
     /// <summary>Gets the once-only lifecycle observation, retaining setup failures for every dependent fact.</summary>
     /// <param name="legacy">Selects the independently provisioned legacy rather than strict schema.</param>
+    /// <param name="cancellationToken">Cancels this observer without abandoning the shared initializer.</param>
     /// <returns>The captured initial application, replay and verification evidence.</returns>
-    internal Task<GeneratedInitialMigrationObservation> GetInitializedAsync(bool legacy)
+    internal Task<GeneratedInitialMigrationObservation> GetInitializedAsync(
+        bool legacy,
+        CancellationToken cancellationToken
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         // WHY: The first selected fact owns setup, not a particular method order. Lazy also
         // retains a fault instead of retrying a partially applied schema behind another fact.
-        return (legacy ? _legacy : _strict).Value;
+        var initialization = (legacy ? _legacy : _strict).Value;
+
+        // WHY: Cancel only this observer; the retained initialization still owns schema mutation
+        // and must finish independently so another fact cannot race a second setup or cleanup.
+        return cancellationToken.CanBeCanceled
+            ? initialization.WaitAsync(cancellationToken)
+            : initialization;
     }
 
     /// <summary>Captures the original lifecycle before independent discriminator probes add mutable rows.</summary>
+    /// <param name="connectionVariable">The fixture's connectionVariable input.</param>
+    /// <param name="migrationName">The fixture's migrationName input.</param>
+    /// <param name="createContext">The fixture's createContext input.</param>
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
+    /// <returns>The asynchronous fixture operation or observation.</returns>
     private static async Task<GeneratedInitialMigrationObservation> InitializeAsync(
         string connectionVariable,
         string migrationName,
-        Func<string, DbContext> createContext
+        Func<string, DbContext> createContext,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var connectionString = Environment.GetEnvironmentVariable(connectionVariable)
             ?? throw new InvalidOperationException($"{connectionVariable} is required by the tooling gate.");
 
@@ -40,29 +87,30 @@ public sealed class GeneratedInitialMigrationFixture
             context,
             operations,
             new SafeMigrationRunOptions($"generated-initial-{migrationName}"),
-            CancellationToken.None);
+            cancellationToken);
 
         // WHY: Preserve rejection-before-execution even when a discriminator fact initializes the fixture.
         AssertReady(preflight);
-        await ExecuteOperationsAsync(context, operations);
+        await ExecuteOperationsAsync(context, operations, cancellationToken: cancellationToken);
         var replay = await runner.AnalyzeAsync(
             context,
             operations,
             new SafeMigrationRunOptions($"generated-initial-{migrationName}-replay"),
-            CancellationToken.None);
+            cancellationToken);
 
         AssertReady(replay);
-        await ExecuteOperationsAsync(context, operations);
+        await ExecuteOperationsAsync(context, operations, cancellationToken: cancellationToken);
         var postflight = await runner.VerifyAsync(
             context,
             operations,
             new SafeMigrationRunOptions($"generated-initial-{migrationName}-postflight"),
-            CancellationToken.None);
+            cancellationToken);
 
         var seedCount = await ScalarIntAsync(
             context,
             "SELECT COUNT(*) FROM \"scaffolding_users\" "
-            + "WHERE \"Id\" = 1 AND \"TenantId\" = 7 AND \"Email\" = 'administrator@example.test';");
+            + "WHERE \"Id\" = 1 AND \"TenantId\" = 7 AND \"Email\" = 'administrator@example.test';",
+            cancellationToken: cancellationToken);
 
         return new GeneratedInitialMigrationObservation(
             preflight, replay, postflight, seedCount, () => createContext(connectionString));
@@ -113,35 +161,48 @@ public sealed class GeneratedInitialMigrationFixture
     }
 
     /// <summary>Runs the generated operation stream without replacing the provider's native commands.</summary>
+    /// <param name="context">The configured fixture context.</param>
+    /// <param name="operations">The ordered fixture migration operations.</param>
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
+    /// <returns>The asynchronous fixture operation or observation.</returns>
     private static async Task ExecuteOperationsAsync(
         DbContext context,
-        IReadOnlyList<MigrationOperation> operations
+        IReadOnlyList<MigrationOperation> operations,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var commands = generator.Generate(operations, context.Model);
         var connection = context.GetService<IRelationalConnection>();
 
         foreach (var command in commands)
         {
-            _ = await command.ExecuteNonQueryAsync(connection, cancellationToken: CancellationToken.None);
+            _ = await command.ExecuteNonQueryAsync(connection, cancellationToken: cancellationToken);
         }
     }
 
     /// <summary>Reads the source-controlled seed without retaining a connection outside its setup context.</summary>
-    private static async Task<int> ScalarIntAsync(DbContext context, string sql)
+    /// <param name="context">The configured fixture context.</param>
+    /// <param name="sql">The source-controlled fixture SQL.</param>
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
+    /// <returns>The asynchronous fixture operation or observation.</returns>
+    private static async Task<int> ScalarIntAsync(DbContext context, string sql, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var connection = context.Database.GetDbConnection();
         if (connection.State != System.Data.ConnectionState.Open)
         {
-            await connection.OpenAsync(CancellationToken.None);
+            await connection.OpenAsync(cancellationToken);
         }
 
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
 
         return Convert.ToInt32(
-            await command.ExecuteScalarAsync(CancellationToken.None),
+            await command.ExecuteScalarAsync(cancellationToken),
             CultureInfo.InvariantCulture);
     }
 }

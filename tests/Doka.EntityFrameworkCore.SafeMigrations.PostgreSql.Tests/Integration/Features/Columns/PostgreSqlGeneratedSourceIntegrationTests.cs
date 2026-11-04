@@ -21,7 +21,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE native_candidate ({declaration}, "
-            + $"result boolean GENERATED ALWAYS AS ({source}) STORED);");
+            + $"result boolean GENERATED ALWAYS AS ({source}) STORED);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         Assert.True(SafeMigrationSqlExpressionParser.TryParseCapturedSource(source, out var expression));
@@ -35,9 +35,10 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         // Act
         var expected = await ScalarStringAsync(connectionString,
             "SELECT pg_catalog.pg_get_expr(adbin, adrelid) FROM pg_catalog.pg_attrdef "
-            + "WHERE adrelid = 'native_candidate'::regclass;");
+            + "WHERE adrelid = 'native_candidate'::regclass;", cancellationToken: CancellationToken.None);
 
-        var actual = await ScalarStringAsync(connectionString, "SELECT " + candidate + ";");
+        var actual = await ScalarStringAsync(connectionString, "SELECT " + candidate + ";",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(expected, actual);
@@ -58,7 +59,8 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         var physical = actualQuoted ? "\"Left_Bound\"" : "left_bound";
         await ExecuteSqlAsync(connectionString, "CREATE TABLE identifier_roles (left_bound bigint, "
             + $"\"Left_Bound\" bigint, result boolean GENERATED ALWAYS AS ({physical} > 0) STORED); "
-            + "INSERT INTO identifier_roles (left_bound, \"Left_Bound\") VALUES (1, -1);");
+            + "INSERT INTO identifier_roles (left_bound, \"Left_Bound\") VALUES (1, -1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -75,7 +77,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             Assert.Single(report.Assessments).Action);
 
         Assert.Equal(actualQuoted ? "false" : "true", await ScalarStringAsync(connectionString,
-            "SELECT result::text FROM identifier_roles;"));
+            "SELECT result::text FROM identifier_roles;", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Quoted non-ASCII identities remain exact while the unquoted ASCII grammar fails closed.</summary>
@@ -92,7 +94,8 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE unicode_roles (\"\u00C6\" bigint, \"\u00E6\" bigint, "
             + "result boolean GENERATED ALWAYS AS (\"\u00C6\" > 0) STORED); "
-            + "INSERT INTO unicode_roles (\"\u00C6\", \"\u00E6\") VALUES (1, -1);");
+            + "INSERT INTO unicode_roles (\"\u00C6\", \"\u00E6\") VALUES (1, -1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -106,7 +109,8 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
 
         // Assert
         Assert.Equal(action, Assert.Single(report.Assessments).Action);
-        Assert.Equal("true", await ScalarStringAsync(connectionString, "SELECT result::text FROM unicode_roles;"));
+        Assert.Equal("true", await ScalarStringAsync(connectionString, "SELECT result::text FROM unicode_roles;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>A reserved bare token cannot gain validity from a quoted native catalog candidate.</summary>
@@ -120,7 +124,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE keyword_roles (\"select\" integer, "
             + "result integer GENERATED ALWAYS AS (\"select\" + 1) STORED); "
-            + "INSERT INTO keyword_roles (\"select\") VALUES (1);");
+            + "INSERT INTO keyword_roles (\"select\") VALUES (1);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -136,7 +140,8 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         Assert.Equal(quoted ? SafeMigrationAction.NoOp : SafeMigrationAction.RejectUnsupported,
             Assert.Single(report.Assessments).Action);
 
-        Assert.Equal("2", await ScalarStringAsync(connectionString, "SELECT result::text FROM keyword_roles;"));
+        Assert.Equal("2", await ScalarStringAsync(connectionString, "SELECT result::text FROM keyword_roles;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Qualified labels admit native keywords only after their complete owner has been certified.</summary>
@@ -153,7 +158,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE qualified_roles (\"select\" integer, "
             + "result integer GENERATED ALWAYS AS (\"select\" + 1) STORED); "
-            + "INSERT INTO qualified_roles (\"select\") VALUES (1);");
+            + "INSERT INTO qualified_roles (\"select\") VALUES (1);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -169,7 +174,8 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         Assert.Equal(valid ? SafeMigrationAction.NoOp : SafeMigrationAction.RejectUnsupported,
             Assert.Single(report.Assessments).Action);
 
-        Assert.Equal("2", await ScalarStringAsync(connectionString, "SELECT result::text FROM qualified_roles;"));
+        Assert.Equal("2", await ScalarStringAsync(connectionString, "SELECT result::text FROM qualified_roles;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>A source type alias must resolve to the native builtin before its canonical cast can match.</summary>
@@ -184,7 +190,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         await ExecuteSqlAsync(connectionString,
             (shadowed ? "CREATE DOMAIN public.int8 AS bigint CHECK (VALUE < 0); " : string.Empty)
             + "CREATE TABLE type_roles (id integer, result bigint GENERATED ALWAYS AS (CAST(1 AS bigint)) STORED); "
-            + "INSERT INTO type_roles (id) VALUES (1);");
+            + "INSERT INTO type_roles (id) VALUES (1);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync();
@@ -210,7 +216,8 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(report.Assessments).Action);
         }
 
-        Assert.Equal("1", await ScalarStringAsync(connectionString, "SELECT result::text FROM type_roles;"));
+        Assert.Equal("1", await ScalarStringAsync(connectionString, "SELECT result::text FROM type_roles;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Metadata-only proof types cannot resolve to application domains on the active path.</summary>
@@ -226,7 +233,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             + "RETURNS boolean LANGUAGE plpgsql IMMUTABLE AS $$ BEGIN RAISE EXCEPTION USING ERRCODE = 'P9878', "
             + "MESSAGE = 'metadata domain invoked'; END $$; CREATE DOMAIN public." + alias + " AS pg_catalog."
             + alias + " CHECK (public.metadata_type_probe(VALUE::pg_catalog.oid)); "
-            + "CREATE TABLE metadata_type_binding (value integer);");
+            + "CREATE TABLE metadata_type_binding (value integer);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync();
@@ -241,13 +248,13 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             new SafeMigrationRunOptions("captured-native-metadata-types"), CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, Assert.Single(report.Assessments).Action);
         Assert.Equal(1, await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'metadata_type_binding'::regclass "
-            + "AND attname = 'result' AND NOT attisdropped;"));
+            + "AND attname = 'result' AND NOT attisdropped;", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Unrepresented unary-plus roles cannot alias a plain generated member or execute an overload.</summary>
@@ -264,7 +271,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE unary_binding (value integer"
             + (existing ? ", result integer GENERATED ALWAYS AS (value) STORED" : string.Empty)
-            + "); INSERT INTO unary_binding(value) VALUES(7);");
+            + "); INSERT INTO unary_binding(value) VALUES(7);", cancellationToken: CancellationToken.None);
 
         if (shadowed)
         {
@@ -272,7 +279,8 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
                 "CREATE FUNCTION public.unary_binding_sentinel(integer) RETURNS integer LANGUAGE plpgsql "
                 + "IMMUTABLE AS $$ BEGIN RAISE EXCEPTION USING ERRCODE = 'P9879', "
                 + "MESSAGE = 'application unary operator invoked'; END $$; "
-                + "CREATE OPERATOR public.+ (RIGHTARG=integer, FUNCTION=public.unary_binding_sentinel);");
+                + "CREATE OPERATOR public.+ (RIGHTARG=integer, FUNCTION=public.unary_binding_sentinel);",
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -287,7 +295,8 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("captured-unary-plus-binding"), CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -296,9 +305,10 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         Assert.Equal("P1002", Assert.IsType<PostgresException>(failure).SqlState);
         Assert.Equal(existing ? 1 : 0, await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'unary_binding'::regclass "
-            + "AND attname = 'result' AND NOT attisdropped;"));
+            + "AND attname = 'result' AND NOT attisdropped;", cancellationToken: CancellationToken.None));
 
-        Assert.Equal(7, await ScalarIntAsync(connectionString, "SELECT value FROM unary_binding;"));
+        Assert.Equal(7, await ScalarIntAsync(connectionString, "SELECT value FROM unary_binding;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Uncertified quoted function roles cannot alias a differently named builtin.</summary>
@@ -314,7 +324,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         await ExecuteSqlAsync(connectionString, "CREATE FUNCTION public.\"LOWER\"(text) RETURNS text "
             + "LANGUAGE sql IMMUTABLE AS 'SELECT upper($1)'; "
             + $"CREATE TABLE quoted_function (name text, result text GENERATED ALWAYS AS ({originalFunction}(name)) "
-            + "STORED); INSERT INTO quoted_function (name) VALUES ('AbC');");
+            + "STORED); INSERT INTO quoted_function (name) VALUES ('AbC');", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -330,7 +340,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         Assert.Equal(SafeMigrationAction.RejectUnsupported, Assert.Single(report.Assessments).Action);
 
         Assert.Equal(sameFunction ? "ABC" : "abc", await ScalarStringAsync(connectionString,
-            "SELECT result FROM quoted_function;"));
+            "SELECT result FROM quoted_function;", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Capturing a function never executes an application overload while establishing its proof.</summary>
@@ -357,7 +367,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
                 + (constant ? "abs(integer) RETURNS integer" : "lower(text) RETURNS text")
                 + " LANGUAGE plpgsql IMMUTABLE AS $$ BEGIN RAISE EXCEPTION USING ERRCODE = 'P9876', "
                 + "MESSAGE = 'application function invoked'; END $$;"
-                : string.Empty));
+                : string.Empty), cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync();
@@ -393,12 +403,12 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         if (shadowed)
         {
             rejection = await Assert.ThrowsAsync<PostgresException>(() =>
-                ExecuteOperationsAsync(context, builder.Operations));
+                ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
         }
         else
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         // Assert
@@ -420,7 +430,8 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE generated_clock (value integer);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE generated_clock (value integer);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExistsFromModel(operationBuilder => operationBuilder.AddColumn<DateTime>(
@@ -432,14 +443,15 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             new SafeMigrationRunOptions("captured-generated-immutability"), CancellationToken.None);
 
         var native = await Assert.ThrowsAsync<PostgresException>(() => ExecuteSqlAsync(connectionString,
-            $"ALTER TABLE generated_clock ADD COLUMN result timestamptz GENERATED ALWAYS AS ({source}) STORED;"));
+            $"ALTER TABLE generated_clock ADD COLUMN result timestamptz GENERATED ALWAYS AS ({source}) STORED;",
+            cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Equal(SafeMigrationAction.RejectUnsupported, Assert.Single(report.Assessments).Action);
         Assert.Equal("42P17", native.SqlState);
         Assert.Equal(0, await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'generated_clock'::regclass "
-            + "AND attname = 'result' AND NOT attisdropped;"));
+            + "AND attname = 'result' AND NOT attisdropped;", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Operator lookup cannot execute an application overload during captured-source analysis.</summary>
@@ -468,7 +480,8 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             + (shadowed ? $"CREATE FUNCTION public.application_op({type}, {type}) RETURNS boolean "
                 + "LANGUAGE plpgsql IMMUTABLE AS $$ BEGIN RAISE EXCEPTION USING ERRCODE = 'P9877', "
                 + $"MESSAGE = 'application operator invoked'; END $$; CREATE OPERATOR public.{symbol} "
-                + $"(FUNCTION = public.application_op, LEFTARG = {type}, RIGHTARG = {type});" : string.Empty));
+                + $"(FUNCTION = public.application_op, LEFTARG = {type}, RIGHTARG = {type});" : string.Empty),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync();
@@ -494,12 +507,12 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         if (shadowed)
         {
             rejection = await Assert.ThrowsAsync<PostgresException>(() =>
-                ExecuteOperationsAsync(context, builder.Operations));
+                ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
         }
         else
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         // Assert
@@ -528,7 +541,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE assignment_binding (value integer"
             + (adopt ? $", result {storeType} GENERATED ALWAYS AS ({source}) STORED" : string.Empty)
-            + "); INSERT INTO assignment_binding (value) VALUES (1);");
+            + "); INSERT INTO assignment_binding (value) VALUES (1);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -550,13 +563,14 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             new SafeMigrationRunOptions("captured-generated-assignment"), CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("captured-generated-assignment-replay"), CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
-        Assert.Equal(value, await ScalarStringAsync(connectionString, "SELECT result::text FROM assignment_binding;"));
+        Assert.Equal(value, await ScalarStringAsync(connectionString, "SELECT result::text FROM assignment_binding;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>A UUID certificate cannot authorize malformed input or a different physical target type.</summary>
@@ -569,7 +583,8 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE uuid_assignment_drift (value integer"
-            + (malformed ? string.Empty : ", result text GENERATED ALWAYS AS ('not-a-uuid') STORED") + ");");
+            + (malformed ? string.Empty : ", result text GENERATED ALWAYS AS ('not-a-uuid') STORED") + ");",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -601,7 +616,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE quoted_identifier (value integer, "
             + "result boolean GENERATED ALWAYS AS (value > 0) STORED); "
-            + "INSERT INTO quoted_identifier (value) VALUES (1);");
+            + "INSERT INTO quoted_identifier (value) VALUES (1);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -617,7 +632,8 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         Assert.Equal(native ? SafeMigrationAction.NoOp : SafeMigrationAction.RejectUnsupported,
             Assert.Single(report.Assessments).Action);
 
-        Assert.Equal("true", await ScalarStringAsync(connectionString, "SELECT result::text FROM quoted_identifier;"));
+        Assert.Equal("true", await ScalarStringAsync(connectionString, "SELECT result::text FROM quoted_identifier;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Identifier dialect qualification never treats string literal contents as identifier tokens.</summary>
@@ -627,7 +643,8 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE literal_delimiters (value integer); INSERT INTO literal_delimiters VALUES (1);");
+            "CREATE TABLE literal_delimiters (value integer); INSERT INTO literal_delimiters VALUES (1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -640,13 +657,14 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             new SafeMigrationRunOptions("generated-literal-delimiter-roles"), CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-literal-delimiter-replay"), CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
-        Assert.Equal("`[x]`", await ScalarStringAsync(connectionString, "SELECT result FROM literal_delimiters;"));
+        Assert.Equal("`[x]`", await ScalarStringAsync(connectionString, "SELECT result FROM literal_delimiters;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Native folded references retain exact original capture keys through sparse CHECK promotion.</summary>
@@ -659,7 +677,8 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, $"CREATE TABLE sparse_roles (existing {sourceType});");
+        await ExecuteSqlAsync(connectionString, $"CREATE TABLE sparse_roles (existing {sourceType});",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -676,7 +695,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         if (valid)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         // Assert
@@ -712,7 +731,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE numeric_source (id integer NOT NULL"
             + (adopt ? $", result {storeType} GENERATED ALWAYS AS ({source}) STORED" : string.Empty)
-            + "); INSERT INTO numeric_source (id) VALUES (1);");
+            + "); INSERT INTO numeric_source (id) VALUES (1);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -724,7 +743,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             new SafeMigrationRunOptions("generated-original-numeric-source"), CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-original-numeric-source-replay"), CancellationToken.None);
 
@@ -733,7 +752,8 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             Assert.Single(report.Assessments).Action);
 
         Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
-        Assert.Equal(value, await ScalarStringAsync(connectionString, "SELECT result::text FROM numeric_source;"));
+        Assert.Equal(value, await ScalarStringAsync(connectionString, "SELECT result::text FROM numeric_source;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Neighboring numeric sources cannot alias through an identical CLR double approximation.</summary>
@@ -744,7 +764,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE numeric_source (id integer NOT NULL, "
             + "result numeric GENERATED ALWAYS AS (9007199254740992e0) STORED); "
-            + "INSERT INTO numeric_source (id) VALUES (1);");
+            + "INSERT INTO numeric_source (id) VALUES (1);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -757,13 +777,13 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             new SafeMigrationRunOptions("generated-numeric-source-drift"), CancellationToken.None);
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-            ExecuteOperationsAsync(context, builder.Operations));
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         // Assert
         Assert.Equal(SafeMigrationAction.RejectDifferent, Assert.Single(report.Assessments).Action);
         Assert.Equal("P1001", exception.SqlState);
         Assert.Equal("9007199254740992", await ScalarStringAsync(connectionString,
-            "SELECT result::text FROM numeric_source;"));
+            "SELECT result::text FROM numeric_source;", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Native numeric common-type coercions remain visible in captured CASE predicates.</summary>
@@ -778,7 +798,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE numeric_case (value {sourceType}); "
-            + "INSERT INTO numeric_case VALUES (1001);");
+            + "INSERT INTO numeric_case VALUES (1001);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -791,13 +811,14 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             new SafeMigrationRunOptions("generated-native-numeric-case"), CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-native-numeric-case-replay"), CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
-        Assert.Equal("true", await ScalarStringAsync(connectionString, "SELECT result::text FROM numeric_case;"));
+        Assert.Equal("true", await ScalarStringAsync(connectionString, "SELECT result::text FROM numeric_case;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Only an absent CASE CHECK may be rebound after an accepted source-type replacement.</summary>
@@ -815,7 +836,8 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var originalType = initiallyCompatible ? "integer" : "uuid";
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE case_check (id integer, value {originalType}"
-            + (occupied ? ", CONSTRAINT ck_case CHECK (id > 0)" : string.Empty) + ");");
+            + (occupied ? ", CONSTRAINT ck_case CHECK (id > 0)" : string.Empty) + ");",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -839,7 +861,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         if (replaceWithInteger && !occupied)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         // Assert
@@ -876,7 +898,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         if (!fresh)
         {
             await ExecuteSqlAsync(connectionString, "CREATE TABLE case_check (value integer NOT NULL); "
-                + "INSERT INTO case_check VALUES (1);");
+                + "INSERT INTO case_check VALUES (1);", cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -901,7 +923,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
         if (valid)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         // Assert
@@ -910,6 +932,7 @@ public sealed class PostgreSqlGeneratedSourceIntegrationTests : PostgreSqlIntegr
             Assert.Single(report.Assessments).Action);
 
         Assert.Equal(valid ? 1 : 0, await ScalarIntAsync(connectionString,
-            "SELECT count(*) FROM pg_catalog.pg_constraint WHERE conname = 'ck_case';"));
+            "SELECT count(*) FROM pg_catalog.pg_constraint WHERE conname = 'ck_case';",
+            cancellationToken: CancellationToken.None));
     }
 }

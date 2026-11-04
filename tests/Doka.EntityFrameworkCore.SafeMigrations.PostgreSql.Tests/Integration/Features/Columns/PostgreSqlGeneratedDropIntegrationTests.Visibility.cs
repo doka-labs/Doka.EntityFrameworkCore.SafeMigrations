@@ -31,7 +31,8 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
             + "CREATE TABLE drop_visibility(unrelated integer" + (exists ? ", source integer" : "") + "); "
             + "INSERT INTO drop_visibility(unrelated) VALUES(9); "
             + "ALTER TABLE drop_visibility OWNER TO " + role + "; "
-            + (readable ? "SELECT 1;" : "REVOKE SELECT ON pg_catalog." + catalog + " FROM PUBLIC;"));
+            + (readable ? "SELECT 1;" : "REVOKE SELECT ON pg_catalog." + catalog + " FROM PUBLIC;"),
+            cancellationToken: CancellationToken.None);
 
         try
         {
@@ -72,7 +73,8 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
 
             listener.Dispose();
             scope.Stop();
-            var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+            var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+                CancellationToken.None));
 
             // Assert
             _output.WriteLine("catalog={0}; readable={1}; target-exists={2}; mixed={3}; native-command-batches={4}",
@@ -86,19 +88,21 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
                 Assert.Equal("P1002", Assert.IsType<PostgresException>(failure).SqlState);
                 Assert.Equal(2, await ScalarIntAsync(connectionString,
                     "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='drop_visibility'::regclass "
-                    + "AND attnum>0 AND NOT attisdropped;"));
+                    + "AND attnum>0 AND NOT attisdropped;", cancellationToken: CancellationToken.None));
             }
             else
             {
                 Assert.Null(failure);
             }
 
-            Assert.Equal(9, await ScalarIntAsync(connectionString, "SELECT unrelated FROM drop_visibility;"));
+            Assert.Equal(9, await ScalarIntAsync(connectionString, "SELECT unrelated FROM drop_visibility;",
+                cancellationToken: CancellationToken.None));
         }
         finally
         {
             await ExecuteSqlAsync(connectionString, "ALTER TABLE drop_visibility OWNER TO postgres; "
-                + "REVOKE USAGE, CREATE ON SCHEMA public FROM " + role + "; DROP ROLE " + role + ";");
+                + "REVOKE USAGE, CREATE ON SCHEMA public FROM " + role + "; DROP ROLE " + role + ";",
+                cancellationToken: CancellationToken.None);
         }
     }
 
@@ -116,7 +120,7 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
             + "CREATE TABLE drop_visibility(source integer, unrelated integer); "
             + "INSERT INTO drop_visibility VALUES(2,9); ALTER TABLE drop_visibility OWNER TO " + role + "; "
             + "REVOKE SELECT ON pg_catalog.pg_depend FROM PUBLIC; "
-            + "GRANT SELECT ON pg_catalog.pg_depend TO " + role + ";");
+            + "GRANT SELECT ON pg_catalog.pg_depend TO " + role + ";", cancellationToken: CancellationToken.None);
 
         try
         {
@@ -131,18 +135,24 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
             var initial = await runner.AnalyzeAsync(context, builder.Operations,
                 new SafeMigrationRunOptions("generated-drop-readable-before-revoke"), CancellationToken.None);
 
-            await ExecuteSqlAsync(connectionString, "REVOKE SELECT ON pg_catalog.pg_depend FROM " + role + ";");
-            var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+            await ExecuteSqlAsync(connectionString, "REVOKE SELECT ON pg_catalog.pg_depend FROM " + role + ";",
+                cancellationToken: CancellationToken.None);
+            var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+                CancellationToken.None));
+
             var repeated = await runner.AnalyzeAsync(context, builder.Operations,
                 new SafeMigrationRunOptions("generated-drop-unreadable-after-revoke"), CancellationToken.None);
-            var protectedRows = await ScalarStringAsync(connectionString,
-                "SELECT source::text || ':' || unrelated::text FROM drop_visibility;");
 
-            await ExecuteSqlAsync(connectionString, "GRANT SELECT ON pg_catalog.pg_depend TO " + role + ";");
+            var protectedRows = await ScalarStringAsync(connectionString,
+                "SELECT source::text || ':' || unrelated::text FROM drop_visibility;",
+                cancellationToken: CancellationToken.None);
+
+            await ExecuteSqlAsync(connectionString, "GRANT SELECT ON pg_catalog.pg_depend TO " + role + ";",
+                cancellationToken: CancellationToken.None);
             var restored = await runner.AnalyzeAsync(context, builder.Operations,
                 new SafeMigrationRunOptions("generated-drop-readable-after-regrant"), CancellationToken.None);
 
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
             // Assert
             Assert.Equal(SafeMigrationAction.Apply, Assert.Single(initial.Assessments).Action);
@@ -151,16 +161,18 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
             Assert.Equal("generated_column_drop_unproven", repeated.Assessments[0].AnalysisCode);
             Assert.Equal("2:9", protectedRows);
             Assert.Equal(SafeMigrationAction.Apply, Assert.Single(restored.Assessments).Action);
-            Assert.Equal(9, await ScalarIntAsync(connectionString, "SELECT unrelated FROM drop_visibility;"));
+            Assert.Equal(9, await ScalarIntAsync(connectionString, "SELECT unrelated FROM drop_visibility;",
+                cancellationToken: CancellationToken.None));
             Assert.Equal(1, await ScalarIntAsync(connectionString,
                 "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid='drop_visibility'::regclass "
-                + "AND attnum>0 AND NOT attisdropped;"));
+                + "AND attnum>0 AND NOT attisdropped;", cancellationToken: CancellationToken.None));
         }
         finally
         {
             await ExecuteSqlAsync(connectionString, "ALTER TABLE drop_visibility OWNER TO postgres; "
                 + "REVOKE SELECT ON pg_catalog.pg_depend FROM " + role + "; "
-                + "REVOKE USAGE, CREATE ON SCHEMA public FROM " + role + "; DROP ROLE " + role + ";");
+                + "REVOKE USAGE, CREATE ON SCHEMA public FROM " + role + "; DROP ROLE " + role + ";",
+                cancellationToken: CancellationToken.None);
         }
     }
 }

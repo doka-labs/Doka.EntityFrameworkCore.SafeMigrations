@@ -12,7 +12,7 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
         var connectionString = await CreateDatabaseAsync(token);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE \"__LegacyMigrationsHistory\" (\"MigrationId\" text NOT NULL); "
-            + "INSERT INTO \"__LegacyMigrationsHistory\" VALUES ('legacy-unchanged');");
+            + "INSERT INTO \"__LegacyMigrationsHistory\" VALUES ('legacy-unchanged');", cancellationToken: token);
         var barrier = new MigrationAdmissionBarrier(expectedArrivals: 1);
         var secondIdentity = $"sm-second-{Guid.NewGuid():N}";
         var secondConnection = new NpgsqlConnectionStringBuilder(connectionString)
@@ -43,9 +43,11 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
 
         var historyRows = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM \"__ApplicationDbContextMigrationsHistory\" "
-            + $"WHERE \"MigrationId\" = '{CoreConvergenceMigration.MigrationIdentifier}';");
+            + $"WHERE \"MigrationId\" = '{CoreConvergenceMigration.MigrationIdentifier}';", cancellationToken: token);
+
         var legacyRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM \"__LegacyMigrationsHistory\" WHERE \"MigrationId\" = 'legacy-unchanged';");
+            "SELECT COUNT(*) FROM \"__LegacyMigrationsHistory\" WHERE \"MigrationId\" = 'legacy-unchanged';",
+            cancellationToken: token);
 
         // Assert
         Assert.True(waiterObserved);
@@ -85,10 +87,11 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
 
         var leftTables = await ScalarIntAsync(leftConnectionString,
             "SELECT COUNT(*) FROM information_schema.tables "
-            + "WHERE table_schema = current_schema() AND table_name = 'pipeline_state';");
+            + "WHERE table_schema = current_schema() AND table_name = 'pipeline_state';", cancellationToken: token);
+
         var rightTables = await ScalarIntAsync(rightConnectionString,
             "SELECT COUNT(*) FROM information_schema.tables "
-            + "WHERE table_schema = current_schema() AND table_name = 'pipeline_state';");
+            + "WHERE table_schema = current_schema() AND table_name = 'pipeline_state';", cancellationToken: token);
 
         // Assert
         Assert.True(bothIncomplete);
@@ -132,6 +135,7 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests
         {
             var waiting = Convert.ToBoolean(await command.ExecuteScalarAsync(cancellationToken),
                 CultureInfo.InvariantCulture);
+
             if (waiting)
             {
                 return true;

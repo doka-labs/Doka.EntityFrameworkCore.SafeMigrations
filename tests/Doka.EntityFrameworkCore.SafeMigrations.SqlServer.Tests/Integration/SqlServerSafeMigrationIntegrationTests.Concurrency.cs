@@ -16,7 +16,7 @@ public sealed class SqlServerSafeMigrationConcurrencyIntegrationTests : SqlServe
     public async Task ConcurrentEfMigratorsApplyHistoryAndSchemaExactlyOnce()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var firstContext = CreateContext(connectionString);
         await using var secondContext = CreateContext(connectionString);
 
@@ -27,39 +27,46 @@ public sealed class SqlServerSafeMigrationConcurrencyIntegrationTests : SqlServe
         var migrationCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM dbo.__EFMigrationsHistory "
-            + $"WHERE MigrationId = N'{SqlServerHistoryMigration.MigrationIdentifier}';");
+            + $"WHERE MigrationId = N'{SqlServerHistoryMigration.MigrationIdentifier}';",
+            cancellationToken: CancellationToken.None);
 
         var totalHistoryRows = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM dbo.__EFMigrationsHistory;");
+            "SELECT COUNT(*) FROM dbo.__EFMigrationsHistory;", cancellationToken: CancellationToken.None);
 
         var safeTableCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.safe_history_probe', N'U');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.safe_history_probe', N'U');",
+            cancellationToken: CancellationToken.None);
 
         var ordinaryTableCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.ordinary_pipeline_probe', N'U');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.ordinary_pipeline_probe', N'U');",
+            cancellationToken: CancellationToken.None);
 
         var requiredCaptionCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.safe_history_probe', N'U') "
             + "AND name = N'Caption' AND system_type_id = 231 AND max_length = 160 "
-            + "AND is_nullable = 0 AND default_object_id <> 0;");
+            + "AND is_nullable = 0 AND default_object_id <> 0;", cancellationToken: CancellationToken.None);
 
         var primaryKeyCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.key_constraints WHERE parent_object_id = "
-            + "OBJECT_ID(N'dbo.safe_history_probe', N'U') AND name = N'PK_safe_history_probe' AND type = N'PK';");
+            + "OBJECT_ID(N'dbo.safe_history_probe', N'U') AND name = N'PK_safe_history_probe' AND type = N'PK';",
+            cancellationToken: CancellationToken.None);
 
         var checkCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.check_constraints WHERE parent_object_id = "
             + "OBJECT_ID(N'dbo.safe_history_probe', N'U') AND name = N'CK_safe_history_probe_Id' "
-            + "AND is_disabled = 0 AND is_not_trusted = 0;");
+            + "AND is_disabled = 0 AND is_not_trusted = 0;", cancellationToken: CancellationToken.None);
 
-        var safeRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.safe_history_probe;");
-        var ordinaryRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.ordinary_pipeline_probe;");
+        var safeRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.safe_history_probe;",
+            cancellationToken: CancellationToken.None);
+
+        var ordinaryRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.ordinary_pipeline_probe;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, migrationCount);
@@ -80,18 +87,18 @@ public sealed class SqlServerSafeMigrationConcurrencyIntegrationTests : SqlServe
     public async Task ConcurrentEfMigratorsRejectDriftWithoutPartialApplication()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.safe_history_probe (Id bigint NOT NULL); "
-            + "INSERT dbo.safe_history_probe (Id) VALUES (17);");
+            + "INSERT dbo.safe_history_probe (Id) VALUES (17);", cancellationToken: CancellationToken.None);
         await using var firstContext = CreateContext(connectionString);
         await using var secondContext = CreateContext(connectionString);
 
         // Act
         var originalTableId = await ScalarIntAsync(
             connectionString,
-            "SELECT OBJECT_ID(N'dbo.safe_history_probe', N'U');");
+            "SELECT OBJECT_ID(N'dbo.safe_history_probe', N'U');", cancellationToken: CancellationToken.None);
 
         var failures = await Task.WhenAll(
             Record.ExceptionAsync(() => firstContext.Database.MigrateAsync()),
@@ -99,36 +106,40 @@ public sealed class SqlServerSafeMigrationConcurrencyIntegrationTests : SqlServe
 
         var remainingTableId = await ScalarIntAsync(
             connectionString,
-            "SELECT OBJECT_ID(N'dbo.safe_history_probe', N'U');");
+            "SELECT OBJECT_ID(N'dbo.safe_history_probe', N'U');", cancellationToken: CancellationToken.None);
 
         var ordinaryTableCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.ordinary_pipeline_probe', N'U');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.ordinary_pipeline_probe', N'U');",
+            cancellationToken: CancellationToken.None);
 
         var historyRows = await ScalarIntAsync(
             connectionString,
             "IF OBJECT_ID(N'dbo.__EFMigrationsHistory', N'U') IS NULL SELECT 0; "
-            + "ELSE SELECT COUNT(*) FROM dbo.__EFMigrationsHistory;");
+            + "ELSE SELECT COUNT(*) FROM dbo.__EFMigrationsHistory;", cancellationToken: CancellationToken.None);
 
         var originalIdColumnCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.safe_history_probe', N'U') "
-            + "AND name = N'Id' AND system_type_id = 127 AND is_nullable = 0;");
+            + "AND name = N'Id' AND system_type_id = 127 AND is_nullable = 0;",
+            cancellationToken: CancellationToken.None);
 
         var newCaptionCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.safe_history_probe', N'U') "
-            + "AND name = N'Caption';");
+            + "AND name = N'Caption';", cancellationToken: CancellationToken.None);
 
         var newConstraintCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.objects WHERE parent_object_id = OBJECT_ID(N'dbo.safe_history_probe', N'U') "
-            + "AND type IN (N'PK', N'C');");
+            + "AND type IN (N'PK', N'C');", cancellationToken: CancellationToken.None);
 
-        var remainingRowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.safe_history_probe;");
+        var remainingRowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.safe_history_probe;",
+            cancellationToken: CancellationToken.None);
+
         var unchangedRows = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM dbo.safe_history_probe WHERE Id = 17;");
+            "SELECT COUNT(*) FROM dbo.safe_history_probe WHERE Id = 17;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(2, failures.Length);

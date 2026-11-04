@@ -422,7 +422,9 @@ public sealed partial class SqlServerComputedDropProjectionTests
         var matching = Live(SafeMigrationObservedState.Matching);
 
         // Act
-        var fresh = await analyzer.AnalyzeAsync(context, Array.Empty<SafeMigrationOperation>());
+        var fresh = await analyzer.AnalyzeAsync(context, Array.Empty<SafeMigrationOperation>(),
+            cancellationToken: CancellationToken.None);
+
         var result = analyzer.ValidateProjectedOperation(operation, matching, new Source(null, null));
 
         // Assert

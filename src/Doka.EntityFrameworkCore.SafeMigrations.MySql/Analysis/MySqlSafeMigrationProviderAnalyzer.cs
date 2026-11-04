@@ -106,7 +106,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
     public async Task<SafeMigrationProviderEnvironment> GetEnvironmentAsync(
         DbContext context,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -140,7 +140,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
 
     public async Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
         DbContext context,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -155,7 +155,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer : ISafeMigratio
     public Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
         DbContext context,
         IReadOnlyList<SafeMigrationOperation> operations,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     ) => AnalyzeCoreAsync(context, operations, captureRenameSources: true, cancellationToken);
 
     /// <summary>Analyzes one immutable snapshot without recursively capturing rename-source evidence.</summary>

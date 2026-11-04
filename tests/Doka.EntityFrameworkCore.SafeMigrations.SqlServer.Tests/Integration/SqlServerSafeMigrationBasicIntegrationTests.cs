@@ -16,7 +16,7 @@ public sealed class SqlServerSafeMigrationBasicIntegrationTests : SqlServerSafeM
     public async Task StrictTable_AppliesReplaysAndPassesPostflight()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -33,19 +33,20 @@ public sealed class SqlServerSafeMigrationBasicIntegrationTests : SqlServerSafeM
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-strict-create"));
+            new SafeMigrationRunOptions("sqlserver-strict-create"), cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var postflight = await runner.VerifyAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-strict-postflight"));
+            new SafeMigrationRunOptions("sqlserver-strict-postflight"), cancellationToken: CancellationToken.None);
 
         var tableCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.strict_orders', N'U');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.strict_orders', N'U');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -62,10 +63,11 @@ public sealed class SqlServerSafeMigrationBasicIntegrationTests : SqlServerSafeM
     public async Task StrictTable_RejectsDifferentDefinitionWithoutMutation()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.strict_drift (Id int NOT NULL, Caption nvarchar(20) NOT NULL); ");
+            "CREATE TABLE dbo.strict_drift (Id int NOT NULL, Caption nvarchar(20) NOT NULL); ",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -80,12 +82,13 @@ public sealed class SqlServerSafeMigrationBasicIntegrationTests : SqlServerSafeM
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-strict-drift"));
+            new SafeMigrationRunOptions("sqlserver-strict-drift"), cancellationToken: CancellationToken.None);
 
         var actualLength = await ScalarIntAsync(
             connectionString,
             "SELECT max_length / 2 FROM sys.columns "
-            + "WHERE object_id = OBJECT_ID(N'dbo.strict_drift', N'U') AND name = N'Caption';");
+            + "WHERE object_id = OBJECT_ID(N'dbo.strict_drift', N'U') AND name = N'Caption';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -100,11 +103,11 @@ public sealed class SqlServerSafeMigrationBasicIntegrationTests : SqlServerSafeM
     public async Task LegacyContainer_AddsMissingColumnAndIndexWithoutChangingExistingRows()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.legacy_orders (Id int NOT NULL PRIMARY KEY); "
-            + "INSERT INTO dbo.legacy_orders (Id) VALUES (7);");
+            + "INSERT INTO dbo.legacy_orders (Id) VALUES (7);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -121,19 +124,22 @@ public sealed class SqlServerSafeMigrationBasicIntegrationTests : SqlServerSafeM
         builder.CreateIndexIfNotExists("IX_legacy_orders_Caption", "legacy_orders", ["Caption"]);
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var rowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.legacy_orders WHERE Id = 7;");
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        var rowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.legacy_orders WHERE Id = 7;",
+            cancellationToken: CancellationToken.None);
+
         var columnCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.columns "
-            + "WHERE object_id = OBJECT_ID(N'dbo.legacy_orders', N'U') AND name = N'Caption';");
+            + "WHERE object_id = OBJECT_ID(N'dbo.legacy_orders', N'U') AND name = N'Caption';",
+            cancellationToken: CancellationToken.None);
 
         var indexCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.indexes "
             + "WHERE object_id = OBJECT_ID(N'dbo.legacy_orders', N'U') "
-            + "AND name = N'IX_legacy_orders_Caption';");
+            + "AND name = N'IX_legacy_orders_Caption';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, rowCount);
@@ -148,7 +154,7 @@ public sealed class SqlServerSafeMigrationBasicIntegrationTests : SqlServerSafeM
     public async Task ExplicitSchema_CreatesOnlyQualifiedTableAndReplays()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureSchemaExists("application");
@@ -158,15 +164,17 @@ public sealed class SqlServerSafeMigrationBasicIntegrationTests : SqlServerSafeM
             schema: "application");
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var qualifiedCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'application.qualified_orders', N'U');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'application.qualified_orders', N'U');",
+            cancellationToken: CancellationToken.None);
 
         var defaultCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.qualified_orders', N'U');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.qualified_orders', N'U');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, qualifiedCount);

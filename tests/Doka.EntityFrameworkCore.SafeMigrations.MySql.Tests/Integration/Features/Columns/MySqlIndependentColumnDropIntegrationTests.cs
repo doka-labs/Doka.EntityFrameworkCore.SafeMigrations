@@ -16,7 +16,8 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExistingKeyFixture("(1, 'a', 10), (2, 'b', 20)"));
+        await ExecuteSqlAsync(connectionString, ExistingKeyFixture("(1, 'a', 10), (2, 'b', 20)"),
+            cancellationToken: CancellationToken.None);
         var replacement = newIdentifier
             ? $"ALTER TABLE `replacement_items` ADD COLUMN `id` {IdentifierStorage} "
                 + $"NOT NULL DEFAULT ({IdentifierDefault}); "
@@ -27,18 +28,23 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
         // Act
         await ExecuteSqlAsync(connectionString,
             "ALTER TABLE `replacement_items` DROP PRIMARY KEY; "
-            + "ALTER TABLE `replacement_items` DROP COLUMN `legacy_value`; " + replacement);
+            + "ALTER TABLE `replacement_items` DROP COLUMN `legacy_value`; " + replacement,
+            cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `replacement_items`;");
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `replacement_items`;",
+            cancellationToken: CancellationToken.None);
+
         var primary = await ScalarStringAsync(connectionString,
             "SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY ORDINAL_POSITION) "
             + "FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'replacement_items' AND CONSTRAINT_NAME = 'PRIMARY';");
+            + "AND TABLE_NAME = 'replacement_items' AND CONSTRAINT_NAME = 'PRIMARY';",
+            cancellationToken: CancellationToken.None);
 
         var identifierDefault = newIdentifier
             ? await ScalarStringAsync(connectionString,
                 "SELECT COLUMN_DEFAULT FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-                + "AND TABLE_NAME = 'replacement_items' AND COLUMN_NAME = 'id';")
+                + "AND TABLE_NAME = 'replacement_items' AND COLUMN_NAME = 'id';",
+                cancellationToken: CancellationToken.None)
             : null;
 
         // Assert
@@ -56,17 +62,21 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExistingKeyFixture("(1, 'a', 10), (2, 'b', 20)"));
+        await ExecuteSqlAsync(connectionString, ExistingKeyFixture("(1, 'a', 10), (2, 'b', 20)"),
+            cancellationToken: CancellationToken.None);
 
         // Act
         var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString,
-            "ALTER TABLE `replacement_items` ADD COLUMN `id` char(36) NOT NULL DEFAULT (UUID());"));
+            "ALTER TABLE `replacement_items` ADD COLUMN `id` char(36) NOT NULL DEFAULT (UUID());",
+            cancellationToken: CancellationToken.None));
 
         var identifierColumns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'replacement_items' AND COLUMN_NAME = 'id';");
+            + "AND TABLE_NAME = 'replacement_items' AND COLUMN_NAME = 'id';",
+            cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `replacement_items`;");
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `replacement_items`;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(2, rows);
@@ -90,7 +100,8 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExistingKeyFixture("(1, 'a', 10), (2, 'b', 20)"));
+        await ExecuteSqlAsync(connectionString, ExistingKeyFixture("(1, 'a', 10), (2, 'b', 20)"),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operations = ReplacementOperations(newIdentifier: false).Take(4).ToArray();
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -100,18 +111,20 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
             new SafeMigrationRunOptions("independent-drop-existing-key"), CancellationToken.None);
 
         preflight.ThrowIfBlocked();
-        await ExecuteIndependentDropAsync(context, connectionString, operations, script);
+        await ExecuteIndependentDropAsync(context, connectionString, operations, script,
+            cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(context, operations,
             new SafeMigrationRunOptions("independent-drop-existing-final"), CancellationToken.None);
 
         var rows = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM `replacement_items` WHERE (`event_id` = 1 AND `tag_id` = 10) "
-            + "OR (`event_id` = 2 AND `tag_id` = 20);");
+            + "OR (`event_id` = 2 AND `tag_id` = 20);", cancellationToken: CancellationToken.None);
 
         var primary = await ScalarStringAsync(connectionString,
             "SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY ORDINAL_POSITION) "
             + "FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'replacement_items' AND CONSTRAINT_NAME = 'PRIMARY';");
+            + "AND TABLE_NAME = 'replacement_items' AND CONSTRAINT_NAME = 'PRIMARY';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -133,7 +146,8 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExistingKeyFixture("(1, 'a', 10), (2, 'b', 10)"));
+        await ExecuteSqlAsync(connectionString, ExistingKeyFixture("(1, 'a', 10), (2, 'b', 10)"),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operations = ReplacementOperations(newIdentifier: true);
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -143,7 +157,8 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
             new SafeMigrationRunOptions("independent-drop-expression-key"), CancellationToken.None);
 
         preflight.ThrowIfBlocked();
-        await ExecuteIndependentDropAsync(context, connectionString, operations, script);
+        await ExecuteIndependentDropAsync(context, connectionString, operations, script,
+            cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(context, operations,
             new SafeMigrationRunOptions("independent-drop-expression-final"), CancellationToken.None);
 
@@ -151,12 +166,15 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
             new SafeMigrationRunOptions("independent-drop-expression-rerun"), CancellationToken.None);
 
         rerun.ThrowIfBlocked();
-        await ExecuteIndependentDropAsync(context, connectionString, operations, script);
+        await ExecuteIndependentDropAsync(context, connectionString, operations, script,
+            cancellationToken: CancellationToken.None);
         var identifiers = await ScalarIntAsync(connectionString,
             "SELECT COUNT(DISTINCT `id`) FROM `replacement_items` WHERE `id` IS NOT NULL "
-            + (Fixture.IsMariaDb ? "AND CHAR_LENGTH(`id`) = 36;" : "AND `id` = `event_id`;"));
+            + (Fixture.IsMariaDb ? "AND CHAR_LENGTH(`id`) = 36;" : "AND `id` = `event_id`;"),
+            cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `replacement_items`;");
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `replacement_items`;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
@@ -178,7 +196,7 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExistingKeyFixture(rows));
+        await ExecuteSqlAsync(connectionString, ExistingKeyFixture(rows), cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operations = ReplacementOperations(newIdentifier: false);
 
@@ -188,9 +206,11 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
 
         var legacy = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'replacement_items' AND COLUMN_NAME = 'legacy_value';");
+            + "AND TABLE_NAME = 'replacement_items' AND COLUMN_NAME = 'legacy_value';",
+            cancellationToken: CancellationToken.None);
 
-        var retained = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `replacement_items`;");
+        var retained = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `replacement_items`;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -209,7 +229,8 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
         await ExecuteSqlAsync(connectionString, ExistingKeyFixture("(1, 'a', 10), (2, 'b', 20)")
             + $"ALTER TABLE `replacement_items` ADD COLUMN `id` {IdentifierStorage} "
             + $"NOT NULL DEFAULT ({IdentifierDefault}); "
-            + $"UPDATE `replacement_items` SET `id` = {DuplicateIdentifierLiteral};");
+            + $"UPDATE `replacement_items` SET `id` = {DuplicateIdentifierLiteral};",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operations = ReplacementOperations(newIdentifier: true);
@@ -220,7 +241,8 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
 
         var legacy = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'replacement_items' AND COLUMN_NAME = 'legacy_value';");
+            + "AND TABLE_NAME = 'replacement_items' AND COLUMN_NAME = 'legacy_value';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -242,7 +264,7 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `replacement_items` (`id` int NOT NULL PRIMARY KEY, `legacy_value` int NULL, "
             + "`tag_id` int NULL, KEY `ix_transformed` (`legacy_value`, `tag_id`)) ENGINE=InnoDB; "
-            + "INSERT INTO `replacement_items` VALUES (1, 2, 3);");
+            + "INSERT INTO `replacement_items` VALUES (1, 2, 3);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -254,15 +276,17 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
             new SafeMigrationRunOptions("independent-drop-index-identity"), CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteIndependentDropAsync(context, connectionString, builder.Operations, script);
+        await ExecuteIndependentDropAsync(context, connectionString, builder.Operations, script,
+            cancellationToken: CancellationToken.None);
         var physical = await ScalarStringAsync(connectionString,
             "SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) FROM INFORMATION_SCHEMA.STATISTICS "
             + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'replacement_items' "
-            + "AND INDEX_NAME = 'ix_transformed';");
+            + "AND INDEX_NAME = 'ix_transformed';", cancellationToken: CancellationToken.None);
 
         var redundant = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'replacement_items' AND INDEX_NAME = 'ix_requested';");
+            + "AND TABLE_NAME = 'replacement_items' AND INDEX_NAME = 'ix_requested';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
@@ -282,13 +306,15 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExistingKeyFixture("(1, 'a', 10), (2, 'b', 20)"));
+        await ExecuteSqlAsync(connectionString, ExistingKeyFixture("(1, 'a', 10), (2, 'b', 20)"),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operations = ReplacementOperations(newIdentifier: true);
         await ExecuteOperationsAsync(context, operations.Take(appliedCount).ToArray(), CancellationToken.None);
         var before = appliedCount == 3
             ? await ScalarStringAsync(connectionString,
-                "SELECT GROUP_CONCAT(`id` ORDER BY `event_id`) FROM `replacement_items`;")
+                "SELECT GROUP_CONCAT(`id` ORDER BY `event_id`) FROM `replacement_items`;",
+                cancellationToken: CancellationToken.None)
             : null;
 
         // Act
@@ -298,7 +324,8 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, operations, CancellationToken.None);
         var after = await ScalarStringAsync(connectionString,
-            "SELECT GROUP_CONCAT(`id` ORDER BY `event_id`) FROM `replacement_items`;");
+            "SELECT GROUP_CONCAT(`id` ORDER BY `event_id`) FROM `replacement_items`;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(appliedCount == 3 ? SafeMigrationReportStatus.Ready
@@ -330,7 +357,8 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
             + "CREATE TABLE `dependency_items` (`id` int NOT NULL PRIMARY KEY, `legacy_value` int NULL, "
             + "`owner_id` int NULL, CONSTRAINT `fk_dependency_owner` FOREIGN KEY (`owner_id`) "
             + "REFERENCES `dependency_owners` (`id`) ON DELETE SET NULL) ENGINE=InnoDB; "
-            + "INSERT INTO `dependency_owners` VALUES (1); INSERT INTO `dependency_items` VALUES (1, 2, 1);");
+            + "INSERT INTO `dependency_owners` VALUES (1); INSERT INTO `dependency_items` VALUES (1, 2, 1);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (removeForeignKey)
@@ -356,7 +384,8 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
 
         var nullable = await ScalarStringAsync(connectionString,
             "SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'dependency_items' AND COLUMN_NAME = 'owner_id';");
+            + "AND TABLE_NAME = 'dependency_items' AND COLUMN_NAME = 'owner_id';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(removeForeignKey ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
@@ -376,7 +405,8 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `dependency_items` (`id` int NOT NULL PRIMARY KEY, `legacy_value` int NULL) "
-            + "ENGINE=InnoDB; INSERT INTO `dependency_items` VALUES (1, 2);");
+            + "ENGINE=InnoDB; INSERT INTO `dependency_items` VALUES (1, 2);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -401,7 +431,8 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExistingKeyFixture("(1, 'a', 10), (2, 'b', 20)"));
+        await ExecuteSqlAsync(connectionString, ExistingKeyFixture("(1, 'a', 10), (2, 'b', 20)"),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operations = ReplacementOperations(newIdentifier: true);
         var addition = operations[2];
@@ -415,7 +446,7 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, operations, CancellationToken.None);
         var identifiers = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(DISTINCT `id`) FROM `replacement_items`;");
+            "SELECT COUNT(DISTINCT `id`) FROM `replacement_items`;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
@@ -433,7 +464,8 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ExistingKeyFixture("(1, 'a', 10), (2, 'b', 20)"));
+        await ExecuteSqlAsync(connectionString, ExistingKeyFixture("(1, 'a', 10), (2, 'b', 20)"),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operations = ReplacementOperations(newIdentifier: true);
 
@@ -444,15 +476,19 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, operations.Take(3).ToArray(), CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            $"UPDATE `replacement_items` SET `id` = {DuplicateIdentifierLiteral};");
+            $"UPDATE `replacement_items` SET `id` = {DuplicateIdentifierLiteral};",
+            cancellationToken: CancellationToken.None);
 
         var failure = await Record.ExceptionAsync(() => ExecuteIndependentDropAsync(context, connectionString,
-            operations.Skip(3).ToArray(), script));
+            operations.Skip(3).ToArray(), script, cancellationToken: CancellationToken.None));
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `replacement_items`;");
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `replacement_items`;",
+            cancellationToken: CancellationToken.None);
+
         var primary = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'replacement_items' AND CONSTRAINT_TYPE = 'PRIMARY KEY';");
+            + "AND TABLE_NAME = 'replacement_items' AND CONSTRAINT_TYPE = 'PRIMARY KEY';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
@@ -538,18 +574,27 @@ public sealed partial class MySqlIndependentColumnDropIntegrationTests : MySqlSa
         : "1";
 
     /// <summary>Executes the same guarded SQL through either supported emission path.</summary>
-    private static Task ExecuteIndependentDropAsync(DbContext context, string connectionString,
-        IReadOnlyList<MigrationOperation> operations, bool script)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static Task ExecuteIndependentDropAsync(
+        DbContext context,
+        string connectionString,
+        IReadOnlyList<MigrationOperation> operations,
+        bool script,
+        CancellationToken cancellationToken
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (!script)
         {
-            return ExecuteOperationsAsync(context, operations, CancellationToken.None);
+            return ExecuteOperationsAsync(context, operations, cancellationToken);
         }
 
         var commands = context.GetService<IMigrationsSqlGenerator>().Generate(operations, context.Model,
             MigrationsSqlGenerationOptions.Script);
 
         return ExecuteMigrationScriptAsync(connectionString,
-            string.Join(Environment.NewLine, commands.Select(static command => command.CommandText)));
+            string.Join(Environment.NewLine, commands.Select(static command => command.CommandText)),
+            cancellationToken: cancellationToken);
     }
 }

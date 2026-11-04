@@ -20,13 +20,15 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             + "CONSTRAINT uq_constraint_identity_legacy_a UNIQUE (code, tenant_id), "
             + "CONSTRAINT uq_constraint_identity_legacy_b UNIQUE (code, tenant_id), "
             + "CONSTRAINT ck_constraint_identity_legacy_a CHECK (quantity >= 0), "
-            + "CONSTRAINT ck_constraint_identity_legacy_b CHECK (quantity >= 0));");
+            + "CONSTRAINT ck_constraint_identity_legacy_b CHECK (quantity >= 0));",
+            cancellationToken: CancellationToken.None);
 
         var legacyConstraintCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
             + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-            + "WHERE c.relname = 'constraint_identity' AND co.contype IN ('u', 'c');");
+            + "WHERE c.relname = 'constraint_identity' AND co.contype IN ('u', 'c');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -43,10 +45,11 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("constraint-identity"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("constraint-identity"),
+            CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(
@@ -68,14 +71,15 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
                 + "WHERE c.relname = 'constraint_identity' "
                 + "AND co.conname IN ('uq_constraint_identity_expected', "
-                + "'ck_constraint_identity_expected');"));
+                + "'ck_constraint_identity_expected');", cancellationToken: CancellationToken.None));
         Assert.Equal(
             legacyConstraintCount,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
                 + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-                + "WHERE c.relname = 'constraint_identity' AND co.contype IN ('u', 'c');"));
+                + "WHERE c.relname = 'constraint_identity' AND co.contype IN ('u', 'c');",
+                cancellationToken: CancellationToken.None));
         Assert.True(legacyConstraintCount >= 3);
     }
 
@@ -88,7 +92,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             "CREATE TABLE constraint_nonidentity ("
             + "code integer NULL, alternate_code integer NULL, quantity integer NOT NULL, "
             + "CONSTRAINT uq_constraint_nonidentity_legacy UNIQUE (code), "
-            + "CONSTRAINT ck_constraint_nonidentity_legacy CHECK (quantity >= 0));");
+            + "CONSTRAINT ck_constraint_nonidentity_legacy CHECK (quantity >= 0));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -105,14 +110,16 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
 
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("constraint-nonidentity"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("constraint-nonidentity"),
+            CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var postflight = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("constraint-nonidentity-post"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("constraint-nonidentity-post"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.All(
@@ -134,7 +141,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             connectionString,
             "CREATE TABLE primary_key_identity ("
             + "id integer NOT NULL, tenant_id integer NOT NULL, "
-            + "CONSTRAINT pk_primary_key_legacy PRIMARY KEY (id, tenant_id));");
+            + "CONSTRAINT pk_primary_key_legacy PRIMARY KEY (id, tenant_id));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -145,10 +153,11 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("primary-key-identity"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("primary-key-identity"),
+            CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
 
@@ -164,7 +173,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 connectionString,
                 "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
                 + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-                + "WHERE c.relname = 'primary_key_identity' AND co.contype = 'p';"));
+                + "WHERE c.relname = 'primary_key_identity' AND co.contype = 'p';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -175,7 +185,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             connectionString,
             "CREATE TABLE primary_key_singleton ("
             + "id integer NOT NULL, alternate_id integer NOT NULL, "
-            + "CONSTRAINT pk_primary_key_singleton_legacy PRIMARY KEY (id));");
+            + "CONSTRAINT pk_primary_key_singleton_legacy PRIMARY KEY (id));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -186,10 +197,12 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("primary-key-singleton"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("primary-key-singleton"),
+            CancellationToken.None);
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-            ExecuteOperationsAsync(context, builder.Operations));
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
+
         var assessment = Assert.Single(report.Assessments);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -203,7 +216,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 connectionString,
                 "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
                 + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-                + "WHERE c.relname = 'primary_key_singleton' AND co.contype = 'p';"));
+                + "WHERE c.relname = 'primary_key_singleton' AND co.contype = 'p';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -215,7 +229,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             "CREATE TABLE constraint_namespace_owner (id integer NOT NULL, code integer NULL);"
             + "CREATE INDEX pk_constraint_namespace_target ON constraint_namespace_owner (id);"
             + "CREATE INDEX uq_constraint_namespace_target ON constraint_namespace_owner (code);"
-            + "CREATE TABLE constraint_namespace_target (id integer NOT NULL, code integer NULL);");
+            + "CREATE TABLE constraint_namespace_target (id integer NOT NULL, code integer NULL);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -230,7 +245,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("constraint-namespace"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("constraint-namespace"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.All(
@@ -244,7 +260,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         foreach (var operation in builder.Operations)
         {
             var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-                ExecuteOperationsAsync(context, [operation]));
+                ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
             Assert.Equal("P1001", exception.SqlState);
             Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
@@ -256,14 +272,15 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 connectionString,
                 "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
                 + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-                + "WHERE c.relname = 'constraint_namespace_target' AND co.contype IN ('p', 'u');"));
+                + "WHERE c.relname = 'constraint_namespace_target' AND co.contype IN ('p', 'u');",
+                cancellationToken: CancellationToken.None));
         Assert.Equal(
             2,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM pg_catalog.pg_class c "
                 + "WHERE c.relname IN ('pk_constraint_namespace_target', "
-                + "'uq_constraint_namespace_target');"));
+                + "'uq_constraint_namespace_target');", cancellationToken: CancellationToken.None));
     }
 
     [Theory]
@@ -289,7 +306,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             + "CREATE TABLE identity_children ("
             + "id integer NOT NULL PRIMARY KEY, parent_id integer NOT NULL, tenant_id integer NOT NULL, "
             + $"CONSTRAINT \"{legacyName}\" FOREIGN KEY (parent_id, tenant_id) "
-            + $"REFERENCES identity_parents (id, tenant_id) ON DELETE CASCADE{secondConstraint});");
+            + $"REFERENCES identity_parents (id, tenant_id) ON DELETE CASCADE{secondConstraint});",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -303,10 +321,11 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("foreign-key-identity"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("foreign-key-identity"),
+            CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
 
@@ -320,7 +339,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 connectionString,
                 "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
                 + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-                + "WHERE c.relname = 'identity_children' AND co.contype = 'f';"));
+                + "WHERE c.relname = 'identity_children' AND co.contype = 'f';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -343,7 +363,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             + "REFERENCES identity_precedence_parents (id) ON DELETE CASCADE);"
             + "CREATE INDEX ix_identity_precedence_expected "
             + "ON identity_precedence_children (alternate_code);"
-            + "CREATE INDEX ix_identity_precedence_legacy ON identity_precedence_children (code);");
+            + "CREATE INDEX ix_identity_precedence_legacy ON identity_precedence_children (code);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -371,7 +392,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("identity-precedence"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("identity-precedence"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.All(
@@ -385,7 +407,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         foreach (var operation in builder.Operations)
         {
             var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-                ExecuteOperationsAsync(context, [operation]));
+                ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
             Assert.Equal("P1001", exception.SqlState);
             Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
@@ -397,7 +419,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 connectionString,
                 "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
                 + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-                + "WHERE c.relname = 'identity_precedence_children' AND co.contype = 'f';"));
+                + "WHERE c.relname = 'identity_precedence_children' AND co.contype = 'f';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Theory]
@@ -415,7 +438,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             + "CREATE TABLE identity_action_children ("
             + "id integer NOT NULL PRIMARY KEY, parent_id integer NULL, "
             + "CONSTRAINT fk_identity_action_legacy FOREIGN KEY (parent_id) "
-            + "REFERENCES identity_action_parents (id) ON DELETE CASCADE);");
+            + "REFERENCES identity_action_parents (id) ON DELETE CASCADE);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -430,10 +453,11 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
 
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("foreign-key-actions"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("foreign-key-actions"),
+            CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var assessment = Assert.Single(preflight.Assessments);
 
@@ -446,7 +470,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
                 connectionString,
                 "SELECT COUNT(*) FROM pg_catalog.pg_constraint co "
                 + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
-                + "WHERE c.relname = 'identity_action_children' AND co.contype = 'f';"));
+                + "WHERE c.relname = 'identity_action_children' AND co.contype = 'f';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -469,7 +494,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             + "CREATE TABLE semantic_child ("
             + "parent_id integer NULL, alternate_parent_id integer NULL, "
             + "CONSTRAINT fk_semantic_child FOREIGN KEY (parent_id, alternate_parent_id) "
-            + "REFERENCES semantic_parent (id, alternate_id) MATCH FULL DEFERRABLE INITIALLY DEFERRED);");
+            + "REFERENCES semantic_parent (id, alternate_id) MATCH FULL DEFERRABLE INITIALLY DEFERRED);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -496,7 +522,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("constraint-semantics"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("constraint-semantics"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(4, report.Assessments.Count);
@@ -511,7 +538,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         foreach (var operation in builder.Operations)
         {
             var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-                ExecuteOperationsAsync(context, [operation]));
+                ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
             Assert.Equal("P1001", exception.SqlState);
             Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
@@ -534,7 +561,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             + "CONSTRAINT fk_partition_identity FOREIGN KEY (tenant_id, parent_id) "
             + "REFERENCES partition_identity_parents (tenant_id, id)) PARTITION BY RANGE (tenant_id);"
             + "CREATE TABLE partition_identity_leaf PARTITION OF partition_identity_root "
-            + "FOR VALUES FROM (0) TO (100);");
+            + "FOR VALUES FROM (0) TO (100);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -561,7 +588,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("partition-constraint-identity"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("partition-constraint-identity"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.All(
@@ -575,7 +603,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         for (var index = 0; index < builder.Operations.Count; index++)
         {
             var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-                ExecuteOperationsAsync(context, [builder.Operations[index]]));
+                ExecuteOperationsAsync(context, [builder.Operations[index]], CancellationToken.None));
 
             Assert.Equal("P1001", exception.SqlState);
             Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
@@ -596,7 +624,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             + "CONSTRAINT fk_partition_drop FOREIGN KEY (tenant_id, parent_id) "
             + "REFERENCES partition_drop_parents (tenant_id, id)) PARTITION BY RANGE (tenant_id);"
             + "CREATE TABLE partition_drop_leaf PARTITION OF partition_drop_root "
-            + "FOR VALUES FROM (0) TO (100);");
+            + "FOR VALUES FROM (0) TO (100);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -605,7 +633,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("partition-constraint-drop"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("partition-constraint-drop"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.All(
@@ -619,7 +648,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         foreach (var operation in builder.Operations)
         {
             var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-                ExecuteOperationsAsync(context, [operation]));
+                ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
             Assert.Equal("P1001", exception.SqlState);
             Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
@@ -639,7 +668,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             connectionString,
             "CREATE TABLE unique_null_semantics ("
             + "code integer NULL, "
-            + "CONSTRAINT uq_unique_null_semantics UNIQUE NULLS NOT DISTINCT (code));");
+            + "CONSTRAINT uq_unique_null_semantics UNIQUE NULLS NOT DISTINCT (code));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -650,10 +680,11 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("unique-null-semantics"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("unique-null-semantics"),
+            CancellationToken.None);
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-            ExecuteOperationsAsync(context, builder.Operations));
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         var assessment = Assert.Single(report.Assessments);
 
@@ -679,7 +710,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             + "tenant_id integer NOT NULL, id integer NOT NULL, PRIMARY KEY (tenant_id, id));"
             + "CREATE TABLE partial_set_child (tenant_id integer NULL, parent_id integer NULL, "
             + "CONSTRAINT fk_partial_set_child FOREIGN KEY (tenant_id, parent_id) "
-            + "REFERENCES partial_set_parent (tenant_id, id) ON DELETE SET NULL (parent_id));");
+            + "REFERENCES partial_set_parent (tenant_id, id) ON DELETE SET NULL (parent_id));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -693,10 +725,11 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("partial-set-null"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("partial-set-null"),
+            CancellationToken.None);
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-            ExecuteOperationsAsync(context, builder.Operations));
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         var assessment = Assert.Single(report.Assessments);
 
@@ -723,7 +756,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             + "id integer NOT NULL, validity daterange NOT NULL, "
             + "CONSTRAINT pk_temporal_primary_key PRIMARY KEY (id, validity WITHOUT OVERLAPS));"
             + "CREATE TABLE non_enforced_check (quantity integer NOT NULL, "
-            + "CONSTRAINT ck_non_enforced_check CHECK (quantity >= 0) NOT ENFORCED);");
+            + "CONSTRAINT ck_non_enforced_check CHECK (quantity >= 0) NOT ENFORCED);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -740,7 +774,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("postgresql-18-constraints"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("postgresql-18-constraints"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(2, report.Assessments.Count);
@@ -755,7 +790,7 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
         foreach (var operation in builder.Operations)
         {
             var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-                ExecuteOperationsAsync(context, [operation]));
+                ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
             Assert.Equal("P1001", exception.SqlState);
             Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
@@ -767,15 +802,15 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
     public async Task ObservableConstraintFacets_ApplyAndReplayCanonicalDefinition()
     {
         // Arrange
-        var connectionString = await CreateConstraintMatrixTablesAsync();
+        var connectionString = await CreateConstraintMatrixTablesAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var canonical = CreateConstraintMatrixOperations(context.Database.ProviderName!);
 
         // Act
-        await ExecuteOperationsAsync(context, canonical);
-        await ExecuteOperationsAsync(context, canonical);
+        await ExecuteOperationsAsync(context, canonical, CancellationToken.None);
+        await ExecuteOperationsAsync(context, canonical, CancellationToken.None);
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, canonical, new SafeMigrationRunOptions("constraint-matrix-canonical"));
+            context, canonical, new SafeMigrationRunOptions("constraint-matrix-canonical"), CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -792,9 +827,10 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
     public async Task ObservableConstraintFacets_StrictDefinitionContract(string caseId)
     {
         // Arrange
-        var connectionString = await CreateConstraintMatrixTablesAsync();
+        var connectionString = await CreateConstraintMatrixTablesAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await ApplyConstraintMatrixWithAliasesAsync(context, connectionString);
+        await ApplyConstraintMatrixWithAliasesAsync(context, connectionString,
+            cancellationToken: CancellationToken.None);
         var expectedState = caseId == "delete-action-drift"
             ? SafeMigrationObservedState.Different
             : SafeMigrationObservedState.Matching;
@@ -812,7 +848,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions($"constraint-matrix-strict-{caseId}"));
+            context, builder.Operations, new SafeMigrationRunOptions($"constraint-matrix-strict-{caseId}"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(expectedState == SafeMigrationObservedState.Matching
@@ -842,14 +879,16 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
     public async Task ObservableConstraintFacetDrift_IsRejected(string caseId)
     {
         // Arrange
-        var connectionString = await CreateConstraintMatrixTablesAsync();
+        var connectionString = await CreateConstraintMatrixTablesAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await ApplyConstraintMatrixWithAliasesAsync(context, connectionString);
+        await ApplyConstraintMatrixWithAliasesAsync(context, connectionString,
+            cancellationToken: CancellationToken.None);
         var operations = CreateConstraintMatrixDrift(context.Database.ProviderName!, caseId);
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, operations, new SafeMigrationRunOptions($"constraint-matrix-drift-{caseId}"));
+            context, operations, new SafeMigrationRunOptions($"constraint-matrix-drift-{caseId}"),
+            CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
@@ -859,9 +898,13 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
     }
 
     /// <summary>Owns one tiny isolated database per independent contract, without another container or seed.</summary>
-    private async Task<string> CreateConstraintMatrixTablesAsync()
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
+    /// <returns>The asynchronous fixture operation or observation.</returns>
+    private async Task<string> CreateConstraintMatrixTablesAsync(CancellationToken cancellationToken)
     {
-        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var connectionString = await CreateDatabaseAsync(cancellationToken);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE constraint_matrix_parents ("
             + "id integer NOT NULL, alternate_id integer NOT NULL, PRIMARY KEY (id, alternate_id)); "
@@ -870,7 +913,8 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
             + "CREATE TABLE constraint_matrix_children ("
             + "id integer NOT NULL, alternate_id integer NOT NULL, "
             + "code character varying(30) NULL, alternate_code character varying(30) NULL, "
-            + "quantity integer NOT NULL, parent_id integer NULL, alternate_parent_id integer NULL);");
+            + "quantity integer NOT NULL, parent_id integer NULL, alternate_parent_id integer NULL);",
+            cancellationToken: cancellationToken);
 
         return connectionString;
     }
@@ -895,16 +939,28 @@ public sealed class PostgreSqlConstraintsDriftMatrixIntegrationTests : PostgreSq
     }
 
     /// <summary>Restores the same duplicate semantic aliases before each independent drift contract.</summary>
-    private static async Task ApplyConstraintMatrixWithAliasesAsync(DbContext context, string connectionString)
+    /// <param name="context">The configured fixture context.</param>
+    /// <param name="connectionString">The isolated fixture database connection string.</param>
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
+    /// <returns>The asynchronous fixture operation or observation.</returns>
+    private static async Task ApplyConstraintMatrixWithAliasesAsync(
+        DbContext context,
+        string connectionString,
+        CancellationToken cancellationToken
+    )
     {
-        await ExecuteOperationsAsync(context, CreateConstraintMatrixOperations(context.Database.ProviderName!));
+        cancellationToken.ThrowIfCancellationRequested();
+
+        await ExecuteOperationsAsync(context, CreateConstraintMatrixOperations(context.Database.ProviderName!),
+            cancellationToken);
         await ExecuteSqlAsync(connectionString,
             "ALTER TABLE constraint_matrix_children "
             + "ADD CONSTRAINT uq_constraint_matrix_duplicate UNIQUE (code, alternate_code), "
             + "ADD CONSTRAINT ck_constraint_matrix_duplicate CHECK (quantity >= 0), "
             + "ADD CONSTRAINT fk_constraint_matrix_duplicate "
             + "FOREIGN KEY (parent_id, alternate_parent_id) "
-            + "REFERENCES constraint_matrix_parents (id, alternate_id) ON UPDATE CASCADE ON DELETE SET NULL;");
+            + "REFERENCES constraint_matrix_parents (id, alternate_id) ON UPDATE CASCADE ON DELETE SET NULL;",
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>Changes one original physical facet without sharing mutable database state between cases.</summary>

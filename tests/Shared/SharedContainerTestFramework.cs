@@ -122,7 +122,9 @@ internal sealed class SharedContainerTestAssemblyRunner<TFixture> : XunitTestAss
     protected override Task AfterTestAssemblyStartingAsync() => Aggregator.RunAsync(async () =>
     {
         await base.AfterTestAssemblyStartingAsync().ConfigureAwait(false);
-        await _lifecycle.InitializeAsync(_requiresFixture).ConfigureAwait(false);
+        // WHY: xUnit's parameterless assembly-start hook does not expose a caller token.
+        // The fixture lifetime still owns and awaits the entire committed startup operation.
+        await _lifecycle.InitializeAsync(_requiresFixture, CancellationToken.None).ConfigureAwait(false);
     });
 
     protected override async Task BeforeTestAssemblyFinishedAsync()
@@ -149,15 +151,21 @@ internal sealed class SharedContainerTestAssemblyRunner<TFixture> : XunitTestAss
             }
 
             var run = _scheduler.RunAsync(
-                () => new SharedContainerTestCollectionRunner<TFixture>(
-                    testCollection,
-                    testCases,
-                    DiagnosticMessageSink,
-                    messageBus,
-                    TestCaseOrderer,
-                    new ExceptionAggregator(Aggregator),
-                    cancellationTokenSource,
-                    _lifecycle.Fixture).RunAsync(),
+                token =>
+                {
+                    token.ThrowIfCancellationRequested();
+
+                    // WHY: xUnit owns the source; the scheduler forwards this same source's token.
+                    return new SharedContainerTestCollectionRunner<TFixture>(
+                        testCollection,
+                        testCases,
+                        DiagnosticMessageSink,
+                        messageBus,
+                        TestCaseOrderer,
+                        new ExceptionAggregator(Aggregator),
+                        cancellationTokenSource,
+                        _lifecycle.Fixture).RunAsync();
+                },
                 cancellationTokenSource.Token);
             _collectionRuns.Add(run);
 

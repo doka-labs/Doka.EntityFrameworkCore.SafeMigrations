@@ -52,13 +52,14 @@ public sealed partial class MySqlIdentifiersIntegrationTests : MySqlSafeMigratio
 
         try
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
         catch (Exception exception)
         {
             var diagnostics = await context
                 .GetService<ISafeMigrationRunner>()
-                .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("identifier-instance"));
+                .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("identifier-instance"),
+                              CancellationToken.None);
 
             var failures = diagnostics
                 .Assessments
@@ -66,16 +67,19 @@ public sealed partial class MySqlIdentifiersIntegrationTests : MySqlSafeMigratio
                 .Select(static assessment => $"{assessment.Ordinal}:{assessment.OperationKind}:"
                     + $"{assessment.ObjectName}:{assessment.ObservedState}:{assessment.Code}");
 
-            var catalogCheck = await DescribeCheckConstraintAsync(connectionString, check);
+            var catalogCheck = await DescribeCheckConstraintAsync(connectionString, check,
+                cancellationToken: CancellationToken.None);
+
             throw new InvalidOperationException(
                 $"Identifier convergence failed: {string.Join(";", failures)}. " + $"Catalog check: {catalogCheck}",
                 exception);
         }
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("identifier-instance"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("identifier-instance"),
+                          CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(

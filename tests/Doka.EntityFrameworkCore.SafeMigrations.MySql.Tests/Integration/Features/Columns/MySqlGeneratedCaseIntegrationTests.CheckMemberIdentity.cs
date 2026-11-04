@@ -31,7 +31,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         // Act
         var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("captured-check-column-identity"), CancellationToken.None);
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
         var postflight = await context.GetService<ISafeMigrationRunner>().VerifyAsync(context, builder.Operations,
             new SafeMigrationRunOptions("captured-check-column-identity-verify"), CancellationToken.None);
 

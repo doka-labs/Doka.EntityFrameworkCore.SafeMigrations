@@ -15,11 +15,12 @@ public sealed class SqlServerIndexDropColumnTransitionIntegrationTests : SqlServ
     public async Task OrdinaryIndexDropWideningAppliesAndReplays(bool indexExists)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.index_drop_values (Value int NOT NULL); "
             + "INSERT dbo.index_drop_values VALUES (-2147483648), (2147483647);"
-            + (indexExists ? " CREATE INDEX IX_upgrade_value ON dbo.index_drop_values(Value);" : string.Empty));
+            + (indexExists ? " CREATE INDEX IX_upgrade_value ON dbo.index_drop_values(Value);" : string.Empty),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -31,26 +32,30 @@ public sealed class SqlServerIndexDropColumnTransitionIntegrationTests : SqlServ
 
         // Act
         var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-index-drop-widening-upgrade"));
+            new SafeMigrationRunOptions("sqlserver-index-drop-widening-upgrade"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var replay = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-index-drop-widening-replay"));
+            new SafeMigrationRunOptions("sqlserver-index-drop-widening-replay"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var verified = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-index-drop-widening-postflight"));
+            new SafeMigrationRunOptions("sqlserver-index-drop-widening-postflight"),
+            cancellationToken: CancellationToken.None);
 
         var widened = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.index_drop_values') "
-            + "AND name=N'Value' AND system_type_id=127 AND is_nullable=0;");
+            + "AND name=N'Value' AND system_type_id=127 AND is_nullable=0;", cancellationToken: CancellationToken.None);
 
         var indexes = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.index_drop_values') "
-            + "AND name=N'IX_upgrade_value';");
+            + "AND name=N'IX_upgrade_value';", cancellationToken: CancellationToken.None);
 
         var retained = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.index_drop_values WHERE Value IN(-2147483648,2147483647);");
+            "SELECT COUNT(*) FROM dbo.index_drop_values WHERE Value IN(-2147483648,2147483647);",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -73,13 +78,14 @@ public sealed class SqlServerIndexDropColumnTransitionIntegrationTests : SqlServ
     public async Task OrdinaryIndexDropRetainsWideningSafetyBoundaries(string control)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.index_drop_values (Value int NULL); "
             + "INSERT dbo.index_drop_values VALUES (" + (control == "null-row" ? "NULL" : "2147483647") + "); "
             + "CREATE INDEX IX_upgrade_value ON dbo.index_drop_values(Value);"
             + (control == "remaining-index"
-                ? " CREATE INDEX IX_retained_value ON dbo.index_drop_values(Value);" : string.Empty));
+                ? " CREATE INDEX IX_retained_value ON dbo.index_drop_values(Value);" : string.Empty),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -91,16 +97,20 @@ public sealed class SqlServerIndexDropColumnTransitionIntegrationTests : SqlServ
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-index-drop-invalid-upgrade"));
+            new SafeMigrationRunOptions("sqlserver-index-drop-invalid-upgrade"),
+            cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var source = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.index_drop_values') "
-            + "AND name=N'Value' AND system_type_id=56 AND is_nullable=1;");
+            + "AND name=N'Value' AND system_type_id=56 AND is_nullable=1;", cancellationToken: CancellationToken.None);
 
         var retained = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM dbo.index_drop_values WHERE "
-            + (control == "null-row" ? "Value IS NULL;" : "Value=2147483647;"));
+            + (control == "null-row" ? "Value IS NULL;" : "Value=2147483647;"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);

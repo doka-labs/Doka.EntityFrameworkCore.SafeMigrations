@@ -15,7 +15,7 @@ public sealed partial class MySqlMemberIdentityIntegrationTests : MySqlSafeMigra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE member_rows (id int NOT NULL, Code int NULL, KEY IX_Code (Code)); "
-            + "INSERT INTO member_rows VALUES (7, 29);");
+            + "INSERT INTO member_rows VALUES (7, 29);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -26,20 +26,23 @@ public sealed partial class MySqlMemberIdentityIntegrationTests : MySqlSafeMigra
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename]);
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("member-identity-index-lifetime"));
+        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename],
+            CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("member-identity-index-lifetime"), CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("member-identity-index-lifetime-final"));
+            new SafeMigrationRunOptions("member-identity-index-lifetime-final"), CancellationToken.None);
 
         var indexes = await ScalarIntAsync(connectionString,
             "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'member_rows';");
+            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'member_rows';",
+            cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM member_rows WHERE id = 7 AND Code = 29;");
+            "SELECT COUNT(*) FROM member_rows WHERE id = 7 AND Code = 29;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(analyses).ObservedState);
@@ -63,7 +66,7 @@ public sealed partial class MySqlMemberIdentityIntegrationTests : MySqlSafeMigra
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE member_rows (id int NOT NULL, Code int NULL, UNIQUE KEY UX_Code (Code)); "
-            + "INSERT INTO member_rows VALUES (7, 29);");
+            + "INSERT INTO member_rows VALUES (7, 29);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -88,20 +91,23 @@ public sealed partial class MySqlMemberIdentityIntegrationTests : MySqlSafeMigra
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [finalEnsure]);
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("member-identity-shared-unique"));
+        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [finalEnsure],
+            CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
+            new SafeMigrationRunOptions("member-identity-shared-unique"), CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("member-identity-shared-unique-final"));
+            new SafeMigrationRunOptions("member-identity-shared-unique-final"), CancellationToken.None);
 
         var keys = await ScalarIntAsync(connectionString,
             "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'member_rows' AND NON_UNIQUE = 0;");
+            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'member_rows' AND NON_UNIQUE = 0;",
+            cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM member_rows WHERE id = 7 AND Code = 29;");
+            "SELECT COUNT(*) FROM member_rows WHERE id = 7 AND Code = 29;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(analyses).ObservedState);
@@ -163,17 +169,18 @@ public sealed partial class MySqlMemberIdentityIntegrationTests : MySqlSafeMigra
 
         // Act
         var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("member-identity-candidate-key"));
+            new SafeMigrationRunOptions("member-identity-candidate-key"), CancellationToken.None);
 
         if (!missingPrincipalColumn)
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         var foreignKeys = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS "
             + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'member_child' "
-            + "AND CONSTRAINT_NAME = 'fk_member_case' AND CONSTRAINT_TYPE = 'FOREIGN KEY';");
+            + "AND CONSTRAINT_NAME = 'fk_member_case' AND CONSTRAINT_TYPE = 'FOREIGN KEY';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(missingPrincipalColumn ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready,
@@ -189,14 +196,16 @@ public sealed partial class MySqlMemberIdentityIntegrationTests : MySqlSafeMigra
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var ownerMode = await ScalarIntAsync(connectionString, "SELECT @@lower_case_table_names;");
+        var ownerMode = await ScalarIntAsync(connectionString, "SELECT @@lower_case_table_names;",
+            cancellationToken: CancellationToken.None);
 
         // WHY: Qualified Linux containers use native mode zero, which permits
         // two exact case-distinct owners. Only member names may be folded.
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE member_rows (id int NOT NULL, Code int NULL, KEY IX_Code (Code)); "
             + "CREATE TABLE Member_Rows (id int NOT NULL, Code int NULL, KEY IX_Code (Code)); "
-            + "INSERT INTO member_rows VALUES (7, 29); INSERT INTO Member_Rows VALUES (11, 41);");
+            + "INSERT INTO member_rows VALUES (7, 29); INSERT INTO Member_Rows VALUES (11, 41);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -206,15 +215,19 @@ public sealed partial class MySqlMemberIdentityIntegrationTests : MySqlSafeMigra
 
         // Act
         var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("member-identity-exact-owners"));
+            new SafeMigrationRunOptions("member-identity-exact-owners"), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var indexes = await ScalarIntAsync(connectionString,
             "SELECT COUNT(DISTINCT TABLE_NAME, INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('member_rows', 'Member_Rows');");
+            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('member_rows', 'Member_Rows');",
+            cancellationToken: CancellationToken.None);
 
-        var firstRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM member_rows WHERE id = 7;");
-        var secondRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM Member_Rows WHERE id = 11;");
+        var firstRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM member_rows WHERE id = 7;",
+            cancellationToken: CancellationToken.None);
+
+        var secondRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM Member_Rows WHERE id = 11;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(0, ownerMode);

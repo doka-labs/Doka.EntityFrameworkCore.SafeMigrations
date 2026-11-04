@@ -3,6 +3,60 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 /// <summary>Checks option precedence, real overlapping capacity and cancellation without external services.</summary>
 public sealed class SharedContainerSchedulingTests
 {
+    /// <summary>Bounded and unlimited dispatch preserve the caller token at the owned action boundary.</summary>
+    /// <param name="maximum">The collection capacity; negative means unlimited.</param>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(-1)]
+    public async Task RunAsync_ForwardsExactCallerTokenToAction(int maximum)
+    {
+        // Arrange
+        using var cancellation = new CancellationTokenSource();
+        using var scheduler = new SharedContainerCollectionScheduler(
+            new SharedContainerExecutionPolicy(maximum, false));
+        var observed = CancellationToken.None;
+
+        // Act
+        var result = await scheduler.RunAsync(token =>
+        {
+            observed = token;
+
+            return Task.FromResult(42);
+        }, cancellation.Token);
+
+        // Assert
+        Assert.Equal(42, result);
+        Assert.Equal(cancellation.Token, observed);
+    }
+
+    /// <summary>Cancellation reaches an admitted action and still returns the owned capacity.</summary>
+    [Fact]
+    public async Task RunAsync_CancellationInsideActionReturnsCapacity()
+    {
+        // Arrange
+        using var cancellation = new CancellationTokenSource();
+        using var scheduler = new SharedContainerCollectionScheduler(new SharedContainerExecutionPolicy(1, false));
+        var admitted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // Act
+        var pending = scheduler.RunAsync(async token =>
+        {
+            admitted.SetResult();
+            await Task.Delay(Timeout.Infinite, token);
+
+            return 0;
+        }, cancellation.Token);
+        await admitted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        cancellation.Cancel();
+        var failure = await Record.ExceptionAsync(() => pending);
+        var next = await scheduler.RunAsync(_ => Task.FromResult(42), CancellationToken.None);
+
+        // Assert
+        var canceled = Assert.IsAssignableFrom<OperationCanceledException>(failure);
+        Assert.Equal(cancellation.Token, canceled.CancellationToken);
+        Assert.Equal(42, next);
+    }
+
     /// <summary>Runner options override attributes, while zero retains the CPU-count default.</summary>
     /// <param name="optionMaximum">The optional runner maximum.</param>
     /// <param name="optionDisable">The optional runner parallelization override.</param>
@@ -55,7 +109,7 @@ public sealed class SharedContainerSchedulingTests
         var activeBeforeRelease = 0;
         var startedBeforeRelease = 0;
 
-        async Task<int> RunCollectionAsync()
+        async Task<int> RunCollectionAsync(CancellationToken cancellationToken)
         {
             var nowActive = Interlocked.Increment(ref active);
 
@@ -68,7 +122,7 @@ public sealed class SharedContainerSchedulingTests
 
             try
             {
-                await release.Task;
+                await release.Task.WaitAsync(cancellationToken);
 
                 return nowActive;
             }
@@ -115,8 +169,8 @@ public sealed class SharedContainerSchedulingTests
 
         // Act
         var observedFailure = await Record.ExceptionAsync(() => scheduler.RunAsync(
-            () => Task.FromException<int>(failure), CancellationToken.None));
-        var nextResult = await scheduler.RunAsync(() => Task.FromResult(42), CancellationToken.None)
+            _ => Task.FromException<int>(failure), CancellationToken.None));
+        var nextResult = await scheduler.RunAsync(_ => Task.FromResult(42), CancellationToken.None)
             .WaitAsync(TimeSpan.FromSeconds(10));
 
         // Assert
@@ -136,14 +190,14 @@ public sealed class SharedContainerSchedulingTests
         var nextCollectionExecuted = false;
 
         // Act
-        var first = scheduler.RunAsync(() => release.Task, CancellationToken.None);
-        var canceled = scheduler.RunAsync(() =>
+        var first = scheduler.RunAsync(_ => release.Task, CancellationToken.None);
+        var canceled = scheduler.RunAsync(_ =>
         {
             canceledCollectionExecuted = true;
 
             return Task.FromResult(2);
         }, cancellation.Token);
-        var next = scheduler.RunAsync(() =>
+        var next = scheduler.RunAsync(_ =>
         {
             nextCollectionExecuted = true;
 
@@ -179,7 +233,7 @@ public sealed class SharedContainerSchedulingTests
         cancellation.Cancel();
 
         // Act
-        var failure = await Record.ExceptionAsync(() => scheduler.RunAsync(() =>
+        var failure = await Record.ExceptionAsync(() => scheduler.RunAsync(_ =>
         {
             executed = true;
 

@@ -18,7 +18,7 @@ public sealed class SqlServerSafeMigrationTableAdmissionIntegrationTests : SqlSe
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var definition = new ExpectedTableDefinition("layout_items",
             [new ExpectedColumnDefinition("First", typeof(string), false, "char(8000)"),
@@ -31,13 +31,15 @@ public sealed class SqlServerSafeMigrationTableAdmissionIntegrationTests : SqlSe
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
 
         // Act
-        var before = await analyzer.AnalyzeAsync(context, [operation]);
-        await ExecuteOperationsAsync(context, [operation]);
+        var before = await analyzer.AnalyzeAsync(context, [operation], cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, [operation], cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "INSERT dbo.layout_items VALUES ('a','b'," + (nullable ? "NULL" : "''") + ");");
-        var after = await analyzer.AnalyzeAsync(context, [operation]);
-        await ExecuteOperationsAsync(context, [operation]);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.layout_items;");
+            "INSERT dbo.layout_items VALUES ('a','b'," + (nullable ? "NULL" : "''") + ");",
+            cancellationToken: CancellationToken.None);
+        var after = await analyzer.AnalyzeAsync(context, [operation], cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, [operation], cancellationToken: CancellationToken.None);
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.layout_items;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, Assert.Single(before).ObservedState);
@@ -58,11 +60,12 @@ public sealed class SqlServerSafeMigrationTableAdmissionIntegrationTests : SqlSe
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.layout_ddl_events (Id int NOT NULL);");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.layout_ddl_events (Id int NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TRIGGER layout_ddl_audit ON DATABASE FOR DDL_TABLE_EVENTS "
-            + "AS INSERT dbo.layout_ddl_events VALUES (1);");
+            + "AS INSERT dbo.layout_ddl_events VALUES (1);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var columns = Enumerable.Range(0, count).Select(index => new ExpectedColumnDefinition(
             "C" + index.ToString(CultureInfo.InvariantCulture), type == "int" ? typeof(int) : typeof(string), false,
@@ -73,12 +76,18 @@ public sealed class SqlServerSafeMigrationTableAdmissionIntegrationTests : SqlSe
             "layout_items", columns), SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation]);
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var tables = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.layout_items');");
+        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation],
+            cancellationToken: CancellationToken.None);
 
-        var events = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.layout_ddl_events;");
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            cancellationToken: CancellationToken.None));
+
+        var tables = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.layout_items');",
+            cancellationToken: CancellationToken.None);
+
+        var events = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.layout_ddl_events;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);
@@ -102,7 +111,7 @@ public sealed class SqlServerSafeMigrationTableAdmissionIntegrationTests : SqlSe
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var columns = Enumerable.Range(0, count).Select(index => new ExpectedColumnDefinition(
             "C" + index.ToString(CultureInfo.InvariantCulture), type == "int" ? typeof(int) : typeof(string), false,
@@ -115,21 +124,23 @@ public sealed class SqlServerSafeMigrationTableAdmissionIntegrationTests : SqlSe
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
 
         // Act
-        var before = await analyzer.AnalyzeAsync(context, [operation]);
-        await ExecuteOperationsAsync(context, [operation]);
+        var before = await analyzer.AnalyzeAsync(context, [operation], cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, [operation], cancellationToken: CancellationToken.None);
         if (type != "int")
         {
             await ExecuteSqlAsync(connectionString,
                 "INSERT dbo.layout_items VALUES (REPLICATE('a',4000),REPLICATE('b',"
-                + width.ToString(CultureInfo.InvariantCulture) + "));");
+                + width.ToString(CultureInfo.InvariantCulture) + "));", cancellationToken: CancellationToken.None);
         }
 
-        var after = await analyzer.AnalyzeAsync(context, [operation]);
-        await ExecuteOperationsAsync(context, [operation]);
+        var after = await analyzer.AnalyzeAsync(context, [operation], cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, [operation], cancellationToken: CancellationToken.None);
         var physicalColumns = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.layout_items');");
+            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.layout_items');",
+            cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.layout_items;");
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.layout_items;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, Assert.Single(before).ObservedState);

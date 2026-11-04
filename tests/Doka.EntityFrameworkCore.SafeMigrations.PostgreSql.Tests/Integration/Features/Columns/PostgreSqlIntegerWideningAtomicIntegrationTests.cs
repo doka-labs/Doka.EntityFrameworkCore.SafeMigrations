@@ -18,7 +18,8 @@ public sealed class PostgreSqlIntegerWideningAtomicIntegrationTests : PostgreSql
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE atomic_integer_rows (value integer NOT NULL); INSERT INTO atomic_integer_rows VALUES (7);");
+            "CREATE TABLE atomic_integer_rows (value integer NOT NULL); INSERT INTO atomic_integer_rows VALUES (7);",
+            cancellationToken: CancellationToken.None);
         var applicationName = "integer_fence_" + Guid.NewGuid().ToString("N");
         var migrationConnection = new NpgsqlConnectionStringBuilder(connectionString)
         {
@@ -66,8 +67,9 @@ public sealed class PostgreSqlIntegerWideningAtomicIntegrationTests : PostgreSql
 
         Assert.Equal(mutation == "none" ? "bigint" : "integer", await ScalarStringAsync(connectionString,
             "SELECT data_type FROM information_schema.columns WHERE table_schema='public' "
-            + "AND table_name='atomic_integer_rows' AND column_name='value';"));
-        Assert.Equal(7, await ScalarIntAsync(connectionString, "SELECT value FROM atomic_integer_rows;"));
+            + "AND table_name='atomic_integer_rows' AND column_name='value';", cancellationToken: cancellation.Token));
+        Assert.Equal(7, await ScalarIntAsync(connectionString, "SELECT value FROM atomic_integer_rows;",
+            cancellationToken: cancellation.Token));
     }
 
     /// <summary>Rejects repairs without explicit lock authority but allows exact replay without a lock.</summary>
@@ -85,7 +87,7 @@ public sealed class PostgreSqlIntegerWideningAtomicIntegrationTests : PostgreSql
             + "CREATE TABLE integer_lock_rows(value " + (targetAlreadyWidened ? "bigint" : "integer")
             + " NOT NULL); INSERT INTO integer_lock_rows VALUES(7); "
             + "ALTER TABLE integer_lock_rows OWNER TO " + role + "; "
-            + "REVOKE ALL ON integer_lock_rows FROM " + role + ";");
+            + "REVOKE ALL ON integer_lock_rows FROM " + role + ";", cancellationToken: CancellationToken.None);
 
         try
         {
@@ -100,8 +102,11 @@ public sealed class PostgreSqlIntegerWideningAtomicIntegrationTests : PostgreSql
 
             // Act
             var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-                context, builder.Operations, new SafeMigrationRunOptions("integer-lock-permission"));
-            var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+                context, builder.Operations, new SafeMigrationRunOptions("integer-lock-permission"),
+                CancellationToken.None);
+
+            var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+                CancellationToken.None));
 
             // Assert
             Assert.Equal(targetAlreadyWidened ? SafeMigrationAction.NoOp : SafeMigrationAction.RejectUnsupported,
@@ -116,12 +121,14 @@ public sealed class PostgreSqlIntegerWideningAtomicIntegrationTests : PostgreSql
                 Assert.Equal("P1002", Assert.IsType<PostgresException>(failure).SqlState);
             }
 
-            Assert.Equal(7, await ScalarIntAsync(connectionString, "SELECT value FROM integer_lock_rows;"));
+            Assert.Equal(7, await ScalarIntAsync(connectionString, "SELECT value FROM integer_lock_rows;",
+                cancellationToken: CancellationToken.None));
         }
         finally
         {
             await ExecuteSqlAsync(connectionString, "ALTER TABLE integer_lock_rows OWNER TO postgres; "
-                + "REVOKE USAGE, CREATE ON SCHEMA public FROM " + role + "; DROP ROLE " + role + ";");
+                + "REVOKE USAGE, CREATE ON SCHEMA public FROM " + role + "; DROP ROLE " + role + ";",
+                cancellationToken: CancellationToken.None);
         }
     }
 
@@ -139,7 +146,7 @@ public sealed class PostgreSqlIntegerWideningAtomicIntegrationTests : PostgreSql
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE integer_isolation_rows(value "
             + (targetAlreadyWidened ? "bigint" : "integer") + " NOT NULL); "
-            + "INSERT INTO integer_isolation_rows VALUES(7);");
+            + "INSERT INTO integer_isolation_rows VALUES(7);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await using var transaction = await context.Database.BeginTransactionAsync(isolation, CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -149,7 +156,9 @@ public sealed class PostgreSqlIntegerWideningAtomicIntegrationTests : PostgreSql
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
         await transaction.RollbackAsync(CancellationToken.None);
 
         // Assert
@@ -164,8 +173,10 @@ public sealed class PostgreSqlIntegerWideningAtomicIntegrationTests : PostgreSql
 
         Assert.Equal(targetAlreadyWidened ? "bigint" : "integer", await ScalarStringAsync(connectionString,
             "SELECT data_type FROM information_schema.columns WHERE table_schema='public' "
-            + "AND table_name='integer_isolation_rows' AND column_name='value';"));
-        Assert.Equal(7, await ScalarIntAsync(connectionString, "SELECT value FROM integer_isolation_rows;"));
+            + "AND table_name='integer_isolation_rows' AND column_name='value';",
+            cancellationToken: CancellationToken.None));
+        Assert.Equal(7, await ScalarIntAsync(connectionString, "SELECT value FROM integer_isolation_rows;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Waits on the server-observed exact owner request rather than an elapsed-time guess.</summary>

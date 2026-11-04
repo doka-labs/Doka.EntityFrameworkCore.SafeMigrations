@@ -14,7 +14,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await SeedGeneratedAnalysisScopeOwnersAsync(connectionString);
+        await SeedGeneratedAnalysisScopeOwnersAsync(connectionString, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("unrelated", Table);
@@ -29,17 +29,20 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         var failure = await Record.ExceptionAsync(async () =>
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         });
 
         var postflight = await context.GetService<ISafeMigrationRunner>().VerifyAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-independent-rename-index-verify"), CancellationToken.None);
 
-        var rows = failure is null ? await CountExpectedCaseRowsAsync(connectionString) : -1;
+        var rows = failure is null ? await CountExpectedCaseRowsAsync(connectionString,
+            cancellationToken: CancellationToken.None) : -1;
+
         var indexes = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{Table}' AND INDEX_NAME = 'ix_generated_scope_result';");
+            + $"AND TABLE_NAME = '{Table}' AND INDEX_NAME = 'ix_generated_scope_result';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.True(preflight.Status == SafeMigrationReportStatus.Ready, DescribeGeneratedReport(preflight));
@@ -62,7 +65,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await SeedGeneratedAnalysisScopeOwnersAsync(connectionString);
+        await SeedGeneratedAnalysisScopeOwnersAsync(connectionString, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn(Table, CaseColumn(stored: false), SafeMigrationPolicy.ThrowIfDifferent);
@@ -78,12 +81,14 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             .GetField("_expiredGeneratedDependencyOwners", BindingFlags.Instance | BindingFlags.NonPublic)
             ?.GetValue(analyzer) as HashSet<(string? Schema, string Table)>;
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
         var retainedSource = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'left_bound';");
+            + $"AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'left_bound';", cancellationToken: CancellationToken.None);
 
-        var rows = await CountExpectedCaseRowsAsync(connectionString);
+        var rows = await CountExpectedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
 
         // Assert
         // WHY: Core can independently reject the known dependency. Observe the
@@ -108,14 +113,20 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     }
 
     /// <summary>Seeds independent physical owners without supplying a complete generated-owner model.</summary>
-    private static async Task SeedGeneratedAnalysisScopeOwnersAsync(string connectionString)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static async Task SeedGeneratedAnalysisScopeOwnersAsync(
+        string connectionString,
+        CancellationToken cancellationToken
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE `{Table}` (id int NOT NULL PRIMARY KEY, left_bound bigint NOT NULL, "
             + "right_bound bigint NOT NULL, unrelated int NULL); "
             + $"CREATE TABLE `{AnalysisScopeSource}` (id int NOT NULL PRIMARY KEY, value int NOT NULL); "
-            + $"INSERT INTO `{AnalysisScopeSource}` (id, value) VALUES (1, 7);");
-        await SeedCaseRowsAsync(connectionString);
+            + $"INSERT INTO `{AnalysisScopeSource}` (id, value) VALUES (1, 7);", cancellationToken: cancellationToken);
+        await SeedCaseRowsAsync(connectionString, cancellationToken: cancellationToken);
     }
 
     /// <summary>Forces a real rebound EnsureIndex analysis on a separate renamed native owner.</summary>

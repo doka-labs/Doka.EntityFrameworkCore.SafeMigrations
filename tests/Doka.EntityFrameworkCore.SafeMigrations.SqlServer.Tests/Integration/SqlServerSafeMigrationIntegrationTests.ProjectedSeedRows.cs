@@ -25,8 +25,9 @@ public sealed class SqlServerSafeMigrationProjectedSeedRowsIntegrationTests : Sq
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, "ALTER DATABASE CURRENT COLLATE Latin1_General_100_CI_AS;");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "ALTER DATABASE CURRENT COLLATE Latin1_General_100_CI_AS;",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists("inline_seed_rows", table => new
@@ -53,10 +54,12 @@ public sealed class SqlServerSafeMigrationProjectedSeedRowsIntegrationTests : Sq
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-prospective-inline-seed"));
+            new SafeMigrationRunOptions("sqlserver-prospective-inline-seed"),
+            cancellationToken: CancellationToken.None);
 
         var tableCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.inline_seed_rows');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.inline_seed_rows');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(expected, report.Status);
@@ -79,7 +82,7 @@ public sealed class SqlServerSafeMigrationProjectedSeedRowsIntegrationTests : Sq
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists("filtered_seed_rows", table => new
@@ -98,7 +101,8 @@ public sealed class SqlServerSafeMigrationProjectedSeedRowsIntegrationTests : Sq
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-prospective-filtered-seed"));
+            new SafeMigrationRunOptions("sqlserver-prospective-filtered-seed"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(expected, report.Status);
@@ -122,9 +126,10 @@ public sealed class SqlServerSafeMigrationProjectedSeedRowsIntegrationTests : Sq
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.managed_dates (Id int NOT NULL PRIMARY KEY, Value " + storeType + " NOT NULL);");
+            "CREATE TABLE dbo.managed_dates (Id int NOT NULL PRIMARY KEY, Value " + storeType + " NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel("managed_dates", ["Id"], ["int"],
@@ -132,9 +137,11 @@ public sealed class SqlServerSafeMigrationProjectedSeedRowsIntegrationTests : Sq
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-managed-date-value-boundary"));
+            new SafeMigrationRunOptions("sqlserver-managed-date-value-boundary"),
+            cancellationToken: CancellationToken.None);
 
-        var rowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.managed_dates;");
+        var rowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.managed_dates;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(expected, report.Status);
@@ -154,9 +161,10 @@ public sealed class SqlServerSafeMigrationProjectedSeedRowsIntegrationTests : Sq
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.managed_boundary (Id int NOT NULL PRIMARY KEY, Value " + storeType + " NOT NULL);");
+            "CREATE TABLE dbo.managed_boundary (Id int NOT NULL PRIMARY KEY, Value " + storeType + " NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var value = new DateTime(year, 1, 1);
@@ -166,16 +174,17 @@ public sealed class SqlServerSafeMigrationProjectedSeedRowsIntegrationTests : Sq
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-managed-temporal-boundary-replay"));
+            new SafeMigrationRunOptions("sqlserver-managed-temporal-boundary-replay"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var replayAnalyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context,
-            builder.Operations.Cast<SafeMigrationOperation>().ToArray());
+            builder.Operations.Cast<SafeMigrationOperation>().ToArray(), cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var preservedRows = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM dbo.managed_boundary WHERE Id = 1 AND Value = CAST(N'"
-            + expected + "' AS datetime2(7));");
+            + expected + "' AS datetime2(7));", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);

@@ -12,8 +12,12 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
     public async Task StrictConstraintTransition_RejectsDuplicateShapeBorrowingDifferentAllowedSlot(
         SafeMigrationOperationKind kind)
     {
-        await using var connection = await OpenConnectionAsync();
-        await CreateConstraintShapeOwnerAsync(connection, kind, ["physical_a1", "physical_a2"]);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateConstraintShapeOwnerAsync(
+            connection,
+            kind,
+            ["physical_a1", "physical_a2"],
+            cancellationToken: CancellationToken.None);
         await using var context = CreateConstraintShapeContext(connection, kind);
         var initial = ConstraintShapeTable(kind, ["logical_a"]);
         var contract = new ExpectedTableDefinition(
@@ -37,10 +41,12 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
         var observedConstraintCount = ConstraintShapeNames(snapshot.Tables["shape_items"], kind).Count();
         var preflight = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-native-constraint-capacity"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-native-constraint-capacity"),
+            cancellationToken: CancellationToken.None);
 
         var postflight = await runner.VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-native-constraint-capacity"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-native-constraint-capacity"),
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, preflight.Assessments[0].Action);
@@ -59,8 +65,12 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
     public async Task StrictConstraintTransition_PreservesAuthoredDuplicateAliasCapacity(
         SafeMigrationOperationKind kind)
     {
-        await using var connection = await OpenConnectionAsync();
-        await CreateConstraintShapeOwnerAsync(connection, kind, ["physical_a1", "physical_a2"]);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateConstraintShapeOwnerAsync(
+            connection,
+            kind,
+            ["physical_a1", "physical_a2"],
+            cancellationToken: CancellationToken.None);
         await using var context = CreateConstraintShapeContext(connection, kind);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(ConstraintShapeTable(kind, ["logical_a", "logical_b"]),
@@ -69,11 +79,13 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var preflight = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-authored-duplicate-aliases"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-authored-duplicate-aliases"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-authored-duplicate-aliases"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-authored-duplicate-aliases"),
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.All(preflight.Assessments, item => Assert.Equal(SafeMigrationAction.NoOp, item.Action));
@@ -95,15 +107,20 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
     public async Task StrictConstraintTransition_RejectsMissingRequiredDuplicateAlias(
         SafeMigrationOperationKind kind)
     {
-        await using var connection = await OpenConnectionAsync();
-        await CreateConstraintShapeOwnerAsync(connection, kind, ["physical_a1"]);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateConstraintShapeOwnerAsync(
+            connection,
+            kind,
+            ["physical_a1"],
+            cancellationToken: CancellationToken.None);
         await using var context = CreateConstraintShapeContext(connection, kind);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(ConstraintShapeTable(kind, ["logical_a", "logical_b"]),
             SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
 
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-required-constraint-capacity"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-required-constraint-capacity"),
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[0].Action);
@@ -113,9 +130,11 @@ public sealed partial class SqliteSafeMigrationConstraintShapeIdentityIntegratio
     [Fact]
     public async Task StrictConstraintTransition_SnapshotRejectsUniqueShapeCapacityBorrowing()
     {
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateConstraintShapeOwnerAsync(connection,
-            SafeMigrationOperationKind.EnsureUniqueConstraint, ["physical_a1"]);
+            SafeMigrationOperationKind.EnsureUniqueConstraint,
+            ["physical_a1"],
+            cancellationToken: CancellationToken.None);
         await using var context = CreateConstraintShapeContext(connection,
             SafeMigrationOperationKind.EnsureUniqueConstraint);
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);

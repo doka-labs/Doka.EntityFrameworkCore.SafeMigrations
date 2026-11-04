@@ -19,7 +19,7 @@ public sealed class SqlServerSafeMigrationAlterPermissionsIntegrationTests : Sql
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var length = matching ? 20 : 80;
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.text_read_values(Caption nvarchar("
@@ -29,10 +29,11 @@ public sealed class SqlServerSafeMigrationAlterPermissionsIntegrationTests : Sql
             + "GRANT VIEW DEFINITION TO text_alter_writer; "
             + "GRANT SELECT ON OBJECT::sys.sql_expression_dependencies TO text_alter_writer; "
             + "GRANT ALTER,UPDATE ON OBJECT::dbo.text_read_values TO text_alter_writer; "
-            + "DENY SELECT ON OBJECT::dbo.text_read_values TO text_alter_writer;");
+            + "DENY SELECT ON OBJECT::dbo.text_read_values TO text_alter_writer;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync("EXECUTE AS USER=N'text_alter_writer';");
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn("text_read_values",
@@ -52,9 +53,11 @@ public sealed class SqlServerSafeMigrationAlterPermissionsIntegrationTests : Sql
         try
         {
             report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-                new SafeMigrationRunOptions("sqlserver-text-alter-read-permission"));
+                new SafeMigrationRunOptions("sqlserver-text-alter-read-permission"),
+                cancellationToken: CancellationToken.None);
 
-            failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+            failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+                cancellationToken: CancellationToken.None));
         }
         finally
         {
@@ -63,10 +66,11 @@ public sealed class SqlServerSafeMigrationAlterPermissionsIntegrationTests : Sql
 
         var width = await ScalarIntAsync(connectionString,
             "SELECT max_length FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.text_read_values') "
-            + "AND name=N'Caption';");
+            + "AND name=N'Caption';", cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.text_read_values WHERE Caption=N'short';");
+            "SELECT COUNT(*) FROM dbo.text_read_values WHERE Caption=N'short';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(length * 2, width);
@@ -88,7 +92,7 @@ public sealed class SqlServerSafeMigrationAlterPermissionsIntegrationTests : Sql
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var length = matching ? 20 : 80;
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.text_permission_values(Caption nvarchar("
@@ -97,10 +101,11 @@ public sealed class SqlServerSafeMigrationAlterPermissionsIntegrationTests : Sql
             + "CREATE USER text_alter_reader WITHOUT LOGIN WITH DEFAULT_SCHEMA=dbo; "
             + "GRANT VIEW DEFINITION TO text_alter_reader; "
             + "GRANT SELECT ON OBJECT::sys.sql_expression_dependencies TO text_alter_reader; "
-            + "GRANT ALTER,SELECT ON OBJECT::dbo.text_permission_values TO text_alter_reader;");
+            + "GRANT ALTER,SELECT ON OBJECT::dbo.text_permission_values TO text_alter_reader;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync("EXECUTE AS USER=N'text_alter_reader';");
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn("text_permission_values",
@@ -122,9 +127,11 @@ public sealed class SqlServerSafeMigrationAlterPermissionsIntegrationTests : Sql
         try
         {
             report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-                new SafeMigrationRunOptions("sqlserver-text-alter-write-permission"));
+                new SafeMigrationRunOptions("sqlserver-text-alter-write-permission"),
+                cancellationToken: CancellationToken.None);
 
-            failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+            failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+                cancellationToken: CancellationToken.None));
         }
         finally
         {
@@ -133,10 +140,11 @@ public sealed class SqlServerSafeMigrationAlterPermissionsIntegrationTests : Sql
 
         var width = await ScalarIntAsync(connectionString,
             "SELECT max_length FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.text_permission_values') "
-            + "AND name=N'Caption';");
+            + "AND name=N'Caption';", cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.text_permission_values WHERE Caption=N'short';");
+            "SELECT COUNT(*) FROM dbo.text_permission_values WHERE Caption=N'short';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.DoesNotContain("UPDATE [", sql, StringComparison.Ordinal);

@@ -23,8 +23,9 @@ public sealed class SqlServerSafeMigrationGraphPhysicalBoundaryIntegrationTests 
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, GraphPhysicalBoundarySetupSql(cascade));
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, GraphPhysicalBoundarySetupSql(cascade),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var table = deleteEdge ? "graph_links" : "graph_sources";
         var id = deleteEdge ? 3 : 1;
@@ -43,37 +44,47 @@ public sealed class SqlServerSafeMigrationGraphPhysicalBoundaryIntegrationTests 
 
         // Act
         IReadOnlyList<SafeMigrationProviderAnalysis> analyses;
-        await using (await analyzer.AcquireAnalysisScopeAsync(context))
+        await using (await analyzer.AcquireAnalysisScopeAsync(context, cancellationToken: CancellationToken.None))
         {
-            analyses = await analyzer.AnalyzeAsync(context, operations);
+            analyses = await analyzer.AnalyzeAsync(context, operations, cancellationToken: CancellationToken.None);
         }
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var nodeTables = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE name IN (N'graph_sources', N'graph_targets') AND is_node = 1;");
+            "SELECT COUNT(*) FROM sys.tables WHERE name IN (N'graph_sources', N'graph_targets') AND is_node = 1;",
+            cancellationToken: CancellationToken.None);
 
         var edgeTables = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE name = N'graph_links' AND is_edge = 1;");
+            "SELECT COUNT(*) FROM sys.tables WHERE name = N'graph_links' AND is_edge = 1;",
+            cancellationToken: CancellationToken.None);
 
         var edgeConstraints = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.edge_constraints WHERE parent_object_id = OBJECT_ID(N'dbo.graph_links');");
+            "SELECT COUNT(*) FROM sys.edge_constraints WHERE parent_object_id = OBJECT_ID(N'dbo.graph_links');",
+            cancellationToken: CancellationToken.None);
 
         var ordinaryForeignKeys = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.foreign_keys WHERE referenced_object_id = OBJECT_ID(N'dbo.graph_sources');");
+            "SELECT COUNT(*) FROM sys.foreign_keys WHERE referenced_object_id = OBJECT_ID(N'dbo.graph_sources');",
+            cancellationToken: CancellationToken.None);
 
         var sourceRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.graph_sources WHERE Id = 1 AND Value = 11;");
+            "SELECT COUNT(*) FROM dbo.graph_sources WHERE Id = 1 AND Value = 11;",
+            cancellationToken: CancellationToken.None);
 
         var targetRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.graph_targets WHERE Id = 2 AND Value = 22;");
+            "SELECT COUNT(*) FROM dbo.graph_targets WHERE Id = 2 AND Value = 22;",
+            cancellationToken: CancellationToken.None);
 
         var edgeRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.graph_links WHERE Id = 3 AND Value = 33;");
+            "SELECT COUNT(*) FROM dbo.graph_links WHERE Id = 3 AND Value = 33;",
+            cancellationToken: CancellationToken.None);
 
         var connections = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM dbo.graph_sources source_node, dbo.graph_links graph_edge, "
             + "dbo.graph_targets target_node WHERE MATCH(source_node-(graph_edge)->target_node) "
-            + "AND source_node.Id = 1 AND graph_edge.Id = 3 AND target_node.Id = 2;");
+            + "AND source_node.Id = 1 AND graph_edge.Id = 3 AND target_node.Id = 2;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);

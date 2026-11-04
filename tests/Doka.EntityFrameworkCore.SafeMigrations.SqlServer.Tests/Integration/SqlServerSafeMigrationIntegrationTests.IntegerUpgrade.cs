@@ -14,33 +14,36 @@ public sealed class SqlServerSafeMigrationIntegerUpgradeIntegrationTests : SqlSe
     public async Task IntegerUpgrade_OrderedPreflightEfMigrationAndHistoryReplay()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = new SqlServerIntegerUpgradeContext(connectionString);
         await context.GetService<IMigrator>().MigrateAsync(SqlServerIntegerInitialMigration.MigrationIdentifier);
         var upgrade = new SqlServerIntegerUpgradeMigration { ActiveProvider = context.Database.ProviderName! };
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, upgrade.UpOperations,
-            new SafeMigrationRunOptions("sqlserver-ordered-integer-upgrade"));
+            new SafeMigrationRunOptions("sqlserver-ordered-integer-upgrade"),
+            cancellationToken: CancellationToken.None);
 
         await context.Database.MigrateAsync();
         await context.Database.MigrateAsync();
-        await ExecuteOperationsAsync(context, upgrade.UpOperations);
+        await ExecuteOperationsAsync(context, upgrade.UpOperations, cancellationToken: CancellationToken.None);
         var widened = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.ordered_values') "
-            + "AND name IN(N'Lower',N'Upper',N'Depth',N'Position') AND system_type_id=127;");
+            + "AND name IN(N'Lower',N'Upper',N'Depth',N'Position') AND system_type_id=127;",
+            cancellationToken: CancellationToken.None);
 
         var trusted = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.check_constraints WHERE parent_object_id=OBJECT_ID(N'dbo.ordered_values') "
-            + "AND is_disabled=0 AND is_not_trusted=0;");
+            + "AND is_disabled=0 AND is_not_trusted=0;", cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM dbo.ordered_values WHERE (Id=1 AND Lower=1 AND Upper=2 AND Position IS NULL) "
-            + "OR (Id=2 AND Lower=2147483646 AND Upper=2147483647 AND Position=0);");
+            + "OR (Id=2 AND Lower=2147483646 AND Upper=2147483647 AND Position=0);",
+            cancellationToken: CancellationToken.None);
 
         var history = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM dbo.__EFMigrationsHistory WHERE MigrationId=N'"
-            + SqlServerIntegerUpgradeMigration.MigrationIdentifier + "';");
+            + SqlServerIntegerUpgradeMigration.MigrationIdentifier + "';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -60,12 +63,12 @@ public sealed class SqlServerSafeMigrationIntegerUpgradeIntegrationTests : SqlSe
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = new SqlServerIntegerUpgradeContext(connectionString);
         await context.GetService<IMigrator>().MigrateAsync(SqlServerIntegerInitialMigration.MigrationIdentifier);
         await ExecuteSqlAsync(connectionString,
             "ALTER TABLE dbo.ordered_values ADD Payload " + payloadType + "(100) NOT NULL "
-            + "DEFAULT REPLICATE('x',100);");
+            + "DEFAULT REPLICATE('x',100);", cancellationToken: CancellationToken.None);
         // WHY: Retained fixed-width ALTER versions consume row capacity. Keep
         // this history fixture bounded so the later CHECK owns the rollback.
         var widths = payloadType == "char" ? new[] { 200, 300, 100 } : new[] { 2000, 3000, 100 };
@@ -77,7 +80,7 @@ public sealed class SqlServerSafeMigrationIntegerUpgradeIntegrationTests : SqlSe
                 {
                     await ExecuteSqlAsync(connectionString,
                         "ALTER TABLE dbo.ordered_values ALTER COLUMN Payload " + payloadType + "(" + width
-                        + ") NOT NULL;");
+                        + ") NOT NULL;", cancellationToken: CancellationToken.None);
                 }
                 catch (SqlException setupFailure)
                 {
@@ -87,28 +90,33 @@ public sealed class SqlServerSafeMigrationIntegerUpgradeIntegrationTests : SqlSe
             }
         }
 
-        await ExecuteSqlAsync(connectionString, "UPDATE dbo.ordered_values SET Lower=0 WHERE Id=1;");
+        await ExecuteSqlAsync(connectionString, "UPDATE dbo.ordered_values SET Lower=0 WHERE Id=1;",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var failure = await Record.ExceptionAsync(() => context.Database.MigrateAsync());
         var sourceColumns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.ordered_values') "
-            + "AND name IN(N'Lower',N'Upper',N'Depth',N'Position') AND system_type_id=56;");
+            + "AND name IN(N'Lower',N'Upper',N'Depth',N'Position') AND system_type_id=56;",
+            cancellationToken: CancellationToken.None);
 
         var oldDependencies = await ScalarIntAsync(connectionString,
             "SELECT (SELECT COUNT(*) FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.ordered_values') "
             + "AND name=N'IX_old_range') + (SELECT COUNT(*) FROM sys.check_constraints "
-            + "WHERE parent_object_id=OBJECT_ID(N'dbo.ordered_values') AND name=N'CK_lower_old');");
+            + "WHERE parent_object_id=OBJECT_ID(N'dbo.ordered_values') AND name=N'CK_lower_old');",
+            cancellationToken: CancellationToken.None);
 
         var marker = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.upgrade_marker');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.upgrade_marker');",
+            cancellationToken: CancellationToken.None);
 
         var upgradeHistory = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM dbo.__EFMigrationsHistory WHERE MigrationId=N'"
-            + SqlServerIntegerUpgradeMigration.MigrationIdentifier + "';");
+            + SqlServerIntegerUpgradeMigration.MigrationIdentifier + "';", cancellationToken: CancellationToken.None);
 
         var payloadRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.ordered_values WHERE Payload=REPLICATE('x',100) AND LEN(Payload)=100;");
+            "SELECT COUNT(*) FROM dbo.ordered_values WHERE Payload=REPLICATE('x',100) AND LEN(Payload)=100;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(51003, Assert.IsType<SqlException>(failure).Number);

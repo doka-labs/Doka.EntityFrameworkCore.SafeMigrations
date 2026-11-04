@@ -22,14 +22,15 @@ public sealed class SqlServerSafeMigrationRuntimeDiagnosticsIntegrationTests : S
     public async Task NativeRuntimeDiagnosticPreservesGuardIdentity(string state, int number, string guardCode)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var operation = SqlServerRuntimeDiagnosticTests.ColumnOperation("diagnostic_owner", "RequiredId");
         var plan = new SqlServerSafeMigrationRuntimePlan("N'" + state + "'", "0",
             SafeMigrationRepairCapability.None, "0");
         var sql = SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(operation, plan, [], [], operationOrdinal: 7);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, sql));
+        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, sql,
+            cancellationToken: CancellationToken.None));
 
         // Assert
         var native = Assert.IsType<SqlException>(failure);
@@ -49,14 +50,15 @@ public sealed class SqlServerSafeMigrationRuntimeDiagnosticsIntegrationTests : S
     public async Task NativeMessagePreservesPercentAndQuoteIdentity()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var operation = SqlServerRuntimeDiagnosticTests.ColumnOperation("owner'%; THROW 51099, N'injected', 1; --",
             "RequiredId");
         var plan = SqlServerRuntimeDiagnosticTests.Plan() with { StateExpression = "N'different'" };
         var sql = SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(operation, plan, [], []);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, sql));
+        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, sql,
+            cancellationToken: CancellationToken.None));
 
         // Assert
         var native = Assert.IsType<SqlException>(failure);
@@ -69,13 +71,14 @@ public sealed class SqlServerSafeMigrationRuntimeDiagnosticsIntegrationTests : S
     public async Task NativeMaximumPercentIdentityRetainsOwnedGuard()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var operation = SqlServerRuntimeDiagnosticTests.MaximumPercentForeignKeyOperation();
         var plan = SqlServerRuntimeDiagnosticTests.Plan() with { StateExpression = "N'different'" };
         var sql = SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(operation, plan, [], []);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, sql));
+        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, sql,
+            cancellationToken: CancellationToken.None));
 
         // Assert
         var native = Assert.IsType<SqlException>(failure);
@@ -100,7 +103,7 @@ public sealed class SqlServerSafeMigrationRuntimeDiagnosticsIntegrationTests : S
     public async Task NativeLayoutDiagnosticRetainsSelectedCause(string reasonCode)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var operation = SqlServerRuntimeDiagnosticTests.ColumnOperation("layout_owner", "AddedColumn");
         var plan = SqlServerRuntimeDiagnosticTests.Plan() with
         {
@@ -110,7 +113,8 @@ public sealed class SqlServerSafeMigrationRuntimeDiagnosticsIntegrationTests : S
         var sql = SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(operation, plan, [], []);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, sql));
+        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, sql,
+            cancellationToken: CancellationToken.None));
 
         // Assert
         var native = Assert.IsType<SqlException>(failure);
@@ -126,7 +130,7 @@ public sealed class SqlServerSafeMigrationRuntimeDiagnosticsIntegrationTests : S
     public async Task NativeIdentityScopeDiagnosticDoesNotReplaceCallerState()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync(CancellationToken.None);
         await using var setup = connection.CreateCommand();
@@ -164,15 +168,17 @@ public sealed class SqlServerSafeMigrationRuntimeDiagnosticsIntegrationTests : S
     public async Task OrdinaryForeignKeyErrorRetainsItsNativeIdentity()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.native_parent (Id int PRIMARY KEY); "
-            + "CREATE TABLE dbo.native_child (Id int, ParentId int REFERENCES dbo.native_parent(Id));");
+            + "CREATE TABLE dbo.native_child (Id int, ParentId int REFERENCES dbo.native_parent(Id));",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.Sql("INSERT INTO dbo.native_child VALUES (1, 999);");
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
 
         // Assert
         var native = Assert.IsType<SqlException>(failure);
@@ -185,19 +191,19 @@ public sealed class SqlServerSafeMigrationRuntimeDiagnosticsIntegrationTests : S
     public async Task RuntimeDiagnosticsPreserveCreateAndMatchingReplay()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.diagnostic_tags (Id int PRIMARY KEY); "
-            + "INSERT INTO dbo.diagnostic_tags VALUES (1);");
+            + "INSERT INTO dbo.diagnostic_tags VALUES (1);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<bool>("IsActive", "diagnostic_tags", type: "bit", nullable: false,
             defaultValue: true);
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var activeRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.diagnostic_tags WHERE IsActive = 1;");
+            "SELECT COUNT(*) FROM dbo.diagnostic_tags WHERE IsActive = 1;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, activeRows);

@@ -665,6 +665,15 @@ Resolve `ISafeMigrationRunner` from the configured context. Use a pseudonymous
 instance ID, never a host name, database name, credential, or connection
 string.
 
+Ordinary repository-owned asynchronous APIs require an explicit `CancellationToken`.
+Forward the deployment/request token throughout an operation; pass
+`CancellationToken.None` only when intentionally running without cancellation.
+Source callers that previously omitted this argument must add it. See the
+[cancellation contract](docs/api-reference.md#cancellation-contract).
+Framework-owned entry points and deliberately uninterruptible cleanup/recovery
+retain their separate contracts; an operation's cancellation must not prevent
+necessary cleanup.
+
 ```csharp
 using Doka.EntityFrameworkCore.SafeMigrations;
 using Microsoft.EntityFrameworkCore.Infrastructure;

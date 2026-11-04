@@ -12,36 +12,49 @@ public sealed class SqliteSafeMigrationIndexRenameNamespaceIntegrationTests : Sq
     public async Task EnsuredIndexRename_RejectsSchemaWideDestinationOccupancy(string createOccupant)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE namespace_source (Id INTEGER NOT NULL, Code TEXT NULL); "
             + "CREATE INDEX rename_source ON namespace_source (Code); "
             + "CREATE TABLE namespace_other (Id INTEGER NOT NULL, Code TEXT NULL); "
             + "INSERT INTO namespace_source (Id, Code) VALUES (1, 'source'); "
             + "INSERT INTO namespace_other (Id, Code) VALUES (2, 'other'); "
-            + createOccupant);
+            + createOccupant, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexIfNotExists("rename_source", "namespace_source", ["Code"]);
         builder.RenameIndexIfExists("rename_source", "namespace_source", "RENAME_DESTINATION");
         var runner = context.GetService<ISafeMigrationRunner>();
-        var schemaVersion = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var schemaVersion = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-index-rename-global-collision"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-index-rename-global-collision"),
+            cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
         var sourceRows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM namespace_source WHERE Id = 1 AND Code = 'source';");
+            "SELECT COUNT(*) FROM namespace_source WHERE Id = 1 AND Code = 'source';",
+            cancellationToken: CancellationToken.None);
 
         var otherRows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM namespace_other WHERE Id = 2 AND Code = 'other';");
+            "SELECT COUNT(*) FROM namespace_other WHERE Id = 2 AND Code = 'other';",
+            cancellationToken: CancellationToken.None);
 
-        var finalSchemaVersion = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var finalSchemaVersion = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
+
         var targetObjects = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'rename_destination';");
+            "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'rename_destination';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -62,14 +75,14 @@ public sealed class SqliteSafeMigrationIndexRenameNamespaceIntegrationTests : Sq
     public async Task IndexRename_AcceptedOtherOwnerDestinationDropMakesTheNameAvailable()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE namespace_source (Id INTEGER NOT NULL, Code TEXT NULL); "
             + "CREATE INDEX rename_source ON namespace_source (Code); "
             + "CREATE TABLE namespace_other (Id INTEGER NOT NULL, Code TEXT NULL); "
             + "CREATE INDEX rename_destination ON namespace_other (Code); "
             + "INSERT INTO namespace_source (Id, Code) VALUES (1, 'source'); "
-            + "INSERT INTO namespace_other (Id, Code) VALUES (2, 'other');");
+            + "INSERT INTO namespace_other (Id, Code) VALUES (2, 'other');", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexIfNotExists("rename_source", "namespace_source", ["Code"]);
@@ -79,18 +92,22 @@ public sealed class SqliteSafeMigrationIndexRenameNamespaceIntegrationTests : Sq
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-index-rename-dropped-other-owner"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-index-rename-dropped-other-owner"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-index-rename-shared-postflight"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-index-rename-shared-postflight"),
+            cancellationToken: CancellationToken.None);
 
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
         var sourceRows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM namespace_source WHERE Id = 1 AND Code = 'source';");
+            "SELECT COUNT(*) FROM namespace_source WHERE Id = 1 AND Code = 'source';",
+            cancellationToken: CancellationToken.None);
 
         var otherRows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM namespace_other WHERE Id = 2 AND Code = 'other';");
+            "SELECT COUNT(*) FROM namespace_other WHERE Id = 2 AND Code = 'other';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -112,14 +129,14 @@ public sealed class SqliteSafeMigrationIndexRenameNamespaceIntegrationTests : Sq
     public async Task IndexRename_RecreatedOtherOwnerDestinationRejectsWithoutOverwritingEitherIndex()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE namespace_source (Id INTEGER NOT NULL, Code TEXT NULL); "
             + "CREATE INDEX rename_source ON namespace_source (Code); "
             + "CREATE TABLE namespace_other (Id INTEGER NOT NULL, Code TEXT NULL); "
             + "CREATE INDEX rename_destination ON namespace_other (Id); "
             + "INSERT INTO namespace_source (Id, Code) VALUES (1, 'source'); "
-            + "INSERT INTO namespace_other (Id, Code) VALUES (2, 'other');");
+            + "INSERT INTO namespace_other (Id, Code) VALUES (2, 'other');", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexIfNotExists("rename_source", "namespace_source", ["Code"]);
@@ -130,15 +147,20 @@ public sealed class SqliteSafeMigrationIndexRenameNamespaceIntegrationTests : Sq
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-index-rename-recreated-other-owner"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-index-rename-recreated-other-owner"),
+            cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
         var sourceRows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM namespace_source WHERE Id = 1 AND Code = 'source';");
+            "SELECT COUNT(*) FROM namespace_source WHERE Id = 1 AND Code = 'source';",
+            cancellationToken: CancellationToken.None);
 
         var otherRows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM namespace_other WHERE Id = 2 AND Code = 'other';");
+            "SELECT COUNT(*) FROM namespace_other WHERE Id = 2 AND Code = 'other';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -165,14 +187,14 @@ public sealed class SqliteSafeMigrationIndexRenameNamespaceIntegrationTests : Sq
     public async Task IndexRename_OtherOwnerDestinationDropDoesNotApproveConstraintBackingIndex()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE namespace_source (Id INTEGER NOT NULL, Code TEXT NOT NULL, "
             + "CONSTRAINT uq_namespace_source UNIQUE (Code)); "
             + "CREATE TABLE namespace_other (Id INTEGER NOT NULL, Code TEXT NULL); "
             + "CREATE INDEX rename_destination ON namespace_other (Code); "
             + "INSERT INTO namespace_source (Id, Code) VALUES (1, 'source'); "
-            + "INSERT INTO namespace_other (Id, Code) VALUES (2, 'other');");
+            + "INSERT INTO namespace_other (Id, Code) VALUES (2, 'other');", cancellationToken: CancellationToken.None);
         var sourceSnapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
         var source = sourceSnapshot.Tables["namespace_source"].UniqueConstraints.Single().PhysicalName;
         await using var context = CreateContext(connection);
@@ -184,17 +206,22 @@ public sealed class SqliteSafeMigrationIndexRenameNamespaceIntegrationTests : Sq
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var live = await analyzer.AnalyzeAsync(context, [rename]);
+        var live = await analyzer.AnalyzeAsync(context, [rename], cancellationToken: CancellationToken.None);
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-index-rename-source-kind"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-index-rename-source-kind"),
+            cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
         var sourceRows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM namespace_source WHERE Id = 1 AND Code = 'source';");
+            "SELECT COUNT(*) FROM namespace_source WHERE Id = 1 AND Code = 'source';",
+            cancellationToken: CancellationToken.None);
 
         var otherRows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM namespace_other WHERE Id = 2 AND Code = 'other';");
+            "SELECT COUNT(*) FROM namespace_other WHERE Id = 2 AND Code = 'other';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(live);

@@ -27,21 +27,21 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("generated-check-preflight"));
+            new SafeMigrationRunOptions("generated-check-preflight"), CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var postflight = await runner.VerifyAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("generated-check-postflight"));
+            new SafeMigrationRunOptions("generated-check-postflight"), CancellationToken.None);
 
         var exception = await Assert.ThrowsAsync<MySqlException>(() => ExecuteSqlAsync(
             connectionString,
-            "INSERT INTO `generated_check_orders` (`amount`) VALUES (-1);"));
+            "INSERT INTO `generated_check_orders` (`amount`) VALUES (-1);", cancellationToken: CancellationToken.None));
 
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.True(Assert.Single(postflight.Assessments).PostconditionSatisfied);
@@ -55,7 +55,7 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `module_state` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
-            + "INSERT INTO `module_state` (`id`) VALUES (1);");
+            + "INSERT INTO `module_state` (`id`) VALUES (1);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -74,8 +74,8 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
             nullable: true);
         builder.CreateIndexIfNotExists("ix_module_state_display_name", "module_state", ["display_name"]);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         Assert.Equal(
             1,
@@ -83,21 +83,22 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'module_state' "
-                + "AND COLUMN_NAME = 'display_name';"));
+                + "AND COLUMN_NAME = 'display_name';", cancellationToken: CancellationToken.None));
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'module_state' "
-                + "AND INDEX_NAME = 'ix_module_state_display_name';"));
+                + "AND INDEX_NAME = 'ix_module_state_display_name';", cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task ExistenceOnly_AcceptsAnExistingTableContainerWithoutMutatingShapeDrift()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `existence_shape` (`id` varchar(20) NOT NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE `existence_shape` (`id` varchar(20) NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -111,13 +112,14 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"),
+                          CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         Assert.Equal(
             20,
@@ -125,14 +127,14 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
                 connectionString,
                 "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'existence_shape' "
-                + "AND COLUMN_NAME = 'id';"));
+                + "AND COLUMN_NAME = 'id';", cancellationToken: CancellationToken.None));
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'existence_shape' "
-                + "AND COLUMN_NAME = 'Payload';"));
+                + "AND COLUMN_NAME = 'Payload';", cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -163,11 +165,13 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
 
             await ExecuteSqlAsync(
                 connectionString,
-                $"CREATE TABLE `{table}` (`id` int NOT NULL, `alternate_id` int NOT NULL{columnSql});");
+                $"CREATE TABLE `{table}` (`id` int NOT NULL, `alternate_id` int NOT NULL{columnSql});",
+                cancellationToken: CancellationToken.None);
             if (scenario.Values["index"] != "missing")
             {
                 var indexColumn = scenario.Values["index"] == "matching" ? "id" : "alternate_id";
-                await ExecuteSqlAsync(connectionString, $"CREATE INDEX `{index}` ON `{table}` (`{indexColumn}`);");
+                await ExecuteSqlAsync(connectionString, $"CREATE INDEX `{index}` ON `{table}` (`{indexColumn}`);",
+                    cancellationToken: CancellationToken.None);
             }
 
             if (scenario.Values["data"] == "populated")
@@ -179,12 +183,14 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
                 var insertValues = scenario.Values["column"] == "missing" ? "1, 2" : "1, 2, 'legacy'";
                 await ExecuteSqlAsync(
                     connectionString,
-                    $"INSERT INTO `{table}` ({insertColumns}) VALUES ({insertValues});");
+                    $"INSERT INTO `{table}` ({insertColumns}) VALUES ({insertValues});",
+                    cancellationToken: CancellationToken.None);
             }
 
             if (scenario.Values["extras"] == "unknown")
             {
-                await ExecuteSqlAsync(connectionString, $"ALTER TABLE `{table}` ADD COLUMN `legacy_extra` int NULL;");
+                await ExecuteSqlAsync(connectionString, $"ALTER TABLE `{table}` ADD COLUMN `legacy_extra` int NULL;",
+                    cancellationToken: CancellationToken.None);
             }
 
             if (scenario.Values["history"] == "legacy")
@@ -192,7 +198,8 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
                 await ExecuteSqlAsync(
                     connectionString,
                     "CREATE TABLE `__LegacyMigrationsHistory` (`MigrationId` varchar(150) NOT NULL); "
-                    + "INSERT INTO `__LegacyMigrationsHistory` VALUES ('legacy-unchanged');");
+                    + "INSERT INTO `__LegacyMigrationsHistory` VALUES ('legacy-unchanged');",
+                    cancellationToken: CancellationToken.None);
             }
 
             await using var context = CreateContext(connectionString);
@@ -213,11 +220,13 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
                 connectionString,
                 "SELECT COALESCE(MAX(CHARACTER_MAXIMUM_LENGTH), 0) "
                 + "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-                + $"AND TABLE_NAME = '{table}' AND COLUMN_NAME = 'payload';");
+                + $"AND TABLE_NAME = '{table}' AND COLUMN_NAME = 'payload';",
+                cancellationToken: CancellationToken.None);
 
             var report = await context
                 .GetService<ISafeMigrationRunner>()
-                .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions($"pairwise-{scenario.Index}"));
+                .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions($"pairwise-{scenario.Index}"),
+                              CancellationToken.None);
 
             Assert.Equal(
                 beforeColumnLength,
@@ -225,7 +234,8 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
                     connectionString,
                     "SELECT COALESCE(MAX(CHARACTER_MAXIMUM_LENGTH), 0) "
                     + "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-                    + $"AND TABLE_NAME = '{table}' AND COLUMN_NAME = 'payload';"));
+                    + $"AND TABLE_NAME = '{table}' AND COLUMN_NAME = 'payload';",
+                    cancellationToken: CancellationToken.None));
 
             var shouldBlock = scenario.Values["column"] == "different" || scenario.Values["index"] == "different";
 
@@ -240,8 +250,8 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
                 continue;
             }
 
-            await ExecuteOperationsAsync(context, builder.Operations);
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
             Assert.Equal(
                 40,
@@ -249,14 +259,15 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
                     connectionString,
                     "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
                     + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{table}' "
-                    + "AND COLUMN_NAME = 'payload';"));
+                    + "AND COLUMN_NAME = 'payload';", cancellationToken: CancellationToken.None));
             Assert.Equal(
                 1,
                 await ScalarIntAsync(
                     connectionString,
                     "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
                     + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{table}' "
-                    + $"AND INDEX_NAME = '{index}' AND COLUMN_NAME = 'id';"));
+                    + $"AND INDEX_NAME = '{index}' AND COLUMN_NAME = 'id';",
+                    cancellationToken: CancellationToken.None));
         }
     }
 
@@ -285,13 +296,15 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(definition, SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteSqlAsync(connectionString, "ALTER TABLE `strict_table` ADD `legacy` int NULL;");
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "ALTER TABLE `strict_table` ADD `legacy` int NULL;",
+            cancellationToken: CancellationToken.None);
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"),
+                          CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(
@@ -302,10 +315,12 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
         await ExecuteSqlAsync(
             connectionString,
             "ALTER TABLE `strict_table` DROP COLUMN `legacy`, "
-            + "ADD CONSTRAINT `uq_strict_unexpected` UNIQUE (`id`, `code`);");
+            + "ADD CONSTRAINT `uq_strict_unexpected` UNIQUE (`id`, `code`);",
+            cancellationToken: CancellationToken.None);
         report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"),
+                          CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(
@@ -347,19 +362,19 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
         builder.EnsureTable(definition, SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
         builder.EnsureIndex(expectedIndex, SafeMigrationPolicy.ThrowIfDifferent);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var runner = context.GetService<ISafeMigrationRunner>();
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("strict-unique-index-preflight"));
+            new SafeMigrationRunOptions("strict-unique-index-preflight"), CancellationToken.None);
 
         var postflight = await runner.VerifyAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("strict-unique-index-postflight"));
+            new SafeMigrationRunOptions("strict-unique-index-postflight"), CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
@@ -371,12 +386,13 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
         await ExecuteSqlAsync(
             connectionString,
             "ALTER TABLE `strict_unique_index` RENAME INDEX "
-            + "`ux_strict_unique_index_email` TO `ux_strict_unique_index_legacy`;");
+            + "`ux_strict_unique_index_email` TO `ux_strict_unique_index_legacy`;",
+            cancellationToken: CancellationToken.None);
 
         var alias = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("strict-unique-index-alias"));
+            new SafeMigrationRunOptions("strict-unique-index-alias"), CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, alias.Status);
         Assert.All(alias.Assessments, static assessment =>
@@ -386,15 +402,17 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
         await ExecuteSqlAsync(
             connectionString,
             "ALTER TABLE `strict_unique_index` "
-            + "ADD CONSTRAINT `uq_strict_unique_index_unknown` UNIQUE (`id`, `email`);");
+            + "ADD CONSTRAINT `uq_strict_unique_index_unknown` UNIQUE (`id`, `email`);",
+            cancellationToken: CancellationToken.None);
 
-        var runtimeException = await AssertOwnedGuardFailureAsync(() =>
-            ExecuteOperationsAsync(context, builder.Operations));
+        var runtimeException = await AssertOwnedGuardFailureAsync(operationToken =>
+            ExecuteOperationsAsync(context, builder.Operations, operationToken),
+            cancellationToken: CancellationToken.None);
 
         var drift = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("strict-unique-index-drift"));
+            new SafeMigrationRunOptions("strict-unique-index-drift"), CancellationToken.None);
 
         Assert.Contains("doka_sm_different", runtimeException.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(SafeMigrationReportStatus.Blocked, drift.Status);
@@ -419,7 +437,8 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
             connectionString,
             "CREATE TABLE `strict_unique_substitution` ("
             + "`id` int NOT NULL, `email` varchar(200) NULL, "
-            + "PRIMARY KEY (`id`), UNIQUE KEY `ux_unknown_shape` (`id`, `email`));");
+            + "PRIMARY KEY (`id`), UNIQUE KEY `ux_unknown_shape` (`id`, `email`));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var definition = new ExpectedTableDefinition(
@@ -445,7 +464,8 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("strict-unique-substitution"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("strict-unique-substitution"),
+                          CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.Different, report.Assessments[0].ObservedState);
@@ -468,7 +488,8 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
             connectionString,
             "CREATE TABLE `transition_parents` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
             + "CREATE TABLE `transition_children` ("
-            + "`id` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`));");
+            + "`id` int NOT NULL, `parent_id` int NULL, PRIMARY KEY (`id`));",
+            cancellationToken: CancellationToken.None);
         var options = new DbContextOptionsBuilder<StandaloneForeignKeyContext>()
             .UseMySql(connectionString, Fixture.ServerVersion)
             .UseMySqlSafeMigrations<StandaloneForeignKeyContext>()
@@ -498,7 +519,7 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
         var pending = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("standalone-fk-pending"));
+            new SafeMigrationRunOptions("standalone-fk-pending"), CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, pending.Status);
         Assert.Equal(SafeMigrationObservedState.Matching, pending.Assessments[0].ObservedState);
@@ -506,12 +527,12 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
         Assert.Equal(SafeMigrationAction.NoOp, pending.Assessments[0].Action);
         Assert.Equal(SafeMigrationAction.Apply, pending.Assessments[1].Action);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var replay = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("standalone-fk-replay"));
+            new SafeMigrationRunOptions("standalone-fk-replay"), CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
         Assert.All(replay.Assessments, static assessment =>
@@ -525,12 +546,13 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
             "ALTER TABLE `transition_children` DROP FOREIGN KEY `fk_transition_children_parent`; "
             + "CREATE TABLE `transition_other_parents` (`id` int NOT NULL, PRIMARY KEY (`id`)); "
             + "ALTER TABLE `transition_children` ADD CONSTRAINT `fk_transition_children_unexpected` "
-            + "FOREIGN KEY (`parent_id`) REFERENCES `transition_other_parents` (`id`);");
+            + "FOREIGN KEY (`parent_id`) REFERENCES `transition_other_parents` (`id`);",
+            cancellationToken: CancellationToken.None);
 
         var drift = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("standalone-fk-drift"));
+            new SafeMigrationRunOptions("standalone-fk-drift"), CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, drift.Status);
         Assert.Equal(SafeMigrationObservedState.Different, drift.Assessments[0].ObservedState);
@@ -545,7 +567,7 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
             connectionString,
             "CREATE TABLE `non_unique_alias` ("
             + "`id` int NOT NULL, `code` varchar(30) NULL, "
-            + "CONSTRAINT `ix_non_unique_alias_code` UNIQUE (`code`));");
+            + "CONSTRAINT `ix_non_unique_alias_code` UNIQUE (`code`));", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var definition = new ExpectedTableDefinition(
             "non_unique_alias",
@@ -568,7 +590,8 @@ public sealed partial class MySqlTablesIntegrationTests : MySqlSafeMigrationInte
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("non-unique-alias"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("non-unique-alias"),
+                          CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.Different, report.Assessments[^1].ObservedState);

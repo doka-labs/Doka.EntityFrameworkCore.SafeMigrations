@@ -38,15 +38,19 @@ internal static class SqlServerTemporaryTableProbe
     /// <param name="connection">An already-open native session retained through observation.</param>
     /// <param name="localName">The exact local temporary table name.</param>
     /// <param name="transaction">The caller's existing transaction, when present.</param>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     /// <returns>The native identity without substituting objects from another session.</returns>
     internal static async Task<int?> ReadObjectIdAsync(
         SqlConnection connection,
         string localName,
+        CancellationToken cancellationToken,
         SqlTransaction? transaction = null
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var command = CreateObjectIdCommand(connection, localName, transaction);
-        var value = await command.ExecuteScalarAsync(CancellationToken.None);
+        var value = await command.ExecuteScalarAsync(cancellationToken);
 
         return value is null or DBNull ? null : Convert.ToInt32(value, CultureInfo.InvariantCulture);
     }

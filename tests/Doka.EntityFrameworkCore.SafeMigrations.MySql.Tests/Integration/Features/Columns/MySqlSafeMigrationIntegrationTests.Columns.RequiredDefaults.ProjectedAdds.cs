@@ -21,13 +21,16 @@ public sealed partial class MySqlColumnsRequiredDefaultsProjectedAddsIntegration
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES"
-            + (ansiQuotes ? ",ANSI_QUOTES" : "") + "'; SET SESSION default_storage_engine = InnoDB;");
+            + (ansiQuotes ? ",ANSI_QUOTES" : "") + "'; SET SESSION default_storage_engine = InnoDB;",
+            cancellationToken: CancellationToken.None);
         var column = new SafeMigrationOperation(new EnsureColumnIntent("required_projected_items",
                 new ExpectedColumnDefinition("value", typeof(string), false, @"enum(""Alpha"")")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var originalFingerprint = SafeMigrationContractFingerprint.Create([column]);
-        var originalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context);
+        var originalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context,
+            cancellationToken: CancellationToken.None);
+
         var operations = RequiredDefaultsProjectedOwnerOperations(column);
 
         // Act
@@ -37,11 +40,16 @@ public sealed partial class MySqlColumnsRequiredDefaultsProjectedAddsIntegration
         var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, operations, CancellationToken.None));
 
-        var finalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context);
-        var state = await ReadAtomicRequiredAddStateAsync(connectionString, column);
+        var finalMode = await RequiredDefaultsEnumCommentSessionModeAsync(context,
+            cancellationToken: CancellationToken.None);
+
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, column,
+            cancellationToken: CancellationToken.None);
+
         var physicalType = await ScalarStringAsync(connectionString,
             "SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'required_projected_items' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'required_projected_items' AND COLUMN_NAME = 'value';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(ansiQuotes ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready, report.Status);
@@ -85,7 +93,7 @@ public sealed partial class MySqlColumnsRequiredDefaultsProjectedAddsIntegration
         var engine = environment == "non-innodb" ? "MyISAM" : "InnoDB";
         await AtomicRequiredAddSessionSqlAsync(context,
             "SET SESSION sql_mode = '" + (strictSession ? "STRICT_ALL_TABLES" : "") + "'; "
-            + "SET SESSION default_storage_engine = " + engine + ";");
+            + "SET SESSION default_storage_engine = " + engine + ";", cancellationToken: CancellationToken.None);
         var column = AtomicRequiredAddOperation(useGuidStorage: false, table: "required_projected_items");
         var operations = RequiredDefaultsProjectedOwnerOperations(column);
         var allowed = environment == "strict-innodb";
@@ -97,10 +105,12 @@ public sealed partial class MySqlColumnsRequiredDefaultsProjectedAddsIntegration
         var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, operations, CancellationToken.None));
 
-        var state = await ReadAtomicRequiredAddStateAsync(connectionString, column);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, column,
+            cancellationToken: CancellationToken.None);
+
         var actualEngine = await ScalarStringAsync(connectionString,
             "SELECT ENGINE FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'required_projected_items';");
+            + "AND TABLE_NAME = 'required_projected_items';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(allowed ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked, report.Status);
@@ -135,7 +145,7 @@ public sealed partial class MySqlColumnsRequiredDefaultsProjectedAddsIntegration
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await AtomicRequiredAddSessionSqlAsync(context,
             "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; SET SESSION default_storage_engine = InnoDB; "
-            + "SET SESSION check_constraint_checks = OFF;");
+            + "SET SESSION check_constraint_checks = OFF;", cancellationToken: CancellationToken.None);
         var column = AtomicRequiredAddOperation(useGuidStorage: false, table: "required_projected_items");
         var operations = RequiredDefaultsProjectedOwnerOperations(column);
 
@@ -146,7 +156,8 @@ public sealed partial class MySqlColumnsRequiredDefaultsProjectedAddsIntegration
         var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, operations, CancellationToken.None));
 
-        var state = await ReadAtomicRequiredAddStateAsync(connectionString, column);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, column,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -177,7 +188,8 @@ public sealed partial class MySqlColumnsRequiredDefaultsProjectedAddsIntegration
             "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; SET SESSION explicit_defaults_for_timestamp = ON; "
             + "CREATE TABLE `required_projected_time_items` (`key` int NOT NULL PRIMARY KEY, "
             + "`value` timestamp(6) NOT NULL) ENGINE=InnoDB; "
-            + "INSERT INTO `required_projected_time_items` VALUES (1, '2000-01-02 03:04:05');");
+            + "INSERT INTO `required_projected_time_items` VALUES (1, '2000-01-02 03:04:05');",
+            cancellationToken: CancellationToken.None);
         var ensure = new SafeMigrationOperation(new EnsureColumnIntent("required_projected_time_items",
                 new ExpectedColumnDefinition("value", typeof(DateTime), false, "timestamp(6)")),
             SafeMigrationPolicy.ThrowIfDifferent);
@@ -190,7 +202,7 @@ public sealed partial class MySqlColumnsRequiredDefaultsProjectedAddsIntegration
         var originalContract = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'required_projected_time_items' AND COLUMN_NAME = 'value' "
-            + "AND IS_NULLABLE = 'NO' AND COLUMN_DEFAULT IS NULL;");
+            + "AND IS_NULLABLE = 'NO' AND COLUMN_DEFAULT IS NULL;", cancellationToken: CancellationToken.None);
 
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("projected-required-timestamp-readd"), CancellationToken.None);
@@ -200,10 +212,12 @@ public sealed partial class MySqlColumnsRequiredDefaultsProjectedAddsIntegration
 
         var targetColumns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'required_projected_time_items' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'required_projected_time_items' AND COLUMN_NAME = 'value';",
+            cancellationToken: CancellationToken.None);
 
         var retainedKeys = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `required_projected_time_items` WHERE `key` = 1;");
+            "SELECT COUNT(*) FROM `required_projected_time_items` WHERE `key` = 1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, originalContract);

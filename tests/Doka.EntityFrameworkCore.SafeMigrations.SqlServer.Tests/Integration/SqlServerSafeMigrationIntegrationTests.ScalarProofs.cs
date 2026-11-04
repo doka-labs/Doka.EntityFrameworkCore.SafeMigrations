@@ -14,12 +14,14 @@ public sealed class SqlServerSafeMigrationScalarProofsIntegrationTests : SqlServ
     public async Task ScalarProofs_KeepFreshValuesAndPrivateScopesOnSqlServer()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync();
 
         // Act
-        await SqlServerScalarProofRegressionTests.VerifyLocalAsync(connection);
+        await SqlServerScalarProofRegressionTests.VerifyLocalAsync(
+            connection,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(ConnectionState.Open, connection.State);

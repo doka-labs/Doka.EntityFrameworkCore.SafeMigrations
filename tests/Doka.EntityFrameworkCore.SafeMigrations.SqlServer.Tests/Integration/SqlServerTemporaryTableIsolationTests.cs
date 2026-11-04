@@ -22,7 +22,7 @@ public sealed class SqlServerTemporaryTableIsolationTests : SqlServerIntegration
     public async Task SessionLookup_SeparatesIdenticalNamesDuringPeerDdl(int ownerState)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var owner = new SqlConnection(connectionString);
         await using var peer = new SqlConnection(connectionString);
         await Task.WhenAll(owner.OpenAsync(), peer.OpenAsync());
@@ -33,33 +33,52 @@ public sealed class SqlServerTemporaryTableIsolationTests : SqlServerIntegration
         // this session's exact object; no elapsed-time assertion is needed.
         await ExecuteSessionSqlAsync(peer,
             "CREATE TABLE #doka_sm_identifiers (Sentinel int NOT NULL); "
-            + "INSERT INTO #doka_sm_identifiers VALUES (91);", peerTransaction);
+            + "INSERT INTO #doka_sm_identifiers VALUES (91);",
+            cancellationToken: CancellationToken.None,
+            peerTransaction);
 
         if (ownerState != 0)
         {
             await ExecuteSessionSqlAsync(owner,
                 "CREATE TABLE #doka_sm_identifiers (Sentinel int NOT NULL); "
-                + "INSERT INTO #doka_sm_identifiers VALUES (73);");
+                + "INSERT INTO #doka_sm_identifiers VALUES (73);", cancellationToken: CancellationToken.None);
         }
 
-        var originalObjectId = await SqlServerTemporaryTableProbe.ReadObjectIdAsync(owner, CallerTable);
+        var originalObjectId = await SqlServerTemporaryTableProbe.ReadObjectIdAsync(
+            owner,
+            CallerTable,
+            cancellationToken: CancellationToken.None);
+
         if (ownerState == 2)
         {
-            await ExecuteSessionSqlAsync(owner, "DROP TABLE #doka_sm_identifiers;");
+            await ExecuteSessionSqlAsync(
+                owner,
+                "DROP TABLE #doka_sm_identifiers;",
+                cancellationToken: CancellationToken.None);
         }
 
         int? ownerSentinel = null;
 
         // Act
         var objectIds = await Task.WhenAll(
-            SqlServerTemporaryTableProbe.ReadObjectIdAsync(owner, CallerTable),
-            SqlServerTemporaryTableProbe.ReadObjectIdAsync(peer, CallerTable, peerTransaction));
+            SqlServerTemporaryTableProbe.ReadObjectIdAsync(
+                owner,
+                CallerTable,
+                cancellationToken: CancellationToken.None),
+            SqlServerTemporaryTableProbe.ReadObjectIdAsync(
+                peer,
+                CallerTable,
+                cancellationToken: CancellationToken.None,
+                peerTransaction));
 
         var ownerReadFailure = await Record.ExceptionAsync(async () =>
-            ownerSentinel = await ReadSessionIntAsync(owner, "SELECT Sentinel FROM #doka_sm_identifiers;"));
+            ownerSentinel = await ReadSessionIntAsync(
+                owner,
+                "SELECT Sentinel FROM #doka_sm_identifiers;",
+                cancellationToken: CancellationToken.None));
 
         var peerSentinel = await ReadSessionIntAsync(peer,
-            "SELECT Sentinel FROM #doka_sm_identifiers;", peerTransaction);
+            "SELECT Sentinel FROM #doka_sm_identifiers;", cancellationToken: CancellationToken.None, peerTransaction);
 
         // Assert
         Assert.NotEqual(owner.ClientConnectionId, peer.ClientConnectionId);
@@ -90,9 +109,9 @@ public sealed class SqlServerTemporaryTableIsolationTests : SqlServerIntegration
     public async Task IdentifierCleanup_PreservesCallerAndSameNamePeerScopes(bool interrupted)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(cancellationToken: CancellationToken.None);
         var owner = (SqlConnection)context.Database.GetDbConnection();
         await using var peer = new SqlConnection(connectionString);
         await peer.OpenAsync();
@@ -111,13 +130,24 @@ public sealed class SqlServerTemporaryTableIsolationTests : SqlServerIntegration
 
         await ExecuteSessionSqlAsync(owner,
             "CREATE TABLE #doka_sm_identifiers (Sentinel int NOT NULL); "
-            + "INSERT INTO #doka_sm_identifiers VALUES (73);");
+            + "INSERT INTO #doka_sm_identifiers VALUES (73);", cancellationToken: CancellationToken.None);
         await ExecuteSessionSqlAsync(peer,
             "CREATE TABLE [" + ownedTable + "] (Sentinel int NOT NULL); "
-            + "INSERT INTO [" + ownedTable + "] VALUES (91);", peerTransaction);
+            + "INSERT INTO [" + ownedTable + "] VALUES (91);",
+            cancellationToken: CancellationToken.None,
+            peerTransaction);
 
-        var callerObjectId = await SqlServerTemporaryTableProbe.ReadObjectIdAsync(owner, CallerTable);
-        var peerObjectId = await SqlServerTemporaryTableProbe.ReadObjectIdAsync(peer, ownedTable, peerTransaction);
+        var callerObjectId = await SqlServerTemporaryTableProbe.ReadObjectIdAsync(
+            owner,
+            CallerTable,
+            cancellationToken: CancellationToken.None);
+
+        var peerObjectId = await SqlServerTemporaryTableProbe.ReadObjectIdAsync(
+            peer,
+            ownedTable,
+            cancellationToken: CancellationToken.None,
+            peerTransaction);
+
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
         Exception? originalFailure = interrupted
             ? new InvalidOperationException("Injected identifier interruption.")
@@ -126,27 +156,49 @@ public sealed class SqlServerTemporaryTableIsolationTests : SqlServerIntegration
         int? classification = null;
 
         // Act
-        await ExecuteSessionSqlAsync(owner, statements[0]);
-        var createdObjectId = await SqlServerTemporaryTableProbe.ReadObjectIdAsync(owner, ownedTable);
+        await ExecuteSessionSqlAsync(owner, statements[0], cancellationToken: CancellationToken.None);
+        var createdObjectId = await SqlServerTemporaryTableProbe.ReadObjectIdAsync(
+            owner,
+            ownedTable,
+            cancellationToken: CancellationToken.None);
+
         if (!interrupted)
         {
             for (var index = 1; index + 1 < statements.Count; index++)
             {
-                await ExecuteSessionSqlAsync(owner, statements[index]);
+                await ExecuteSessionSqlAsync(owner, statements[index], cancellationToken: CancellationToken.None);
             }
 
-            classification = await ReadSessionIntAsync(owner, statements[^1]);
+            classification = await ReadSessionIntAsync(
+                owner,
+                statements[^1],
+                cancellationToken: CancellationToken.None);
         }
 
         await analyzer.CleanupTemporaryScopeAsync(owner, null, ownedTable, null, originalFailure);
         var remainingObjectIds = await Task.WhenAll(
-            SqlServerTemporaryTableProbe.ReadObjectIdAsync(owner, ownedTable),
-            SqlServerTemporaryTableProbe.ReadObjectIdAsync(peer, ownedTable, peerTransaction));
+            SqlServerTemporaryTableProbe.ReadObjectIdAsync(
+                owner,
+                ownedTable,
+                cancellationToken: CancellationToken.None),
+            SqlServerTemporaryTableProbe.ReadObjectIdAsync(
+                peer,
+                ownedTable,
+                cancellationToken: CancellationToken.None,
+                peerTransaction));
 
-        var retainedCallerObjectId = await SqlServerTemporaryTableProbe.ReadObjectIdAsync(owner, CallerTable);
-        var callerSentinel = await ReadSessionIntAsync(owner, "SELECT Sentinel FROM #doka_sm_identifiers;");
+        var retainedCallerObjectId = await SqlServerTemporaryTableProbe.ReadObjectIdAsync(
+            owner,
+            CallerTable,
+            cancellationToken: CancellationToken.None);
+
+        var callerSentinel = await ReadSessionIntAsync(
+            owner,
+            "SELECT Sentinel FROM #doka_sm_identifiers;",
+            cancellationToken: CancellationToken.None);
+
         var peerSentinel = await ReadSessionIntAsync(peer,
-            "SELECT Sentinel FROM [" + ownedTable + "];", peerTransaction);
+            "SELECT Sentinel FROM [" + ownedTable + "];", cancellationToken: CancellationToken.None, peerTransaction);
 
         // Assert
         Assert.NotEqual(owner.ClientConnectionId, peer.ClientConnectionId);
@@ -165,29 +217,37 @@ public sealed class SqlServerTemporaryTableIsolationTests : SqlServerIntegration
     }
 
     /// <summary>Executes authored setup or actual provider statements on one retained native session.</summary>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task ExecuteSessionSqlAsync(
         SqlConnection connection,
         string sql,
+        CancellationToken cancellationToken,
         SqlTransaction? transaction = null
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
         command.Transaction = transaction;
-        await command.ExecuteNonQueryAsync(CancellationToken.None);
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     /// <summary>Reads a scalar without opening another session or enumerating unrelated metadata.</summary>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task<int> ReadSessionIntAsync(
         SqlConnection connection,
         string sql,
+        CancellationToken cancellationToken,
         SqlTransaction? transaction = null
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
         command.Transaction = transaction;
 
-        return Convert.ToInt32(await command.ExecuteScalarAsync(CancellationToken.None), CultureInfo.InvariantCulture);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture);
     }
 }

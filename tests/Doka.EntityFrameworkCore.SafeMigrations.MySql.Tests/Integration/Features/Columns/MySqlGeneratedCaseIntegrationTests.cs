@@ -17,12 +17,16 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY); "
-            + $"INSERT INTO `{Table}` VALUES (1);");
+            + $"INSERT INTO `{Table}` VALUES (1);", cancellationToken: CancellationToken.None);
         var initial = new MigrationBuilder(context.Database.ProviderName!);
         initial.EnsureColumn(Table, StringCaseColumn("Alpha"), SafeMigrationPolicy.ThrowIfDifferent);
-        var creationFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, initial.Operations));
+        var creationFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, initial.Operations,
+            CancellationToken.None));
+
         var native = creationFailure is null
-            ? null : await GeneratedNativeDisplayAsync(connectionString, "string_result");
+            ? null : await GeneratedNativeDisplayAsync(connectionString, "string_result",
+                cancellationToken: CancellationToken.None);
+
         var changed = new MigrationBuilder(context.Database.ProviderName!);
         changed.EnsureColumn(Table, StringCaseColumn("alpha"), SafeMigrationPolicy.ThrowIfDifferent);
 
@@ -31,7 +35,8 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
             new SafeMigrationRunOptions("generated-case-literal-drift"), CancellationToken.None);
 
         var original = await ScalarIntAsync(connectionString,
-            $"SELECT COUNT(*) FROM `{Table}` WHERE CAST(string_result AS BINARY) = CAST('Alpha' AS BINARY);");
+            $"SELECT COUNT(*) FROM `{Table}` WHERE CAST(string_result AS BINARY) = CAST('Alpha' AS BINARY);",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.True(creationFailure is null, $"{creationFailure?.Message}; native={native}");
@@ -70,12 +75,16 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
         // WHY: Unicode result fidelity is this table's contract, not the selected server's database default.
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY) "
             + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + $"INSERT INTO `{Table}` VALUES (1);");
+            + $"INSERT INTO `{Table}` VALUES (1);", cancellationToken: CancellationToken.None);
         var initial = new MigrationBuilder(context.Database.ProviderName!);
         initial.EnsureColumn(Table, StringCaseColumn(result, prefix: prefix), SafeMigrationPolicy.ThrowIfDifferent);
-        var creationFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, initial.Operations));
+        var creationFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, initial.Operations,
+            CancellationToken.None));
+
         var native = creationFailure is null
-            ? null : await GeneratedNativeDisplayAsync(connectionString, "string_result");
+            ? null : await GeneratedNativeDisplayAsync(connectionString, "string_result",
+                cancellationToken: CancellationToken.None);
+
         var equivalent = new MigrationBuilder(context.Database.ProviderName!);
         equivalent.EnsureColumn(Table, StringCaseColumn(result, "ID", prefix), SafeMigrationPolicy.ThrowIfDifferent);
 
@@ -84,7 +93,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
             new SafeMigrationRunOptions("generated-case-identifier-identity"), CancellationToken.None);
 
         var actual = await ScalarStringAsync(connectionString,
-            $"SELECT string_result FROM `{Table}` WHERE id = 1;");
+            $"SELECT string_result FROM `{Table}` WHERE id = 1;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.True(creationFailure is null, $"{creationFailure?.Message}; native={native}");
@@ -114,7 +123,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` "
             + "(`id` int NOT NULL PRIMARY KEY, `left_bound` bigint NOT NULL, `right_bound` bigint NOT NULL); "
-            + $"INSERT INTO `{Table}` VALUES (1, 2, 3);");
+            + $"INSERT INTO `{Table}` VALUES (1, 2, 3);", cancellationToken: CancellationToken.None);
         var definition = SafeMigrationExpectedDefinitionFactory.From(new AddColumnOperation
         {
             Name = "integral_result", Table = Table, ClrType = typeof(long), ColumnType = "bigint",
@@ -130,16 +139,19 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
 
         var exception = await Record.ExceptionAsync(async () =>
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         });
 
         var postflight = await context.GetService<ISafeMigrationRunner>().VerifyAsync(context, builder.Operations,
             new SafeMigrationRunOptions("integral-generated-forms-replay"), CancellationToken.None);
 
         var result = exception is null
-            ? await ScalarIntAsync(connectionString, $"SELECT integral_result FROM `{Table}` WHERE id = 1;") : -1;
-        var native = exception is null ? null : await GeneratedNativeDisplayAsync(connectionString, "integral_result");
+            ? await ScalarIntAsync(connectionString, $"SELECT integral_result FROM `{Table}` WHERE id = 1;",
+                cancellationToken: CancellationToken.None) : -1;
+
+        var native = exception is null ? null : await GeneratedNativeDisplayAsync(connectionString, "integral_result",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -189,15 +201,16 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
         // Act
         var exception = await Record.ExceptionAsync(async () =>
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
-            await SeedCaseRowsAsync(connectionString);
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+            await SeedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         });
 
         var report = await context.GetService<ISafeMigrationRunner>().VerifyAsync(context, builder.Operations,
             new SafeMigrationRunOptions("fresh-generated-case-replay"), CancellationToken.None);
 
-        var computedRows = exception is null ? await CountExpectedCaseRowsAsync(connectionString) : -1;
+        var computedRows = exception is null ? await CountExpectedCaseRowsAsync(connectionString,
+            cancellationToken: CancellationToken.None) : -1;
 
         // Assert
         Assert.True(exception is null, $"{exception}; " + DescribeGeneratedReport(report));
@@ -217,8 +230,9 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` "
-            + "(`id` int NOT NULL PRIMARY KEY, `left_bound` bigint NOT NULL, `right_bound` bigint NOT NULL);");
-        await SeedCaseRowsAsync(connectionString);
+            + "(`id` int NOT NULL PRIMARY KEY, `left_bound` bigint NOT NULL, `right_bound` bigint NOT NULL);",
+            cancellationToken: CancellationToken.None);
+        await SeedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn(Table, CaseColumn(stored), policy: SafeMigrationPolicy.ThrowIfDifferent);
         builder.EnsureIndex(new ExpectedIndexDefinition("ix_generated_case", Table,
@@ -231,14 +245,15 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
 
         var exception = await Record.ExceptionAsync(async () =>
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         });
 
         var postflight = await context.GetService<ISafeMigrationRunner>().VerifyAsync(context, builder.Operations,
             new SafeMigrationRunOptions("populated-generated-case-replay"), CancellationToken.None);
 
-        var computedRows = exception is null ? await CountExpectedCaseRowsAsync(connectionString) : -1;
+        var computedRows = exception is null ? await CountExpectedCaseRowsAsync(connectionString,
+            cancellationToken: CancellationToken.None) : -1;
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -262,8 +277,8 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
         var initial = new MigrationBuilder(context.Database.ProviderName!);
         initial.EnsureTable(CaseTable(stored: false), SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
-        await ExecuteOperationsAsync(context, initial.Operations);
-        await SeedCaseRowsAsync(connectionString);
+        await ExecuteOperationsAsync(context, initial.Operations, CancellationToken.None);
+        await SeedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
         var changed = new MigrationBuilder(context.Database.ProviderName!);
         changed.EnsureColumn(Table, CaseColumn(stored: facet == "storage",
             offset: facet == "expression" ? 2 : 1, storeType: facet == "type" ? "smallint" : "tinyint(1)"),
@@ -273,7 +288,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, changed.Operations,
             new SafeMigrationRunOptions("generated-case-drift"), CancellationToken.None);
 
-        var rows = await CountExpectedCaseRowsAsync(connectionString);
+        var rows = await CountExpectedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -330,14 +345,22 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
                     SafeMigrationSql.Literal(offset)))), isStored: stored);
 
     /// <summary>Includes both signed extrema and ordinary true/false generated outcomes.</summary>
-    private static Task SeedCaseRowsAsync(string connectionString) => ExecuteSqlAsync(connectionString,
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static Task SeedCaseRowsAsync(
+        string connectionString,
+        CancellationToken cancellationToken
+    ) => ExecuteSqlAsync(connectionString,
         $"INSERT INTO `{Table}` (`id`, `left_bound`, `right_bound`) VALUES "
         + "(1, 1, 2), (2, 1, 3), (3, 9223372036854775807, 9223372036854775807), "
         + "(4, -9223372036854775808, -9223372036854775807), "
-        + "(5, -9223372036854775808, -9223372036854775806);");
+        + "(5, -9223372036854775808, -9223372036854775806);", cancellationToken: cancellationToken);
 
     /// <summary>Checks generated outputs while also retaining every original key and bound.</summary>
-    private static Task<int> CountExpectedCaseRowsAsync(string connectionString) => ScalarIntAsync(connectionString,
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static Task<int> CountExpectedCaseRowsAsync(
+        string connectionString,
+        CancellationToken cancellationToken
+    ) => ScalarIntAsync(connectionString,
         $"SELECT COUNT(*) FROM `{Table}` WHERE "
         + "(id = 1 AND left_bound = 1 AND right_bound = 2 AND has_descendants = 0) OR "
         + "(id = 2 AND left_bound = 1 AND right_bound = 3 AND has_descendants = 1) OR "
@@ -346,7 +369,7 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
         + "(id = 4 AND left_bound = -9223372036854775808 AND right_bound = -9223372036854775807 "
         + "AND has_descendants = 0) OR "
         + "(id = 5 AND left_bound = -9223372036854775808 AND right_bound = -9223372036854775806 "
-        + "AND has_descendants = 1);");
+        + "AND has_descendants = 1);", cancellationToken: cancellationToken);
 
     /// <summary>Retains bounded catalog differences when a native postcondition fails before replay.</summary>
     private static string DescribeGeneratedReport(SafeMigrationRunReport report) => string.Join("; ",
@@ -355,8 +378,14 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests : MySqlSafeMigrat
                 $"{difference.Facet}={difference.Expected}/{difference.Actual}"))));
 
     /// <summary>Captures only deterministic test-fixture metadata when an expression postcondition fails.</summary>
-    private static Task<string> GeneratedNativeDisplayAsync(string connectionString, string column) =>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static Task<string> GeneratedNativeDisplayAsync(
+        string connectionString,
+        string column,
+        CancellationToken cancellationToken
+    ) =>
         ScalarStringAsync(connectionString, "SELECT CONCAT(COLUMN_TYPE, '|', IS_NULLABLE, '|', "
             + "COALESCE(COLUMN_DEFAULT, '<null>'), '|', GENERATION_EXPRESSION) FROM INFORMATION_SCHEMA.COLUMNS "
-            + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND COLUMN_NAME = '{column}';");
+            + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND COLUMN_NAME = '{column}';",
+            cancellationToken: cancellationToken);
 }

@@ -18,7 +18,7 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `diagnostic_items` (`id` int NOT NULL PRIMARY KEY);"
-            + "INSERT INTO `diagnostic_items` VALUES (1);");
+            + "INSERT INTO `diagnostic_items` VALUES (1);", cancellationToken: CancellationToken.None);
         var observer = new MySqlRuntimeCommandInterceptor();
         await using var context = CreateRuntimeContext(connectionString, observer);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
@@ -28,10 +28,15 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
         var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteDiagnosticCommandsAsync(context, commands, synchronous));
+        var failure = await Record.ExceptionAsync(() => ExecuteDiagnosticCommandsAsync(context, commands, synchronous,
+            cancellationToken: CancellationToken.None));
+
         var cleaned = await ContextScalarIntAsync(context, "SELECT @doka_sm_state IS NULL "
-            + "AND @doka_sm_action IS NULL AND @doka_sm_sql IS NULL AND @doka_sm_diag IS NULL;");
-        var preserved = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `diagnostic_items` WHERE `id` = 1;");
+            + "AND @doka_sm_action IS NULL AND @doka_sm_sql IS NULL AND @doka_sm_diag IS NULL;",
+            cancellationToken: CancellationToken.None);
+
+        var preserved = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `diagnostic_items` WHERE `id` = 1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var diagnostic = Assert.IsType<SafeMigrationExecutionException>(failure);
@@ -65,7 +70,8 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `diagnostic_items` (`id` int NOT NULL PRIMARY KEY);"
-            + (populated ? "INSERT INTO `diagnostic_items` VALUES (1);" : string.Empty));
+            + (populated ? "INSERT INTO `diagnostic_items` VALUES (1);" : string.Empty),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<bool>("active", "diagnostic_items", type: "tinyint(1)", nullable: false,
@@ -73,10 +79,15 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
         var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
 
         // Act
-        await ExecuteDiagnosticCommandsAsync(context, commands, synchronous: false);
-        await ExecuteDiagnosticCommandsAsync(context, commands, synchronous: false);
-        var values = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `diagnostic_items` WHERE `active` = 1;");
-        var cleaned = await ContextScalarIntAsync(context, "SELECT @doka_sm_diag IS NULL;");
+        await ExecuteDiagnosticCommandsAsync(context, commands, synchronous: false,
+            cancellationToken: CancellationToken.None);
+        await ExecuteDiagnosticCommandsAsync(context, commands, synchronous: false,
+            cancellationToken: CancellationToken.None);
+        var values = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `diagnostic_items` WHERE `active` = 1;",
+            cancellationToken: CancellationToken.None);
+
+        var cleaned = await ContextScalarIntAsync(context, "SELECT @doka_sm_diag IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(populated ? 1 : 0, values);
@@ -95,8 +106,8 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
         var nativeDatabase = await CreateDatabaseAsync(CancellationToken.None);
         const string setup = "CREATE TABLE `diagnostic_items` (`id` int NOT NULL PRIMARY KEY);"
             + "INSERT INTO `diagnostic_items` VALUES (1);";
-        await ExecuteSqlAsync(wrappedDatabase, setup);
-        await ExecuteSqlAsync(nativeDatabase, setup);
+        await ExecuteSqlAsync(wrappedDatabase, setup, cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(nativeDatabase, setup, cancellationToken: CancellationToken.None);
         var wrappedObserver = new MySqlRuntimeCommandInterceptor();
         var nativeObserver = new MySqlRuntimeCommandInterceptor();
         await using var wrappedContext = CreateRuntimeContext(wrappedDatabase, wrappedObserver);
@@ -130,10 +141,12 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `diagnostic_items` (`id` int NOT NULL PRIMARY KEY);"
-            + "INSERT INTO `diagnostic_items` VALUES (1);");
+            + "INSERT INTO `diagnostic_items` VALUES (1);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
-        var session = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();");
+        var session = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();",
+            cancellationToken: CancellationToken.None);
+
         var rejected = new MigrationBuilder(context.Database.ProviderName!);
         rejected.AddColumnIfNotExists<bool>("active", "diagnostic_items", type: "tinyint(1)", nullable: false);
         var approved = new MigrationBuilder(context.Database.ProviderName!);
@@ -141,11 +154,18 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
             defaultValue: true);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, rejected.Operations));
-        await ExecuteOperationsAsync(context, approved.Operations);
-        var actualSession = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();");
-        var filled = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `diagnostic_items` WHERE `active` = 1;");
-        var cleaned = await ContextScalarIntAsync(context, "SELECT @doka_sm_diag IS NULL;");
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, rejected.Operations,
+            CancellationToken.None));
+
+        await ExecuteOperationsAsync(context, approved.Operations, CancellationToken.None);
+        var actualSession = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();",
+            cancellationToken: CancellationToken.None);
+
+        var filled = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `diagnostic_items` WHERE `active` = 1;",
+            cancellationToken: CancellationToken.None);
+
+        var cleaned = await ContextScalarIntAsync(context, "SELECT @doka_sm_diag IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.IsType<SafeMigrationExecutionException>(failure);
@@ -165,7 +185,8 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `diagnostic_items` (`id` int NOT NULL PRIMARY KEY);"
             + "CREATE TABLE `diagnostic_duplicates` (`value` int NOT NULL, CONSTRAINT `" + name
-            + "` UNIQUE (`value`)); INSERT INTO `diagnostic_duplicates` VALUES (1);");
+            + "` UNIQUE (`value`)); INSERT INTO `diagnostic_duplicates` VALUES (1);",
+            cancellationToken: CancellationToken.None);
         var observer = new MySqlRuntimeCommandInterceptor();
         observer.InjectFirstSetup("INSERT INTO `diagnostic_duplicates` VALUES (1);");
         await using var context = CreateRuntimeContext(connectionString, observer);
@@ -174,9 +195,12 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
         builder.AddColumnIfNotExists<int>("value", "diagnostic_items", type: "int", nullable: true);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
         var cleaned = await ContextScalarIntAsync(context, "SELECT @doka_sm_state IS NULL "
-            + "AND @doka_sm_action IS NULL AND @doka_sm_sql IS NULL AND @doka_sm_diag IS NULL;");
+            + "AND @doka_sm_action IS NULL AND @doka_sm_sql IS NULL AND @doka_sm_diag IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var native = Assert.IsType<MySqlException>(failure);
@@ -202,7 +226,8 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
             schema: foreignQualifier ? "foreign_database" : null);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
 
         // Assert
         var diagnostic = Assert.IsType<SafeMigrationExecutionException>(failure);
@@ -224,7 +249,7 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `diagnostic_items` (`id` int NOT NULL PRIMARY KEY);"
-            + "INSERT INTO `diagnostic_items` VALUES (1);");
+            + "INSERT INTO `diagnostic_items` VALUES (1);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<bool>("active", "diagnostic_items", type: "tinyint(1)", nullable: false);
@@ -232,7 +257,8 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
             context.Model, MigrationsSqlGenerationOptions.Script)).CommandText;
 
         // Act
-        var result = await ReadDiagnosticScriptFailureAsync(connectionString, sql);
+        var result = await ReadDiagnosticScriptFailureAsync(connectionString, sql,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal("safe_migration_runtime_diagnostic", result.DocumentKind);
@@ -261,14 +287,16 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
             + "INSERT INTO `diagnostic_children` VALUES (7, " + (orphan ? "2" : "1")
             + ", 'private-row-never-for-diagnostics');"
             + (orphan ? string.Empty : "ALTER TABLE `diagnostic_children` ADD CONSTRAINT `fk_diagnostic_parent` "
-                + "FOREIGN KEY (`parent_id`) REFERENCES `diagnostic_parents` (`id`) ON DELETE RESTRICT;"));
+                + "FOREIGN KEY (`parent_id`) REFERENCES `diagnostic_parents` (`id`) ON DELETE RESTRICT;"),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddForeignKeyIfNotExists("fk_diagnostic_parent", "diagnostic_children", ["parent_id"],
             "diagnostic_parents", ["id"], onDelete: ReferentialAction.Cascade);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
 
         // Assert
         var diagnostic = Assert.IsType<SafeMigrationExecutionException>(failure);
@@ -289,7 +317,8 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `diagnostic_items` (`id` int NOT NULL PRIMARY KEY);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE `diagnostic_items` (`id` int NOT NULL PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
         var interceptor = new DiagnosticPostconditionFailureInterceptor();
         await using var context = CreateRuntimeContext(connectionString, interceptor);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
@@ -297,9 +326,12 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
         builder.AddColumnIfNotExists<int>("value", "diagnostic_items", type: "int", nullable: true);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
         var cleaned = await ContextScalarIntAsync(context, "SELECT @doka_sm_state IS NULL "
-            + "AND @doka_sm_sql IS NULL AND @doka_sm_post_ok IS NULL AND @doka_sm_diag IS NULL;");
+            + "AND @doka_sm_sql IS NULL AND @doka_sm_post_ok IS NULL AND @doka_sm_diag IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var diagnostic = Assert.IsType<SafeMigrationExecutionException>(failure);
@@ -319,7 +351,7 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE `diagnostic_items` (`id` int NOT NULL PRIMARY KEY);"
-            + "INSERT INTO `diagnostic_items` VALUES (1);");
+            + "INSERT INTO `diagnostic_items` VALUES (1);", cancellationToken: CancellationToken.None);
         var interceptor = new RuntimeCleanupFailureInterceptor();
         await using var context = CreateRuntimeContext(connectionString, interceptor);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
@@ -327,7 +359,8 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
         builder.AddColumnIfNotExists<bool>("active", "diagnostic_items", type: "tinyint(1)", nullable: false);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
 
         // Assert
         var recovery = Assert.IsType<InvalidOperationException>(failure, exactMatch: false);
@@ -349,7 +382,8 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `diagnostic_items` (`id` int NOT NULL PRIMARY KEY);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE `diagnostic_items` (`id` int NOT NULL PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
         var interceptor = new DiagnosticRequiredAddRaceInterceptor();
         await using var context = CreateRuntimeContext(connectionString, interceptor);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
@@ -357,9 +391,14 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
         builder.AddColumnIfNotExists<bool>("active", "diagnostic_items", type: "tinyint(1)", nullable: false);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
-        var preserved = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `diagnostic_items` WHERE `id` = 9;");
-        var cleaned = await ContextScalarIntAsync(context, "SELECT @doka_sm_diag IS NULL;");
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
+        var preserved = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `diagnostic_items` WHERE `id` = 9;",
+            cancellationToken: CancellationToken.None);
+
+        var cleaned = await ContextScalarIntAsync(context, "SELECT @doka_sm_diag IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var diagnostic = Assert.IsType<SafeMigrationExecutionException>(failure);
@@ -374,9 +413,16 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
     }
 
     /// <summary>Executes generated command ownership unchanged on either supported managed path.</summary>
-    private static async Task ExecuteDiagnosticCommandsAsync(DbContext context, IReadOnlyList<MigrationCommand> commands,
-        bool synchronous)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static async Task ExecuteDiagnosticCommandsAsync(
+        DbContext context,
+        IReadOnlyList<MigrationCommand> commands,
+        bool synchronous,
+        CancellationToken cancellationToken
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var connection = context.GetService<IRelationalConnection>();
         foreach (var command in commands)
         {
@@ -386,16 +432,23 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
             }
             else
             {
-                _ = await command.ExecuteNonQueryAsync(connection);
+                _ = await command.ExecuteNonQueryAsync(connection, cancellationToken: cancellationToken);
             }
         }
     }
 
     /// <summary>Consumes the actual script result stream instead of treating SQL comments as diagnostics.</summary>
-    private static async Task<DiagnosticScriptResult> ReadDiagnosticScriptFailureAsync(string connectionString, string sql)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static async Task<DiagnosticScriptResult> ReadDiagnosticScriptFailureAsync(
+        string connectionString,
+        string sql,
+        CancellationToken cancellationToken
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync(CancellationToken.None);
+        await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
         string? documentKind = null;
@@ -405,10 +458,10 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
         Exception? failure = null;
         try
         {
-            await using var reader = await command.ExecuteReaderAsync(CancellationToken.None);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             do
             {
-                if (reader.FieldCount == 5 && await reader.ReadAsync(CancellationToken.None))
+                if (reader.FieldCount == 5 && await reader.ReadAsync(cancellationToken))
                 {
                     documentKind = reader.GetString("documentKind");
                     guard = reader.GetString("guardCode");
@@ -416,7 +469,7 @@ public sealed partial class MySqlRuntimeDiagnosticsIntegrationTests : MySqlSafeM
                     message = reader.GetString("message");
                 }
             }
-            while (await reader.NextResultAsync(CancellationToken.None));
+            while (await reader.NextResultAsync(cancellationToken));
         }
         catch (MySqlException exception)
         {

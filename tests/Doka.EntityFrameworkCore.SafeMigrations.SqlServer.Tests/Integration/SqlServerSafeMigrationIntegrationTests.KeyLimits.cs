@@ -18,11 +18,12 @@ public sealed class SqlServerSafeMigrationKeyLimitsIntegrationTests : SqlServerS
     public async Task CandidateKey_DuplicateRowsAreDataBlocked(bool primaryKey)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.duplicate_keys (Id int NOT NULL, Code int NOT NULL); "
-            + "INSERT INTO dbo.duplicate_keys (Id, Code) VALUES (1, 7), (1, 7);");
+            + "INSERT INTO dbo.duplicate_keys (Id, Code) VALUES (1, 7), (1, 7);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var constraintName = primaryKey ? "PK_duplicate_keys" : "UQ_duplicate_keys_Code";
@@ -40,11 +41,12 @@ public sealed class SqlServerSafeMigrationKeyLimitsIntegrationTests : SqlServerS
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-duplicate-key"));
+            new SafeMigrationRunOptions("sqlserver-duplicate-key"), cancellationToken: CancellationToken.None);
 
         var keyCount = await ScalarIntAsync(
             connectionString,
-            $"SELECT COUNT(*) FROM sys.key_constraints WHERE name = N'{constraintName}';");
+            $"SELECT COUNT(*) FROM sys.key_constraints WHERE name = N'{constraintName}';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -64,10 +66,11 @@ public sealed class SqlServerSafeMigrationKeyLimitsIntegrationTests : SqlServerS
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE TABLE dbo.wide_keys (Code nvarchar({length}) NOT NULL);");
+            $"CREATE TABLE dbo.wide_keys (Code nvarchar({length}) NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var constraintName = primaryKey ? "PK_wide_keys" : "UQ_wide_keys_Code";
@@ -85,11 +88,12 @@ public sealed class SqlServerSafeMigrationKeyLimitsIntegrationTests : SqlServerS
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-key-width"));
+            new SafeMigrationRunOptions("sqlserver-key-width"), cancellationToken: CancellationToken.None);
 
         var keyCount = await ScalarIntAsync(
             connectionString,
-            $"SELECT COUNT(*) FROM sys.key_constraints WHERE name = N'{constraintName}';");
+            $"SELECT COUNT(*) FROM sys.key_constraints WHERE name = N'{constraintName}';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);

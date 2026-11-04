@@ -29,7 +29,8 @@ public sealed partial class MySqlProviderAnalysisCleanupTests
         var operations = CreateOperations(context);
 
         // Act
-        var actual = await Assert.ThrowsAnyAsync<Exception>(() => analyzer.AnalyzeAsync(context, operations));
+        var actual = await Assert.ThrowsAnyAsync<Exception>(() => analyzer.AnalyzeAsync(context, operations,
+            CancellationToken.None));
 
         // Assert
         Assert.Same(primary, actual);
@@ -49,7 +50,8 @@ public sealed partial class MySqlProviderAnalysisCleanupTests
         var operations = CreateOperations(context);
 
         // Act
-        var actual = await Assert.ThrowsAsync<InvalidOperationException>(() => analyzer.AnalyzeAsync(context, operations));
+        var actual = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            analyzer.AnalyzeAsync(context, operations, CancellationToken.None));
 
         // Assert
         Assert.Same(primary, actual);
@@ -75,7 +77,8 @@ public sealed partial class MySqlProviderAnalysisCleanupTests
         var operations = CreateOperations(context);
 
         // Act
-        var actual = await Assert.ThrowsAsync<InvalidOperationException>(() => analyzer.AnalyzeAsync(context, operations));
+        var actual = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            analyzer.AnalyzeAsync(context, operations, CancellationToken.None));
 
         // Assert
         Assert.Same(primary, actual);
@@ -96,7 +99,8 @@ public sealed partial class MySqlProviderAnalysisCleanupTests
         var operations = CreateOperations(context);
 
         // Act
-        var actual = await Assert.ThrowsAsync<InvalidOperationException>(() => analyzer.AnalyzeAsync(context, operations));
+        var actual = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            analyzer.AnalyzeAsync(context, operations, CancellationToken.None));
 
         // Assert
         Assert.Same(closeFailure, actual);
@@ -120,7 +124,7 @@ public sealed partial class MySqlProviderAnalysisCleanupTests
         var operations = CreateOperations(context);
 
         // Act
-        var result = await analyzer.AnalyzeAsync(context, operations);
+        var result = await analyzer.AnalyzeAsync(context, operations, CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(result).ObservedState);

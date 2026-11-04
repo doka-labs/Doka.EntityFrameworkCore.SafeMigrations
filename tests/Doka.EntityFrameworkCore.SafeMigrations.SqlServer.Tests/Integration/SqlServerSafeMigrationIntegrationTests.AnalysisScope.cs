@@ -20,7 +20,7 @@ public sealed class SqlServerSafeMigrationAnalysisScopeIntegrationTests : SqlSer
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await using var transaction = callerOwnsTransaction
             ? await context.Database.BeginTransactionAsync()
@@ -35,12 +35,15 @@ public sealed class SqlServerSafeMigrationAnalysisScopeIntegrationTests : SqlSer
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var scope = await analyzer.AcquireAnalysisScopeAsync(context);
+        var scope = await analyzer.AcquireAnalysisScopeAsync(context, cancellationToken: CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync("CREATE TABLE dbo.uncommitted_items (Id int NOT NULL);");
         var analyses = await analyzer.AnalyzeAsync(
-            context, builder.Operations.Cast<SafeMigrationOperation>().ToArray());
+            context, builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
+            cancellationToken: CancellationToken.None);
 
-        var unexpected = await analyzer.FindUnexpectedObjectsAsync(context, builder.Operations);
+        var unexpected = await analyzer.FindUnexpectedObjectsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None);
+
         await scope.DisposeAsync();
         var activeTransaction = context.Database.CurrentTransaction;
         if (transaction is not null)
@@ -49,7 +52,8 @@ public sealed class SqlServerSafeMigrationAnalysisScopeIntegrationTests : SqlSer
         }
 
         var tableCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.uncommitted_items', N'U');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.uncommitted_items', N'U');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(2, analyses.Count);
@@ -70,8 +74,9 @@ public sealed class SqlServerSafeMigrationAnalysisScopeIntegrationTests : SqlSer
     public async Task AnalysisScope_BindsAllCatalogCommandsToActiveTransaction(bool callerOwnsTransaction)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.scoped_items (Id int NOT NULL);");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.scoped_items (Id int NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await using var transaction = callerOwnsTransaction
             ? await context.Database.BeginTransactionAsync()
@@ -85,9 +90,12 @@ public sealed class SqlServerSafeMigrationAnalysisScopeIntegrationTests : SqlSer
         var operation = (SafeMigrationOperation)builder.Operations.Single();
 
         // Act
-        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context);
-        var analyses = await analyzer.AnalyzeAsync(context, [operation]);
-        var unexpected = await analyzer.FindUnexpectedObjectsAsync(context, builder.Operations);
+        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context,
+            cancellationToken: CancellationToken.None);
+
+        var analyses = await analyzer.AnalyzeAsync(context, [operation], cancellationToken: CancellationToken.None);
+        var unexpected = await analyzer.FindUnexpectedObjectsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.IsType<SafeMigrationOperation>(Assert.Single(builder.Operations));
@@ -103,7 +111,7 @@ public sealed class SqlServerSafeMigrationAnalysisScopeIntegrationTests : SqlSer
     public async Task CallerOwnedAnalysisScope_ReleasesLockBeforeCallerTransactionCommits()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await using var transaction = await context.Database.BeginTransactionAsync();
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
@@ -116,7 +124,7 @@ public sealed class SqlServerSafeMigrationAnalysisScopeIntegrationTests : SqlSer
             + "@LockOwner = N'Session', @LockTimeout = 0; SELECT @result;";
 
         // Act
-        var scope = await analyzer.AcquireAnalysisScopeAsync(context);
+        var scope = await analyzer.AcquireAnalysisScopeAsync(context, cancellationToken: CancellationToken.None);
         var blockedResult = Convert.ToInt32(await competingCommand.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
         await scope.DisposeAsync();
         var acquiredResult = Convert.ToInt32(await competingCommand.ExecuteScalarAsync(), CultureInfo.InvariantCulture);

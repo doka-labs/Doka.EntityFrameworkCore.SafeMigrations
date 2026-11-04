@@ -34,7 +34,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("missing-parent"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("missing-parent"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.All(
@@ -47,7 +48,7 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
             });
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-            ExecuteOperationsAsync(context, [builder.Operations[0]]));
+            ExecuteOperationsAsync(context, [builder.Operations[0]], CancellationToken.None));
 
         Assert.Equal("P1004", exception.SqlState);
         Assert.Equal(
@@ -55,7 +56,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM information_schema.tables "
-                + "WHERE table_schema = current_schema() AND table_name = 'missing_parent';"));
+                + "WHERE table_schema = current_schema() AND table_name = 'missing_parent';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -82,7 +84,7 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("missing-legacy-table-preflight"));
+            new SafeMigrationRunOptions("missing-legacy-table-preflight"), CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationObservedState.Missing, preflight.Assessments[0].ObservedState);
@@ -95,13 +97,13 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
                 Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
             });
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var postflight = await runner.VerifyAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("missing-legacy-table-postflight"));
+            new SafeMigrationRunOptions("missing-legacy-table-postflight"), CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
@@ -111,7 +113,7 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
                 connectionString,
                 "SELECT COUNT(*) FROM information_schema.columns "
                 + "WHERE table_schema = current_schema() AND table_name = 'missing_legacy_table' "
-                + "AND is_nullable = 'NO';"));
+                + "AND is_nullable = 'NO';", cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -121,7 +123,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE column_prerequisite_child (id integer NOT NULL); "
-            + "CREATE TABLE column_prerequisite_parent (id integer NOT NULL);");
+            + "CREATE TABLE column_prerequisite_parent (id integer NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureIndex(
@@ -157,7 +160,7 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("missing-column-prerequisites"));
+                new SafeMigrationRunOptions("missing-column-prerequisites"), CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(5, report.Assessments.Count);
@@ -177,7 +180,7 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE legacy_unique_users (id integer NOT NULL); "
-            + "INSERT INTO legacy_unique_users (id) VALUES (1), (2);");
+            + "INSERT INTO legacy_unique_users (id) VALUES (1), (2);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var definition = new ExpectedTableDefinition(
             "legacy_unique_users",
@@ -199,19 +202,19 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("legacy-unique-users-preflight"));
+            new SafeMigrationRunOptions("legacy-unique-users-preflight"), CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationObservedState.Missing, preflight.Assessments[^1].ObservedState);
         Assert.Equal("projected_missing", preflight.Assessments[^1].Code);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var postflight = await runner.VerifyAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("legacy-unique-users-postflight"));
+            new SafeMigrationRunOptions("legacy-unique-users-postflight"), CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
@@ -221,7 +224,7 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
                 connectionString,
                 "SELECT COUNT(*) FROM pg_catalog.pg_indexes "
                 + "WHERE schemaname = current_schema() AND tablename = 'legacy_unique_users' "
-                + "AND indexname = 'ux_legacy_unique_users_email';"));
+                + "AND indexname = 'ux_legacy_unique_users_email';", cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -231,7 +234,7 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE legacy_default_users (id integer NOT NULL); "
-            + "INSERT INTO legacy_default_users (id) VALUES (1), (2);");
+            + "INSERT INTO legacy_default_users (id) VALUES (1), (2);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var definition = new ExpectedTableDefinition(
             "legacy_default_users",
@@ -259,7 +262,7 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("legacy-default-users"));
+                new SafeMigrationRunOptions("legacy-default-users"), CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, report.Assessments[^1].ObservedState);
@@ -269,7 +272,7 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
                 connectionString,
                 "SELECT COUNT(*) FROM information_schema.columns "
                 + "WHERE table_schema = current_schema() AND table_name = 'legacy_default_users' "
-                + "AND column_name = 'tenant_id';"));
+                + "AND column_name = 'tenant_id';", cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -277,7 +280,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
     {
         const int operationCount = 513;
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE chunked_analysis (id integer NOT NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE chunked_analysis (id integer NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         for (var ordinal = 0; ordinal < operationCount; ordinal++)
@@ -290,7 +294,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("chunked-analysis"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("chunked-analysis"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(operationCount, report.Assessments.Count);
@@ -310,7 +315,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
         const int maximumUtf8PayloadBytes = 4 * 1024 * 1024;
         var oversizedComment = new string('\u00e4', (maximumUtf8PayloadBytes / 2) + 1);
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE oversized_analysis (id integer NOT NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE oversized_analysis (id integer NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn(
@@ -320,7 +326,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("oversized-analysis")));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("oversized-analysis"),
+            CancellationToken.None));
 
         Assert.Contains("operation 0 exceeds a bounded query limit", exception.Message, StringComparison.Ordinal);
         Assert.Contains("utf8_payload_bytes=", exception.Message, StringComparison.Ordinal);
@@ -330,7 +337,7 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
                 connectionString,
                 "SELECT COUNT(*) FROM information_schema.columns "
                 + "WHERE table_schema = current_schema() AND table_name = 'oversized_analysis' "
-                + "AND column_name = 'payload';"));
+                + "AND column_name = 'payload';", cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -357,7 +364,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("oversized-parameters")));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("oversized-parameters"),
+            CancellationToken.None));
 
         Assert.Contains("operation 0 exceeds a bounded query limit", exception.Message, StringComparison.Ordinal);
         Assert.Contains("parameters=", exception.Message, StringComparison.Ordinal);
@@ -366,7 +374,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM information_schema.tables "
-                + "WHERE table_schema = current_schema() AND table_name = 'oversized_parameters';"));
+                + "WHERE table_schema = current_schema() AND table_name = 'oversized_parameters';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Theory]
@@ -381,15 +390,18 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
         await using var transaction = await context.Database.BeginTransactionAsync(
             isolationLevel,
             CancellationToken.None);
+
         await context.Database.ExecuteSqlRawAsync("SET TRANSACTION READ ONLY;", CancellationToken.None);
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, [], new SafeMigrationRunOptions("qualified-caller-transaction"));
+            .AnalyzeAsync(context, [], new SafeMigrationRunOptions("qualified-caller-transaction"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.NoOperations, report.Status);
         Assert.Same(transaction, context.Database.CurrentTransaction);
-        Assert.Equal("on", await ScalarOnCurrentTransactionAsync(context, "SHOW transaction_read_only;"));
+        Assert.Equal("on", await ScalarOnCurrentTransactionAsync(context, "SHOW transaction_read_only;",
+            cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -403,7 +415,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, [], new SafeMigrationRunOptions("read-committed-caller-transaction")));
+            .AnalyzeAsync(context, [], new SafeMigrationRunOptions("read-committed-caller-transaction"),
+            CancellationToken.None));
 
         Assert.Contains("RepeatableRead or Serializable", exception.Message, StringComparison.Ordinal);
         Assert.Same(transaction, context.Database.CurrentTransaction);
@@ -420,7 +433,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, [], new SafeMigrationRunOptions("read-write-caller-transaction")));
+            .AnalyzeAsync(context, [], new SafeMigrationRunOptions("read-write-caller-transaction"),
+            CancellationToken.None));
 
         Assert.Contains("to be read-only", exception.Message, StringComparison.Ordinal);
         Assert.Same(transaction, context.Database.CurrentTransaction);
@@ -439,7 +453,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
     public async Task OpaqueSqlExpression_IsUnsupportedWithStableReasonBeforeTargetDdl()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE opaque_expression (value integer NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE opaque_expression (value integer NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         // WHY: The public SQL helper now parses supported CHECK grammar.
@@ -449,7 +464,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("opaque-expression"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("opaque-expression"),
+            CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
 
@@ -461,14 +477,16 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE conname = 'ck_opaque_expression';"));
+                "SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE conname = 'ck_opaque_expression';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task UnsupportedStructuredCastType_IsRejectedBeforeTargetDdl()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE unsupported_cast_type (value integer NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE unsupported_cast_type (value integer NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureCheckConstraint(
@@ -501,12 +519,14 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
             1,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_class WHERE relname = 'unsupported_cast_type';"));
+                "SELECT COUNT(*) FROM pg_catalog.pg_class WHERE relname = 'unsupported_cast_type';",
+                cancellationToken: CancellationToken.None));
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE conname = 'ck_unsupported_cast_type';"));
+                "SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE conname = 'ck_unsupported_cast_type';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -516,7 +536,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
         await using var context = new MatchingDerivedContext(connectionString);
         var runner = context.GetService<ISafeMigrationRunner>();
 
-        var emptyReport = await runner.AnalyzeAsync(context, [], new SafeMigrationRunOptions("matching-derived"));
+        var emptyReport = await runner.AnalyzeAsync(context, [], new SafeMigrationRunOptions("matching-derived"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.NoOperations, emptyReport.Status);
 
@@ -524,7 +545,7 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
 
         var pendingReport = await runner.AnalyzePendingMigrationsAsync(
             context,
-            new SafeMigrationRunOptions("matching-derived"));
+            new SafeMigrationRunOptions("matching-derived"), CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.NoOperations, pendingReport.Status);
         Assert.Equal(
@@ -532,7 +553,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
             await ScalarIntAsync(
                 connectionString,
                 $"SELECT COUNT(*) FROM \"__ApplicationDbContextMigrationsHistory\" "
-                + $"WHERE \"MigrationId\" = '{CoreConvergenceMigration.MigrationIdentifier}';"));
+                + $"WHERE \"MigrationId\" = '{CoreConvergenceMigration.MigrationIdentifier}';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -547,7 +569,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .VerifyAsync(context, builder.Operations, new SafeMigrationRunOptions("postflight-negative"));
+            .VerifyAsync(context, builder.Operations, new SafeMigrationRunOptions("postflight-negative"),
+            CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
 
@@ -559,7 +582,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM information_schema.tables "
-                + "WHERE table_schema = current_schema() AND table_name = 'postflight_missing';"));
+                + "WHERE table_schema = current_schema() AND table_name = 'postflight_missing';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -580,7 +604,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
                 connectionString,
                 "SELECT COUNT(*) FROM information_schema.tables "
                 + "WHERE table_schema = current_schema() "
-                + "AND table_name = '__ApplicationDbContextMigrationsHistory';"));
+                + "AND table_name = '__ApplicationDbContextMigrationsHistory';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -617,11 +642,12 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
 
         await Assert.ThrowsAsync<ArgumentException>(() => runner.AnalyzePendingMigrationsAsync(
             context,
-            new SafeMigrationRunOptions("unknown-target", "209901010000_Unknown")));
+            new SafeMigrationRunOptions("unknown-target", "209901010000_Unknown"), CancellationToken.None));
 
         await context.Database.MigrateAsync(cancellationToken: CancellationToken.None);
 
-        var completed = await runner.AnalyzePendingMigrationsAsync(context, new SafeMigrationRunOptions("completed"));
+        var completed = await runner.AnalyzePendingMigrationsAsync(context, new SafeMigrationRunOptions("completed"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.NoOperations, completed.Status);
         Assert.Empty(completed.Assessments);
@@ -629,11 +655,12 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
         await ExecuteSqlAsync(
             connectionString,
             "INSERT INTO \"__ApplicationDbContextMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") "
-            + "VALUES ('209901010000_Future', '10.0.0');");
+            + "VALUES ('209901010000_Future', '10.0.0');", cancellationToken: CancellationToken.None);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => runner.AnalyzePendingMigrationsAsync(
             context,
-            new SafeMigrationRunOptions("backward-target", CoreConvergenceMigration.MigrationIdentifier)));
+            new SafeMigrationRunOptions("backward-target", CoreConvergenceMigration.MigrationIdentifier),
+            CancellationToken.None));
     }
 
     [Fact]
@@ -655,7 +682,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
             "CREATE TABLE rename_source (source_column integer NULL, target_column integer NULL); "
             + "CREATE TABLE rename_target (id integer NOT NULL); "
             + "CREATE INDEX rename_source_index ON rename_source (source_column); "
-            + "CREATE INDEX rename_target_index ON rename_source (target_column);");
+            + "CREATE INDEX rename_target_index ON rename_source (target_column);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("rename_source", "rename_target");
@@ -664,7 +692,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("rename-collisions"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("rename-collisions"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.All(
@@ -678,7 +707,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
         foreach (var operation in builder.Operations)
         {
             var exception =
-                await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(context, [operation]));
+                await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(context, [operation],
+                    CancellationToken.None));
 
             Assert.Equal("P1001", exception.SqlState);
         }
@@ -689,20 +719,21 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
                 connectionString,
                 "SELECT COUNT(*) FROM information_schema.tables "
                 + "WHERE table_schema = current_schema() "
-                + "AND table_name IN ('rename_source', 'rename_target');"));
+                + "AND table_name IN ('rename_source', 'rename_target');", cancellationToken: CancellationToken.None));
         Assert.Equal(
             2,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM information_schema.columns "
                 + "WHERE table_schema = current_schema() AND table_name = 'rename_source' "
-                + "AND column_name IN ('source_column', 'target_column');"));
+                + "AND column_name IN ('source_column', 'target_column');", cancellationToken: CancellationToken.None));
         Assert.Equal(
             2,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM pg_catalog.pg_class "
-                + "WHERE relkind = 'i' AND relname IN ('rename_source_index', 'rename_target_index');"));
+                + "WHERE relkind = 'i' AND relname IN ('rename_source_index', 'rename_target_index');",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -717,7 +748,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
             + "CONSTRAINT pk_inventory_constraints PRIMARY KEY (id), "
             + "CONSTRAINT uq_inventory_code UNIQUE (code), "
             + "CONSTRAINT ck_inventory_quantity CHECK (quantity >= 0), "
-            + "CONSTRAINT fk_inventory_parent FOREIGN KEY (parent_id) REFERENCES inventory_parent (id));");
+            + "CONSTRAINT fk_inventory_parent FOREIGN KEY (parent_id) REFERENCES inventory_parent (id));",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -734,7 +766,8 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("unexpected-constraints"));
+            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("unexpected-constraints"),
+            CancellationToken.None);
 
         Assert.Contains(
             report.UnexpectedObjects,
@@ -765,7 +798,7 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
                 + "JOIN pg_catalog.pg_class c ON c.oid = co.conrelid "
                 + "WHERE c.relname = 'inventory_constraints' "
                 + "AND co.conname IN ('pk_inventory_constraints', 'uq_inventory_code', "
-                + "'ck_inventory_quantity', 'fk_inventory_parent');"));
+                + "'ck_inventory_quantity', 'fk_inventory_parent');", cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -796,21 +829,30 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
             await ScalarIntAsync(
                 connectionString,
                 $"SELECT COUNT(*) FROM \"__ApplicationDbContextMigrationsHistory\" "
-                + $"WHERE \"MigrationId\" = '{CoreConvergenceMigration.MigrationIdentifier}';"));
+                + $"WHERE \"MigrationId\" = '{CoreConvergenceMigration.MigrationIdentifier}';",
+                cancellationToken: CancellationToken.None));
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM information_schema.columns "
                 + "WHERE table_schema = current_schema() AND table_name = 'pipeline_state' "
-                + "AND column_name = 'payload';"));
+                + "AND column_name = 'payload';", cancellationToken: CancellationToken.None));
     }
 
+    /// <summary>Reads a scalar using the fixture's current transaction.</summary>
+    /// <param name="context">The configured fixture context.</param>
+    /// <param name="sql">The source-controlled fixture SQL.</param>
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
+    /// <returns>The asynchronous fixture operation or observation.</returns>
     private static async Task<string> ScalarOnCurrentTransactionAsync(
         DbContext context,
-        string sql
+        string sql,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var command = context
             .Database
             .GetDbConnection()
@@ -818,7 +860,7 @@ public sealed class PostgreSqlLifecycleEdgeCasesIntegrationTests : PostgreSqlSaf
         command.Transaction = context.Database.CurrentTransaction?.GetDbTransaction();
         command.CommandText = sql;
 
-        var result = await command.ExecuteScalarAsync(CancellationToken.None);
+        var result = await command.ExecuteScalarAsync(cancellationToken);
 
         return Convert.ToString(result, CultureInfo.InvariantCulture) ?? "<null>";
     }

@@ -21,6 +21,17 @@ see [diagnostic compatibility](diagnostics.md#runtime-provider-differences).
 Native qualification still requires the complete blocking matrix; ARM SQL Server
 skips and offline SQL-shape tests are not substitutes for its x64 cells.
 
+## Unreleased source compatibility
+
+Repository-owned cancellation parameters are now required. When recompiling,
+update calls to runner/provider-analyzer methods and owned helpers to pass the
+operation's token explicitly, or `CancellationToken.None` when intentionally
+uncancellable. Existing binary signatures are unchanged; framework-owned
+EF/ADO.NET seams retain their parameter conventions. This source contract
+change does not require a database migration or alter SQL, policies, history,
+report schemas or fingerprint formats. See the
+[cancellation contract](api-reference.md#cancellation-contract).
+
 ## Upgrade to 10.6.1
 
 Keep every installed SafeMigrations package on the same 10.6.1 version; install

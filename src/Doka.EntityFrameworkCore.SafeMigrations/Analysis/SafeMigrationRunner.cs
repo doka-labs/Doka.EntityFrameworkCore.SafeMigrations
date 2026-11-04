@@ -24,7 +24,7 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
     public async Task<SafeMigrationRunReport> AnalyzePendingMigrationsAsync(
         DbContext context,
         SafeMigrationRunOptions options,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -103,7 +103,7 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
         DbContext context,
         IReadOnlyList<MigrationOperation> operations,
         SafeMigrationRunOptions options,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     ) => RunAsync(context, operations, SafeMigrationReportMode.Preflight, options, null, null, cancellationToken);
 
     /// <inheritdoc />
@@ -111,7 +111,7 @@ public sealed partial class SafeMigrationRunner : ISafeMigrationRunner
         DbContext context,
         IReadOnlyList<MigrationOperation> operations,
         SafeMigrationRunOptions options,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     ) => RunAsync(context, operations, SafeMigrationReportMode.Postflight, options, null, null, cancellationToken);
 
     private async Task<SafeMigrationRunReport> RunAsync(

@@ -26,22 +26,26 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
 
         // Act
         var script = context.GetService<IMigrator>().GenerateScript(options: options);
-        await ExecuteSqlAsync(connectionString, settings + script);
+        await ExecuteSqlAsync(connectionString, settings + script, cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "INSERT INTO scripted_generated_nodes (id, left_bound, right_bound) "
-            + "VALUES (1, 1, 4), (2, 1, 2);");
+            + "VALUES (1, 1, 4), (2, 1, 2);", cancellationToken: CancellationToken.None);
         if ((options & MigrationsSqlGenerationOptions.Idempotent) != 0)
         {
-            await ExecuteSqlAsync(connectionString, settings + script);
+            await ExecuteSqlAsync(connectionString, settings + script, cancellationToken: CancellationToken.None);
         }
 
         var values = await ScalarStringAsync(connectionString,
-            "SELECT string_agg(has_descendants::text, ',' ORDER BY id) FROM scripted_generated_nodes;");
+            "SELECT string_agg(has_descendants::text, ',' ORDER BY id) FROM scripted_generated_nodes;",
+            cancellationToken: CancellationToken.None);
+
         var payload = await ScalarStringAsync(connectionString,
-            "SELECT payload FROM scripted_generated_nodes WHERE id = 1;");
+            "SELECT payload FROM scripted_generated_nodes WHERE id = 1;", cancellationToken: CancellationToken.None);
+
         var comment = await ScalarStringAsync(connectionString,
-            "SELECT obj_description('scripted_generated_nodes'::regclass);");
+            "SELECT obj_description('scripted_generated_nodes'::regclass);", cancellationToken: CancellationToken.None);
+
         var history = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM \"__GeneratedScriptHistory\";");
+            "SELECT COUNT(*) FROM \"__GeneratedScriptHistory\";", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal("true,false", values);
@@ -71,8 +75,9 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         var script = "SET standard_conforming_strings = " + (standardStrings ? "on" : "off")
             + "; SET backslash_quote = off; DO $EF$\nBEGIN\n    " + encoded + "\nEND $EF$;";
 
-        await ExecuteSqlAsync(connectionString, script);
-        var payload = await ScalarStringAsync(connectionString, "SELECT value FROM encoded_payload;");
+        await ExecuteSqlAsync(connectionString, script, cancellationToken: CancellationToken.None);
+        var payload = await ScalarStringAsync(connectionString, "SELECT value FROM encoded_payload;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.DoesNotContain('\n', encoded);
@@ -95,15 +100,17 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         await ExecuteSqlAsync(connectionString, "ALTER TABLE scripted_generated_nodes DROP COLUMN has_descendants; "
             + "ALTER TABLE scripted_generated_nodes ADD has_descendants boolean "
             + "GENERATED ALWAYS AS (right_bound > left_bound + 2) STORED NOT NULL; "
-            + "DELETE FROM \"__GeneratedScriptHistory\";");
+            + "DELETE FROM \"__GeneratedScriptHistory\";", cancellationToken: CancellationToken.None);
         var options = MigrationsSqlGenerationOptions.Idempotent
             | (noTransactions ? MigrationsSqlGenerationOptions.NoTransactions : 0);
         var script = context.GetService<IMigrator>().GenerateScript(options: options);
 
         // Act
-        var exception = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, script));
+        var exception = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, script,
+            cancellationToken: CancellationToken.None));
+
         var history = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM \"__GeneratedScriptHistory\";");
+            "SELECT COUNT(*) FROM \"__GeneratedScriptHistory\";", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal("P1001", Assert.IsType<PostgresException>(exception).SqlState);
@@ -131,7 +138,8 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            $"CREATE TABLE generated_pairs (left_value {leftType}, right_value {rightType});");
+            $"CREATE TABLE generated_pairs (left_value {leftType}, right_value {rightType});",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -146,7 +154,7 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         if (compatible)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         var replay = compatible ? await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
@@ -195,7 +203,7 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
                 + "(id integer NOT NULL PRIMARY KEY, left_bound bigint NOT NULL, right_bound bigint NOT NULL, "
                 + "depth integer NOT NULL, position integer NOT NULL); "
                 + "INSERT INTO generated_nodes VALUES (1, 1, 2, 0, 0), (2, 3, 6, 0, 1), "
-                + "(3, 9223372036854775806, 9223372036854775807, 0, 2);");
+                + "(3, 9223372036854775806, 9223372036854775807, 0, 2);", cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -207,18 +215,19 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
             new SafeMigrationRunOptions("generated-case-initial"), CancellationToken.None);
 
         preflight.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         if (!populated)
         {
             await ExecuteSqlAsync(connectionString, "INSERT INTO generated_nodes "
                 + "(id, left_bound, right_bound, depth, position) VALUES "
-                + "(1, 1, 2, 0, 0), (2, 3, 6, 0, 1), (3, 9223372036854775806, 9223372036854775807, 0, 2);");
+                + "(1, 1, 2, 0, 0), (2, 3, 6, 0, 1), (3, 9223372036854775806, 9223372036854775807, 0, 2);",
+                cancellationToken: CancellationToken.None);
         }
 
         var replay = await runner.AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-case-replay"), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var postflight = await runner.VerifyAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-case-final"), CancellationToken.None);
 
@@ -233,17 +242,18 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
 
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.Equal("false,true,false", await ScalarStringAsync(connectionString,
-            "SELECT string_agg(has_descendants::text, ',' ORDER BY id) FROM generated_nodes;"));
+            "SELECT string_agg(has_descendants::text, ',' ORDER BY id) FROM generated_nodes;",
+            cancellationToken: CancellationToken.None));
 
         Assert.Equal(4, await ScalarIntAsync(connectionString,
             "SELECT count(*) FROM pg_catalog.pg_constraint WHERE conrelid = 'generated_nodes'::regclass "
-            + "AND contype = 'c';"));
+            + "AND contype = 'c';", cancellationToken: CancellationToken.None));
 
         Assert.Equal("boolean:true:s", await ScalarStringAsync(connectionString,
             "SELECT pg_catalog.format_type(atttypid, atttypmod) || ':' || attnotnull::text "
             + "|| ':' || attgenerated::text "
             + "FROM pg_catalog.pg_attribute WHERE attrelid = 'generated_nodes'::regclass "
-            + "AND attname = 'has_descendants';"));
+            + "AND attname = 'has_descendants';", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Changing generation, type, nullability or expression must not become an idempotent success.</summary>
@@ -260,7 +270,8 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         await ExecuteSqlAsync(connectionString, "CREATE TABLE generated_nodes "
             + "(id integer NOT NULL PRIMARY KEY, left_bound bigint NOT NULL, right_bound bigint NOT NULL, "
             + $"depth integer NOT NULL, position integer NOT NULL, has_descendants {declaration}); "
-            + "INSERT INTO generated_nodes (id, left_bound, right_bound, depth, position) VALUES (1, 1, 2, 0, 0);");
+            + "INSERT INTO generated_nodes (id, left_bound, right_bound, depth, position) VALUES (1, 1, 2, 0, 0);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = GeneratedColumn(context);
@@ -270,13 +281,14 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
             new SafeMigrationRunOptions("generated-case-drift"), CancellationToken.None);
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-            ExecuteOperationsAsync(context, builder.Operations));
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, Assert.Single(report.Assessments).Action);
         Assert.Equal("P1001", exception.SqlState);
-        Assert.Equal(1, await ScalarIntAsync(connectionString, "SELECT count(*) FROM generated_nodes;"));
+        Assert.Equal(1, await ScalarIntAsync(connectionString, "SELECT count(*) FROM generated_nodes;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>An omitted ELSE remains a nullable generated contract, not an implicit FALSE.</summary>
@@ -286,7 +298,8 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE generated_nodes (id integer NOT NULL); INSERT INTO generated_nodes VALUES (0), (1);");
+            "CREATE TABLE generated_nodes (id integer NOT NULL); INSERT INTO generated_nodes VALUES (0), (1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -299,7 +312,7 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
             new SafeMigrationRunOptions("generated-case-null-branch"), CancellationToken.None);
 
         preflight.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-case-null-replay"), CancellationToken.None);
 
@@ -307,10 +320,12 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
         Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
         Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT count(*) FROM generated_nodes WHERE has_descendants IS NULL;"));
+            "SELECT count(*) FROM generated_nodes WHERE has_descendants IS NULL;",
+            cancellationToken: CancellationToken.None));
 
         Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT count(*) FROM generated_nodes WHERE has_descendants IS TRUE;"));
+            "SELECT count(*) FROM generated_nodes WHERE has_descendants IS TRUE;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>The maximum operand takes the guarded branch without evaluating overflowing addition.</summary>
@@ -321,7 +336,8 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE generated_nodes "
             + "(id integer NOT NULL, left_bound bigint NOT NULL, right_bound bigint NOT NULL); "
-            + "INSERT INTO generated_nodes VALUES (1, 9223372036854775807, 9223372036854775807);");
+            + "INSERT INTO generated_nodes VALUES (1, 9223372036854775807, 9223372036854775807);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = GeneratedColumn(context);
@@ -331,7 +347,7 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
             new SafeMigrationRunOptions("generated-case-real-maximum"), CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-case-maximum-replay"), CancellationToken.None);
 
@@ -339,7 +355,7 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
         Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
         Assert.Equal("false", await ScalarStringAsync(connectionString,
-            "SELECT has_descendants::text FROM generated_nodes;"));
+            "SELECT has_descendants::text FROM generated_nodes;", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Native matching preserves whitespace inside literals and rejects changed branch values.</summary>
@@ -353,7 +369,7 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE generated_text (id integer NOT NULL, "
             + "label text GENERATED ALWAYS AS (CASE WHEN id > 0 THEN 'a  b' ELSE 'a b' END) STORED); "
-            + "INSERT INTO generated_text (id) VALUES (1), (0);");
+            + "INSERT INTO generated_text (id) VALUES (1), (0);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -372,7 +388,7 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
             Assert.Single(report.Assessments).Action);
 
         Assert.Equal("a  b", await ScalarStringAsync(connectionString,
-            "SELECT label FROM generated_text WHERE id = 1;"));
+            "SELECT label FROM generated_text WHERE id = 1;", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Native branch coercion and nesting retain exact catalog identity after populated ADD.</summary>
@@ -389,7 +405,8 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE generated_cases (id integer NOT NULL, "
-            + "left_bound bigint NOT NULL); INSERT INTO generated_cases VALUES (-1, 10), (0, 20), (1, 30), (2, 40);");
+            + "left_bound bigint NOT NULL); INSERT INTO generated_cases VALUES (-1, 10), (0, 20), (1, 30), (2, 40);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -402,7 +419,7 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
             new SafeMigrationRunOptions("generated-case-branch-shapes"), CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-case-branch-replay"), CancellationToken.None);
 
@@ -410,7 +427,8 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
         Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
         Assert.Equal(expected, await ScalarStringAsync(connectionString,
-            "SELECT string_agg(COALESCE(selected_bound::text, 'null'), ',' ORDER BY id) FROM generated_cases;"));
+            "SELECT string_agg(COALESCE(selected_bound::text, 'null'), ',' ORDER BY id) FROM generated_cases;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Native character coercions remain part of the canonical CASE comparison contract.</summary>
@@ -424,7 +442,7 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE generated_varchar (label {sourceType}); "
-            + "INSERT INTO generated_varchar VALUES ('x'), ('y');");
+            + "INSERT INTO generated_varchar VALUES ('x'), ('y');", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -437,14 +455,15 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
             new SafeMigrationRunOptions("generated-case-varchar-condition"), CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-case-varchar-replay"), CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
         Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
-        Assert.Equal(1, await ScalarIntAsync(connectionString, "SELECT count(*) FROM generated_varchar WHERE flag;"));
+        Assert.Equal(1, await ScalarIntAsync(connectionString, "SELECT count(*) FROM generated_varchar WHERE flag;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>CASE cannot borrow a type-only certificate when its implicit text collations conflict.</summary>
@@ -464,7 +483,8 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         if (!fresh)
         {
             await ExecuteSqlAsync(connectionString, "CREATE TABLE generated_collation (id integer NOT NULL, "
-                + $"left_text text COLLATE \"C\", right_text text COLLATE \"{rightCollation}\");");
+                + $"left_text text COLLATE \"C\", right_text text COLLATE \"{rightCollation}\");",
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -493,7 +513,7 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         if (compatible)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         // Assert
@@ -503,7 +523,8 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
 
         Assert.Equal(compatible ? 1 : 0, await ScalarIntAsync(connectionString,
             "SELECT count(*) FROM information_schema.columns WHERE table_schema = current_schema() "
-            + "AND table_name = 'generated_collation' AND column_name = 'flag';"));
+            + "AND table_name = 'generated_collation' AND column_name = 'flag';",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Source replacement invalidates collation proof even when its native type OID is unchanged.</summary>
@@ -519,7 +540,8 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var initialCollation = initialCompatible ? "C" : "POSIX";
         await ExecuteSqlAsync(connectionString, "CREATE TABLE generated_collation (id integer NOT NULL, "
-            + $"left_text text COLLATE \"C\", right_text text COLLATE \"{initialCollation}\");");
+            + $"left_text text COLLATE \"C\", right_text text COLLATE \"{initialCollation}\");",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -538,7 +560,7 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         if (compatible)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         // Assert
@@ -548,7 +570,8 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
 
         Assert.Equal(compatible ? 1 : 0, await ScalarIntAsync(connectionString,
             "SELECT count(*) FROM information_schema.columns WHERE table_schema = current_schema() "
-            + "AND table_name = 'generated_collation' AND column_name = 'flag';"));
+            + "AND table_name = 'generated_collation' AND column_name = 'flag';",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Unsupported subqueries and physical virtual storage remain fail-closed before mutation.</summary>
@@ -562,7 +585,8 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE generated_nodes (id integer NOT NULL); INSERT INTO generated_nodes VALUES (1);");
+            "CREATE TABLE generated_nodes (id integer NOT NULL); INSERT INTO generated_nodes VALUES (1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -575,7 +599,7 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
             new SafeMigrationRunOptions("generated-case-unsupported"), CancellationToken.None);
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-            ExecuteOperationsAsync(context, builder.Operations));
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -583,7 +607,7 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         Assert.Equal("P1002", exception.SqlState);
         Assert.Equal(0, await ScalarIntAsync(connectionString,
             "SELECT count(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'generated_nodes'::regclass "
-            + "AND attname = 'has_descendants';"));
+            + "AND attname = 'has_descendants';", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Non-Boolean WHEN operands are rejected both from declared metadata and real live types.</summary>
@@ -597,7 +621,8 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         if (!fresh)
         {
-            await ExecuteSqlAsync(connectionString, "CREATE TABLE invalid_case (id integer NOT NULL);");
+            await ExecuteSqlAsync(connectionString, "CREATE TABLE invalid_case (id integer NOT NULL);",
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -623,7 +648,7 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
             new SafeMigrationRunOptions("generated-case-invalid-condition"), CancellationToken.None);
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-            ExecuteOperationsAsync(context, builder.Operations));
+            ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -632,7 +657,7 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         Assert.Equal("P1002", exception.SqlState);
         Assert.Equal(0, await ScalarIntAsync(connectionString,
             "SELECT count(*) FROM information_schema.columns WHERE table_schema = current_schema() "
-            + "AND table_name = 'invalid_case' AND column_name = 'flag';"));
+            + "AND table_name = 'invalid_case' AND column_name = 'flag';", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>A new or replaced source cannot borrow an incompatible earlier live CASE binding.</summary>
@@ -653,7 +678,8 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         {
             var initialType = initialCompatible ? "bigint" : "uuid";
 
-            await ExecuteSqlAsync(connectionString, $"CREATE TABLE prefix_case (id {initialType} NOT NULL);");
+            await ExecuteSqlAsync(connectionString, $"CREATE TABLE prefix_case (id {initialType} NOT NULL);",
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -684,7 +710,7 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
         if (compatible)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         // Assert
@@ -694,7 +720,7 @@ public sealed class PostgreSqlGeneratedCaseIntegrationTests : PostgreSqlIntegrat
 
         Assert.Equal(compatible ? 1 : 0, await ScalarIntAsync(connectionString,
             "SELECT count(*) FROM information_schema.columns WHERE table_schema = current_schema() "
-            + "AND table_name = 'prefix_case' AND column_name = 'flag';"));
+            + "AND table_name = 'prefix_case' AND column_name = 'flag';", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Builds the generated source-shaped operation rather than a hand-authored expression graph.</summary>

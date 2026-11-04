@@ -42,7 +42,8 @@ public sealed class PostgreSqlCatalogProbesIntegrationTests : PostgreSqlSafeMigr
         var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
 
         // Act
-        var results = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations);
+        var results = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal((nonconstantCount + 31) / 32, connection.PrerequisiteStatementCount);
@@ -83,7 +84,8 @@ public sealed class PostgreSqlCatalogProbesIntegrationTests : PostgreSqlSafeMigr
 
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations));
+            context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations,
+                CancellationToken.None));
 
         // Assert
         Assert.True(connection.FaultWasInjected);
@@ -107,7 +109,7 @@ public sealed class PostgreSqlCatalogProbesIntegrationTests : PostgreSqlSafeMigr
             setup.Append(CultureInfo.InvariantCulture, $"INSERT INTO bounded_probe_{index} VALUES ('{value}'); ");
         }
 
-        await ExecuteSqlAsync(connectionString, setup.ToString());
+        await ExecuteSqlAsync(connectionString, setup.ToString(), cancellationToken: CancellationToken.None);
         await using var fallbackContext = CreateContext(connectionString);
         await using var fallback = new CatalogClassificationCountingConnection(new NpgsqlConnection(connectionString));
         fallbackContext.Database.SetDbConnection(fallback);
@@ -133,9 +135,10 @@ public sealed class PostgreSqlCatalogProbesIntegrationTests : PostgreSqlSafeMigr
 
         // Act
         var fallbackResults = await fallbackContext.GetService<ISafeMigrationProviderAnalyzer>()
-            .AnalyzeAsync(fallbackContext, operations);
+            .AnalyzeAsync(fallbackContext, operations, CancellationToken.None);
+
         var nativeResults = await nativeContext.GetService<ISafeMigrationProviderAnalyzer>()
-            .AnalyzeAsync(nativeContext, operations);
+            .AnalyzeAsync(nativeContext, operations, CancellationToken.None);
 
         // Assert
         Assert.Equal(3, fallback.NarrowingEligibilityStatementCount);

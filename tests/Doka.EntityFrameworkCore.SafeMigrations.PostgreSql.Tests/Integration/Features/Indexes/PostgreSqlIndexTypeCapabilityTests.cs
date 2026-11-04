@@ -20,7 +20,7 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE native_members (id integer, label varchar(8)); "
-            + "INSERT INTO native_members VALUES (1, 'value');");
+            + "INSERT INTO native_members VALUES (1, 'value');", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -65,7 +65,7 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
         if (shape is "add" or "alter")
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
             postflight = await runner.VerifyAsync(context, builder.Operations,
                 new SafeMigrationRunOptions("ordinary-current-index-binding-final"), CancellationToken.None);
 
@@ -113,7 +113,8 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
         if (path != "authored")
         {
             await ExecuteSqlAsync(connectionString, $"CREATE TABLE native_members (old_value {type} NOT NULL"
-                + (path == "live" ? ", added integer NULL" : string.Empty) + ");");
+                + (path == "live" ? ", added integer NULL" : string.Empty) + ");",
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -143,7 +144,7 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
         if (jsonb)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
             postflight = await runner.VerifyAsync(context, builder.Operations,
                 new SafeMigrationRunOptions("native-default-btree-input-final"), CancellationToken.None);
 
@@ -158,15 +159,18 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
             if (path == "authored")
             {
                 await ExecuteSqlAsync(connectionString,
-                    $"CREATE TABLE native_members (old_value {type} NOT NULL, added integer NULL);");
+                    $"CREATE TABLE native_members (old_value {type} NOT NULL, added integer NULL);",
+                    cancellationToken: CancellationToken.None);
             }
             else if (path == "sparse")
             {
-                await ExecuteSqlAsync(connectionString, "ALTER TABLE native_members ADD COLUMN added integer NULL;");
+                await ExecuteSqlAsync(connectionString, "ALTER TABLE native_members ADD COLUMN added integer NULL;",
+                    cancellationToken: CancellationToken.None);
             }
 
             nativeError = await Assert.ThrowsAsync<PostgresException>(() => ExecuteSqlAsync(connectionString,
-                "CREATE INDEX ix_native_members ON native_members (old_value, added);"));
+                "CREATE INDEX ix_native_members ON native_members (old_value, added);",
+                cancellationToken: CancellationToken.None));
         }
 
         // Assert
@@ -230,7 +234,8 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
         // no comparison support. Empty creation proves only native selection,
         // not arbitrary row/comparator execution; other shapes retain real rows.
         await ExecuteSqlAsync(connectionString, setup + $"CREATE TABLE native_members (old_value {type} NOT NULL); "
-            + (values is null ? string.Empty : "INSERT INTO native_members VALUES " + values + ";"));
+            + (values is null ? string.Empty : "INSERT INTO native_members VALUES " + values + ";"),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -243,14 +248,15 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
             new SafeMigrationRunOptions("native-default-input-shapes"), CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var postflight = await runner.VerifyAsync(context, builder.Operations,
             new SafeMigrationRunOptions("native-default-input-shapes-final"), CancellationToken.None);
 
         var replay = await runner.AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("native-default-input-shapes-replay"), CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM native_members;");
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM native_members;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -274,7 +280,8 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE native_members (value varchar(32) NOT NULL); INSERT INTO native_members VALUES ('a');");
+            "CREATE TABLE native_members (value varchar(32) NOT NULL); INSERT INTO native_members VALUES ('a');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -295,7 +302,7 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
         if (compatible)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
             postflight = await runner.VerifyAsync(context, builder.Operations,
                 new SafeMigrationRunOptions("native-explicit-input-final"), CancellationToken.None);
 
@@ -305,7 +312,8 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
         else
         {
             nativeError = await Assert.ThrowsAsync<PostgresException>(() => ExecuteSqlAsync(connectionString,
-                "CREATE INDEX ix_native_members ON native_members (value " + opclass + ");"));
+                "CREATE INDEX ix_native_members ON native_members (value " + opclass + ");",
+                cancellationToken: CancellationToken.None));
         }
 
         // Assert
@@ -338,7 +346,8 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE native_members (id integer NOT NULL, "
-            + "payload json NULL, label text NOT NULL); INSERT INTO native_members VALUES (1, '{}', 'a');");
+            + "payload json NULL, label text NOT NULL); INSERT INTO native_members VALUES (1, '{}', 'a');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -376,7 +385,7 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
         if (shape != "identifier-json")
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
             postflight = await runner.VerifyAsync(context, builder.Operations,
                 new SafeMigrationRunOptions("native-key-result-boundary-final"), CancellationToken.None);
 
@@ -410,7 +419,7 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE native_members (id integer, other integer); "
-            + "CREATE INDEX ix_native_members ON native_members (id);");
+            + "CREATE INDEX ix_native_members ON native_members (id);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -436,7 +445,7 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE native_members (payload json); "
-            + "INSERT INTO native_members VALUES ('{}');");
+            + "INSERT INTO native_members VALUES ('{}');", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -461,7 +470,8 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE native_members (id integer, other integer); "
-            + "CREATE INDEX ix_native_members ON native_members ((id::bigint));");
+            + "CREATE INDEX ix_native_members ON native_members ((id::bigint));",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -490,7 +500,8 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE native_members (id integer, added integer);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE native_members (id integer, added integer);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -519,7 +530,8 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE FUNCTION custom_btree(internal) RETURNS index_am_handler "
             + "LANGUAGE internal AS 'bthandler'; CREATE ACCESS METHOD custom_btree_alias TYPE INDEX "
-            + "HANDLER custom_btree; CREATE TABLE native_members (id integer, added integer);");
+            + "HANDLER custom_btree; CREATE TABLE native_members (id integer, added integer);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -545,7 +557,8 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
         await ExecuteSqlAsync(connectionString, "CREATE ACCESS METHOD native_hash_alias TYPE INDEX "
             + "HANDLER pg_catalog.hashhandler; CREATE OPERATOR CLASS alias_integer_ops DEFAULT FOR TYPE integer "
             + "USING native_hash_alias AS OPERATOR 1 =(integer, integer), FUNCTION 1 hashint4(integer); "
-            + "CREATE TABLE native_members (id integer NOT NULL); INSERT INTO native_members VALUES (1);");
+            + "CREATE TABLE native_members (id integer NOT NULL); INSERT INTO native_members VALUES (1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -560,7 +573,7 @@ public sealed class PostgreSqlIndexTypeCapabilityTests : PostgreSqlIntegrationTe
             new SafeMigrationRunOptions("native-handler-alias"), CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var postflight = await runner.VerifyAsync(context, builder.Operations,
             new SafeMigrationRunOptions("native-handler-alias-final"), CancellationToken.None);
 

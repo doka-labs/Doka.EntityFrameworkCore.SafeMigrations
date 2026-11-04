@@ -31,7 +31,8 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE proof_eligibility_rows (id integer PRIMARY KEY, value {storeType} NOT NULL{defaultClause}); "
             + $"COMMENT ON COLUMN proof_eligibility_rows.value IS '{comment}'; "
-            + $"INSERT INTO proof_eligibility_rows VALUES (1, {value}); " + NullProofSentinelSql);
+            + $"INSERT INTO proof_eligibility_rows VALUES (1, {value}); " + NullProofSentinelSql,
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operation = BuildNullProofEligibilityOperation(varchar);
@@ -40,16 +41,24 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
         // Act
         var providerAnalysis = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
             context, [operation], CancellationToken.None);
-        var inlineState = await ExecuteInlineNullProofSentinelAsync(context, plan);
+
+        var inlineState = await ExecuteInlineNullProofSentinelAsync(context, plan,
+            cancellationToken: CancellationToken.None);
+
         var runtimeException = await Record.ExceptionAsync(() =>
-            ExecuteRuntimeNullProofSentinelAsync(context, operation, plan));
+            ExecuteRuntimeNullProofSentinelAsync(context, operation, plan, cancellationToken: CancellationToken.None));
+
         var replay = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
             context, [operation], CancellationToken.None);
+
         var preservedRows = await ScalarIntAsync(connectionString,
-            $"SELECT COUNT(*) FROM proof_eligibility_rows WHERE id = 1 AND value = {value};");
+            $"SELECT COUNT(*) FROM proof_eligibility_rows WHERE id = 1 AND value = {value};",
+            cancellationToken: CancellationToken.None);
+
         var canonicalColumns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'proof_eligibility_rows' "
-            + "AND column_name = 'value' AND is_nullable = 'NO' AND column_default IS NULL;");
+            + "AND column_name = 'value' AND is_nullable = 'NO' AND column_default IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(providerAnalysis);
@@ -78,7 +87,8 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
         var value = containsNull ? "NULL" : "'preserved'";
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE proof_eligibility_rows (id integer PRIMARY KEY, value character varying(800) NULL); "
-            + $"INSERT INTO proof_eligibility_rows VALUES (1, {value}); " + NullProofSentinelSql);
+            + $"INSERT INTO proof_eligibility_rows VALUES (1, {value}); " + NullProofSentinelSql,
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operation = BuildNullProofEligibilityOperation(varchar: true);
@@ -87,15 +97,22 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
         // Act
         var providerAnalysis = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
             context, [operation], CancellationToken.None);
-        var inlineException = await Record.ExceptionAsync(() => ExecuteInlineNullProofSentinelAsync(context, plan));
+
+        var inlineException = await Record.ExceptionAsync(() => ExecuteInlineNullProofSentinelAsync(context, plan,
+            cancellationToken: CancellationToken.None));
+
         var sentinelException = await Record.ExceptionAsync(() =>
-            ExecuteRuntimeNullProofSentinelAsync(context, operation, plan));
-        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+            ExecuteRuntimeNullProofSentinelAsync(context, operation, plan, cancellationToken: CancellationToken.None));
+
+        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
         var replay = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
             context, [operation], CancellationToken.None);
+
         var preservedRows = await ScalarIntAsync(connectionString,
             $"SELECT COUNT(*) FROM proof_eligibility_rows WHERE id = 1 AND value "
-            + (containsNull ? "IS NULL;" : "= 'preserved';"));
+            + (containsNull ? "IS NULL;" : "= 'preserved';"), cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(providerAnalysis);
@@ -139,7 +156,7 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
             + $"COMMENT ON COLUMN proof_eligibility_rows.value IS 'canonical'; "
             + $"INSERT INTO proof_eligibility_rows VALUES (1, {value}); "
             + $"ALTER TABLE proof_eligibility_rows ADD CONSTRAINT proof_not_null {constraint}; "
-            + NullProofSentinelSql);
+            + NullProofSentinelSql, cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operation = BuildNullProofEligibilityOperation(varchar: true);
@@ -148,18 +165,28 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
         // Act
         var declaredNotNull = await ScalarIntAsync(connectionString,
             "SELECT attnotnull::integer FROM pg_catalog.pg_attribute "
-            + "WHERE attrelid = 'proof_eligibility_rows'::regclass AND attname = 'value';");
+            + "WHERE attrelid = 'proof_eligibility_rows'::regclass AND attname = 'value';",
+            cancellationToken: CancellationToken.None);
+
         var providerAnalysis = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
             context, [operation], CancellationToken.None);
-        var inlineException = await Record.ExceptionAsync(() => ExecuteInlineNullProofSentinelAsync(context, plan));
+
+        var inlineException = await Record.ExceptionAsync(() => ExecuteInlineNullProofSentinelAsync(context, plan,
+            cancellationToken: CancellationToken.None));
+
         var sentinelException = await Record.ExceptionAsync(() =>
-            ExecuteRuntimeNullProofSentinelAsync(context, operation, plan));
-        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+            ExecuteRuntimeNullProofSentinelAsync(context, operation, plan, cancellationToken: CancellationToken.None));
+
+        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
         var replay = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
             context, [operation], CancellationToken.None);
+
         var constraintValidated = Fixture.ServerVersion.Major >= 18
             ? await ScalarIntAsync(connectionString,
-                "SELECT convalidated::integer FROM pg_catalog.pg_constraint WHERE conname = 'proof_not_null';")
+                "SELECT convalidated::integer FROM pg_catalog.pg_constraint WHERE conname = 'proof_not_null';",
+                cancellationToken: CancellationToken.None)
             : -1;
 
         // Assert
@@ -210,7 +237,7 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
             + "INSERT INTO proof_eligibility_rows VALUES (1, 'parent'); "
             + $"INSERT INTO proof_eligibility_child VALUES (2, {childValue}); "
             + $"ALTER TABLE proof_eligibility_rows ADD CONSTRAINT proof_parent_not_null {constraint}; "
-            + NullProofSentinelSql);
+            + NullProofSentinelSql, cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operation = BuildNullProofEligibilityOperation(varchar: true);
@@ -219,15 +246,23 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
         // Act
         var providerAnalysis = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
             context, [operation], CancellationToken.None);
-        var inlineException = await Record.ExceptionAsync(() => ExecuteInlineNullProofSentinelAsync(context, plan));
+
+        var inlineException = await Record.ExceptionAsync(() => ExecuteInlineNullProofSentinelAsync(context, plan,
+            cancellationToken: CancellationToken.None));
+
         var sentinelException = await Record.ExceptionAsync(() =>
-            ExecuteRuntimeNullProofSentinelAsync(context, operation, plan));
-        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+            ExecuteRuntimeNullProofSentinelAsync(context, operation, plan, cancellationToken: CancellationToken.None));
+
+        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
         var preservedParentRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM ONLY proof_eligibility_rows WHERE id = 1 AND value = 'parent';");
+            "SELECT COUNT(*) FROM ONLY proof_eligibility_rows WHERE id = 1 AND value = 'parent';",
+            cancellationToken: CancellationToken.None);
+
         var preservedChildRows = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM proof_eligibility_child WHERE id = 2 AND value "
-            + (containsNull ? "IS NULL;" : "= 'child';"));
+            + (containsNull ? "IS NULL;" : "= 'child';"), cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(providerAnalysis);
@@ -267,7 +302,7 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE proof_eligibility_rows (id integer, value character varying(800) {nullability}); "
             + "COMMENT ON COLUMN proof_eligibility_rows.value IS 'canonical'; "
-            + "INSERT INTO proof_eligibility_rows VALUES (1, 'parent');");
+            + "INSERT INTO proof_eligibility_rows VALUES (1, 'parent');", cancellationToken: CancellationToken.None);
         if (inherited)
         {
             var constraint = Fixture.ServerVersion.Major >= 18
@@ -276,7 +311,8 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
             await ExecuteSqlAsync(connectionString,
                 "CREATE TABLE proof_eligibility_child () INHERITS (proof_eligibility_rows); "
                 + "INSERT INTO proof_eligibility_child VALUES (2, 'child'); "
-                + $"ALTER TABLE proof_eligibility_rows ADD CONSTRAINT proof_parent_not_null {constraint};");
+                + $"ALTER TABLE proof_eligibility_rows ADD CONSTRAINT proof_parent_not_null {constraint};",
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -286,6 +322,7 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
         // Act
         var liveResults = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
             context, [operation], CancellationToken.None);
+
         var live = liveResults.Single();
         projection.ObserveProviderPostcondition(new InsertDataOperation
         {
@@ -296,8 +333,10 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
         var projected = projection.Project(operation, live);
         await ExecuteSqlAsync(connectionString, inherited
             ? "INSERT INTO proof_eligibility_child VALUES (3, NULL);"
-            : "INSERT INTO proof_eligibility_rows VALUES (3, 'next');");
-        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+            : "INSERT INTO proof_eligibility_rows VALUES (3, 'next');", cancellationToken: CancellationToken.None);
+        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
         var repeatedResults = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
             context, [operation], CancellationToken.None);
 
@@ -331,7 +370,7 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE proof_eligibility_rows (id integer PRIMARY KEY, value character varying(800) NULL); "
-            + "INSERT INTO proof_eligibility_rows VALUES (1, 'preserved');");
+            + "INSERT INTO proof_eligibility_rows VALUES (1, 'preserved');", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var operation = BuildNullProofEligibilityOperation(varchar: true);
@@ -339,12 +378,18 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
         // Act
         var preflight = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
             context, [operation], CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "INSERT INTO proof_eligibility_rows VALUES (2, NULL);");
-        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+
+        await ExecuteSqlAsync(connectionString, "INSERT INTO proof_eligibility_rows VALUES (2, NULL);",
+            cancellationToken: CancellationToken.None);
+        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
         var repeatedAnalysis = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
             context, [operation], CancellationToken.None);
+
         var insertedNullRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM proof_eligibility_rows WHERE id = 2 AND value IS NULL;");
+            "SELECT COUNT(*) FROM proof_eligibility_rows WHERE id = 2 AND value IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(preflight).ObservedState);
@@ -363,7 +408,8 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
         var connectionString = await CreateDatabaseAsync(cancellation.Token);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE proof_eligibility_rows (id integer PRIMARY KEY, value timestamp without time zone NULL); "
-            + "INSERT INTO proof_eligibility_rows VALUES (1, '2026-01-02 03:04:05.123456');");
+            + "INSERT INTO proof_eligibility_rows VALUES (1, '2026-01-02 03:04:05.123456');",
+            cancellationToken: cancellation.Token);
 
         await using var context = CreateContext(connectionString);
         var operation = BuildNullProofEligibilityOperation(varchar: false);
@@ -380,17 +426,21 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
         // Act
         var execution = Task.Run(() => ExecuteOperationsAsync(context, [operation], cancellation.Token),
             CancellationToken.None);
+
         await WaitForBlockedPostgreSqlNarrowingCommandAsync(
             connectionString, "proof_eligibility_rows", cancellation.Token);
         await transaction.CommitAsync(cancellation.Token);
         var exception = await Record.ExceptionAsync(() => execution);
         var analysis = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
             context, [operation], cancellation.Token);
+
         var nullableColumns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'proof_eligibility_rows' "
-            + "AND column_name = 'value' AND is_nullable = 'YES';");
+            + "AND column_name = 'value' AND is_nullable = 'YES';", cancellationToken: cancellation.Token);
+
         var insertedNullRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM proof_eligibility_rows WHERE id = 2 AND value IS NULL;");
+            "SELECT COUNT(*) FROM proof_eligibility_rows WHERE id = 2 AND value IS NULL;",
+            cancellationToken: cancellation.Token);
 
         // Assert
         Assert.Equal("P1003", Assert.IsType<PostgresException>(exception).SqlState);
@@ -410,10 +460,11 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, NullProofSentinelSql);
+        await ExecuteSqlAsync(connectionString, NullProofSentinelSql, cancellationToken: CancellationToken.None);
         if (tableExists)
         {
-            await ExecuteSqlAsync(connectionString, "CREATE TABLE proof_eligibility_rows (id integer);");
+            await ExecuteSqlAsync(connectionString, "CREATE TABLE proof_eligibility_rows (id integer);",
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connectionString);
@@ -423,8 +474,9 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
         // Act
         var analysis = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
             context, [operation], CancellationToken.None);
+
         var runtimeException = await Record.ExceptionAsync(() =>
-            ExecuteRuntimeNullProofSentinelAsync(context, operation, plan));
+            ExecuteRuntimeNullProofSentinelAsync(context, operation, plan, cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Equal(tableExists ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.PrerequisiteMissing,
@@ -448,11 +500,18 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
         maxLength: varchar ? 800 : null, comment: "canonical")), SafeMigrationPolicy.RepairIfSafe);
 
     /// <summary>Proves the inline CASE branch excludes row SQL using a volatile raising function.</summary>
+    /// <param name="context">The configured fixture context.</param>
+    /// <param name="plan">The fixture's plan input.</param>
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
+    /// <returns>The asynchronous fixture operation or observation.</returns>
     private static async Task<string> ExecuteInlineNullProofSentinelAsync(
         DbContext context,
-        PostgreSqlSafeMigrationRuntimePlan plan
+        PostgreSqlSafeMigrationRuntimePlan plan,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var sentinelPlan = plan with
         {
             NullabilityDataProbe = plan.NullabilityDataProbe! with { BlockedExpression = "null_proof_sentinel()" },
@@ -461,36 +520,44 @@ public sealed class PostgreSqlColumnsNullProofEligibilityIntegrationTests : Post
         var connection = context.Database.GetDbConnection();
         if (connection.State != ConnectionState.Open)
         {
-            await connection.OpenAsync(CancellationToken.None);
+            await connection.OpenAsync(cancellationToken);
         }
 
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT (" + sentinelPlan.RenderStateExpression(false, false) + "), ("
             + sentinelPlan.RenderRepairPrecondition(false, false) + ");";
 
-        return Convert.ToString(await command.ExecuteScalarAsync(CancellationToken.None), CultureInfo.InvariantCulture)
+        return Convert.ToString(await command.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture)
             ?? throw new InvalidOperationException("The inline classifier returned no state.");
     }
 
     /// <summary>Substitutes the same raising function inside the generated PL/pgSQL row-reading branch.</summary>
+    /// <param name="context">The configured fixture context.</param>
+    /// <param name="operation">The fixture's operation input.</param>
+    /// <param name="plan">The fixture's plan input.</param>
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
+    /// <returns>The asynchronous fixture operation or observation.</returns>
     private static async Task ExecuteRuntimeNullProofSentinelAsync(
         DbContext context,
         SafeMigrationOperation operation,
-        PostgreSqlSafeMigrationRuntimePlan plan
+        PostgreSqlSafeMigrationRuntimePlan plan,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var generated = Assert.Single(
             context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
         var connection = context.Database.GetDbConnection();
         if (connection.State != ConnectionState.Open)
         {
-            await connection.OpenAsync(CancellationToken.None);
+            await connection.OpenAsync(cancellationToken);
         }
 
         await using var command = connection.CreateCommand();
         command.CommandText = generated.CommandText.Replace(
             plan.NullabilityDataProbe!.BlockedExpression, "null_proof_sentinel()", StringComparison.Ordinal);
-        await command.ExecuteNonQueryAsync(CancellationToken.None);
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
 }

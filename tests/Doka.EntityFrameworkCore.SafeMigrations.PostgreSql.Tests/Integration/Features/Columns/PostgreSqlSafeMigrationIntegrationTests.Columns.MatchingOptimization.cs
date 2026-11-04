@@ -32,7 +32,8 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
             "CREATE SCHEMA repair_collation; CREATE COLLATION repair_collation.shared FROM \"C\"; "
             + $"CREATE TABLE matching_optimization_rows (value character varying(32) COLLATE {collationSql} "
             + "NOT NULL DEFAULT 'legacy'); COMMENT ON COLUMN matching_optimization_rows.value IS 'legacy'; "
-            + "INSERT INTO matching_optimization_rows VALUES ('preserved');");
+            + "INSERT INTO matching_optimization_rows VALUES ('preserved');",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var targetLength = lengthTransition ? 64 : 32;
         var operation = new SafeMigrationOperation(new EnsureColumnIntent("matching_optimization_rows",
@@ -43,22 +44,28 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
 
         var oidBefore = await ScalarIntAsync(connectionString,
             "SELECT attcollation::integer FROM pg_catalog.pg_attribute "
-            + "WHERE attrelid = 'matching_optimization_rows'::regclass AND attname = 'value';");
+            + "WHERE attrelid = 'matching_optimization_rows'::regclass AND attname = 'value';",
+            cancellationToken: CancellationToken.None);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
         var replayFailure = failure is null
-            ? await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation])) : failure;
+            ? await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+                CancellationToken.None)) : failure;
 
         var analysis = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
             context, [operation], CancellationToken.None);
 
         var oidAfter = await ScalarIntAsync(connectionString,
             "SELECT attcollation::integer FROM pg_catalog.pg_attribute "
-            + "WHERE attrelid = 'matching_optimization_rows'::regclass AND attname = 'value';");
+            + "WHERE attrelid = 'matching_optimization_rows'::regclass AND attname = 'value';",
+            cancellationToken: CancellationToken.None);
 
         var preserved = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM matching_optimization_rows WHERE value = 'preserved';");
+            "SELECT COUNT(*) FROM matching_optimization_rows WHERE value = 'preserved';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Null(failure);
@@ -77,7 +84,8 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
         await ExecuteSqlAsync(connectionString,
             "CREATE SCHEMA repair_collation; CREATE COLLATION repair_collation.shared FROM \"C\"; "
             + "CREATE TABLE matching_optimization_rows (value character varying(32) COLLATE \"C\" NOT NULL); "
-            + "INSERT INTO matching_optimization_rows VALUES ('preserved');");
+            + "INSERT INTO matching_optimization_rows VALUES ('preserved');",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operation = new SafeMigrationOperation(new EnsureColumnIntent("matching_optimization_rows",
             new ExpectedColumnDefinition("value", typeof(string), false, "character varying(64)",
@@ -85,9 +93,12 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
         var preserved = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM matching_optimization_rows WHERE value = 'preserved';");
+            "SELECT COUNT(*) FROM matching_optimization_rows WHERE value = 'preserved';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal("P1001", Assert.IsType<PostgresException>(failure).SqlState);
@@ -107,7 +118,8 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE matching_optimization_rows (value text COLLATE \"C\" NULL); "
-            + "INSERT INTO matching_optimization_rows VALUES ('preserved');");
+            + "INSERT INTO matching_optimization_rows VALUES ('preserved');",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operation = new SafeMigrationOperation(new EnsureColumnIntent("matching_optimization_rows",
             new ExpectedColumnDefinition("value", typeof(string), true, "text",
@@ -118,9 +130,12 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
         var analysis = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
             context, [operation], CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
         var preserved = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM matching_optimization_rows WHERE value = 'preserved';");
+            "SELECT COUNT(*) FROM matching_optimization_rows WHERE value = 'preserved';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(analysis);
@@ -149,7 +164,8 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
         var value = varchar ? "'preserved'" : "'2026-01-02 03:04:05.123456'";
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE matching_optimization_rows (value {storeType} NOT NULL); "
-            + $"INSERT INTO matching_optimization_rows VALUES ({value}); " + NullProofSentinelSql);
+            + $"INSERT INTO matching_optimization_rows VALUES ({value}); " + NullProofSentinelSql,
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var target = new ExpectedColumnDefinition(
             "value", varchar ? typeof(string) : typeof(DateTime), false, storeType);
@@ -165,13 +181,16 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
 
         // Act
         var first = await Record.ExceptionAsync(() =>
-            ExecuteRepairQualificationSentinelAsync(context, operation, plan));
+            ExecuteRepairQualificationSentinelAsync(context, operation, plan,
+                cancellationToken: CancellationToken.None));
 
         var replay = await Record.ExceptionAsync(() =>
-            ExecuteRepairQualificationSentinelAsync(context, operation, plan));
+            ExecuteRepairQualificationSentinelAsync(context, operation, plan,
+                cancellationToken: CancellationToken.None));
 
         var preserved = await ScalarIntAsync(connectionString,
-            $"SELECT COUNT(*) FROM matching_optimization_rows WHERE value = {value};");
+            $"SELECT COUNT(*) FROM matching_optimization_rows WHERE value = {value};",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Null(first);
@@ -195,7 +214,7 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
             + "INSERT INTO matching_optimization_rows VALUES ('preserved'); "
             + "INSERT INTO matching_optimization_child VALUES (NULL); "
             + $"ALTER TABLE matching_optimization_rows ADD CONSTRAINT parent_not_null {constraint}; "
-            + NullProofSentinelSql);
+            + NullProofSentinelSql, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operation = new SafeMigrationOperation(new EnsureColumnIntent("matching_optimization_rows",
             new ExpectedColumnDefinition("value", typeof(string), false, "character varying(32)")),
@@ -205,11 +224,15 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
 
         // Act
         var sentinelFailure = await Record.ExceptionAsync(() =>
-            ExecuteRepairQualificationSentinelAsync(context, operation, plan));
+            ExecuteRepairQualificationSentinelAsync(context, operation, plan,
+                cancellationToken: CancellationToken.None));
 
-        var realFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+        var realFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
         var nullRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM matching_optimization_child WHERE value IS NULL;");
+            "SELECT COUNT(*) FROM matching_optimization_child WHERE value IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal("P1901", Assert.IsType<PostgresException>(sentinelFailure).SqlState);
@@ -238,7 +261,8 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
             + "CREATE TABLE matching_optimization_child () INHERITS (matching_optimization_rows); "
             + "INSERT INTO matching_optimization_rows VALUES ('parent'); "
             + $"INSERT INTO matching_optimization_child VALUES ({childValue}); "
-            + $"ALTER TABLE matching_optimization_rows ADD CONSTRAINT parent_not_null {constraint};");
+            + $"ALTER TABLE matching_optimization_rows ADD CONSTRAINT parent_not_null {constraint};",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operation = new SafeMigrationOperation(new AlterColumnIntent("matching_optimization_rows",
             new ExpectedColumnDefinition("value", typeof(string), false, "character varying(32)"),
@@ -257,10 +281,12 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
         var inlineState = Convert.ToString(await inline.ExecuteScalarAsync(CancellationToken.None),
             CultureInfo.InvariantCulture);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
         var preserved = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM matching_optimization_child WHERE value "
-            + (containsNull ? "IS NULL;" : "= 'child';"));
+            + (containsNull ? "IS NULL;" : "= 'child';"), cancellationToken: CancellationToken.None);
 
         // Assert
         var expectedState = Fixture.ServerVersion.Major >= 18 || !containsNull
@@ -291,7 +317,8 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE matching_optimization_rows (value timestamp without time zone NOT NULL); "
-            + "INSERT INTO matching_optimization_rows VALUES ('2026-01-02 03:04:05');");
+            + "INSERT INTO matching_optimization_rows VALUES ('2026-01-02 03:04:05');",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operation = new SafeMigrationOperation(new EnsureColumnIntent("matching_optimization_rows",
             new ExpectedColumnDefinition("value", typeof(DateTime), false, "timestamp without time zone")),
@@ -309,9 +336,12 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
         ];
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, operations,
+            CancellationToken.None));
+
         var nullRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM matching_optimization_rows WHERE value IS NULL;");
+            "SELECT COUNT(*) FROM matching_optimization_rows WHERE value IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         var analysis = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
             context, [operation], CancellationToken.None);
@@ -327,12 +357,16 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
     /// <param name="operation">The reviewed operation whose real guards remain active.</param>
     /// <param name="plan">The actual catalog plan with only repair qualification instrumented.</param>
     /// <returns>A task completing after the rendered guard executes.</returns>
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
     private static async Task ExecuteRepairQualificationSentinelAsync(
         DbContext context,
         SafeMigrationOperation operation,
-        PostgreSqlSafeMigrationRuntimePlan plan
+        PostgreSqlSafeMigrationRuntimePlan plan,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var sentinel = plan with
         {
             DataProbe = plan.DataProbe is null ? null
@@ -351,12 +385,12 @@ public sealed class PostgreSqlColumnsMatchingOptimizationIntegrationTests : Post
         var connection = context.Database.GetDbConnection();
         if (connection.State != ConnectionState.Open)
         {
-            await connection.OpenAsync(CancellationToken.None);
+            await connection.OpenAsync(cancellationToken);
         }
 
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
-        await command.ExecuteNonQueryAsync(CancellationToken.None);
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
 }

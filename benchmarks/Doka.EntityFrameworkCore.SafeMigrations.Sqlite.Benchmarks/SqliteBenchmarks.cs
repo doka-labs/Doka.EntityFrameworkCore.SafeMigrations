@@ -155,7 +155,7 @@ public class SqliteModelManagedDataAnalysisBenchmarks : IDisposable
     public async System.Threading.Tasks.Task<int> AnalyzeModelManagedData()
     {
         var report = await _runner
-            .AnalyzeAsync(_context, _operations, new SafeMigrationRunOptions(_instanceId))
+            .AnalyzeAsync(_context, _operations, new SafeMigrationRunOptions(_instanceId), CancellationToken.None)
             .ConfigureAwait(false);
 
         return report.Assessments.Count;

@@ -16,44 +16,57 @@ public sealed class SqlServerSafeMigrationPhysicalTablesIntegrationTests : SqlSe
     public async Task PhysicalTableEngine_AllTableIntentsAreInvariantUnsupportedWithoutMutation(string engine)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, PhysicalTableSetupSql(engine));
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, PhysicalTableSetupSql(engine),
+            cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.ordinary_child (Id int NOT NULL); "
-            + "CREATE TABLE dbo.engine_ddl_events (Id int NOT NULL);");
+            + "CREATE TABLE dbo.engine_ddl_events (Id int NOT NULL);", cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TRIGGER doka_engine_ddl_audit ON DATABASE FOR DDL_TABLE_EVENTS, DDL_INDEX_EVENTS "
-            + "AS INSERT dbo.engine_ddl_events VALUES (1);");
-        var originalId = await ScalarIntAsync(connectionString, "SELECT OBJECT_ID(N'dbo.physical_items', N'U');");
-        var originalColumns = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.physical_items', N'U');");
+            + "AS INSERT dbo.engine_ddl_events VALUES (1);", cancellationToken: CancellationToken.None);
+        var originalId = await ScalarIntAsync(connectionString, "SELECT OBJECT_ID(N'dbo.physical_items', N'U');",
+            cancellationToken: CancellationToken.None);
 
-        var originalRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.physical_items;");
+        var originalColumns = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.physical_items', N'U');",
+            cancellationToken: CancellationToken.None);
+
+        var originalRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.physical_items;",
+            cancellationToken: CancellationToken.None);
+
         var operations = PhysicalTableOperations();
         await using var context = CreateContext(connectionString);
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
 
         // Act
         IReadOnlyList<SafeMigrationProviderAnalysis> analyses;
-        await using (await analyzer.AcquireAnalysisScopeAsync(context))
+        await using (await analyzer.AcquireAnalysisScopeAsync(context, cancellationToken: CancellationToken.None))
         {
             // WHY: Memory-optimized row reads under the owned ReadCommitted
             // transaction would fail before classification without this gate.
-            analyses = await analyzer.AnalyzeAsync(context, operations);
+            analyses = await analyzer.AnalyzeAsync(context, operations, cancellationToken: CancellationToken.None);
         }
 
         var failures = new List<Exception?>();
         foreach (var operation in operations)
         {
-            failures.Add(await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation])));
+            failures.Add(await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+                cancellationToken: CancellationToken.None)));
         }
 
-        var remainingId = await ScalarIntAsync(connectionString, "SELECT OBJECT_ID(N'dbo.physical_items', N'U');");
-        var remainingColumns = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.physical_items', N'U');");
+        var remainingId = await ScalarIntAsync(connectionString, "SELECT OBJECT_ID(N'dbo.physical_items', N'U');",
+            cancellationToken: CancellationToken.None);
 
-        var remainingRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.physical_items;");
-        var ddlEvents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.engine_ddl_events;");
+        var remainingColumns = await ScalarIntAsync(connectionString,
+            "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.physical_items', N'U');",
+            cancellationToken: CancellationToken.None);
+
+        var remainingRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.physical_items;",
+            cancellationToken: CancellationToken.None);
+
+        var ddlEvents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.engine_ddl_events;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(operations.Length, analyses.Count);
@@ -78,8 +91,9 @@ public sealed class SqlServerSafeMigrationPhysicalTablesIntegrationTests : SqlSe
     public async Task OrdinaryAndAbsentTables_PhysicalBoundaryAllowsApplyAndReplay()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.ordinary_items (Id int NOT NULL);");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.ordinary_items (Id int NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(new ExpectedTableDefinition("ordinary_items",
@@ -92,13 +106,14 @@ public sealed class SqlServerSafeMigrationPhysicalTablesIntegrationTests : SqlSe
         var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
 
         // Act
-        var before = await analyzer.AnalyzeAsync(context, operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var after = await analyzer.AnalyzeAsync(context, operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        var before = await analyzer.AnalyzeAsync(context, operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        var after = await analyzer.AnalyzeAsync(context, operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var ordinaryEngines = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.tables WHERE name IN (N'ordinary_items', N'absent_items') "
-            + "AND is_memory_optimized = 0 AND is_filetable = 0 AND temporal_type = 0;");
+            + "AND is_memory_optimized = 0 AND is_filetable = 0 AND temporal_type = 0;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Matching, before[0].ObservedState);

@@ -142,22 +142,33 @@ public abstract partial class PostgreSqlSafeMigrationIntegrationTests : PostgreS
     }
 
     /// <summary>Creates only test-owned schema and mixed null/non-null rows for the predicate boundary.</summary>
+    /// <param name="connectionString">The isolated fixture database connection string.</param>
+    /// <param name="column">The fixture column whose physical contract is inspected.</param>
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
+    /// <returns>The asynchronous fixture operation or observation.</returns>
     protected static Task CreateSimpleFilterTableAsync(
         string connectionString,
+        CancellationToken cancellationToken,
         string column = "parent"
     ) => ExecuteSqlAsync(
         connectionString,
         "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters "
         + $"(id integer NOT NULL, {PostgreSqlIdentifier(column)} integer NULL);"
-        + "INSERT INTO hierarchy.simple_filters VALUES (1, NULL), (2, 1), (3, 2);");
+        + "INSERT INTO hierarchy.simple_filters VALUES (1, NULL), (2, 1), (3, 2);",
+        cancellationToken: cancellationToken);
 
     /// <summary>Counts the independently managed filtered index in the exact test-owned schema.</summary>
+    /// <param name="connectionString">The isolated fixture database connection string.</param>
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
+    /// <returns>The asynchronous fixture operation or observation.</returns>
     protected static Task<int> SimpleFilterIndexCountAsync(
-        string connectionString
+        string connectionString,
+        CancellationToken cancellationToken
     ) => ScalarIntAsync(
         connectionString,
         "SELECT count(*) FROM pg_catalog.pg_indexes "
-        + "WHERE schemaname = 'hierarchy' AND indexname = 'simple_filter_lookup';");
+        + "WHERE schemaname = 'hierarchy' AND indexname = 'simple_filter_lookup';",
+        cancellationToken: cancellationToken);
 
     /// <summary>Retains the MatchingDerivedContext CLR identity while feature classes share its model.</summary>
     protected sealed class MatchingDerivedContext(string connectionString) : SafeMigrationDbContext(connectionString);
@@ -178,14 +189,16 @@ public abstract partial class PostgreSqlSafeMigrationIntegrationTests : PostgreS
             ArgumentNullException.ThrowIfNull(context);
         }
 
+        /// <inheritdoc />
         public Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
             DbContext context,
-            CancellationToken cancellationToken = default
+            CancellationToken cancellationToken
         ) => throw new InvalidOperationException("Analysis scope acquisition must not be reached.");
 
+        /// <inheritdoc />
         public async Task<SafeMigrationProviderEnvironment> GetEnvironmentAsync(
             DbContext context,
-            CancellationToken cancellationToken = default
+            CancellationToken cancellationToken
         )
         {
             _started.TrySetResult();
@@ -194,16 +207,18 @@ public abstract partial class PostgreSqlSafeMigrationIntegrationTests : PostgreS
             throw new InvalidOperationException("The blocking analyzer completed without cancellation.");
         }
 
+        /// <inheritdoc />
         public Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
             DbContext context,
             IReadOnlyList<SafeMigrationOperation> operations,
-            CancellationToken cancellationToken = default
+            CancellationToken cancellationToken
         ) => throw new InvalidOperationException("Operation analysis must not be reached.");
 
+        /// <inheritdoc />
         public Task<IReadOnlyList<SafeMigrationUnexpectedObject>> FindUnexpectedObjectsAsync(
             DbContext context,
             IReadOnlyList<MigrationOperation> operations,
-            CancellationToken cancellationToken = default
+            CancellationToken cancellationToken
         ) => throw new InvalidOperationException("Unexpected-object analysis must not be reached.");
     }
 

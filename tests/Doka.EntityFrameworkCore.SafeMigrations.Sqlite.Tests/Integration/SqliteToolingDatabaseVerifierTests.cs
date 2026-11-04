@@ -11,15 +11,21 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     public async Task CompleteTargetPassesWithoutPersistingProbeRows()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateFixtureAsync(connection);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateFixtureAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
         PackageConsumer.ToolingDatabaseVerifier.Verify(connection, InitialMigrationId, TransitionMigrationId);
 
         // Assert
-        Assert.Equal(0, await ScalarIntAsync(connection, "SELECT COUNT(*) FROM scaffolding_generated_nodes;"));
-        Assert.Equal(1, await ScalarIntAsync(connection, "SELECT COUNT(*) FROM tooling_entities;"));
+        Assert.Equal(0, await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM scaffolding_generated_nodes;",
+            cancellationToken: CancellationToken.None));
+        Assert.Equal(1, await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM tooling_entities;",
+            cancellationToken: CancellationToken.None));
         using var transaction = connection.BeginTransaction();
         Assert.Same(connection, transaction.Connection);
     }
@@ -29,8 +35,12 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     public async Task BaselineOnlyDatabaseIsRejected()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateFixtureAsync(connection, baselineOnly: true, includeGeneratedTable: false);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateFixtureAsync(
+            connection,
+            baselineOnly: true,
+            includeGeneratedTable: false,
+            cancellationToken: CancellationToken.None);
 
         // Act
         var exception = Record.Exception(() => PackageConsumer.ToolingDatabaseVerifier.Verify(
@@ -49,10 +59,11 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     public async Task ExtraIndexCannotCompensateForMissingHistory(string missingMigrationId)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateFixtureAsync(connection);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateFixtureAsync(connection, cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection, "DELETE FROM __EFMigrationsHistory WHERE MigrationId = '"
-            + missingMigrationId + "'; CREATE UNIQUE INDEX unrelated_unique ON tooling_entities (Code, Id);");
+            + missingMigrationId + "'; CREATE UNIQUE INDEX unrelated_unique ON tooling_entities (Code, Id);",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var exception = Record.Exception(() => PackageConsumer.ToolingDatabaseVerifier.Verify(
@@ -68,10 +79,10 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     public async Task DifferentTransitionHistoryIsRejected()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateFixtureAsync(connection);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateFixtureAsync(connection, cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection, "UPDATE __EFMigrationsHistory SET MigrationId = '20990101000001_Other' "
-            + "WHERE MigrationId = '" + TransitionMigrationId + "';");
+            + "WHERE MigrationId = '" + TransitionMigrationId + "';", cancellationToken: CancellationToken.None);
 
         // Act
         var exception = Record.Exception(() => PackageConsumer.ToolingDatabaseVerifier.Verify(
@@ -90,9 +101,12 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     public async Task MissingTargetColumnIsRejected(string column)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateFixtureAsync(connection);
-        await ExecuteSqlAsync(connection, "ALTER TABLE tooling_entities DROP COLUMN \"" + column + "\";");
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateFixtureAsync(connection, cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "ALTER TABLE tooling_entities DROP COLUMN \"" + column + "\";",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var exception = Record.Exception(() => PackageConsumer.ToolingDatabaseVerifier.Verify(
@@ -112,9 +126,12 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     public async Task IncorrectCodeIndexIsRejected(string replacement)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateFixtureAsync(connection);
-        await ExecuteSqlAsync(connection, "DROP INDEX IX_tooling_entities_Code; " + replacement + ";");
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateFixtureAsync(connection, cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "DROP INDEX IX_tooling_entities_Code; " + replacement + ";",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var exception = Record.Exception(() => PackageConsumer.ToolingDatabaseVerifier.Verify(
@@ -130,8 +147,8 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     public async Task MissingGeneratedTableIsRejected()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateFixtureAsync(connection, includeGeneratedTable: false);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateFixtureAsync(connection, includeGeneratedTable: false, cancellationToken: CancellationToken.None);
 
         // Act
         var exception = Record.Exception(() => PackageConsumer.ToolingDatabaseVerifier.Verify(
@@ -147,12 +164,13 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     public async Task ReorderedGeneratedIndexIsRejected()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateFixtureAsync(connection);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateFixtureAsync(connection, cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "DROP INDEX IX_scaffolding_generated_nodes_HasDescendants_LeftBound_RightBound; "
             + "CREATE INDEX IX_scaffolding_generated_nodes_HasDescendants_LeftBound_RightBound "
-            + "ON scaffolding_generated_nodes (HasDescendants, RightBound, LeftBound);");
+            + "ON scaffolding_generated_nodes (HasDescendants, RightBound, LeftBound);",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var exception = Record.Exception(() => PackageConsumer.ToolingDatabaseVerifier.Verify(
@@ -168,8 +186,8 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     public async Task IncorrectGeneratedExpressionIsRejectedAndProbeRowsAreRolledBack()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateFixtureAsync(connection, generatedExpression: "0");
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateFixtureAsync(connection, generatedExpression: "0", cancellationToken: CancellationToken.None);
 
         // Act
         var exception = Record.Exception(() => PackageConsumer.ToolingDatabaseVerifier.Verify(
@@ -178,7 +196,10 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
         // Assert
         Assert.Contains("generated_values", Assert.IsType<InvalidOperationException>(exception).Message,
             StringComparison.Ordinal);
-        Assert.Equal(0, await ScalarIntAsync(connection, "SELECT COUNT(*) FROM scaffolding_generated_nodes;"));
+        Assert.Equal(0, await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM scaffolding_generated_nodes;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>A named but ineffective CHECK must fail its behavioral negative control.</summary>
@@ -189,8 +210,11 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     public async Task MissingOrIneffectiveCheckIsRejected(string? checkExpression)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateFixtureAsync(connection, checkExpression: checkExpression);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateFixtureAsync(
+            connection,
+            checkExpression: checkExpression,
+            cancellationToken: CancellationToken.None);
 
         // Act
         var exception = Record.Exception(() => PackageConsumer.ToolingDatabaseVerifier.Verify(
@@ -199,7 +223,10 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
         // Assert
         Assert.Contains("generated_check", Assert.IsType<InvalidOperationException>(exception).Message,
             StringComparison.Ordinal);
-        Assert.Equal(0, await ScalarIntAsync(connection, "SELECT COUNT(*) FROM scaffolding_generated_nodes;"));
+        Assert.Equal(0, await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM scaffolding_generated_nodes;",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Foreign-key violations remain fatal even when all selected application objects match.</summary>
@@ -207,12 +234,13 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     public async Task ForeignKeyViolationIsRejected()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await CreateFixtureAsync(connection);
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await CreateFixtureAsync(connection, cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection, "PRAGMA foreign_keys = OFF; "
             + "CREATE TABLE extra_parent (Id INTEGER PRIMARY KEY); "
             + "CREATE TABLE extra_child (ParentId INTEGER REFERENCES extra_parent (Id)); "
-            + "INSERT INTO extra_child VALUES (1); PRAGMA foreign_keys = ON;");
+            + "INSERT INTO extra_child VALUES (1); PRAGMA foreign_keys = ON;",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var exception = Record.Exception(() => PackageConsumer.ToolingDatabaseVerifier.Verify(
@@ -224,14 +252,18 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     }
 
     /// <summary>Creates independent engine fixtures rather than reproducing the verifier's SQL predicates.</summary>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task CreateFixtureAsync(
         SqliteConnection connection,
+        CancellationToken cancellationToken,
         bool baselineOnly = false,
         bool includeGeneratedTable = true,
         string? generatedExpression = null,
         string? checkExpression = "\"RightBound\" > \"LeftBound\""
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var transitionColumns = baselineOnly
             ? "\"old_code\" TEXT NULL, \"LegacyCode\" INTEGER NULL"
             : "\"renamed_code\" TEXT NULL, \"AddedCode\" TEXT NULL";
@@ -243,7 +275,7 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
                 : "INSERT INTO __EFMigrationsHistory VALUES ('" + TransitionMigrationId + "', '10.0.13'); ")
             + "CREATE TABLE tooling_entities (Id INTEGER NOT NULL PRIMARY KEY, Code TEXT NOT NULL, "
             + transitionColumns + "); CREATE UNIQUE INDEX IX_tooling_entities_Code ON tooling_entities (Code); "
-            + "INSERT INTO tooling_entities (Id, Code) VALUES (1, 'baseline');");
+            + "INSERT INTO tooling_entities (Id, Code) VALUES (1, 'baseline');", cancellationToken: cancellationToken);
 
         if (includeGeneratedTable)
         {
@@ -259,7 +291,8 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
                 + "LeftBound INTEGER NOT NULL, RightBound INTEGER NOT NULL, HasDescendants INTEGER NOT NULL "
                 + "GENERATED ALWAYS AS (" + expression + ") VIRTUAL" + check + "); "
                 + "CREATE INDEX IX_scaffolding_generated_nodes_HasDescendants_LeftBound_RightBound "
-                + "ON scaffolding_generated_nodes (HasDescendants, LeftBound, RightBound);");
+                + "ON scaffolding_generated_nodes (HasDescendants, LeftBound, RightBound);",
+                cancellationToken: cancellationToken);
         }
     }
 }

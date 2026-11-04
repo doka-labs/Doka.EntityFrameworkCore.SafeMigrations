@@ -201,7 +201,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
     public Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
         DbContext context,
         IReadOnlyList<SafeMigrationOperation> operations,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
         => AnalyzeCoreAsync(context, operations, operations, cancellationToken);
 
@@ -210,7 +210,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer :
         DbContext context,
         IReadOnlyList<MigrationOperation> operations,
         IReadOnlyList<IModel?>? targetModels,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(operations);

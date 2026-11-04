@@ -370,6 +370,7 @@ public sealed class PostgreSqlTransitionProbeWindowTests
         // Act
         var first = await ResolveAsync(analyzer, connection, operations,
             new SafeMigrationObservedState?[operations.Length], CancellationToken.None);
+
         var beforeEmpty = connection.Submissions.Count;
         var empty = await ResolveAsync(analyzer, connection, [], [], CancellationToken.None);
         var afterEmpty = connection.Submissions.Count;

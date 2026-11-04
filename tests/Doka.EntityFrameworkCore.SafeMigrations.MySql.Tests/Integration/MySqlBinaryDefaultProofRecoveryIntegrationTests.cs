@@ -25,7 +25,7 @@ public sealed class MySqlBinaryDefaultProofRecoveryIntegrationTests : MySqlInteg
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `binary_default_recovery` (`id` int NOT NULL, "
             + "`value` varbinary(4) NOT NULL DEFAULT X'A0B1'); "
-            + "INSERT INTO `binary_default_recovery` VALUES (1, X'1020');");
+            + "INSERT INTO `binary_default_recovery` VALUES (1, X'1020');", cancellationToken: CancellationToken.None);
         using var cancellation = new CancellationTokenSource();
         var observer = new AcquiredBinaryDefaultCancellationInterceptor(cancellation);
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>()
@@ -35,9 +35,11 @@ public sealed class MySqlBinaryDefaultProofRecoveryIntegrationTests : MySqlInteg
             .Options;
 
         await using var context = new SafeMigrationDbContext(options);
-        await context.Database.OpenConnectionAsync(CancellationToken.None);
+        await context.Database.OpenConnectionAsync(cancellation.Token);
         var connection = context.Database.GetDbConnection();
-        var sessionBefore = await SessionScalarAsync(connection, "SELECT CONNECTION_ID();");
+        var sessionBefore = await SessionScalarAsync(connection, "SELECT CONNECTION_ID();",
+            cancellationToken: cancellation.Token);
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn("binary_default_recovery",
             new ExpectedColumnDefinition("value", typeof(byte[]), false, "varbinary(4)", maxLength: 4,
@@ -49,24 +51,36 @@ public sealed class MySqlBinaryDefaultProofRecoveryIntegrationTests : MySqlInteg
             cancellation.Token));
 
         var bodiesBeforeRetry = observer.GuardedBodiesStarted;
-        var variablesAfterCancellation = await SessionScalarAsync(connection, ClearedVariables);
+        // WHY: The execution token is now canceled; cleanup proof and retry must remain independently observable.
+        var variablesAfterCancellation = await SessionScalarAsync(connection, ClearedVariables,
+            cancellationToken: CancellationToken.None);
+
         var temporaryTableError = await ResourceFailureCodeAsync(connection,
-            "SELECT 1 FROM `__doka_sm_assert` LIMIT 1;");
+            "SELECT 1 FROM `__doka_sm_assert` LIMIT 1;", cancellationToken: CancellationToken.None);
+
         var preparedStatementError = await ResourceFailureCodeAsync(connection,
-            "DEALLOCATE PREPARE doka_sm_statement;");
-        var sessionAfterCancellation = await SessionScalarAsync(connection, "SELECT CONNECTION_ID();");
+            "DEALLOCATE PREPARE doka_sm_statement;", cancellationToken: CancellationToken.None);
+
+        var sessionAfterCancellation = await SessionScalarAsync(connection, "SELECT CONNECTION_ID();",
+            cancellationToken: CancellationToken.None);
+
         var preservedBeforeRetry = await SessionScalarAsync(connection,
-            "SELECT COUNT(*) FROM `binary_default_recovery` WHERE `id` = 1 AND `value` = X'1020';");
+            "SELECT COUNT(*) FROM `binary_default_recovery` WHERE `id` = 1 AND `value` = X'1020';",
+            cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var variablesAfterRetry = await SessionScalarAsync(connection, ClearedVariables);
-        var sessionAfterRetry = await SessionScalarAsync(connection, "SELECT CONNECTION_ID();");
+        var variablesAfterRetry = await SessionScalarAsync(connection, ClearedVariables,
+            cancellationToken: CancellationToken.None);
+
+        var sessionAfterRetry = await SessionScalarAsync(connection, "SELECT CONNECTION_ID();",
+            cancellationToken: CancellationToken.None);
+
         await using var insert = connection.CreateCommand();
         insert.CommandText = "INSERT INTO `binary_default_recovery` (`id`) VALUES (2);";
         await insert.ExecuteNonQueryAsync(CancellationToken.None);
         var defaultRows = await SessionScalarAsync(connection,
             "SELECT COUNT(*) FROM `binary_default_recovery` WHERE `id` = 2 "
-            + "AND HEX(`value`) = 'A0B1';");
+            + "AND HEX(`value`) = 'A0B1';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.IsAssignableFrom<OperationCanceledException>(failure);
@@ -92,12 +106,19 @@ public sealed class MySqlBinaryDefaultProofRecoveryIntegrationTests : MySqlInteg
     /// <param name="connection">The already open migration session.</param>
     /// <param name="sql">A test-owned scalar query containing no application or connection information.</param>
     /// <returns>The scalar value converted without dependence on provider integer-width metadata.</returns>
-    private static async Task<long> SessionScalarAsync(DbConnection connection, string sql)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static async Task<long> SessionScalarAsync(
+        DbConnection connection,
+        string sql,
+        CancellationToken cancellationToken
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
 
-        return Convert.ToInt64(await command.ExecuteScalarAsync(CancellationToken.None), CultureInfo.InvariantCulture);
+        return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture);
     }
 
     /// <summary>
@@ -106,13 +127,20 @@ public sealed class MySqlBinaryDefaultProofRecoveryIntegrationTests : MySqlInteg
     /// <param name="connection">The unchanged physical migration connection.</param>
     /// <param name="sql">The direct resource-absence probe.</param>
     /// <returns>The native error code, or zero when the supposedly released resource still exists.</returns>
-    private static async Task<int> ResourceFailureCodeAsync(DbConnection connection, string sql)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static async Task<int> ResourceFailureCodeAsync(
+        DbConnection connection,
+        string sql,
+        CancellationToken cancellationToken
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
         try
         {
-            await command.ExecuteNonQueryAsync(CancellationToken.None);
+            await command.ExecuteNonQueryAsync(cancellationToken);
 
             return 0;
         }

@@ -5,6 +5,46 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 /// </summary>
 public sealed class SqlServerIdentityInsertPauseTests
 {
+    /// <summary>Distinguishes an expired readiness token from an independent post-attention observer.</summary>
+    /// <param name="reuseReadinessToken">
+    /// Whether the observation incorrectly reuses the canceled prior-phase token.
+    /// </param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PostAttentionObservationSeparatesExpiredReadinessFromNativeDispatch(bool reuseReadinessToken)
+    {
+        // Arrange
+        using var readiness = new CancellationTokenSource();
+        readiness.Cancel();
+        using var observer = new SqlConnection();
+        var method = typeof(SqlServerIdentityInsertOwnershipIntegrationTests).GetMethod("ReadMarkerIsNullAsync",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+
+        var observationToken = reuseReadinessToken
+            ? readiness.Token
+            : CancellationToken.None;
+
+        // Act
+        var exception = await Record.ExceptionAsync(() => (Task<bool>)method.Invoke(
+            null, [observer, observationToken])!);
+
+        // Assert
+        if (reuseReadinessToken)
+        {
+            var canceled = Assert.IsAssignableFrom<OperationCanceledException>(exception);
+            Assert.Equal(readiness.Token, canceled.CancellationToken);
+        }
+        else
+        {
+            // WHY: An unopened connection proves command admission without contacting a server.
+            // This control must reach native dispatch, rather than being short-circuited by expired readiness.
+            Assert.IsType<InvalidOperationException>(exception);
+        }
+
+        Assert.Equal(ConnectionState.Closed, observer.State);
+    }
+
     /// <summary>
     /// Binds the observation to explicit SQL integer metadata without interpolating the resource.
     /// </summary>

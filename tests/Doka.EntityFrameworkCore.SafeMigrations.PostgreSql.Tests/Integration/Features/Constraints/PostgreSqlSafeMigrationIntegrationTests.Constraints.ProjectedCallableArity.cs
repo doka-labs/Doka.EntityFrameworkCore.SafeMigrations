@@ -20,13 +20,16 @@ public sealed class PostgreSqlConstraintsProjectedCallableArityIntegrationTests 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var limit = await ScalarIntAsync(connectionString, "SELECT current_setting('max_function_args')::integer;");
+        var limit = await ScalarIntAsync(connectionString, "SELECT current_setting('max_function_args')::integer;",
+            cancellationToken: CancellationToken.None);
+
         var count = limit + (overLimit ? 1 : 0);
         var signature = variadic ? "VARIADIC integer[]" : string.Join(", ", Enumerable.Repeat("integer", limit));
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE mixed_columns (id integer NOT NULL); CREATE TABLE callback_audit (id integer); "
             + $"CREATE FUNCTION metadata_many({signature}) RETURNS boolean LANGUAGE plpgsql AS "
-            + "'BEGIN INSERT INTO callback_audit VALUES (1); RETURN TRUE; END';");
+            + "'BEGIN INSERT INTO callback_audit VALUES (1); RETURN TRUE; END';",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -53,7 +56,7 @@ public sealed class PostgreSqlConstraintsProjectedCallableArityIntegrationTests 
         if (approved)
         {
             report.ThrowIfBlocked();
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
             postflight = await runner.VerifyAsync(context, builder.Operations,
                 new SafeMigrationRunOptions("sparse-check-callable-limit-final"), CancellationToken.None);
 
@@ -64,16 +67,19 @@ public sealed class PostgreSqlConstraintsProjectedCallableArityIntegrationTests 
         {
             var nativeArguments = string.Join(", ", Enumerable.Repeat("id", count));
             nativeError = await Assert.ThrowsAsync<PostgresException>(() => ExecuteSqlAsync(connectionString,
-                $"ALTER TABLE mixed_columns ADD CONSTRAINT native_probe CHECK (metadata_many({nativeArguments}));"));
+                $"ALTER TABLE mixed_columns ADD CONSTRAINT native_probe CHECK (metadata_many({nativeArguments}));",
+                cancellationToken: CancellationToken.None));
         }
         else
         {
             var nativeArguments = string.Join(", ", Enumerable.Repeat("id", count));
             await ExecuteSqlAsync(connectionString,
-                $"ALTER TABLE mixed_columns ADD CONSTRAINT native_probe CHECK (metadata_many({nativeArguments}));");
+                $"ALTER TABLE mixed_columns ADD CONSTRAINT native_probe CHECK (metadata_many({nativeArguments}));",
+                cancellationToken: CancellationToken.None);
         }
 
-        var callbacks = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM callback_audit;");
+        var callbacks = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM callback_audit;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(0, callbacks);

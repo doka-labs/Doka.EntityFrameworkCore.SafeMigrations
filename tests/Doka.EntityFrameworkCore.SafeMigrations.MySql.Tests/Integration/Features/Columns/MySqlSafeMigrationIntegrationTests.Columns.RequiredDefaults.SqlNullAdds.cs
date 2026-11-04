@@ -23,12 +23,14 @@ public sealed partial class MySqlColumnsRequiredDefaultsSqlNullAddsIntegrationTe
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `sql_null_add_items` (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;"
-            + (populated ? " INSERT INTO `sql_null_add_items` (`key`) VALUES (1);" : ""));
+            + (populated ? " INSERT INTO `sql_null_add_items` (`key`) VALUES (1);" : ""),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await AtomicRequiredAddSessionSqlAsync(context,
-            "SET SESSION sql_mode = '" + (strictSession ? "STRICT_ALL_TABLES" : "") + "';");
+            "SET SESSION sql_mode = '" + (strictSession ? "STRICT_ALL_TABLES" : "") + "';",
+            cancellationToken: CancellationToken.None);
         var operation = RequiredDefaultsSqlNullAddOperation();
         var originalFingerprint = SafeMigrationContractFingerprint.Create([operation]);
         var qualified = !Fixture.IsMariaDb && strictSession;
@@ -52,7 +54,8 @@ public sealed partial class MySqlColumnsRequiredDefaultsSqlNullAddsIntegrationTe
         {
             // WHY: A completed exact target has no conversion to perform.
             // The missing-column session guard must not reject its later NoOp.
-            await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = '';");
+            await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = '';",
+                cancellationToken: CancellationToken.None);
             matching = await runner.AnalyzeAsync(context, [operation],
                 new SafeMigrationRunOptions("required-sql-null-add-matching"), CancellationToken.None);
 
@@ -62,15 +65,19 @@ public sealed partial class MySqlColumnsRequiredDefaultsSqlNullAddsIntegrationTe
 
         var targetColumns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'sql_null_add_items' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'sql_null_add_items' AND COLUMN_NAME = 'value';",
+            cancellationToken: CancellationToken.None);
 
         var requiredColumns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'sql_null_add_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';");
+            + "AND TABLE_NAME = 'sql_null_add_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';",
+            cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `sql_null_add_items`;");
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `sql_null_add_items`;",
+            cancellationToken: CancellationToken.None);
+
         var originalKeys = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `sql_null_add_items` WHERE `key` = 1;");
+            "SELECT COUNT(*) FROM `sql_null_add_items` WHERE `key` = 1;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(allowed ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked, preflight.Status);
@@ -122,7 +129,8 @@ public sealed partial class MySqlColumnsRequiredDefaultsSqlNullAddsIntegrationTe
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await AtomicRequiredAddSessionSqlAsync(context,
-            "SET SESSION sql_mode = '" + (strictSession ? "STRICT_ALL_TABLES" : "") + "';");
+            "SET SESSION sql_mode = '" + (strictSession ? "STRICT_ALL_TABLES" : "") + "';",
+            cancellationToken: CancellationToken.None);
         var operation = RequiredDefaultsSqlNullAddOperation();
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(new ExpectedTableDefinition("sql_null_add_items",
@@ -141,13 +149,16 @@ public sealed partial class MySqlColumnsRequiredDefaultsSqlNullAddsIntegrationTe
 
         var ownerExists = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'sql_null_add_items' AND TABLE_TYPE = 'BASE TABLE';");
+            + "AND TABLE_NAME = 'sql_null_add_items' AND TABLE_TYPE = 'BASE TABLE';",
+            cancellationToken: CancellationToken.None);
 
         var targetColumns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'sql_null_add_items' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'sql_null_add_items' AND COLUMN_NAME = 'value';",
+            cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `sql_null_add_items`;");
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `sql_null_add_items`;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(allowed ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked, report.Status);
@@ -187,11 +198,13 @@ public sealed partial class MySqlColumnsRequiredDefaultsSqlNullAddsIntegrationTe
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE `sql_null_add_items` (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;");
+            "CREATE TABLE `sql_null_add_items` (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;",
+            cancellationToken: CancellationToken.None);
         var observer = new RequiredSqlDefaultAddWriter(connectionString);
         await using var context = CreateRuntimeContext(connectionString, observer);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
-        await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES';");
+        await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES';",
+            cancellationToken: CancellationToken.None);
         var operation = useNullDefault
             ? RequiredDefaultsSqlNullAddOperation()
             : new SafeMigrationOperation(new EnsureColumnIntent("sql_null_add_items",
@@ -208,13 +221,19 @@ public sealed partial class MySqlColumnsRequiredDefaultsSqlNullAddsIntegrationTe
 
         var targetColumns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'sql_null_add_items' AND COLUMN_NAME = 'value';");
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `sql_null_add_items`;");
+            + "AND TABLE_NAME = 'sql_null_add_items' AND COLUMN_NAME = 'value';",
+            cancellationToken: CancellationToken.None);
+
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `sql_null_add_items`;",
+            cancellationToken: CancellationToken.None);
+
         var writerKeys = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `sql_null_add_items` WHERE `key` = 2;");
+            "SELECT COUNT(*) FROM `sql_null_add_items` WHERE `key` = 2;", cancellationToken: CancellationToken.None);
+
         var explicitValues = targetColumns == 1
             ? await ScalarIntAsync(connectionString,
-                "SELECT COUNT(*) FROM `sql_null_add_items` WHERE `key` = 2 AND `value` = 7;")
+                "SELECT COUNT(*) FROM `sql_null_add_items` WHERE `key` = 2 AND `value` = 7;",
+                cancellationToken: CancellationToken.None)
             : 0;
 
         // Assert

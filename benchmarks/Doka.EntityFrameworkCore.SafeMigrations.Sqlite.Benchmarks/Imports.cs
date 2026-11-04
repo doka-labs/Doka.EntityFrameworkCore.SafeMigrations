@@ -5,6 +5,7 @@ global using System.Globalization;
 global using System.IO;
 global using System.Linq;
 global using System.Text.Json;
+global using System.Threading;
 global using Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 global using Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 global using Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks;

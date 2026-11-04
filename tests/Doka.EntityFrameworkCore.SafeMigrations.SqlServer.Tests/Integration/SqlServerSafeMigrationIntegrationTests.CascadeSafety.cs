@@ -14,11 +14,12 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
     public async Task SingleCascadeAppliesAndDeletesDependentRows()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.cascade_parent (Id int NOT NULL PRIMARY KEY); "
             + "CREATE TABLE dbo.cascade_child (Id int NOT NULL PRIMARY KEY, ParentId int NOT NULL); "
-            + "INSERT dbo.cascade_parent VALUES (1); INSERT dbo.cascade_child VALUES (2, 1);");
+            + "INSERT dbo.cascade_parent VALUES (1); INSERT dbo.cascade_child VALUES (2, 1);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddForeignKeyIfNotExists(
@@ -27,12 +28,14 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("single-cascade"));
+            new SafeMigrationRunOptions("single-cascade"), cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteSqlAsync(connectionString, "DELETE dbo.cascade_parent WHERE Id = 1;");
-        var children = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.cascade_child;");
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "DELETE dbo.cascade_parent WHERE Id = 1;",
+            cancellationToken: CancellationToken.None);
+        var children = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.cascade_child;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -46,11 +49,11 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
     public async Task SameStreamCascadePathsAreRejected(bool delete)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.paths_parent (Id int NOT NULL PRIMARY KEY); "
             + "CREATE TABLE dbo.paths_child (Id int NOT NULL PRIMARY KEY, "
-            + "FirstId int NOT NULL, SecondId int NOT NULL);");
+            + "FirstId int NOT NULL, SecondId int NOT NULL);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var onDelete = delete ? ReferentialAction.Cascade : ReferentialAction.NoAction;
@@ -63,11 +66,14 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("multiple-cascade-paths"));
+            new SafeMigrationRunOptions("multiple-cascade-paths"), cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var secondCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.foreign_keys WHERE name = N'FK_paths_second';");
+            "SELECT COUNT(*) FROM sys.foreign_keys WHERE name = N'FK_paths_second';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -83,8 +89,9 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
     public async Task InlineMultipleCascadePathsAreRejectedBeforeTableDdl()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.inline_parent (Id int NOT NULL PRIMARY KEY);");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.inline_parent (Id int NOT NULL PRIMARY KEY);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(new ExpectedTableDefinition("inline_child",
@@ -101,11 +108,13 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("inline-cascade-paths"));
+            new SafeMigrationRunOptions("inline-cascade-paths"), cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var childCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE name = N'inline_child';");
+            "SELECT COUNT(*) FROM sys.tables WHERE name = N'inline_child';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -120,7 +129,7 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
     public async Task NewInlineForeignKeyPreventsSameStreamParentDrop()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(new ExpectedTableDefinition("new_parent",
@@ -139,7 +148,7 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("inline-parent-drop"));
+            new SafeMigrationRunOptions("inline-parent-drop"), cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -154,12 +163,13 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
     public async Task DroppedCascadeDoesNotBlockSameStreamReplacement()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.replace_parent (Id int NOT NULL PRIMARY KEY); "
             + "CREATE TABLE dbo.replace_child (Id int NOT NULL PRIMARY KEY, "
             + "FirstId int NOT NULL, SecondId int NOT NULL, "
-            + "CONSTRAINT FK_replace_old FOREIGN KEY (FirstId) REFERENCES dbo.replace_parent(Id) ON DELETE CASCADE);");
+            + "CONSTRAINT FK_replace_old FOREIGN KEY (FirstId) REFERENCES dbo.replace_parent(Id) ON DELETE CASCADE);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("FK_replace_old", "replace_child");
@@ -168,11 +178,12 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("cascade-replacement"));
+            new SafeMigrationRunOptions("cascade-replacement"), cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var newCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.foreign_keys WHERE name = N'FK_replace_new';");
+            "SELECT COUNT(*) FROM sys.foreign_keys WHERE name = N'FK_replace_new';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -191,13 +202,14 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.trigger_parent (Id int NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE dbo.trigger_child (Id int NOT NULL PRIMARY KEY, ParentId int NOT NULL);");
+            + "CREATE TABLE dbo.trigger_child (Id int NOT NULL PRIMARY KEY, ParentId int NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             $"CREATE TRIGGER dbo.tr_fk_child ON dbo.trigger_child INSTEAD OF {triggerEvent} "
-            + "AS BEGIN SET NOCOUNT ON; END;");
+            + "AS BEGIN SET NOCOUNT ON; END;", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddForeignKeyIfNotExists(
@@ -206,9 +218,10 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("cascade-trigger-conflict"));
+            new SafeMigrationRunOptions("cascade-trigger-conflict"), cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -229,11 +242,12 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.default_parent (Id int NOT NULL PRIMARY KEY); "
             + "CREATE TABLE dbo.default_child (Id int NOT NULL PRIMARY KEY, ParentId int "
-            + (nullable ? "NULL" : "NOT NULL") + (hasDefault ? " DEFAULT (1)" : string.Empty) + ");");
+            + (nullable ? "NULL" : "NOT NULL") + (hasDefault ? " DEFAULT (1)" : string.Empty) + ");",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddForeignKeyIfNotExists(
@@ -242,7 +256,7 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("cascade-set-default"));
+            new SafeMigrationRunOptions("cascade-set-default"), cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(expectedReady ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
@@ -256,10 +270,11 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
     public async Task RowVersionCascadeRejectsBeforeProviderDdl()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.version_parent (Version rowversion NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE dbo.version_child (Version rowversion NOT NULL);");
+            + "CREATE TABLE dbo.version_child (Version rowversion NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddForeignKeyIfNotExists(
@@ -268,9 +283,10 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("cascade-rowversion"));
+            new SafeMigrationRunOptions("cascade-rowversion"), cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -284,10 +300,11 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
     public async Task RowVersionNoActionForeignKeyRemainsSupported()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.noaction_version_parent (Version rowversion NOT NULL PRIMARY KEY); "
-            + "CREATE TABLE dbo.noaction_version_child (Version rowversion NOT NULL);");
+            + "CREATE TABLE dbo.noaction_version_child (Version rowversion NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddForeignKeyIfNotExists("FK_noaction_version_child_parent", "noaction_version_child", ["Version"],
@@ -295,11 +312,12 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("rowversion-no-action"));
+            new SafeMigrationRunOptions("rowversion-no-action"), cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var count = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.foreign_keys WHERE name = N'FK_noaction_version_child_parent';");
+            "SELECT COUNT(*) FROM sys.foreign_keys WHERE name = N'FK_noaction_version_child_parent';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -311,9 +329,10 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
     public async Task SelfCascadeMatchesServerTopologyBoundary()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.self_cascade (Id int NOT NULL PRIMARY KEY, ParentId int NULL);");
+            "CREATE TABLE dbo.self_cascade (Id int NOT NULL PRIMARY KEY, ParentId int NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddForeignKeyIfNotExists("FK_self_guarded", "self_cascade", ["ParentId"], "self_cascade", ["Id"],
@@ -322,12 +341,13 @@ public sealed class SqlServerSafeMigrationCascadeSafetyIntegrationTests : SqlSer
         // Act
         var serverException = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString,
             "ALTER TABLE dbo.self_cascade ADD CONSTRAINT FK_self_vendor FOREIGN KEY (ParentId) "
-            + "REFERENCES dbo.self_cascade(Id) ON DELETE CASCADE;"));
+            + "REFERENCES dbo.self_cascade(Id) ON DELETE CASCADE;", cancellationToken: CancellationToken.None));
 
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("self-cascade-boundary"));
+            new SafeMigrationRunOptions("self-cascade-boundary"), cancellationToken: CancellationToken.None);
 
-        var guardedException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var guardedException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Contains(Assert.IsType<SqlException>(serverException).Errors.Cast<SqlError>(),

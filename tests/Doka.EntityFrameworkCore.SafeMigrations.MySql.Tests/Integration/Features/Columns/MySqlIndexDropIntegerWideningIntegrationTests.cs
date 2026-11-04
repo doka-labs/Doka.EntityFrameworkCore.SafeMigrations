@@ -34,35 +34,38 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, FixtureSql(alreadyDropped));
-        await ApplyNativeWideningPrefixAsync(connectionString, completedWidenings);
+        await ExecuteSqlAsync(connectionString, FixtureSql(alreadyDropped), cancellationToken: CancellationToken.None);
+        await ApplyNativeWideningPrefixAsync(connectionString, completedWidenings,
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var schema = qualified ? new MySqlConnectionStringBuilder(connectionString).Database : null;
         var operations = UpgradeOperations(dropIndex, schema, columnAliases);
         var runner = context.GetService<ISafeMigrationRunner>();
-        var before = await ReadCreateAsync(connectionString);
+        var before = await ReadCreateAsync(connectionString, cancellationToken: CancellationToken.None);
 
         // Act
         var preflight = await runner.AnalyzeAsync(context, operations,
             new SafeMigrationRunOptions("integer-upgrade"), CancellationToken.None);
 
-        var afterAnalysis = await ReadCreateAsync(connectionString);
+        var afterAnalysis = await ReadCreateAsync(connectionString, cancellationToken: CancellationToken.None);
         preflight.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, operations);
+        await ExecuteOperationsAsync(context, operations, CancellationToken.None);
         var replay = await runner.AnalyzeAsync(context, operations,
             new SafeMigrationRunOptions("integer-upgrade-replay"), CancellationToken.None);
 
         replay.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, operations);
+        await ExecuteOperationsAsync(context, operations, CancellationToken.None);
         var rows = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM `integer_upgrade` WHERE (`id`=1 AND `left_value`=-2147483648 "
             + "AND `right_value`=2147483647 AND `position`=0 AND `payload`='first') "
-            + "OR (`id`=2 AND `left_value`=0 AND `right_value`=1 AND `position`=2 AND `payload`='second');");
+            + "OR (`id`=2 AND `left_value`=0 AND `right_value`=1 AND `position`=2 AND `payload`='second');",
+            cancellationToken: CancellationToken.None);
 
         var widened = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() "
             + "AND TABLE_NAME='integer_upgrade' AND COLUMN_NAME IN ('left_value','right_value','position') "
-            + "AND DATA_TYPE='bigint' AND IS_NULLABLE='NO' AND COLUMN_DEFAULT IS NULL;");
+            + "AND DATA_TYPE='bigint' AND IS_NULLABLE='NO' AND COLUMN_DEFAULT IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(before, afterAnalysis);
@@ -80,7 +83,7 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, FixtureSql(alreadyDropped: false)
             + "ALTER TABLE `integer_upgrade` ADD INDEX `ix_upgrade_right` (`right_value`), "
-            + "ADD INDEX `ix_upgrade_position` (`position`);");
+            + "ADD INDEX `ix_upgrade_position` (`position`);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operations = UpgradeOperations(dropIndex: true, schema: null);
         operations.Insert(1, new SafeMigrationOperation(new DropIndexIntent("ix_upgrade_right", Table),
@@ -88,21 +91,22 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
         operations.Insert(2, new SafeMigrationOperation(new DropIndexIntent("ix_upgrade_position", Table),
             SafeMigrationPolicy.ThrowIfDifferent));
         var runner = context.GetService<ISafeMigrationRunner>();
-        var before = await ReadCreateAsync(connectionString);
+        var before = await ReadCreateAsync(connectionString, cancellationToken: CancellationToken.None);
 
         // Act
         var preflight = await runner.AnalyzeAsync(context, operations,
-            new SafeMigrationRunOptions("integer-upgrade-three-indexes"));
+            new SafeMigrationRunOptions("integer-upgrade-three-indexes"), CancellationToken.None);
 
-        var afterAnalysis = await ReadCreateAsync(connectionString);
+        var afterAnalysis = await ReadCreateAsync(connectionString, cancellationToken: CancellationToken.None);
         preflight.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, operations);
+        await ExecuteOperationsAsync(context, operations, CancellationToken.None);
         var replay = await runner.AnalyzeAsync(context, operations,
-            new SafeMigrationRunOptions("integer-upgrade-three-indexes-replay"));
+            new SafeMigrationRunOptions("integer-upgrade-three-indexes-replay"), CancellationToken.None);
 
         replay.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, operations);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `integer_upgrade`;");
+        await ExecuteOperationsAsync(context, operations, CancellationToken.None);
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `integer_upgrade`;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(before, afterAnalysis);
@@ -126,27 +130,29 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, FixtureSql(alreadyDropped));
-        await ApplyNativeWideningPrefixAsync(connectionString, completedWidenings);
+        await ExecuteSqlAsync(connectionString, FixtureSql(alreadyDropped), cancellationToken: CancellationToken.None);
+        await ApplyNativeWideningPrefixAsync(connectionString, completedWidenings,
+            cancellationToken: CancellationToken.None);
         await using var context = new IndexDropIntegerUpgradeDbContext(connectionString, Fixture.ServerVersion);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
         var pending = await runner.AnalyzePendingMigrationsAsync(context,
-            new SafeMigrationRunOptions("integer-upgrade-pending"));
+            new SafeMigrationRunOptions("integer-upgrade-pending"), CancellationToken.None);
 
         var beforeHistory = await context.Database.GetAppliedMigrationsAsync();
         pending.ThrowIfBlocked();
         await context.Database.MigrateAsync();
         var applied = (await context.Database.GetAppliedMigrationsAsync()).ToArray();
         var replay = await runner.AnalyzePendingMigrationsAsync(context,
-            new SafeMigrationRunOptions("integer-upgrade-completed"));
+            new SafeMigrationRunOptions("integer-upgrade-completed"), CancellationToken.None);
 
         replay.ThrowIfBlocked();
         await context.Database.MigrateAsync();
         var replayed = (await context.Database.GetAppliedMigrationsAsync()).ToArray();
         var rows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `integer_upgrade` WHERE `payload` IN ('first','second');");
+            "SELECT COUNT(*) FROM `integer_upgrade` WHERE `payload` IN ('first','second');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, pending.Status);
@@ -169,7 +175,7 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
         await ExecuteSqlAsync(connectionString, FixtureSql(alreadyDropped: true)
             + (literalDefault
                 ? "ALTER TABLE `integer_upgrade` MODIFY COLUMN `left_value` int NOT NULL DEFAULT 0;"
-                : string.Empty));
+                : string.Empty), cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operation = new SafeMigrationOperation(new AlterColumnIntent(Table,
             new ExpectedColumnDefinition("left_value", typeof(long), false, "bigint",
@@ -182,18 +188,19 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
 
         // Act
         var preflight = await runner.AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("integer-upgrade-source-alias"));
+            new SafeMigrationRunOptions("integer-upgrade-source-alias"), CancellationToken.None);
 
         preflight.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, [operation]);
+        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
         var replay = await runner.AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("integer-upgrade-source-alias-replay"));
+            new SafeMigrationRunOptions("integer-upgrade-source-alias-replay"), CancellationToken.None);
 
         replay.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, [operation]);
+        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
         var columnDefault = await ScalarStringAsync(connectionString,
             "SELECT COALESCE(COLUMN_DEFAULT, '<none>') FROM INFORMATION_SCHEMA.COLUMNS "
-            + "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='integer_upgrade' AND COLUMN_NAME='left_value';");
+            + "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='integer_upgrade' AND COLUMN_NAME='left_value';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -214,7 +221,8 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, FixtureSql(alreadyDropped: false));
+        await ExecuteSqlAsync(connectionString, FixtureSql(alreadyDropped: false),
+            cancellationToken: CancellationToken.None);
         var drift = failure switch
         {
             "unsigned" => "UPDATE `integer_upgrade` SET `left_value`=0; "
@@ -230,7 +238,7 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
             _ => throw new ArgumentOutOfRangeException(nameof(failure)),
         };
 
-        await ExecuteSqlAsync(connectionString, drift);
+        await ExecuteSqlAsync(connectionString, drift, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operations = UpgradeOperations(dropIndex: true, schema: null);
         if (failure == "wrong_source")
@@ -240,16 +248,17 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
                 new ExpectedColumnDefinition("left_value", typeof(short), false, "smallint")),
                 SafeMigrationPolicy.RepairIfSafe);
             await ExecuteSqlAsync(connectionString,
-                "ALTER TABLE `integer_upgrade` MODIFY COLUMN `left_value` int NOT NULL;");
+                "ALTER TABLE `integer_upgrade` MODIFY COLUMN `left_value` int NOT NULL;",
+                cancellationToken: CancellationToken.None);
         }
 
-        var before = await ReadCreateAsync(connectionString);
+        var before = await ReadCreateAsync(connectionString, cancellationToken: CancellationToken.None);
 
         // Act
         var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, operations,
             new SafeMigrationRunOptions("integer-upgrade-source-drift"), CancellationToken.None);
 
-        var after = await ReadCreateAsync(connectionString);
+        var after = await ReadCreateAsync(connectionString, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
@@ -263,7 +272,8 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, FixtureSql(alreadyDropped: false));
+        await ExecuteSqlAsync(connectionString, FixtureSql(alreadyDropped: false),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operations = UpgradeOperations(dropIndex: false, schema: null);
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -273,11 +283,14 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
             new SafeMigrationRunOptions("integer-upgrade-before-race"), CancellationToken.None);
 
         await ExecuteSqlAsync(connectionString,
-            "ALTER TABLE `integer_upgrade` MODIFY COLUMN `left_value` int NOT NULL DEFAULT 7;");
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, operations));
+            "ALTER TABLE `integer_upgrade` MODIFY COLUMN `left_value` int NOT NULL DEFAULT 7;",
+            cancellationToken: CancellationToken.None);
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, operations,
+            CancellationToken.None));
+
         var remaining = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() "
-            + "AND TABLE_NAME='integer_upgrade' AND DATA_TYPE='int';");
+            + "AND TABLE_NAME='integer_upgrade' AND DATA_TYPE='int';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -296,13 +309,15 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString, FixtureSql(alreadyDropped: fullText)
             + (fullText ? "ALTER TABLE `integer_upgrade` ADD FULLTEXT INDEX `ix_upgrade_coordinates` (`payload`);"
-                : string.Empty));
+                : string.Empty), cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operations = UpgradeOperations(dropIndex: true, schema: null);
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
 
         // Act
-        var analyses = await analyzer.AnalyzeAsync(context, operations.Cast<SafeMigrationOperation>().ToArray());
+        var analyses = await analyzer.AnalyzeAsync(context, operations.Cast<SafeMigrationOperation>().ToArray(),
+            CancellationToken.None);
+
         var verifier = (ISafeMigrationProjectedColumnAnalyzer)analyzer;
         var drop = Assert.IsType<DropIndexIntent>(((SafeMigrationOperation)operations[0]).Intent);
         var certified = verifier.PreservesColumnSourcesAfterIndexDrop(drop, analyses[0]);
@@ -319,19 +334,20 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
                     SafeMigrationRepairCapability.None, false, "uncaptured")),
         };
 
-        await analyzer.AnalyzeAsync(context, []);
+        await analyzer.AnalyzeAsync(context, [], CancellationToken.None);
         var expiredCertificate = verifier.PreservesColumnSourcesAfterIndexDrop(drop, analyses[0]);
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, operations,
-            new SafeMigrationRunOptions("integer-upgrade-special-index"));
+            new SafeMigrationRunOptions("integer-upgrade-special-index"), CancellationToken.None);
 
         report.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, operations);
+        await ExecuteOperationsAsync(context, operations, CancellationToken.None);
         var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, operations,
-            new SafeMigrationRunOptions("integer-upgrade-special-index-replay"));
+            new SafeMigrationRunOptions("integer-upgrade-special-index-replay"), CancellationToken.None);
 
         replay.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, operations);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `integer_upgrade`;");
+        await ExecuteOperationsAsync(context, operations, CancellationToken.None);
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `integer_upgrade`;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(!fullText, certified);
@@ -348,7 +364,8 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, FixtureSql(alreadyDropped: false));
+        await ExecuteSqlAsync(connectionString, FixtureSql(alreadyDropped: false),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operations = UpgradeOperations(dropIndex: true, schema: null);
         operations.Insert(1, new SqlOperation
@@ -358,13 +375,15 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, operations,
-            new SafeMigrationRunOptions("integer-upgrade-opaque-source"));
+            new SafeMigrationRunOptions("integer-upgrade-opaque-source"), CancellationToken.None);
 
         report.ThrowIfBlocked();
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, operations,
+            CancellationToken.None));
+
         var remaining = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() "
-            + "AND TABLE_NAME='integer_upgrade' AND DATA_TYPE='int';");
+            + "AND TABLE_NAME='integer_upgrade' AND DATA_TYPE='int';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
@@ -382,16 +401,17 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, FixtureSql(alreadyDropped: false) + CompactKeyBudgetSql);
+        await ExecuteSqlAsync(connectionString, FixtureSql(alreadyDropped: false) + CompactKeyBudgetSql,
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operations = UpgradeOperations(dropIndex: true, schema: null, columnAliases);
-        var before = await ReadCreateAsync(connectionString);
+        var before = await ReadCreateAsync(connectionString, cancellationToken: CancellationToken.None);
 
         // Act
         var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, operations,
-            new SafeMigrationRunOptions("integer-upgrade-cumulative-key"));
+            new SafeMigrationRunOptions("integer-upgrade-cumulative-key"), CancellationToken.None);
 
-        var after = await ReadCreateAsync(connectionString);
+        var after = await ReadCreateAsync(connectionString, cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
@@ -406,21 +426,25 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, FixtureSql(alreadyDropped: false));
+        await ExecuteSqlAsync(connectionString, FixtureSql(alreadyDropped: false),
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operations = UpgradeOperations(dropIndex: false, schema: null);
 
         // Act
         var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, operations,
-            new SafeMigrationRunOptions("integer-upgrade-key-race"));
+            new SafeMigrationRunOptions("integer-upgrade-key-race"), CancellationToken.None);
 
-        await ExecuteSqlAsync(connectionString, CompactKeyBudgetSql);
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, operations));
+        await ExecuteSqlAsync(connectionString, CompactKeyBudgetSql, cancellationToken: CancellationToken.None);
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, operations,
+            CancellationToken.None));
+
         var widened = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() "
-            + "AND TABLE_NAME='integer_upgrade' AND DATA_TYPE='bigint';");
+            + "AND TABLE_NAME='integer_upgrade' AND DATA_TYPE='bigint';", cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `integer_upgrade`;");
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `integer_upgrade`;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -451,13 +475,14 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
             $"CREATE TABLE `integer_upgrade` (`id` int NOT NULL PRIMARY KEY, `left_value` {sourceType} NOT NULL, "
             + "UNIQUE INDEX `uq_parent_value` (`left_value`)) ENGINE=InnoDB "
             + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `integer_upgrade` VALUES " + seedRows + ";");
+            + "INSERT INTO `integer_upgrade` VALUES " + seedRows + ";", cancellationToken: CancellationToken.None);
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await ExecuteSqlAsync(childConnection,
             $"CREATE TABLE `integer_child` (`value` {sourceType} NOT NULL, CONSTRAINT `fk_other_database_parent` "
             + $"FOREIGN KEY (`value`) REFERENCES `{database}`.`integer_upgrade` (`left_value`)) ENGINE=InnoDB "
             + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `integer_child` VALUES (" + referencedValue + ");");
+            + "INSERT INTO `integer_child` VALUES (" + referencedValue + ");",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         MigrationOperation[] operations =
         [new SafeMigrationOperation(new AlterColumnIntent(Table,
@@ -471,10 +496,13 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, operations,
-            new SafeMigrationRunOptions("integer-upgrade-cross-database-fk"));
+            new SafeMigrationRunOptions("integer-upgrade-cross-database-fk"), CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, operations));
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `integer_upgrade`;");
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, operations,
+            CancellationToken.None));
+
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `integer_upgrade`;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -491,26 +519,39 @@ public sealed class MySqlIndexDropIntegerWideningIntegrationTests : MySqlSafeMig
         + "ALTER TABLE `integer_upgrade` ADD INDEX `ix_live_budget` "
         + "(`padding`,`left_value`,`right_value`,`position`);";
 
-    private static async Task<string> ReadCreateAsync(string connectionString)
+    /// <summary>Performs the read create test operation with explicit cancellation.</summary>
+    /// <param name="connectionString">The connection string for this operation.</param>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static async Task<string> ReadCreateAsync(string connectionString, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var connection = new MySqlConnection(connectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(cancellationToken: cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = "SHOW CREATE TABLE `integer_upgrade`;";
-        await using var reader = await command.ExecuteReaderAsync();
-        Assert.True(await reader.ReadAsync());
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken: cancellationToken);
+        Assert.True(await reader.ReadAsync(cancellationToken: cancellationToken));
 
         return reader.GetString(1);
     }
 
     /// <summary>Reproduces nontransactional interruption without inventing an EF history row.</summary>
-    private static async Task ApplyNativeWideningPrefixAsync(string connectionString, int count)
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
+    private static async Task ApplyNativeWideningPrefixAsync(
+        string connectionString,
+        int count,
+        CancellationToken cancellationToken
+    )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var names = new[] { "left_value", "right_value", "position" };
         foreach (var name in names.Take(count))
         {
             await ExecuteSqlAsync(connectionString,
-                $"ALTER TABLE `integer_upgrade` MODIFY COLUMN `{name}` bigint NOT NULL;");
+                $"ALTER TABLE `integer_upgrade` MODIFY COLUMN `{name}` bigint NOT NULL;",
+                cancellationToken: cancellationToken);
         }
     }
 

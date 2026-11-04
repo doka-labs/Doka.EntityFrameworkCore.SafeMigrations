@@ -15,9 +15,9 @@ public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTest
     public async Task CatalogPreamble_ImpersonatedPrincipalRequiresFreshInventoryEvidence()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.inventory_items (Id int NULL); "
-            + "CREATE USER inventory_limited WITHOUT LOGIN;");
+            + "CREATE USER inventory_limited WITHOUT LOGIN;", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(new ExpectedTableDefinition("inventory_items",
@@ -25,15 +25,19 @@ public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTest
             SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
 
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
-        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context);
-        var analyses = await analyzer.AnalyzeAsync(context, builder.Operations.Cast<SafeMigrationOperation>().ToArray());
+        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context,
+            cancellationToken: CancellationToken.None);
+
+        var analyses = await analyzer.AnalyzeAsync(context, builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
+            cancellationToken: CancellationToken.None);
 
         // Act
         await context.Database.ExecuteSqlRawAsync("EXECUTE AS USER = N'inventory_limited';");
         Exception? failure;
         try
         {
-            failure = await Record.ExceptionAsync(() => analyzer.FindUnexpectedObjectsAsync(context, builder.Operations));
+            failure = await Record.ExceptionAsync(() => analyzer.FindUnexpectedObjectsAsync(context, builder.Operations,
+                cancellationToken: CancellationToken.None));
         }
         finally
         {
@@ -51,10 +55,10 @@ public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTest
     public async Task CatalogBindings_DistinctKeysRetainSourceTargetDifferentAndMissingEvidence()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.binding_rows (Id int NOT NULL PRIMARY KEY, "
             + "Caption nvarchar(80) NOT NULL); INSERT dbo.binding_rows VALUES "
-            + "(1,N'source'),(2,N'target'),(3,N'edited');");
+            + "(1,N'source'),(2,N'target'),(3,N'edited');", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         for (var key = 1; key <= 4; key++)
@@ -66,10 +70,11 @@ public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTest
 
         // Act
         var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context,
-            builder.Operations.Cast<SafeMigrationOperation>().ToArray());
+            builder.Operations.Cast<SafeMigrationOperation>().ToArray(), cancellationToken: CancellationToken.None);
 
         var unchanged = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.binding_rows "
-            + "WHERE (Id=1 AND Caption=N'source') OR (Id=2 AND Caption=N'target') OR (Id=3 AND Caption=N'edited');");
+            + "WHERE (Id=1 AND Caption=N'source') OR (Id=2 AND Caption=N'target') OR (Id=3 AND Caption=N'edited');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal([SafeMigrationObservedState.TransitionReady, SafeMigrationObservedState.Matching,
@@ -88,10 +93,11 @@ public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTest
     public async Task CatalogBindings_OffsetOnlyTransitionRetainsSourceAndTargetRepresentations()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.binding_offsets "
             + "(Id int NOT NULL PRIMARY KEY, Zoned datetimeoffset(7) NOT NULL); "
-            + "INSERT dbo.binding_offsets VALUES (1,CAST('2026-01-02T03:04:05+00:00' AS datetimeoffset(7)));");
+            + "INSERT dbo.binding_offsets VALUES (1,CAST('2026-01-02T03:04:05+00:00' AS datetimeoffset(7)));",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var source = new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero);
         var target = source.ToOffset(TimeSpan.FromHours(1));
@@ -104,11 +110,12 @@ public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTest
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
 
         // Act
-        var before = await analyzer.AnalyzeAsync(context, operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var after = await analyzer.AnalyzeAsync(context, operations);
+        var before = await analyzer.AnalyzeAsync(context, operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        var after = await analyzer.AnalyzeAsync(context, operations, cancellationToken: CancellationToken.None);
         var offset = await ScalarIntAsync(connectionString,
-            "SELECT DATEPART(TZOFFSET,Zoned) FROM dbo.binding_offsets WHERE Id=1;");
+            "SELECT DATEPART(TZOFFSET,Zoned) FROM dbo.binding_offsets WHERE Id=1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var initial = Assert.Single(before);
@@ -126,10 +133,11 @@ public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTest
     public async Task CatalogBindings_FullSourceValuesApplyAndVerifyWithoutRounding()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.binding_values (Id int NOT NULL PRIMARY KEY, "
             + "Caption nvarchar(80) NULL, Bytes varbinary(8) NULL, Amount decimal(38,20) NULL, "
-            + "Moment datetime2(7) NULL, Zoned datetimeoffset(7) NULL, Clock time(7) NULL);");
+            + "Moment datetime2(7) NULL, Zoned datetimeoffset(7) NULL, Clock time(7) NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel("binding_values", ["Id"], ["int"],
@@ -148,10 +156,11 @@ public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTest
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
 
         // Act
-        var before = await analyzer.AnalyzeAsync(context, operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var after = await analyzer.AnalyzeAsync(context, operations);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.binding_values;");
+        var before = await analyzer.AnalyzeAsync(context, operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        var after = await analyzer.AnalyzeAsync(context, operations, cancellationToken: CancellationToken.None);
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.binding_values;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, Assert.Single(before).ObservedState);
@@ -172,7 +181,7 @@ public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTest
     public async Task CatalogBindings_NarrowConversionsRemainUnsupported(string kind)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var storeType = kind switch
         {
             "ansi" => "varchar(80)",
@@ -190,7 +199,8 @@ public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTest
         };
 
         await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.narrow_binding_values "
-            + "(Id int NOT NULL PRIMARY KEY, Value " + storeType + " NULL);");
+            + "(Id int NOT NULL PRIMARY KEY, Value " + storeType + " NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel("narrow_binding_values", ["Id"], ["int"],
@@ -198,9 +208,10 @@ public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTest
 
         // Act
         var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context,
-            builder.Operations.Cast<SafeMigrationOperation>().ToArray());
+            builder.Operations.Cast<SafeMigrationOperation>().ToArray(), cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.narrow_binding_values;");
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.narrow_binding_values;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Unsupported, Assert.Single(analyses).ObservedState);
@@ -213,10 +224,11 @@ public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTest
     public async Task AbsentTablePrepass_PreservesWrongObjectKindsAndSchemaPrerequisites()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
-        await ExecuteSqlAsync(connectionString, "CREATE VIEW dbo.occupied_view AS SELECT 1 AS Id;");
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, "CREATE VIEW dbo.occupied_view AS SELECT 1 AS Id;",
+            cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE SEQUENCE dbo.occupied_sequence AS int START WITH 1; "
-            + "CREATE SYNONYM dbo.occupied_synonym FOR dbo.not_created;");
+            + "CREATE SYNONYM dbo.occupied_synonym FOR dbo.not_created;", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         SafeMigrationOperation[] operations =
         [
@@ -226,7 +238,8 @@ public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTest
         ];
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations);
+        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal([SafeMigrationObservedState.Missing, SafeMigrationObservedState.Different,
@@ -243,7 +256,7 @@ public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTest
     public async Task AbsentTablePrepass_NewOccupantAfterProofRemainsDifferent(bool view)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync();
@@ -261,7 +274,7 @@ public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTest
         // later classification. Absence is not a promise that an intervening creator cannot run.
         await ExecuteSqlAsync(connectionString, view
             ? "CREATE VIEW dbo.changed_target AS SELECT 1 AS Id;"
-            : "CREATE TABLE dbo.changed_target (Id int NOT NULL);");
+            : "CREATE TABLE dbo.changed_target (Id int NOT NULL);", cancellationToken: CancellationToken.None);
 
         var plan = catalog.Build(operation, targetTableKnownAbsent: absent[0]);
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(connection, null, 67,
@@ -281,7 +294,7 @@ public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTest
     public async Task AbsentTablePrepass_InvalidAuthoredGuardRemainsBlocked(bool collation)
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var definition = new ExpectedTableDefinition("guarded_absent_target",
             [new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
@@ -295,9 +308,12 @@ public sealed class SqlServerSafeMigrationCatalogAnalysisBindingsIntegrationTest
             SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation]);
+        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation],
+            cancellationToken: CancellationToken.None);
+
         var tables = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.guarded_absent_target');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.guarded_absent_target');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);

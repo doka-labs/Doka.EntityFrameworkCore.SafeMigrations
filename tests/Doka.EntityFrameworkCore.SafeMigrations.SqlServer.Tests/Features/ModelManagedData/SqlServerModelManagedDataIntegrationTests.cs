@@ -17,31 +17,32 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task IdentitySeed_AppliesAndReplaysWithoutLeakingIdentityInsert()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.identity_roles (Id int IDENTITY(1,1) NOT NULL "
             + "CONSTRAINT PK_identity_roles PRIMARY KEY, Caption nvarchar(80) NOT NULL); "
             + "CREATE TABLE dbo.identity_probe (Id int IDENTITY(1,1) NOT NULL "
-            + "CONSTRAINT PK_identity_probe PRIMARY KEY);");
+            + "CONSTRAINT PK_identity_probe PRIMARY KEY);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel(
             "identity_roles", ["Id"], ["int"], ["Id", "Caption"], ["int", "nvarchar(80)"],
             new object?[,] { { 7, "Administrator" } });
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(cancellationToken: CancellationToken.None);
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync(
             "SET IDENTITY_INSERT dbo.identity_probe ON; "
             + "INSERT INTO dbo.identity_probe (Id) VALUES (11); "
             + "SET IDENTITY_INSERT dbo.identity_probe OFF;");
         var count = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.identity_roles WHERE Id = 7 AND Caption = N'Administrator';");
+            "SELECT COUNT(*) FROM dbo.identity_roles WHERE Id = 7 AND Caption = N'Administrator';",
+            cancellationToken: CancellationToken.None);
 
         var probeCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.identity_probe WHERE Id = 11;");
+            "SELECT COUNT(*) FROM dbo.identity_probe WHERE Id = 11;", cancellationToken: CancellationToken.None);
 
         await context.Database.CloseConnectionAsync();
 
@@ -57,29 +58,33 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task IdentitySeed_DmlFailureRestoresSessionState()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.identity_reject (Id int IDENTITY(1,1) NOT NULL "
             + "CONSTRAINT PK_identity_reject PRIMARY KEY, Caption nvarchar(80) NOT NULL "
             + "CONSTRAINT CK_identity_reject_Caption CHECK (Caption <> N'bad')); "
             + "CREATE TABLE dbo.identity_probe (Id int IDENTITY(1,1) NOT NULL "
-            + "CONSTRAINT PK_identity_probe PRIMARY KEY);");
+            + "CONSTRAINT PK_identity_probe PRIMARY KEY);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel(
             "identity_reject", ["Id"], ["int"], ["Id", "Caption"], ["int", "nvarchar(80)"],
             new object?[,] { { 9, "bad" } });
-        await context.Database.OpenConnectionAsync();
+        await context.Database.OpenConnectionAsync(cancellationToken: CancellationToken.None);
 
         // Act
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         await context.Database.ExecuteSqlRawAsync(
             "SET IDENTITY_INSERT dbo.identity_probe ON; "
             + "INSERT INTO dbo.identity_probe (Id) VALUES (11); "
             + "SET IDENTITY_INSERT dbo.identity_probe OFF;");
-        var rejectedCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.identity_reject;");
+        var rejectedCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.identity_reject;",
+            cancellationToken: CancellationToken.None);
+
         var probeCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.identity_probe WHERE Id = 11;");
+            "SELECT COUNT(*) FROM dbo.identity_probe WHERE Id = 11;", cancellationToken: CancellationToken.None);
 
         await context.Database.CloseConnectionAsync();
 
@@ -96,11 +101,12 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task CaseInsensitiveCollation_DoesNotHideDifferentStoredContent()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.collated_roles (Id int NOT NULL CONSTRAINT PK_collated_roles PRIMARY KEY, "
             + "Caption nvarchar(80) COLLATE Latin1_General_100_CI_AS NOT NULL); "
-            + "INSERT INTO dbo.collated_roles (Id, Caption) VALUES (1, N'administrator');");
+            + "INSERT INTO dbo.collated_roles (Id, Caption) VALUES (1, N'administrator');",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel(
@@ -109,11 +115,13 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-collation-drift"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-collation-drift"),
+            cancellationToken: CancellationToken.None);
 
         var unchanged = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM dbo.collated_roles "
-            + "WHERE Id = 1 AND CONVERT(varbinary(max), Caption) = CONVERT(varbinary(max), N'administrator');");
+            + "WHERE Id = 1 AND CONVERT(varbinary(max), Caption) = CONVERT(varbinary(max), N'administrator');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -128,11 +136,11 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task NullableUniqueKey_RejectsDuplicateNullTarget()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.unique_roles (Id int NOT NULL CONSTRAINT PK_unique_roles PRIMARY KEY, "
             + "Code nvarchar(40) NULL CONSTRAINT UQ_unique_roles_Code UNIQUE); "
-            + "INSERT INTO dbo.unique_roles (Id, Code) VALUES (1, NULL);");
+            + "INSERT INTO dbo.unique_roles (Id, Code) VALUES (1, NULL);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel(
@@ -142,9 +150,11 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-null-unique"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-null-unique"),
+            cancellationToken: CancellationToken.None);
 
-        var count = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.unique_roles;");
+        var count = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.unique_roles;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -159,10 +169,10 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task CaseInsensitiveKeys_RejectSourceBatchCollision()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.collated_keys (Code nvarchar(40) "
-            + "NOT NULL CONSTRAINT PK_collated_keys PRIMARY KEY);");
+            + "NOT NULL CONSTRAINT PK_collated_keys PRIMARY KEY);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel(
@@ -171,9 +181,11 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-key-collision"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-key-collision"),
+            cancellationToken: CancellationToken.None);
 
-        var count = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.collated_keys;");
+        var count = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.collated_keys;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -188,11 +200,11 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task ExplicitKeyCollation_RejectsUnprovenSourceBatchComparison()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.explicit_collation_keys (Code nvarchar(40) "
             + "COLLATE Latin1_General_100_BIN2 NOT NULL "
-            + "CONSTRAINT PK_explicit_collation_keys PRIMARY KEY);");
+            + "CONSTRAINT PK_explicit_collation_keys PRIMARY KEY);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel(
@@ -201,10 +213,11 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-explicit-collation"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-explicit-collation"),
+            cancellationToken: CancellationToken.None);
 
         var count = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.explicit_collation_keys;");
+            "SELECT COUNT(*) FROM dbo.explicit_collation_keys;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -220,11 +233,12 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task ManagedUpdate_AppliesAndReplays()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.update_roles (Id int NOT NULL CONSTRAINT PK_update_roles PRIMARY KEY, "
             + "Caption nvarchar(80) NOT NULL); "
-            + "INSERT INTO dbo.update_roles (Id, Caption) VALUES (1, N'old');");
+            + "INSERT INTO dbo.update_roles (Id, Caption) VALUES (1, N'old');",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.UpdateModelManagedDataFromModel(
@@ -233,10 +247,11 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
             new object?[,] { { "old" } }, new object?[,] { { "new" } });
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var updated = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.update_roles WHERE Id = 1 AND Caption = N'new';");
+            "SELECT COUNT(*) FROM dbo.update_roles WHERE Id = 1 AND Caption = N'new';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, updated);
@@ -249,11 +264,12 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task ManagedUpdate_RejectsSourceDrift()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.update_drift (Id int NOT NULL CONSTRAINT PK_update_drift PRIMARY KEY, "
             + "Caption nvarchar(80) NOT NULL); "
-            + "INSERT INTO dbo.update_drift (Id, Caption) VALUES (1, N'user-edited');");
+            + "INSERT INTO dbo.update_drift (Id, Caption) VALUES (1, N'user-edited');",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.UpdateModelManagedDataFromModel(
@@ -263,10 +279,12 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-update-drift"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-update-drift"),
+            cancellationToken: CancellationToken.None);
 
         var unchanged = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.update_drift WHERE Id = 1 AND Caption = N'user-edited';");
+            "SELECT COUNT(*) FROM dbo.update_drift WHERE Id = 1 AND Caption = N'user-edited';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -281,11 +299,12 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task ManagedDelete_AppliesAndReplays()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.delete_roles (Id int NOT NULL CONSTRAINT PK_delete_roles PRIMARY KEY, "
             + "Caption nvarchar(80) NOT NULL); "
-            + "INSERT INTO dbo.delete_roles (Id, Caption) VALUES (1, N'old');");
+            + "INSERT INTO dbo.delete_roles (Id, Caption) VALUES (1, N'old');",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DeleteModelManagedDataFromModel(
@@ -294,9 +313,10 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
             new object?[,] { { 1, "old" } });
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var remaining = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.delete_roles;");
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        var remaining = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.delete_roles;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(0, remaining);
@@ -309,7 +329,7 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task ManagedDelete_RejectsDependentRow()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.delete_principals (Id int NOT NULL "
             + "CONSTRAINT PK_delete_principals PRIMARY KEY, Caption nvarchar(80) NOT NULL); "
@@ -317,7 +337,8 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
             + "PrincipalId int NOT NULL CONSTRAINT FK_delete_children_principals "
             + "REFERENCES dbo.delete_principals(Id)); "
             + "INSERT INTO dbo.delete_principals (Id, Caption) VALUES (1, N'old'); "
-            + "INSERT INTO dbo.delete_children (Id, PrincipalId) VALUES (7, 1);");
+            + "INSERT INTO dbo.delete_children (Id, PrincipalId) VALUES (7, 1);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DeleteModelManagedDataFromModel(
@@ -329,10 +350,11 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-delete-dependent"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-delete-dependent"),
+            cancellationToken: CancellationToken.None);
 
         var remaining = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.delete_principals WHERE Id = 1;");
+            "SELECT COUNT(*) FROM dbo.delete_principals WHERE Id = 1;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -347,7 +369,7 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task ManagedDelete_RejectsUnmodeledIncomingForeignKey()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.unmodeled_principals (Id int NOT NULL "
             + "CONSTRAINT PK_unmodeled_principals PRIMARY KEY); "
@@ -355,7 +377,7 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
             + "CONSTRAINT PK_unmodeled_children PRIMARY KEY, PrincipalId int NOT NULL "
             + "CONSTRAINT FK_unmodeled_children_principals "
             + "REFERENCES dbo.unmodeled_principals(Id)); "
-            + "INSERT INTO dbo.unmodeled_principals (Id) VALUES (1);");
+            + "INSERT INTO dbo.unmodeled_principals (Id) VALUES (1);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DeleteModelManagedDataFromModel(
@@ -364,10 +386,11 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-unmodeled-fk"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-unmodeled-fk"),
+            cancellationToken: CancellationToken.None);
 
         var remaining = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.unmodeled_principals WHERE Id = 1;");
+            "SELECT COUNT(*) FROM dbo.unmodeled_principals WHERE Id = 1;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -383,11 +406,12 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task MismatchedPhysicalStoreType_IsDifferentBeforeRowProbe()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.typed_roles (Id int NOT NULL CONSTRAINT PK_typed_roles PRIMARY KEY, "
             + "Caption nvarchar(20) NOT NULL); "
-            + "INSERT INTO dbo.typed_roles (Id, Caption) VALUES (1, N'Old');");
+            + "INSERT INTO dbo.typed_roles (Id, Caption) VALUES (1, N'Old');",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.UpdateModelManagedDataFromModel(
@@ -397,10 +421,12 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-type-drift"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-type-drift"),
+            cancellationToken: CancellationToken.None);
 
         var unchanged = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.typed_roles WHERE Id = 1 AND Caption = N'Old';");
+            "SELECT COUNT(*) FROM dbo.typed_roles WHERE Id = 1 AND Caption = N'Old';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -415,13 +441,13 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task EnabledDmlTrigger_IsUnsupportedBeforeManagedInsert()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.triggered_roles (Id int NOT NULL "
-            + "CONSTRAINT PK_triggered_roles PRIMARY KEY);");
+            + "CONSTRAINT PK_triggered_roles PRIMARY KEY);", cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TRIGGER dbo.tr_triggered_roles ON dbo.triggered_roles AFTER INSERT AS "
-            + "BEGIN SET NOCOUNT ON; END;");
+            + "BEGIN SET NOCOUNT ON; END;", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel(
@@ -430,10 +456,11 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-enabled-trigger"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-enabled-trigger"),
+            cancellationToken: CancellationToken.None);
 
         var count = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.triggered_roles;");
+            "SELECT COUNT(*) FROM dbo.triggered_roles;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -449,11 +476,11 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task ComputedTargetColumn_IsUnsupportedBeforeManagedInsert()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.computed_roles (Id int NOT NULL "
             + "CONSTRAINT PK_computed_roles PRIMARY KEY, Code int NOT NULL, "
-            + "Doubled AS (Code * 2));");
+            + "Doubled AS (Code * 2));", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel(
@@ -463,10 +490,11 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-computed-seed"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-computed-seed"),
+            cancellationToken: CancellationToken.None);
 
         var count = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.computed_roles;");
+            "SELECT COUNT(*) FROM dbo.computed_roles;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -482,11 +510,11 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
     public async Task IdentityTargetColumn_IsUnsupportedBeforeManagedUpdate()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo.identity_update (Id int IDENTITY(1,1) NOT NULL "
             + "CONSTRAINT PK_identity_update PRIMARY KEY); "
-            + "INSERT INTO dbo.identity_update DEFAULT VALUES;");
+            + "INSERT INTO dbo.identity_update DEFAULT VALUES;", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.UpdateModelManagedDataFromModel(
@@ -496,10 +524,11 @@ public sealed class SqlServerModelManagedDataIntegrationTests : SqlServerIntegra
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-identity-update"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-identity-update"),
+            cancellationToken: CancellationToken.None);
 
         var unchanged = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.identity_update WHERE Id = 1;");
+            "SELECT COUNT(*) FROM dbo.identity_update WHERE Id = 1;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);

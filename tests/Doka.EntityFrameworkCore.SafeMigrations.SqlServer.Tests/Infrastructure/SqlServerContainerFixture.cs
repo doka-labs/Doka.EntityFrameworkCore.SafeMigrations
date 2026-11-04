@@ -151,8 +151,10 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
     /// <summary>
     /// Creates a unique database and returns a connection string scoped to it.
     /// </summary>
+    /// <param name="cancellationToken">The token cancelling database creation and acknowledgement.</param>
+    /// <returns>The unpooled connection string scoped to the newly owned database.</returns>
     public async Task<string> CreateDatabaseAsync(
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         if (_container is not null && RuntimeInformation.OSArchitecture != Architecture.X64)
@@ -205,7 +207,7 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
     /// <param name="cancellationToken">The token cancelling the drop.</param>
     public async Task ReleaseDatabaseAsync(
         string connectionString,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);

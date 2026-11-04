@@ -19,29 +19,35 @@ public sealed class SqlServerSafeMigrationColumnLayoutAuditingIntegrationTests :
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.layout_probe (Id int NOT NULL); INSERT dbo.layout_probe VALUES(7);");
-        await CreateColumnLayoutAuditAsync(connectionString);
+            "CREATE TABLE dbo.layout_probe (Id int NOT NULL); INSERT dbo.layout_probe VALUES(7);",
+            cancellationToken: CancellationToken.None);
+        await CreateColumnLayoutAuditAsync(connectionString, cancellationToken: CancellationToken.None);
         if (!disabled)
         {
-            await EnableColumnLayoutAuditAsync(connectionString);
+            await EnableColumnLayoutAuditAsync(connectionString, cancellationToken: CancellationToken.None);
         }
 
         // Act
-        await ExecuteSqlAsync(connectionString, "ALTER TABLE dbo.layout_probe ADD Added int NULL;");
+        await ExecuteSqlAsync(connectionString, "ALTER TABLE dbo.layout_probe ADD Added int NULL;",
+            cancellationToken: CancellationToken.None);
         var triggerDisabled = await ScalarIntAsync(connectionString,
             "SELECT CONVERT(int,is_disabled) FROM sys.triggers "
-            + "WHERE parent_class=0 AND name=N'layout_ddl_audit';");
+            + "WHERE parent_class=0 AND name=N'layout_ddl_audit';", cancellationToken: CancellationToken.None);
 
-        var events = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.layout_ddl_events;");
+        var events = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.layout_ddl_events;",
+            cancellationToken: CancellationToken.None);
+
         var added = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U') "
             + "AND name=N'Added' AND column_id=2 AND system_type_id=TYPE_ID(N'int') "
-            + "AND user_type_id=TYPE_ID(N'int') AND max_length=4 AND is_nullable=1;");
+            + "AND user_type_id=TYPE_ID(N'int') AND max_length=4 AND is_nullable=1;",
+            cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.layout_probe WHERE Id=7 AND Added IS NULL;");
+            "SELECT COUNT(*) FROM dbo.layout_probe WHERE Id=7 AND Added IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(disabled ? 1 : 0, triggerDisabled);
@@ -62,16 +68,16 @@ public sealed class SqlServerSafeMigrationColumnLayoutAuditingIntegrationTests :
     )
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         if (!freshTable)
         {
             await ExecuteSqlAsync(connectionString,
                 "CREATE TABLE dbo.layout_probe (Existing char(4000) NULL); "
-                + "INSERT dbo.layout_probe VALUES('sentinel');");
+                + "INSERT dbo.layout_probe VALUES('sentinel');", cancellationToken: CancellationToken.None);
         }
 
-        await CreateColumnLayoutAuditAsync(connectionString);
-        await EnableColumnLayoutAuditAsync(connectionString);
+        await CreateColumnLayoutAuditAsync(connectionString, cancellationToken: CancellationToken.None);
+        await EnableColumnLayoutAuditAsync(connectionString, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operations = new List<MigrationOperation>();
         if (freshTable)
@@ -86,34 +92,47 @@ public sealed class SqlServerSafeMigrationColumnLayoutAuditingIntegrationTests :
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, operations,
-            new SafeMigrationRunOptions("sqlserver-ordered-layout-enabled-audit"));
+            new SafeMigrationRunOptions("sqlserver-ordered-layout-enabled-audit"),
+            cancellationToken: CancellationToken.None);
 
         var preflightFailure = Record.Exception(report.ThrowIfBlocked);
         var preflightTables = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U');",
+            cancellationToken: CancellationToken.None);
 
         var preflightColumns = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U');");
+            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U');",
+            cancellationToken: CancellationToken.None);
 
-        var preflightEvents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.layout_ddl_events;");
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, operations));
-        var events = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.layout_ddl_events;");
+        var preflightEvents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.layout_ddl_events;",
+            cancellationToken: CancellationToken.None);
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, operations,
+            cancellationToken: CancellationToken.None));
+
+        var events = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.layout_ddl_events;",
+            cancellationToken: CancellationToken.None);
+
         var columns = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U');");
+            "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U');",
+            cancellationToken: CancellationToken.None);
 
         var acceptedBindings = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U') "
             + "AND system_type_id=TYPE_ID(N'char') AND user_type_id=TYPE_ID(N'char') AND is_nullable=1 "
             + "AND ((name=N'Existing' AND column_id=1 AND max_length=4000) "
-            + "OR (name=N'First' AND column_id=2 AND max_length=3000));");
+            + "OR (name=N'First' AND column_id=2 AND max_length=3000));", cancellationToken: CancellationToken.None);
 
         var rejected = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id=OBJECT_ID(N'dbo.layout_probe',N'U') "
-            + "AND name=N'Second';");
+            + "AND name=N'Second';", cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.layout_probe;");
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.layout_probe;",
+            cancellationToken: CancellationToken.None);
+
         var sentinelRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.layout_probe WHERE RTRIM(Existing)='sentinel' AND First IS NULL;");
+            "SELECT COUNT(*) FROM dbo.layout_probe WHERE RTRIM(Existing)='sentinel' AND First IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);

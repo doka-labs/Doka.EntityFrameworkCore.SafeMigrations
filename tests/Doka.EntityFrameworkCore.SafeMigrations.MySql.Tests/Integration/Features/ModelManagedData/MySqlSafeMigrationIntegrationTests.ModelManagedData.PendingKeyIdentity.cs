@@ -15,7 +15,8 @@ public sealed partial class MySqlModelManagedDataPendingKeyIdentityIntegrationTe
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `managed_pending_keys` (`Id` int NOT NULL, `Code` int NOT NULL, "
-            + "`Marker` int NOT NULL, PRIMARY KEY (`Id`, `Code`)) ENGINE=InnoDB;");
+            + "`Marker` int NOT NULL, PRIMARY KEY (`Id`, `Code`)) ENGINE=InnoDB;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = new ModelManagedPendingKeyDbContext(connectionString, Fixture.ServerVersion);
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -36,12 +37,14 @@ public sealed partial class MySqlModelManagedDataPendingKeyIdentityIntegrationTe
         var pending = await context.Database.GetPendingMigrationsAsync(CancellationToken.None);
         var applied = await context.Database.GetAppliedMigrationsAsync(CancellationToken.None);
         var historyRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `__ModelManagedPendingKeyHistory`;");
+            "SELECT COUNT(*) FROM `__ModelManagedPendingKeyHistory`;", cancellationToken: CancellationToken.None);
 
         var retainedRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `managed_pending_keys` WHERE `Id` = 1 AND `Code` = 7 AND `Marker` = 1;");
+            "SELECT COUNT(*) FROM `managed_pending_keys` WHERE `Id` = 1 AND `Code` = 7 AND `Marker` = 1;",
+            cancellationToken: CancellationToken.None);
 
-        var totalRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `managed_pending_keys`;");
+        var totalRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `managed_pending_keys`;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(2, preflight.Assessments.Count);

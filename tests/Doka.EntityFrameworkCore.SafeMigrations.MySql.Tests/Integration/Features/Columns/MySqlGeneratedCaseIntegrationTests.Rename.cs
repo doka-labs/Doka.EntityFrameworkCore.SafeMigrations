@@ -15,7 +15,8 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (s int NULL, other int NULL, "
             + "`e` int GENERATED ALWAYS AS (other + 1) VIRTUAL, "
             + "`\u00e9` int GENERATED ALWAYS AS (" + (dependentAccentMember ? "s" : "other")
-            + " + 1) VIRTUAL); " + $"INSERT INTO `{Table}` (s, other) VALUES (7, 11);");
+            + " + 1) VIRTUAL); " + $"INSERT INTO `{Table}` (s, other) VALUES (7, 11);",
+            cancellationToken: CancellationToken.None);
         var expression = SafeMigrationSql.Binary(SafeMigrationSql.Identifier("other"),
             SafeMigrationSqlBinaryOperator.Add, SafeMigrationSql.Literal(1));
 
@@ -46,8 +47,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         command.CommandText = "SELECT (" + plan.RenderStateExpression(parameters.Add) + ");";
         var state = Convert.ToString(await command.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
         var nativeFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString,
-            $"ALTER TABLE `{Table}` RENAME COLUMN s TO renamed_s;"));
-        var rows = await ScalarIntAsync(connectionString, $"SELECT COUNT(*) FROM `{Table}`;");
+            $"ALTER TABLE `{Table}` RENAME COLUMN s TO renamed_s;", cancellationToken: CancellationToken.None));
+
+        var rows = await ScalarIntAsync(connectionString, $"SELECT COUNT(*) FROM `{Table}`;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(dependentAccentMember ? "unsupported" : "matching", state);
@@ -70,8 +73,8 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             SafeMigrationPolicy.ThrowIfDifferent);
         if (!freshOwner)
         {
-            await ExecuteOperationsAsync(context, initial.Operations);
-            await SeedCaseRowsAsync(connectionString);
+            await ExecuteOperationsAsync(context, initial.Operations, CancellationToken.None);
+            await SeedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
         }
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -82,10 +85,16 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-source-rename-refused"), CancellationToken.None);
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
         var unchanged = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
-            + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'left_bound';");
-        var rows = await ScalarIntAsync(connectionString, $"SELECT COUNT(*) FROM `{Table}`;");
+            + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'left_bound';",
+            cancellationToken: CancellationToken.None);
+
+        var rows = await ScalarIntAsync(connectionString, $"SELECT COUNT(*) FROM `{Table}`;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -113,8 +122,8 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var initial = new MigrationBuilder(context.Database.ProviderName!);
         initial.EnsureTable(CaseTable(stored: false), SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
-        await ExecuteOperationsAsync(context, initial.Operations);
-        await SeedCaseRowsAsync(connectionString);
+        await ExecuteOperationsAsync(context, initial.Operations, CancellationToken.None);
+        await SeedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(CaseTable(stored: false), SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
@@ -130,10 +139,15 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-unrelated-rename"), CancellationToken.None);
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
         var verified = await context.GetService<ISafeMigrationRunner>().VerifyAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-unrelated-rename-verify"), CancellationToken.None);
-        var rows = failure is null ? await ScalarIntAsync(connectionString, $"SELECT COUNT(*) FROM `{Table}`;") : -1;
+
+        var rows = failure is null ? await ScalarIntAsync(connectionString, $"SELECT COUNT(*) FROM `{Table}`;",
+            cancellationToken: CancellationToken.None) : -1;
 
         // Assert
         Assert.True(report.Status == SafeMigrationReportStatus.Ready, DescribeGeneratedReport(report));
@@ -154,15 +168,19 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (id int NOT NULL, unrelated int NULL, "
             + "derived int GENERATED ALWAYS AS (id + 1) VIRTUAL); "
-            + $"INSERT INTO `{Table}` (id, unrelated) VALUES (1, 7);");
+            + $"INSERT INTO `{Table}` (id, unrelated) VALUES (1, 7);", cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameColumnIfExists(sourceExists ? "unrelated" : "already_absent", Table, "renamed_value");
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
             new SafeMigrationRunOptions("generated-native-unknown-rename"), CancellationToken.None);
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
-        var rows = await ScalarIntAsync(connectionString, $"SELECT COUNT(*) FROM `{Table}` WHERE derived = 2;");
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
+        var rows = await ScalarIntAsync(connectionString, $"SELECT COUNT(*) FROM `{Table}` WHERE derived = 2;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(sourceExists ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready, report.Status);

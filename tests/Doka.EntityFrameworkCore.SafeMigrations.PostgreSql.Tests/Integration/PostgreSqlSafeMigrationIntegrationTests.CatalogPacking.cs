@@ -14,7 +14,8 @@ public sealed class PostgreSqlCatalogPackingIntegrationTests : PostgreSqlSafeMig
     public async Task Analyzer_PacksAcrossShortCircuitGapsAndCaptureBoundariesWithoutMixingResults()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE catalog_packing (id integer NOT NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE catalog_packing (id integer NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(
             new NpgsqlConnection(connectionString));
@@ -71,7 +72,8 @@ public sealed class PostgreSqlCatalogPackingIntegrationTests : PostgreSqlSafeMig
     )
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE catalog_ownership (id integer NOT NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE catalog_ownership (id integer NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(
             new NpgsqlConnection(connectionString),
@@ -91,7 +93,8 @@ public sealed class PostgreSqlCatalogPackingIntegrationTests : PostgreSqlSafeMig
         var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations));
+            context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations,
+                CancellationToken.None));
 
         Assert.True(connection.FaultWasInjected);
         Assert.Equal(1, connection.ClassificationStatementCount);

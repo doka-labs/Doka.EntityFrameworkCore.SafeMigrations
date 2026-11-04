@@ -21,7 +21,7 @@ public sealed class SqliteSafeMigrationNativeCandidateKeySemanticsIntegrationTes
         bool matches)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         var keyName = kind == SafeMigrationOperationKind.EnsurePrimaryKey ? "pk_native_parent" : "uq_native_parent";
         var keyKind = kind == SafeMigrationOperationKind.EnsurePrimaryKey ? "PRIMARY KEY" : "UNIQUE";
 
@@ -30,7 +30,7 @@ public sealed class SqliteSafeMigrationNativeCandidateKeySemanticsIntegrationTes
         // so collation and sort counterfactuals test real physical semantics.
         await ExecuteSqlAsync(connection,
             $"CREATE TABLE constraint_parents (Id TEXT NOT NULL, CONSTRAINT {keyName} {keyKind}({keySql})); "
-            + "INSERT INTO constraint_parents(Id) VALUES(1);");
+            + "INSERT INTO constraint_parents(Id) VALUES(1);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (kind == SafeMigrationOperationKind.EnsurePrimaryKey)
@@ -44,9 +44,13 @@ public sealed class SqliteSafeMigrationNativeCandidateKeySemanticsIntegrationTes
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-native-key-semantics"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-native-key-semantics"),
+            cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connection, "SELECT COUNT(*) FROM constraint_parents WHERE Id = 1;");
+        var rows = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM constraint_parents WHERE Id = 1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);

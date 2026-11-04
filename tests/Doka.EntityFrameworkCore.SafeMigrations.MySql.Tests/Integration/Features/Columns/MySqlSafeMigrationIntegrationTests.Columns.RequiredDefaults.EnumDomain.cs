@@ -25,7 +25,8 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumDomainIntegrationTes
         var operation = RequiredDefaultsEnumDomainOperation(useSetStorage);
         var storeType = RequiredDefaultsEnumDomainStoreType(useSetStorage, "exact");
         await ExecuteSqlAsync(connectionString,
-            RequiredDefaultsEnumDomainFixtureSql(operation, storeType, alreadyRequired, "Alpha"));
+            RequiredDefaultsEnumDomainFixtureSql(operation, storeType, alreadyRequired, "Alpha"),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -43,13 +44,17 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumDomainIntegrationTes
         var postflight = await runner.VerifyAsync(context, [operation],
             new SafeMigrationRunOptions("required-enum-domain-exact-final"), CancellationToken.None);
 
-        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: CancellationToken.None);
+
         var storedValue = await ScalarStringAsync(connectionString,
-            "SELECT `value` FROM `required_enum_domain_items` WHERE `key` = 1;");
+            "SELECT `value` FROM `required_enum_domain_items` WHERE `key` = 1;",
+            cancellationToken: CancellationToken.None);
 
         var physicalType = await ScalarStringAsync(connectionString,
             "SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'required_enum_domain_items' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'required_enum_domain_items' AND COLUMN_NAME = 'value';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -84,10 +89,12 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumDomainIntegrationTes
         var storeType = RequiredDefaultsEnumDomainStoreType(useSetStorage, domainDifference);
         var originalValue = domainDifference == "literal-case" ? "alpha" : "Alpha";
         await ExecuteSqlAsync(connectionString,
-            RequiredDefaultsEnumDomainFixtureSql(operation, storeType, alreadyRequired: false, originalValue));
+            RequiredDefaultsEnumDomainFixtureSql(operation, storeType, alreadyRequired: false, originalValue),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
-        var before = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+        var before = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: CancellationToken.None);
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
@@ -99,13 +106,17 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumDomainIntegrationTes
         var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var after = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+        var after = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+            cancellationToken: CancellationToken.None);
+
         var storedValue = await ScalarStringAsync(connectionString,
-            "SELECT `value` FROM `required_enum_domain_items` WHERE `key` = 1;");
+            "SELECT `value` FROM `required_enum_domain_items` WHERE `key` = 1;",
+            cancellationToken: CancellationToken.None);
 
         var physicalType = await ScalarStringAsync(connectionString,
             "SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'required_enum_domain_items' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'required_enum_domain_items' AND COLUMN_NAME = 'value';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);

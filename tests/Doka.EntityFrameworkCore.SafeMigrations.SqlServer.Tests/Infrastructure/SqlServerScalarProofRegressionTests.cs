@@ -8,6 +8,33 @@ public sealed class SqlServerScalarProofRegressionTests
 
     private static readonly int[] s_proofValues = [1, 0, 1];
 
+    /// <summary>Preserves caller cancellation without letting injected capture cancellation abort its caller.</summary>
+    /// <param name="cancelCaller">Whether cancellation originates at the caller or the injected capture scope.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ScalarCancellationScopeRetainsOneWayCallerLink(bool cancelCaller)
+    {
+        // Arrange
+        using var caller = new CancellationTokenSource();
+        using var injected = CreateScalarCancellationSource(caller.Token);
+
+        // Act
+        if (cancelCaller)
+        {
+            caller.Cancel();
+        }
+        else
+        {
+            injected.Cancel();
+        }
+
+        // Assert
+        Assert.True(injected.IsCancellationRequested);
+        Assert.Equal(cancelCaller, caller.IsCancellationRequested);
+        Assert.NotEqual(caller.Token, injected.Token);
+    }
+
     /// <summary>The encoded continuation payload is charged before a delayed classifier is admitted.</summary>
     [Fact]
     public void ContinuationExpansion_RejectsAnOversizedFinalPayload()
@@ -183,28 +210,42 @@ public sealed class SqlServerScalarProofRegressionTests
 
     /// <summary>Runs every engine contract on an open connection to a caller-owned isolated database.</summary>
     /// <param name="connection">The unique owned connection, which this helper neither closes nor disposes.</param>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     /// <returns>The asynchronous verification operation.</returns>
-    internal static async Task VerifyLocalAsync(SqlConnection connection)
+    internal static async Task VerifyLocalAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         ArgumentNullException.ThrowIfNull(connection);
         Assert.Equal(ConnectionState.Open, connection.State);
         using var context = new SafeMigrationDbContext(connection.ConnectionString);
         var mappings = context.GetService<IRelationalTypeMappingSource>();
 
-        await VerifyNameAndCollationGatesAsync(connection);
-        await VerifySupportRejectionsAsync(connection);
-        await VerifyLayoutAndOuterFallbackAsync(connection);
-        await VerifyFreshSourcesAndPrivateScopesAsync(connection, mappings);
-        await VerifyMaximumSourcesAsync(connection, mappings);
-        await VerifyScalarCancellationAsync(connection);
+        await VerifyNameAndCollationGatesAsync(connection, cancellationToken: cancellationToken);
+        await VerifySupportRejectionsAsync(connection, cancellationToken: cancellationToken);
+        await VerifyLayoutAndOuterFallbackAsync(connection, cancellationToken: cancellationToken);
+        await VerifyFreshSourcesAndPrivateScopesAsync(connection, mappings, cancellationToken: cancellationToken);
+        await VerifyMaximumSourcesAsync(connection, mappings, cancellationToken: cancellationToken);
+        await VerifyScalarCancellationAsync(connection, cancellationToken: cancellationToken);
     }
 
     /// <summary>Skipped classifier and default scopes must not bind missing objects or invalid collations.</summary>
-    private static async Task VerifyNameAndCollationGatesAsync(SqlConnection connection)
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
+    private static async Task VerifyNameAndCollationGatesAsync(
+        SqlConnection connection,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         const string missingState = "(SELECT TOP (1) N'matching' FROM dbo.doka_scalar_proof_missing_object)";
         var absent = Plan() with { PrerequisiteExpression = "0", StateExpression = missingState };
-        await AssertResultAsync(connection, absent, 11, "prerequisite_missing", null);
+        await AssertResultAsync(
+            connection,
+            absent,
+            11,
+            "prerequisite_missing",
+            null,
+            cancellationToken: cancellationToken);
 
         const string invalidCollation = "CASE WHEN N'x' COLLATE doka_scalar_proof_invalid_collation = N'x' "
             + "THEN 1 ELSE 0 END";
@@ -217,12 +258,17 @@ public sealed class SqlServerScalarProofRegressionTests
         };
 
         await AssertResultAsync(connection, collation, 12, "unsupported",
-            SqlServerSafeMigrationRuntimePlan.ColumnCollationUnsupportedCode);
+            SqlServerSafeMigrationRuntimePlan.ColumnCollationUnsupportedCode, cancellationToken: cancellationToken);
     }
 
     /// <summary>False or NULL support proofs reject before compiling later proofs.</summary>
-    private static async Task VerifySupportRejectionsAsync(SqlConnection connection)
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
+    private static async Task VerifySupportRejectionsAsync(
+        SqlConnection connection,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         const string invalid = "(SELECT TOP (1) missing FROM dbo.doka_scalar_proof_missing_object)";
         string[] kinds = ["physical", "collation", "default", "filter"];
         foreach (var kind in kinds)
@@ -264,22 +310,39 @@ public sealed class SqlServerScalarProofRegressionTests
                     _ => throw new UnreachableException(),
                 };
 
-                await AssertResultAsync(connection, plan, 13, "unsupported", code);
+                await AssertResultAsync(
+                    connection,
+                    plan,
+                    13,
+                    "unsupported",
+                    code,
+                    cancellationToken: cancellationToken);
             }
         }
     }
 
     /// <summary>Layout outputs retain their declared width, and outer guard failures retain state and code.</summary>
-    private static async Task VerifyLayoutAndOuterFallbackAsync(SqlConnection connection)
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
+    private static async Task VerifyLayoutAndOuterFallbackAsync(
+        SqlConnection connection,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var layoutCode = "layout_" + new string('x', 150);
         var layout = GuardedPlan() with
         {
             ColumnLayoutFailureExpression = "N'" + layoutCode + "'",
             ColumnCollationSupportExpression = "(SELECT missing FROM dbo.doka_scalar_proof_missing_object)",
         };
-        await AssertResultAsync(connection, layout, 14, "unsupported", layoutCode[..128]);
-        await AssertResultAsync(connection, GuardedPlan(), 15, "matching", null);
+        await AssertResultAsync(
+            connection,
+            layout,
+            14,
+            "unsupported",
+            layoutCode[..128],
+            cancellationToken: cancellationToken);
+        await AssertResultAsync(connection, GuardedPlan(), 15, "matching", null, cancellationToken: cancellationToken);
 
         var outer = Plan() with
         {
@@ -289,15 +352,25 @@ public sealed class SqlServerScalarProofRegressionTests
             StateExpression = "(SELECT TOP (1) N'matching' FROM dbo.doka_scalar_proof_missing_object)",
         };
 
-        await AssertResultAsync(connection, outer, 16, "different", "outer_guard_rejected");
+        await AssertResultAsync(
+            connection,
+            outer,
+            16,
+            "different",
+            "outer_guard_rejected",
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>Native dispatchers re-evaluate equal templates with private preambles and max sources.</summary>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task VerifyFreshSourcesAndPrivateScopesAsync(
         SqlConnection connection,
-        IRelationalTypeMappingSource mappings
+        IRelationalTypeMappingSource mappings,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         Assert.True(connection.CanCreateBatch);
         var numeric = s_proofValues.Select((value, ordinal) => BoundPlan(mappings, ordinal, value) with
         {
@@ -309,7 +382,7 @@ public sealed class SqlServerScalarProofRegressionTests
         Assert.Single(numeric.Select(SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate).Distinct());
         var numericResults = new SafeMigrationProviderAnalysis[numeric.Length];
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, 10, numeric, 0, numericResults, CancellationToken.None);
+            connection, null, 10, numeric, 0, numericResults, cancellationToken);
         Assert.Equal(SafeMigrationObservedState.Matching, numericResults[0].ObservedState);
         Assert.Equal(SafeMigrationObservedState.Unsupported, numericResults[1].ObservedState);
         Assert.Equal(SqlServerSafeMigrationRuntimePlan.PhysicalTableUnsupportedCode, numericResults[1].Code);
@@ -329,7 +402,7 @@ public sealed class SqlServerScalarProofRegressionTests
             Assert.Single(plan.AnalysisParameters).Mapping.StoreType));
         var unicodeResults = new SafeMigrationProviderAnalysis[unicode.Length];
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, 10, unicode, 0, unicodeResults, CancellationToken.None);
+            connection, null, 10, unicode, 0, unicodeResults, cancellationToken);
         Assert.Equal(SafeMigrationObservedState.Matching, unicodeResults[0].ObservedState);
         Assert.Equal(SafeMigrationObservedState.Unsupported, unicodeResults[1].ObservedState);
         Assert.Equal(SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode, unicodeResults[1].Code);
@@ -337,19 +410,23 @@ public sealed class SqlServerScalarProofRegressionTests
 
         // WHY: The analyzer already rejects any extra, empty, or non-nine-column result set. Direct reads
         // additionally pin the raw engine shape, independently of the provider's result projection.
-        await AssertResultAsync(connection, numeric[0], 17, "matching", null);
+        await AssertResultAsync(connection, numeric[0], 17, "matching", null, cancellationToken: cancellationToken);
         await AssertResultAsync(connection, numeric[1], 18, "unsupported",
-            SqlServerSafeMigrationRuntimePlan.PhysicalTableUnsupportedCode);
+            SqlServerSafeMigrationRuntimePlan.PhysicalTableUnsupportedCode, cancellationToken: cancellationToken);
     }
 
     /// <summary>Every source participates in a real boundary proof, including the final source.</summary>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task VerifyMaximumSourcesAsync(
         SqlConnection connection,
-        IRelationalTypeMappingSource mappings
+        IRelationalTypeMappingSource mappings,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var plan = MaximumSourcePlan(mappings);
-        await AssertResultAsync(connection, plan, 19, "matching", null);
+        await AssertResultAsync(connection, plan, 19, "matching", null, cancellationToken: cancellationToken);
         var changed = plan with
         {
             AnalysisParameters = plan.AnalysisParameters.Select((parameter, index) =>
@@ -357,12 +434,17 @@ public sealed class SqlServerScalarProofRegressionTests
         };
 
         await AssertResultAsync(connection, changed, 20, "unsupported",
-            SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode);
+            SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode, cancellationToken: cancellationToken);
     }
 
     /// <summary>Cancels a running scalar metadata query with one owned session and no time-delay SQL.</summary>
-    private static async Task VerifyScalarCancellationAsync(SqlConnection connection)
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
+    private static async Task VerifyScalarCancellationAsync(
+        SqlConnection connection,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var plan = Plan() with
         {
             PhysicalTableSupportExpression = "(SELECT CASE WHEN SUM(CONVERT(bigint, "
@@ -371,7 +453,8 @@ public sealed class SqlServerScalarProofRegressionTests
                 + "CROSS JOIN sys.all_objects d CROSS JOIN sys.all_objects e)",
         };
 
-        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
+        using var cancellation = CreateScalarCancellationSource(cancellationToken);
+        cancellation.CancelAfter(TimeSpan.FromMilliseconds(250));
         var results = new SafeMigrationProviderAnalysis[1];
         var stopwatch = Stopwatch.StartNew();
         // WHY: Exercise the actual native capture path. An informational prefix can make SqlClient
@@ -403,19 +486,30 @@ public sealed class SqlServerScalarProofRegressionTests
         await using var probe = connection.CreateCommand();
         probe.CommandText = "SELECT 1;";
         probe.CommandTimeout = 5;
-        Assert.Equal(1, await probe.ExecuteScalarAsync());
+        Assert.Equal(1, await probe.ExecuteScalarAsync(cancellationToken: cancellationToken));
     }
 
+    /// <summary>Creates an independently cancelable capture scope that also observes caller cancellation.</summary>
+    /// <param name="cancellationToken">The caller whose cancellation must reach the native capture.</param>
+    /// <returns>The linked source whose disposal belongs to the caller.</returns>
+    private static CancellationTokenSource CreateScalarCancellationSource(CancellationToken cancellationToken)
+        // WHY: Keep linking separate from the injected timer so offline controls do not depend on elapsed time.
+        => CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
     /// <summary>Executes one complete classifier and checks its single owned raw result.</summary>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task AssertResultAsync(
         SqlConnection connection,
         SqlServerSafeMigrationRuntimePlan plan,
         int ordinal,
         string state,
-        string? code
+        string? code,
+        CancellationToken cancellationToken
     )
     {
-        var actual = await ReadRawResultAsync(connection, plan, ordinal, CancellationToken.None);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var actual = await ReadRawResultAsync(connection, plan, ordinal, cancellationToken);
         Assert.Equal(ordinal, actual.Ordinal);
         Assert.Equal(state, actual.State);
         Assert.Equal(code, actual.Code);

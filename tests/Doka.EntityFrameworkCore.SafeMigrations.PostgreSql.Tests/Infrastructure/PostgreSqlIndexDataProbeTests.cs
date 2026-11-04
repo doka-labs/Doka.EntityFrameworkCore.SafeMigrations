@@ -27,7 +27,7 @@ public sealed class PostgreSqlIndexDataProbeTests
         var operations = Operations(1);
         var results = Analyses(1, state);
         var previous = results[0];
-        await CaptureAsync(analyzer, operations, results, supported);
+        await CaptureAsync(analyzer, operations, results, supported, cancellationToken: CancellationToken.None);
         await using var connection = new CatalogStatementTestConnection(true,
             (sql, _) => RowResults(sql, duplicate));
 
@@ -57,7 +57,7 @@ public sealed class PostgreSqlIndexDataProbeTests
         var analyzer = Analyzer(context);
         var operations = Operations(290);
         var results = Analyses(operations.Length, SafeMigrationObservedState.Missing);
-        await CaptureAsync(analyzer, operations, results, supported: true);
+        await CaptureAsync(analyzer, operations, results, supported: true, cancellationToken: CancellationToken.None);
         await using var connection = new CatalogStatementTestConnection(native,
             (sql, _) => RowResults(sql, duplicate: false));
 
@@ -96,7 +96,7 @@ public sealed class PostgreSqlIndexDataProbeTests
         var operations = Operations(2);
         var results = Analyses(operations.Length, SafeMigrationObservedState.Missing);
         var previous = results.ToArray();
-        await CaptureAsync(analyzer, operations, results, supported: true);
+        await CaptureAsync(analyzer, operations, results, supported: true, cancellationToken: CancellationToken.None);
         using var cancellation = new CancellationTokenSource();
         await using var connection = new CatalogStatementTestConnection(true, (sql, _) =>
         {
@@ -177,9 +177,19 @@ public sealed class PostgreSqlIndexDataProbeTests
             SafeMigrationOperationalImpact.NotApplicable,
             [new SafeMigrationFacetDifference("index_key_order", "id", "other")])).ToArray();
 
+    /// <summary>Runs the isolated PostgreSQL fixture operation with explicit cancellation.</summary>
+    /// <param name="analyzer">The fixture's analyzer input.</param>
+    /// <param name="operations">The ordered fixture migration operations.</param>
+    /// <param name="results">The fixture's results input.</param>
+    /// <param name="supported">The fixture's supported input.</param>
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
+    /// <returns>The asynchronous fixture operation or observation.</returns>
     private static async Task CaptureAsync(PostgreSqlSafeMigrationProviderAnalyzer analyzer,
-        SafeMigrationOperation[] operations, SafeMigrationProviderAnalysis[] results, bool supported)
+        SafeMigrationOperation[] operations, SafeMigrationProviderAnalysis[] results, bool supported,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var connection = new CatalogStatementTestConnection(true, (sql, _) =>
         {
             var table = new DataTable();
@@ -210,7 +220,7 @@ public sealed class PostgreSqlIndexDataProbeTests
         });
 
         await analyzer.PopulateLivePrerequisiteEvidenceAsync(connection, operations, results, 71,
-            CancellationToken.None);
+            cancellationToken);
     }
 
     private static DataTable RowResults(string sql, bool duplicate)

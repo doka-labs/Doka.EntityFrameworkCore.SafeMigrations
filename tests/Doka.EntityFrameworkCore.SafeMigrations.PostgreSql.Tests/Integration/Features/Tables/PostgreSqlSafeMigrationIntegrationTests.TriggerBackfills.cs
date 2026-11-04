@@ -31,7 +31,8 @@ public sealed class PostgreSqlTriggerBackfillsIntegrationTests : PostgreSqlSafeM
             + "CREATE FUNCTION event_backfill_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ "
             + "BEGIN DROP INDEX ix_event_existing; CREATE INDEX ix_event_existing ON event_existing_values(value); "
             + "RETURN NULL; END; $$; CREATE TRIGGER event_backfill_fixture AFTER UPDATE ON event_backfill_source "
-            + "FOR EACH STATEMENT EXECUTE FUNCTION event_backfill_trigger_fixture();");
+            + "FOR EACH STATEMENT EXECUTE FUNCTION event_backfill_trigger_fixture();",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         AppendEventTriggerColumnAlter(builder, authoring, sqlDefault, hasDefault: true);
@@ -39,11 +40,15 @@ public sealed class PostgreSqlTriggerBackfillsIntegrationTests : PostgreSqlSafeM
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-backfill-trigger-structure"));
-        await ExecuteOperationsAsync(context, [builder.Operations[0]]);
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [builder.Operations[1]]));
+            new SafeMigrationRunOptions("postgresql-backfill-trigger-structure"), CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, [builder.Operations[0]], CancellationToken.None);
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [builder.Operations[1]],
+            CancellationToken.None));
+
         var values = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM event_backfill_source WHERE value=" + (authoring == "typed" ? "0" : "3") + ";");
+            "SELECT COUNT(*) FROM event_backfill_source WHERE value=" + (authoring == "typed" ? "0" : "3") + ";",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
@@ -80,7 +85,8 @@ public sealed class PostgreSqlTriggerBackfillsIntegrationTests : PostgreSqlSafeM
             + "CREATE FUNCTION event_backfill_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ "
             + "BEGIN DROP INDEX ix_event_existing; RETURN NULL; END; $$; "
             + "CREATE TRIGGER event_backfill_fixture AFTER UPDATE ON event_backfill_source "
-            + "FOR EACH STATEMENT EXECUTE FUNCTION event_backfill_trigger_fixture();");
+            + "FOR EACH STATEMENT EXECUTE FUNCTION event_backfill_trigger_fixture();",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         AppendEventTriggerColumnAlter(builder, authoring, sqlDefault: false, hasDefault: false);
@@ -88,10 +94,12 @@ public sealed class PostgreSqlTriggerBackfillsIntegrationTests : PostgreSqlSafeM
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-no-backfill-trigger-structure"));
-        await ExecuteOperationsAsync(context, builder.Operations);
+            new SafeMigrationRunOptions("postgresql-no-backfill-trigger-structure"), CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var indexes = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_indexes WHERE indexname='ix_event_existing';");
+            "SELECT COUNT(*) FROM pg_catalog.pg_indexes WHERE indexname='ix_event_existing';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(authoring == "typed" ? SafeMigrationReportStatus.ReadyWithProviderOperations
@@ -115,7 +123,8 @@ public sealed class PostgreSqlTriggerBackfillsIntegrationTests : PostgreSqlSafeM
             + "CREATE FUNCTION event_backfill_trigger_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ "
             + "BEGIN DROP INDEX ix_event_existing; RETURN NULL; END; $$; "
             + "CREATE TRIGGER event_backfill_fixture AFTER UPDATE ON event_backfill_source "
-            + "FOR EACH STATEMENT EXECUTE FUNCTION event_backfill_trigger_fixture();");
+            + "FOR EACH STATEMENT EXECUTE FUNCTION event_backfill_trigger_fixture();",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.Operations.Add(new AlterColumnOperation
@@ -140,11 +149,13 @@ public sealed class PostgreSqlTriggerBackfillsIntegrationTests : PostgreSqlSafeM
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-computed-replacement-without-backfill"));
+            new SafeMigrationRunOptions("postgresql-computed-replacement-without-backfill"), CancellationToken.None);
+
         var commands = context.GetService<IMigrationsSqlGenerator>().Generate([builder.Operations[0]], context.Model);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var indexes = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_indexes WHERE indexname='ix_event_existing';");
+            "SELECT COUNT(*) FROM pg_catalog.pg_indexes WHERE indexname='ix_event_existing';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, report.Status);

@@ -30,7 +30,7 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
             $"CREATE TABLE `alter_rows` (`id` int PRIMARY KEY, `value` {sourceType} NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
             + "INSERT INTO `alter_rows` VALUES (1, REPEAT(CONVERT(0xF09F9880 USING utf8mb4), 5)), "
-            + "(2, 'a   '), (3, NULL);");
+            + "(2, 'a   '), (3, NULL);", cancellationToken: CancellationToken.None);
         var operation = AlterTransitionOperation(sourceType, targetType);
         var observer = new RuntimeMatchingProbeInterceptor();
         await using var context = CreateRuntimeMatchingContext(connectionString, observer);
@@ -42,16 +42,16 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
         var analyzer = analysisContext.GetService<ISafeMigrationProviderAnalyzer>();
 
         // Act
-        var beforeResults = await analyzer.AnalyzeAsync(analysisContext, [operation]);
-        await ExecuteOperationsAsync(context, [operation]);
-        var firstVisits = await ReadRuntimeMatchingVisitsAsync(context);
+        var beforeResults = await analyzer.AnalyzeAsync(analysisContext, [operation], CancellationToken.None);
+        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
+        var firstVisits = await ReadRuntimeMatchingVisitsAsync(context, cancellationToken: CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync(RuntimeMatchingResetSql);
-        await ExecuteOperationsAsync(context, [operation]);
-        var replayVisits = await ReadRuntimeMatchingVisitsAsync(context);
-        var afterResults = await analyzer.AnalyzeAsync(analysisContext, [operation]);
+        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
+        var replayVisits = await ReadRuntimeMatchingVisitsAsync(context, cancellationToken: CancellationToken.None);
+        var afterResults = await analyzer.AnalyzeAsync(analysisContext, [operation], CancellationToken.None);
         var values = await ScalarStringAsync(connectionString,
             "SELECT GROUP_CONCAT(CONCAT(`id`, ':', COALESCE(HEX(`value`), 'null')) ORDER BY `id`) "
-            + "FROM `alter_rows`;");
+            + "FROM `alter_rows`;", cancellationToken: CancellationToken.None);
 
         // Assert
         var before = Assert.Single(beforeResults);
@@ -91,17 +91,20 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE `alter_rows` (`value` {sourceType} NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `alter_rows` VALUES ('a     ');");
+            + "INSERT INTO `alter_rows` VALUES ('a     ');", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operation = AlterTransitionOperation(sourceType, "varchar(5)");
 
         // Act
         var analysisResults = await context.GetService<ISafeMigrationProviderAnalyzer>()
-            .AnalyzeAsync(context, [operation]);
+            .AnalyzeAsync(context, [operation], CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
         var preserved = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `alter_rows` WHERE HEX(`value`) = '612020202020';");
+            "SELECT COUNT(*) FROM `alter_rows` WHERE HEX(`value`) = '612020202020';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analysisResults);
@@ -150,14 +153,16 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE `alter_rows` (`id` int PRIMARY KEY{column}) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;"
-            + (blocker == "missing" ? string.Empty : "INSERT INTO `alter_rows` (`id`, `value`) VALUES (1, 'kept');"));
+            + (blocker == "missing" ? string.Empty : "INSERT INTO `alter_rows` (`id`, `value`) VALUES (1, 'kept');"),
+            cancellationToken: CancellationToken.None);
         if (blocker == "foreign_key")
         {
             await ExecuteSqlAsync(connectionString,
                 "ALTER TABLE `alter_rows` ADD UNIQUE KEY `uq_value` (`value`); "
                 + "CREATE TABLE `alter_children` (`value` varchar(20) NULL, "
                 + "CONSTRAINT `fk_value` FOREIGN KEY (`value`) REFERENCES `alter_rows` (`value`)) "
-                + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+                + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
+                cancellationToken: CancellationToken.None);
         }
 
         var operation = blocker == "no_source"
@@ -205,13 +210,16 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
 
         // Act
         var analysisResults = await context.GetService<ISafeMigrationProviderAnalyzer>()
-            .AnalyzeAsync(context, [operation]);
+            .AnalyzeAsync(context, [operation], CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var visits = await ReadRuntimeMatchingVisitsAsync(context);
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
+        var visits = await ReadRuntimeMatchingVisitsAsync(context, cancellationToken: CancellationToken.None);
         var columns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value' AND CHARACTER_MAXIMUM_LENGTH = 20;");
+            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value' AND CHARACTER_MAXIMUM_LENGTH = 20;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analysisResults);
@@ -241,7 +249,8 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `alter_rows` (`value` varchar(20) NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + $"INSERT INTO `alter_rows` VALUES ('{(overlength ? "too-long" : "kept")}');");
+            + $"INSERT INTO `alter_rows` VALUES ('{(overlength ? "too-long" : "kept")}');",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(new MySqlConnection(connectionString));
         context.Database.SetDbConnection(connection);
@@ -254,7 +263,8 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
         SafeMigrationOperation[] operations = alterFirst ? [rejected, ensure, accepted] : [ensure, rejected, accepted];
 
         // Act
-        var results = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations);
+        var results = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations,
+            CancellationToken.None);
 
         // Assert
         var rejectedResult = results[alterFirst ? 0 : 1];
@@ -289,7 +299,7 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `alter_rows` (`value` varchar(20) NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `alter_rows` VALUES ('kept');");
+            + "INSERT INTO `alter_rows` VALUES ('kept');", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(new MySqlConnection(connectionString));
         context.Database.SetDbConnection(connection);
@@ -312,7 +322,8 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
             .ToArray();
 
         // Act
-        var results = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations);
+        var results = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(1, connection.NarrowingEligibilityStatementCount);
@@ -342,7 +353,8 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `alter_rows` (`value` varchar(20) NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + $"INSERT INTO `alter_rows` VALUES ({(containsNull ? "NULL" : "'short'")}), ('kept');");
+            + $"INSERT INTO `alter_rows` VALUES ({(containsNull ? "NULL" : "'short'")}), ('kept');",
+            cancellationToken: CancellationToken.None);
         var observer = new RuntimeMatchingProbeInterceptor();
         await using var context = CreateRuntimeMatchingContext(connectionString, observer);
         await context.Database.OpenConnectionAsync();
@@ -355,13 +367,17 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
 
         // Act
         var analysisResults = await context.GetService<ISafeMigrationProviderAnalyzer>()
-            .AnalyzeAsync(context, [operation]);
+            .AnalyzeAsync(context, [operation], CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var visits = await ReadRuntimeMatchingVisitsAsync(context);
-        var nulls = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `alter_rows` WHERE `value` IS NULL;");
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
+        var visits = await ReadRuntimeMatchingVisitsAsync(context, cancellationToken: CancellationToken.None);
+        var nulls = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `alter_rows` WHERE `value` IS NULL;",
+            cancellationToken: CancellationToken.None);
+
         var preserved = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `alter_rows` WHERE `value` = 'kept';");
+            "SELECT COUNT(*) FROM `alter_rows` WHERE `value` = 'kept';", cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analysisResults);
@@ -397,24 +413,27 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `alter_rows` (`value` varchar(20) NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `alter_rows` VALUES ('kept');");
+            + "INSERT INTO `alter_rows` VALUES ('kept');", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync();
         var operation = AlterTransitionOperation("varchar(20)", "varchar(5)");
 
         // Act
         var beforeResults = await context.GetService<ISafeMigrationProviderAnalyzer>()
-            .AnalyzeAsync(context, [operation]);
+            .AnalyzeAsync(context, [operation], CancellationToken.None);
 
         await context.Database.ExecuteSqlRawAsync(disableStrictMode
             ? "SET SESSION sql_mode = '';"
             : "INSERT INTO `alter_rows` VALUES ('too-long');");
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
         var length = await ScalarIntAsync(connectionString,
             "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';", cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `alter_rows`;");
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `alter_rows`;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var before = Assert.Single(beforeResults);
@@ -450,7 +469,7 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE `alter_rows` (`value` {sourceType} NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `alter_rows` VALUES (NULL), ('kept');");
+            + "INSERT INTO `alter_rows` VALUES (NULL), ('kept');", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync();
         if (permissiveMode)
@@ -472,10 +491,13 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
 
         // Act
         var analysisResults = await context.GetService<ISafeMigrationProviderAnalyzer>()
-            .AnalyzeAsync(context, [operation]);
+            .AnalyzeAsync(context, [operation], CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var nulls = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `alter_rows` WHERE `value` IS NULL;");
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
+        var nulls = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `alter_rows` WHERE `value` IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analysisResults);
@@ -506,7 +528,7 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
             $"CREATE TABLE `alter_rows` (`value` varchar(10) NULL, {constraint}) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
             + $"INSERT INTO `alter_rows` VALUES ('{(unique ? "x" : "kept")}')"
-            + (containsNull ? ", (NULL);" : ";"));
+            + (containsNull ? ", (NULL);" : ";"), cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var operation = new SafeMigrationOperation(new AlterColumnIntent("alter_rows",
             new ExpectedColumnDefinition("value", typeof(string), false, "varchar(20)",
@@ -516,13 +538,17 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
 
         // Act
         var analysisResults = await context.GetService<ISafeMigrationProviderAnalyzer>()
-            .AnalyzeAsync(context, [operation]);
+            .AnalyzeAsync(context, [operation], CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var nulls = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `alter_rows` WHERE `value` IS NULL;");
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
+        var nulls = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `alter_rows` WHERE `value` IS NULL;",
+            cancellationToken: CancellationToken.None);
+
         var length = await ScalarIntAsync(connectionString,
             "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';", cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analysisResults);
@@ -571,7 +597,7 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
             "CREATE TABLE `alter_rows` (`value` varchar(10) NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
             + $"INSERT INTO `alter_rows` VALUES ('{(check ? "kept" : "x")}')"
-            + (containsNull ? ", (NULL);" : ";"));
+            + (containsNull ? ", (NULL);" : ";"), cancellationToken: CancellationToken.None);
         SafeMigrationIntent constraint = constraintKind switch
         {
             "index" => new EnsureIndexIntent(new ExpectedIndexDefinition("uq_value", "alter_rows",
@@ -597,12 +623,18 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
         await using var context = CreateContext(connectionString);
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations);
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, operations));
-        var nulls = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `alter_rows` WHERE `value` IS NULL;");
+        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations,
+            CancellationToken.None);
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, operations,
+            CancellationToken.None));
+
+        var nulls = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `alter_rows` WHERE `value` IS NULL;",
+            cancellationToken: CancellationToken.None);
+
         var length = await ScalarIntAsync(connectionString,
             "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(containsNull ? SafeMigrationObservedState.DataBlocked : SafeMigrationObservedState.Different,
@@ -635,7 +667,8 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `alter_rows` (`value` varchar(10) NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `alter_rows` VALUES ('x')" + (containsNull ? ", (NULL);" : ";"));
+            + "INSERT INTO `alter_rows` VALUES ('x')" + (containsNull ? ", (NULL);" : ";"),
+            cancellationToken: CancellationToken.None);
         SafeMigrationOperation[] operations =
         [
             new(new EnsureUniqueConstraintIntent(
@@ -654,20 +687,23 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
 
         // Act
-        _ = await analyzer.AnalyzeAsync(context, operations);
+        _ = await analyzer.AnalyzeAsync(context, operations, CancellationToken.None);
         var captured = ((ISafeMigrationRenamedTableAnalyzer)analyzer).TryGetRenamedTableAnalysis(
             operations[2], "alter_rows", null, out var sourceAnalysis);
 
-        _ = await analyzer.AnalyzeAsync(context, []);
+        _ = await analyzer.AnalyzeAsync(context, [], CancellationToken.None);
         var retainedAfterEmpty = ((ISafeMigrationRenamedTableAnalyzer)analyzer).TryGetRenamedTableAnalysis(
             operations[2], "alter_rows", null, out _);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, operations));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, operations,
+            CancellationToken.None));
+
         var nulls = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `renamed_rows` WHERE `value` IS NULL;");
+            "SELECT COUNT(*) FROM `renamed_rows` WHERE `value` IS NULL;", cancellationToken: CancellationToken.None);
+
         var length = await ScalarIntAsync(connectionString,
             "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'renamed_rows' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'renamed_rows' AND COLUMN_NAME = 'value';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.True(captured);
@@ -712,7 +748,7 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE `alter_rows` (`value` {sourceType} NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `alter_rows` VALUES (NULL);");
+            + "INSERT INTO `alter_rows` VALUES (NULL);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var replacement = string.Concat(Enumerable.Repeat(char.ConvertFromUtf32(supplementary ? 0x1F600 : 0xE9), 5));
         var operation = new SafeMigrationOperation(new AlterColumnIntent("alter_rows",
@@ -723,29 +759,34 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
 
         // Act
         var analysisResults = await context.GetService<ISafeMigrationProviderAnalyzer>()
-            .AnalyzeAsync(context, [operation]);
+            .AnalyzeAsync(context, [operation], CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
         var catalogType = await ScalarStringAsync(connectionString,
             "SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';", cancellationToken: CancellationToken.None);
 
         var defaultCatalog = await ScalarStringAsync(connectionString,
             "SELECT CONCAT(COALESCE(COLUMN_DEFAULT, '<null>'), '|', HEX(COALESCE(COLUMN_DEFAULT, '')), '|', EXTRA) "
             + "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';", cancellationToken: CancellationToken.None);
 
         if (!supplementary)
         {
-            await ExecuteSqlAsync(connectionString, "INSERT INTO `alter_rows` VALUES (DEFAULT);");
+            await ExecuteSqlAsync(connectionString, "INSERT INTO `alter_rows` VALUES (DEFAULT);",
+                cancellationToken: CancellationToken.None);
         }
 
         var storedValues = await ScalarStringAsync(connectionString,
-            "SELECT GROUP_CONCAT(HEX(`value`) ORDER BY HEX(`value`)) FROM `alter_rows`;");
+            "SELECT GROUP_CONCAT(HEX(`value`) ORDER BY HEX(`value`)) FROM `alter_rows`;",
+            cancellationToken: CancellationToken.None);
 
         var preserved = await ScalarIntAsync(connectionString,
             supplementary ? "SELECT COUNT(*) FROM `alter_rows` WHERE `value` IS NULL;"
-                : "SELECT COUNT(*) FROM `alter_rows` WHERE HEX(`value`) = 'C3A9C3A9C3A9C3A9C3A9';");
+                : "SELECT COUNT(*) FROM `alter_rows` WHERE HEX(`value`) = 'C3A9C3A9C3A9C3A9C3A9';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analysisResults);
@@ -778,7 +819,8 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `alter_rows` (`value` varchar(20) NULL) "
-            + "ENGINE=InnoDB DEFAULT CHARSET=ascii COLLATE=ascii_bin; INSERT INTO `alter_rows` VALUES (NULL);");
+            + "ENGINE=InnoDB DEFAULT CHARSET=ascii COLLATE=ascii_bin; INSERT INTO `alter_rows` VALUES (NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var replacement = asciiLiteral ? "new" : char.ConvertFromUtf32(0x1F600);
         var operation = new SafeMigrationOperation(new AlterColumnIntent("alter_rows",
@@ -789,10 +831,13 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
 
         // Act
         var analysisResults = await context.GetService<ISafeMigrationProviderAnalyzer>()
-            .AnalyzeAsync(context, [operation]);
+            .AnalyzeAsync(context, [operation], CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var nulls = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `alter_rows` WHERE `value` IS NULL;");
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
+        var nulls = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `alter_rows` WHERE `value` IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analysisResults);
@@ -869,7 +914,7 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `alter_rows` (`value` varchar(20) NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `alter_rows` VALUES (NULL);");
+            + "INSERT INTO `alter_rows` VALUES (NULL);", cancellationToken: CancellationToken.None);
         var contextConnection = new MySqlConnectionStringBuilder(connectionString)
         {
             NoBackslashEscapes = noBackslashEscapes,
@@ -897,35 +942,42 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
 
         // Act
         var beforeResults = await context.GetService<ISafeMigrationProviderAnalyzer>()
-            .AnalyzeAsync(context, [operation]);
+            .AnalyzeAsync(context, [operation], CancellationToken.None);
 
-        var firstFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
-        var secondFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+        var firstFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
+        var secondFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
         if (!blocked)
         {
-            await ExecuteSqlAsync(connectionString, "INSERT INTO `alter_rows` VALUES (DEFAULT);");
+            await ExecuteSqlAsync(connectionString, "INSERT INTO `alter_rows` VALUES (DEFAULT);",
+                cancellationToken: CancellationToken.None);
         }
 
         var afterResults = await context.GetService<ISafeMigrationProviderAnalyzer>()
-            .AnalyzeAsync(context, [operation]);
+            .AnalyzeAsync(context, [operation], CancellationToken.None);
 
         var preserved = await ScalarIntAsync(connectionString,
-            $"SELECT COUNT(*) FROM `alter_rows` WHERE HEX(`value`) = '{replacementHex}';");
+            $"SELECT COUNT(*) FROM `alter_rows` WHERE HEX(`value`) = '{replacementHex}';",
+            cancellationToken: CancellationToken.None);
 
         var defaultCatalog = await ScalarStringAsync(connectionString,
             "SELECT CONCAT(COALESCE(COLUMN_DEFAULT, '<null>'), '|', HEX(COALESCE(COLUMN_DEFAULT, '')), '|', EXTRA) "
             + "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';", cancellationToken: CancellationToken.None);
 
         var unchanged = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `alter_rows` WHERE `value` IS NULL;");
+            "SELECT COUNT(*) FROM `alter_rows` WHERE `value` IS NULL;", cancellationToken: CancellationToken.None);
 
         var storedHex = await ScalarStringAsync(connectionString,
-            "SELECT GROUP_CONCAT(COALESCE(HEX(`value`), '<null>') ORDER BY `value`) FROM `alter_rows`;");
+            "SELECT GROUP_CONCAT(COALESCE(HEX(`value`), '<null>') ORDER BY `value`) FROM `alter_rows`;",
+            cancellationToken: CancellationToken.None);
 
         var length = await ScalarIntAsync(connectionString,
             "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';", cancellationToken: CancellationToken.None);
 
         // Assert
         var before = Assert.Single(beforeResults);
@@ -970,7 +1022,7 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
             "CREATE TABLE `alter_rows` (`value` varchar(20) NULL"
             + (sourceDefault ? " DEFAULT 'a''b'" : string.Empty)
             + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
-            + "INSERT INTO `alter_rows` VALUES (NULL);");
+            + "INSERT INTO `alter_rows` VALUES (NULL);", cancellationToken: CancellationToken.None);
         var configuredConnection = new MySqlConnectionStringBuilder(connectionString) { NoBackslashEscapes = true };
         await using var context = CreateContext(configuredConnection.ConnectionString);
         await context.Database.OpenConnectionAsync();
@@ -986,25 +1038,34 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
         var blocked = !Fixture.IsMariaDb && textTarget;
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation]);
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation],
+            CancellationToken.None);
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
         if (!blocked)
         {
-            await ExecuteSqlAsync(connectionString, "INSERT INTO `alter_rows` VALUES (DEFAULT);");
+            await ExecuteSqlAsync(connectionString, "INSERT INTO `alter_rows` VALUES (DEFAULT);",
+                cancellationToken: CancellationToken.None);
         }
 
-        var nulls = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `alter_rows` WHERE `value` IS NULL;");
+        var nulls = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `alter_rows` WHERE `value` IS NULL;",
+            cancellationToken: CancellationToken.None);
+
         var oldColumns = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value' AND CHARACTER_MAXIMUM_LENGTH = 20;");
+            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value' AND CHARACTER_MAXIMUM_LENGTH = 20;",
+            cancellationToken: CancellationToken.None);
 
         var catalog = await ScalarStringAsync(connectionString,
             "SELECT CONCAT(COALESCE(COLUMN_DEFAULT, '<null>'), '|', HEX(COALESCE(COLUMN_DEFAULT, '')), '|', EXTRA) "
             + "FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';", cancellationToken: CancellationToken.None);
 
         var valueHex = await ScalarStringAsync(connectionString,
-            "SELECT GROUP_CONCAT(COALESCE(HEX(`value`), '<null>') ORDER BY `value`) FROM `alter_rows`;");
+            "SELECT GROUP_CONCAT(COALESCE(HEX(`value`), '<null>') ORDER BY `value`) FROM `alter_rows`;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(blocked ? SafeMigrationRepairCapability.None : SafeMigrationRepairCapability.Safe,
@@ -1035,7 +1096,8 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
 
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE `alter_rows` (`value` varchar(200) NULL, {additionalColumns}) "
-            + "ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=latin1 COLLATE=latin1_bin;");
+            + "ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=latin1 COLLATE=latin1_bin;",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(new MySqlConnection(connectionString));
         context.Database.SetDbConnection(connection);
@@ -1043,12 +1105,14 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
 
         // Act
         var analysisResults = await context.GetService<ISafeMigrationProviderAnalyzer>()
-            .AnalyzeAsync(context, [operation]);
+            .AnalyzeAsync(context, [operation], CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
         var length = await ScalarIntAsync(connectionString,
             "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';", cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analysisResults);
@@ -1072,7 +1136,7 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
         await ExecuteSqlAsync(connectionString,
             $"CREATE TABLE `alter_rows` (`value` varchar(100) NOT NULL, {additionalColumns}, "
             + "UNIQUE KEY `uq_value` (`value`)) ENGINE=InnoDB ROW_FORMAT=DYNAMIC "
-            + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;");
+            + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var target = new ExpectedColumnDefinition("value", typeof(string), false, "varchar(768)");
         var operation = new SafeMigrationOperation(new AlterColumnIntent("alter_rows", target,
@@ -1081,18 +1145,21 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
 
         // Act
         var analysisResults = await context.GetService<ISafeMigrationProviderAnalyzer>()
-            .AnalyzeAsync(context, [operation]);
+            .AnalyzeAsync(context, [operation], CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation]));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+            CancellationToken.None));
+
         var length = await ScalarIntAsync(connectionString,
             "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';");
+            + "AND TABLE_NAME = 'alter_rows' AND COLUMN_NAME = 'value';", cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(connectionString,
-            "ALTER TABLE `alter_rows` MODIFY COLUMN `value` varchar(768) NOT NULL;");
+            "ALTER TABLE `alter_rows` MODIFY COLUMN `value` varchar(768) NOT NULL;",
+            cancellationToken: CancellationToken.None);
         var directFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString,
             "INSERT INTO `alter_rows` VALUES (REPEAT(CONVERT(0xF09F9880 USING utf8mb4), 768), "
-            + string.Join(", ", Enumerable.Repeat("0", 750)) + ");"));
+            + string.Join(", ", Enumerable.Repeat("0", 750)) + ");", cancellationToken: CancellationToken.None));
 
         // Assert
         var analysis = Assert.Single(analysisResults);
@@ -1116,7 +1183,8 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE `alter_rows` (`id` int PRIMARY KEY, `value` bit(1) NULL) ENGINE=InnoDB; "
-            + "INSERT INTO `alter_rows` VALUES (1, b'0'), (2, b'1'), (3, NULL);");
+            + "INSERT INTO `alter_rows` VALUES (1, b'0'), (2, b'1'), (3, NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var clrType = nullableClr ? typeof(bool?) : typeof(bool);
         var operation = new SafeMigrationOperation(new AlterColumnIntent("alter_rows",
@@ -1127,13 +1195,14 @@ public sealed partial class MySqlColumnsAlterTransitionsIntegrationTests : MySql
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
 
         // Act
-        var beforeResults = await analyzer.AnalyzeAsync(context, [operation]);
-        await ExecuteOperationsAsync(context, [operation]);
-        await ExecuteOperationsAsync(context, [operation]);
-        var afterResults = await analyzer.AnalyzeAsync(context, [operation]);
+        var beforeResults = await analyzer.AnalyzeAsync(context, [operation], CancellationToken.None);
+        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
+        await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
+        var afterResults = await analyzer.AnalyzeAsync(context, [operation], CancellationToken.None);
         var preserved = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM `alter_rows` WHERE (`id` = 1 AND `value` = 0) "
-            + "OR (`id` = 2 AND `value` = 1) OR (`id` = 3 AND `value` IS NULL);");
+            + "OR (`id` = 2 AND `value` = 1) OR (`id` = 3 AND `value` IS NULL);",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var before = Assert.Single(beforeResults);

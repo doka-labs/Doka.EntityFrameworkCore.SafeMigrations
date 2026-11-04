@@ -35,7 +35,8 @@ public sealed class CatalogStatementCaptureModeTests
         // Act
         for (var repetition = 0; repetition < repetitions; repetition++)
         {
-            results.AddRange(await ReadValuesAsync(connection, native, readers));
+            results.AddRange(await ReadValuesAsync(connection, native, readers,
+                cancellationToken: CancellationToken.None));
         }
 
         // Assert
@@ -101,12 +102,16 @@ public sealed class CatalogStatementCaptureModeTests
     /// <param name="native">Whether both statements share a native batch.</param>
     /// <param name="readers">The observed readers used to verify actual cleanup independently of counters.</param>
     /// <returns>The ordered row values from every result set.</returns>
+    /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
     private static async Task<List<int>> ReadValuesAsync(
         CatalogStatementTestConnection connection,
         bool native,
-        List<DbDataReader> readers
+        List<DbDataReader> readers,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var results = new List<int>();
         if (native)
         {
@@ -122,15 +127,15 @@ public sealed class CatalogStatementCaptureModeTests
                 batch.BatchCommands.Add(command);
             }
 
-            await using var reader = await batch.ExecuteReaderAsync();
+            await using var reader = await batch.ExecuteReaderAsync(cancellationToken: cancellationToken);
             readers.Add(reader);
             do
             {
-                while (await reader.ReadAsync())
+                while (await reader.ReadAsync(cancellationToken: cancellationToken))
                 {
                     results.Add(reader.GetInt32(0));
                 }
-            } while (await reader.NextResultAsync());
+            } while (await reader.NextResultAsync(cancellationToken: cancellationToken));
         }
         else
         {
@@ -142,9 +147,9 @@ public sealed class CatalogStatementCaptureModeTests
                 parameter.ParameterName = "@value";
                 parameter.Value = value;
                 command.Parameters.Add(parameter);
-                await using var reader = await command.ExecuteReaderAsync();
+                await using var reader = await command.ExecuteReaderAsync(cancellationToken: cancellationToken);
                 readers.Add(reader);
-                while (await reader.ReadAsync())
+                while (await reader.ReadAsync(cancellationToken: cancellationToken))
                 {
                     results.Add(reader.GetInt32(0));
                 }

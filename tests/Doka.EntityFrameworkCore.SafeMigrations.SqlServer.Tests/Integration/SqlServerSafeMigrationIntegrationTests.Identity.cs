@@ -18,16 +18,20 @@ public sealed class SqlServerSafeMigrationIdentityIntegrationTests : SqlServerSa
     public async Task NonDboPrincipal_UnqualifiedOperationFailsClosed()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var login = $"sm_user_{Guid.NewGuid():N}";
-        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA application;");
+        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA application;",
+            cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE LOGIN [{login}] WITH PASSWORD = '{RestrictedLoginPassword}', CHECK_POLICY = OFF;");
+            $"CREATE LOGIN [{login}] WITH PASSWORD = '{RestrictedLoginPassword}', CHECK_POLICY = OFF;",
+            cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE USER [{login}] FOR LOGIN [{login}] WITH DEFAULT_SCHEMA = application;");
-        await ExecuteSqlAsync(connectionString, $"GRANT VIEW DEFINITION TO [{login}];");
+            $"CREATE USER [{login}] FOR LOGIN [{login}] WITH DEFAULT_SCHEMA = application;",
+            cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, $"GRANT VIEW DEFINITION TO [{login}];",
+            cancellationToken: CancellationToken.None);
         var userConnectionString = new SqlConnectionStringBuilder(connectionString)
         {
             UserID = login,
@@ -42,7 +46,7 @@ public sealed class SqlServerSafeMigrationIdentityIntegrationTests : SqlServerSa
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-non-dbo-default"));
+            new SafeMigrationRunOptions("sqlserver-non-dbo-default"), cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -56,13 +60,16 @@ public sealed class SqlServerSafeMigrationIdentityIntegrationTests : SqlServerSa
     public async Task RestrictedMetadataVisibility_DoesNotClassifyExistingTableAsMissing()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var login = $"sm_user_{Guid.NewGuid():N}";
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.hidden_orders (Id int NOT NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.hidden_orders (Id int NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            $"CREATE LOGIN [{login}] WITH PASSWORD = '{RestrictedLoginPassword}', CHECK_POLICY = OFF;");
-        await ExecuteSqlAsync(connectionString, $"CREATE USER [{login}] FOR LOGIN [{login}];");
+            $"CREATE LOGIN [{login}] WITH PASSWORD = '{RestrictedLoginPassword}', CHECK_POLICY = OFF;",
+            cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, $"CREATE USER [{login}] FOR LOGIN [{login}];",
+            cancellationToken: CancellationToken.None);
         var userConnectionString = new SqlConnectionStringBuilder(connectionString)
         {
             UserID = login,
@@ -79,9 +86,11 @@ public sealed class SqlServerSafeMigrationIdentityIntegrationTests : SqlServerSa
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-hidden-metadata"));
+            new SafeMigrationRunOptions("sqlserver-hidden-metadata"), cancellationToken: CancellationToken.None);
+
         var existingTables = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.hidden_orders');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id=OBJECT_ID(N'dbo.hidden_orders');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -98,12 +107,15 @@ public sealed class SqlServerSafeMigrationIdentityIntegrationTests : SqlServerSa
     public async Task RestrictedMetadataVisibility_DirectInventoryFailsWithoutPriorAnalysis()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var login = $"sm_user_{Guid.NewGuid():N}";
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.hidden_orders (Id int NOT NULL);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.hidden_orders (Id int NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            $"CREATE LOGIN [{login}] WITH PASSWORD = '{RestrictedLoginPassword}', CHECK_POLICY = OFF;");
-        await ExecuteSqlAsync(connectionString, $"CREATE USER [{login}] FOR LOGIN [{login}];");
+            $"CREATE LOGIN [{login}] WITH PASSWORD = '{RestrictedLoginPassword}', CHECK_POLICY = OFF;",
+            cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(connectionString, $"CREATE USER [{login}] FOR LOGIN [{login}];",
+            cancellationToken: CancellationToken.None);
         var userConnectionString = new SqlConnectionStringBuilder(connectionString)
         {
             UserID = login,
@@ -117,7 +129,7 @@ public sealed class SqlServerSafeMigrationIdentityIntegrationTests : SqlServerSa
 
         // Act
         var failure = await Record.ExceptionAsync(() => context.GetService<ISafeMigrationProviderAnalyzer>()
-            .FindUnexpectedObjectsAsync(context, builder.Operations));
+            .FindUnexpectedObjectsAsync(context, builder.Operations, cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Contains("requires database metadata visibility", Assert.IsType<InvalidOperationException>(failure).Message,
@@ -131,23 +143,24 @@ public sealed class SqlServerSafeMigrationIdentityIntegrationTests : SqlServerSa
     public async Task CaseSensitiveCatalog_DoesNotDropDifferentlyCasedTable()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "ALTER DATABASE CURRENT COLLATE Latin1_General_100_CS_AS;");
+            "ALTER DATABASE CURRENT COLLATE Latin1_General_100_CS_AS;", cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE dbo.CaseOrders (Id int NOT NULL);");
+            "CREATE TABLE dbo.CaseOrders (Id int NOT NULL);", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropTableIfExists("caseorders");
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var existingCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.CaseOrders', N'U');");
+            "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.CaseOrders', N'U');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, existingCount);

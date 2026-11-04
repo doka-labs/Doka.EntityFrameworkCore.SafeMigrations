@@ -21,12 +21,13 @@ public sealed class SqlServerLedgerPhysicalBoundaryTests : SqlServerIntegrationT
     public async Task OrdinaryPhysicalBoundary_ExecutesVersionCompatibleMetadataAndManagedRows()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var major = await ScalarIntAsync(connectionString,
-            "SELECT CONVERT(int, SERVERPROPERTY('ProductMajorVersion'));");
+            "SELECT CONVERT(int, SERVERPROPERTY('ProductMajorVersion'));", cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.ordinary_control (Id int NOT NULL PRIMARY KEY, Value int NOT NULL);");
+            "CREATE TABLE dbo.ordinary_control (Id int NOT NULL PRIMARY KEY, Value int NOT NULL);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
@@ -39,11 +40,14 @@ public sealed class SqlServerLedgerPhysicalBoundaryTests : SqlServerIntegrationT
 
         // Act
         var ordinaryGate = await ScalarIntAsync(connectionString,
-            "SELECT (" + catalog.BuildPhysicalTableSupportExpression("ordinary_control", null) + ");");
+            "SELECT (" + catalog.BuildPhysicalTableSupportExpression("ordinary_control", null) + ");",
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, [ordinary]);
-        var ordinaryAnalyses = await analyzer.AnalyzeAsync(context, [ordinary]);
-        await ExecuteOperationsAsync(context, [ordinary]);
+        await ExecuteOperationsAsync(context, [ordinary], cancellationToken: CancellationToken.None);
+        var ordinaryAnalyses = await analyzer.AnalyzeAsync(context, [ordinary],
+            cancellationToken: CancellationToken.None);
+
+        await ExecuteOperationsAsync(context, [ordinary], cancellationToken: CancellationToken.None);
 
         // Assert
         var ordinaryAnalysis = Assert.Single(ordinaryAnalyses);
@@ -60,16 +64,16 @@ public sealed class SqlServerLedgerPhysicalBoundaryTests : SqlServerIntegrationT
     public async Task LedgerPhysicalBoundary_ExecutesTheExplicitEngineCapabilityBranch()
     {
         // Arrange
-        var connectionString = await CreateDatabaseAsync();
+        var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         var major = await ScalarIntAsync(connectionString,
-            "SELECT CONVERT(int, SERVERPROPERTY('ProductMajorVersion'));");
+            "SELECT CONVERT(int, SERVERPROPERTY('ProductMajorVersion'));", cancellationToken: CancellationToken.None);
 
         var ledgerAvailable = major >= 16;
         var table = ledgerAvailable ? "ledger_items" : "ordinary_control";
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE dbo." + table + " (Id int NOT NULL PRIMARY KEY, Value int NOT NULL) "
             + (ledgerAvailable ? "WITH (LEDGER = ON (APPEND_ONLY = ON))" : string.Empty)
-            + "; INSERT dbo." + table + " (Id, Value) VALUES (1, 7);");
+            + "; INSERT dbo." + table + " (Id, Value) VALUES (1, 7);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
@@ -90,23 +94,28 @@ public sealed class SqlServerLedgerPhysicalBoundaryTests : SqlServerIntegrationT
 
         // Act
         var physicalGate = await ScalarIntAsync(connectionString,
-            "SELECT (" + catalog.BuildPhysicalTableSupportExpression(table, null) + ");");
+            "SELECT (" + catalog.BuildPhysicalTableSupportExpression(table, null) + ");",
+                cancellationToken: CancellationToken.None);
 
         IReadOnlyList<SafeMigrationProviderAnalysis> ledgerAnalyses;
-        await using (await analyzer.AcquireAnalysisScopeAsync(context))
+        await using (await analyzer.AcquireAnalysisScopeAsync(context, cancellationToken: CancellationToken.None))
         {
-            ledgerAnalyses = await analyzer.AnalyzeAsync(context, ledgerOperations);
+            ledgerAnalyses = await analyzer.AnalyzeAsync(context, ledgerOperations,
+            cancellationToken: CancellationToken.None);
         }
 
         var failures = new List<Exception?>();
         foreach (var operation in ledgerOperations)
         {
-            failures.Add(await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation])));
+            failures.Add(await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+                cancellationToken: CancellationToken.None)));
         }
 
-        var rowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo." + table + ";");
+        var rowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo." + table + ";",
+            cancellationToken: CancellationToken.None);
+
         var unchangedValue = await ScalarIntAsync(connectionString,
-            "SELECT Value FROM dbo." + table + " WHERE Id = 1;");
+            "SELECT Value FROM dbo." + table + " WHERE Id = 1;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.True(major >= 15, "The qualification contract requires SQL Server 2019 or later.");

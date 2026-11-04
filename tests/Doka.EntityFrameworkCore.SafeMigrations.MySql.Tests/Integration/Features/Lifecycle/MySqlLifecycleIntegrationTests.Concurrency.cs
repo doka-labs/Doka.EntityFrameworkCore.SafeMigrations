@@ -11,7 +11,8 @@ public sealed partial class MySqlLifecycleIntegrationTests
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `__LegacyMigrationsHistory` (`MigrationId` varchar(150) NOT NULL); "
-            + "INSERT INTO `__LegacyMigrationsHistory` VALUES ('legacy-unchanged');");
+            + "INSERT INTO `__LegacyMigrationsHistory` VALUES ('legacy-unchanged');",
+            cancellationToken: CancellationToken.None);
 
         var firstGate = new MigrationAdmissionGate();
         var secondGate = new MigrationAdmissionGate();
@@ -45,10 +46,12 @@ public sealed partial class MySqlLifecycleIntegrationTests
         Assert.Equal(1, await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM `__ApplicationDbContextMigrationsHistory` "
-            + $"WHERE `MigrationId` = '{CoreConvergenceMigration.MigrationIdentifier}';"));
+            + $"WHERE `MigrationId` = '{CoreConvergenceMigration.MigrationIdentifier}';",
+            cancellationToken: watchdog.Token));
         Assert.Equal(1, await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM `__LegacyMigrationsHistory` WHERE `MigrationId` = 'legacy-unchanged';"));
+            "SELECT COUNT(*) FROM `__LegacyMigrationsHistory` WHERE `MigrationId` = 'legacy-unchanged';",
+            cancellationToken: watchdog.Token));
     }
 
     /// <summary>Admits both databases before either migrator is permitted to execute its first target DDL.</summary>
@@ -87,11 +90,13 @@ public sealed partial class MySqlLifecycleIntegrationTests
         Assert.Equal(1, await ScalarIntAsync(
             leftConnectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pipeline_state';"));
+            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pipeline_state';",
+            cancellationToken: watchdog.Token));
         Assert.Equal(1, await ScalarIntAsync(
             rightConnectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pipeline_state';"));
+            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pipeline_state';",
+            cancellationToken: watchdog.Token));
     }
 
     /// <summary>Uses the ordinary migration context with an operation-local test admission observer.</summary>

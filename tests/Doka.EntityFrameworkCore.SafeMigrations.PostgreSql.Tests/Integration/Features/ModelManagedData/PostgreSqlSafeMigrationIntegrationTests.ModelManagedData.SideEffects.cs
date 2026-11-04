@@ -34,14 +34,16 @@ public sealed class PostgreSqlModelManagedDataSideEffectsIntegrationTests : Post
             + "INSERT INTO side_effect_rows (id, managed_value) VALUES (1, 'expected');"
             + (writeKind == "INSERT"
                 ? string.Empty
-                : "INSERT INTO side_effect_writes (id, managed_value) VALUES (1, 'source');"));
+                : "INSERT INTO side_effect_writes (id, managed_value) VALUES (1, 'source');"),
+            cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
             "CREATE FUNCTION side_effect_trigger_function() RETURNS trigger LANGUAGE plpgsql AS $$ "
             + "BEGIN UPDATE side_effect_rows SET managed_value = 'trigger-change' WHERE id = 1; RETURN NULL; END; $$; "
             + "CREATE TRIGGER side_effect_trigger AFTER " + writeKind
-            + " ON side_effect_writes FOR EACH ROW EXECUTE FUNCTION side_effect_trigger_function();");
+            + " ON side_effect_writes FOR EACH ROW EXECUTE FUNCTION side_effect_trigger_function();",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
 
@@ -56,21 +58,22 @@ public sealed class PostgreSqlModelManagedDataSideEffectsIntegrationTests : Post
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("postgresql-managed-trigger-" + writeKind));
+            new SafeMigrationRunOptions("postgresql-managed-trigger-" + writeKind), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, [builder.Operations[0]]);
+        await ExecuteOperationsAsync(context, [builder.Operations[0]], CancellationToken.None);
 
         var actual = await runner.AnalyzeAsync(
             context,
             [builder.Operations[1]],
-            new SafeMigrationRunOptions("postgresql-managed-trigger-actual-" + writeKind));
+            new SafeMigrationRunOptions("postgresql-managed-trigger-actual-" + writeKind), CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(
-            () => ExecuteOperationsAsync(context, [builder.Operations[1]]));
+            () => ExecuteOperationsAsync(context, [builder.Operations[1]], CancellationToken.None));
 
         var changedRows = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM side_effect_rows WHERE id = 1 AND managed_value = 'trigger-change';");
+            "SELECT COUNT(*) FROM side_effect_rows WHERE id = 1 AND managed_value = 'trigger-change';",
+            cancellationToken: CancellationToken.None);
 
         var origin = preflight.Assessments[1].DeferredOrigin;
 
@@ -99,7 +102,7 @@ public sealed class PostgreSqlModelManagedDataSideEffectsIntegrationTests : Post
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE side_effect_rows (id integer NOT NULL PRIMARY KEY, "
-            + "managed_value character varying(64) NOT NULL);");
+            + "managed_value character varying(64) NOT NULL);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
 
@@ -111,18 +114,19 @@ public sealed class PostgreSqlModelManagedDataSideEffectsIntegrationTests : Post
         var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("postgresql-managed-immediate-postcondition"));
+            new SafeMigrationRunOptions("postgresql-managed-immediate-postcondition"), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("postgresql-managed-executed-replay"));
+            new SafeMigrationRunOptions("postgresql-managed-executed-replay"), CancellationToken.None);
 
         var rowCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM side_effect_rows WHERE id = 1 AND managed_value = 'expected';");
+            "SELECT COUNT(*) FROM side_effect_rows WHERE id = 1 AND managed_value = 'expected';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -161,13 +165,14 @@ public sealed class PostgreSqlModelManagedDataSideEffectsIntegrationTests : Post
         var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("postgresql-managed-fresh-table"));
+            new SafeMigrationRunOptions("postgresql-managed-fresh-table"), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var rowCount = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM side_effect_rows WHERE id = 1 AND managed_value = 'expected';");
+            "SELECT COUNT(*) FROM side_effect_rows WHERE id = 1 AND managed_value = 'expected';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -193,7 +198,8 @@ public sealed class PostgreSqlModelManagedDataSideEffectsIntegrationTests : Post
             + "parent_id integer NOT NULL, CONSTRAINT fk_side_effect_parent FOREIGN KEY (parent_id) "
             + "REFERENCES side_effect_parents (id) ON DELETE CASCADE); "
             + "INSERT INTO side_effect_parents (id) VALUES (1); "
-            + "INSERT INTO side_effect_children (id, parent_id) VALUES (11, 1), (12, 1);");
+            + "INSERT INTO side_effect_children (id, parent_id) VALUES (11, 1), (12, 1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
 
@@ -207,13 +213,15 @@ public sealed class PostgreSqlModelManagedDataSideEffectsIntegrationTests : Post
         var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("postgresql-managed-two-child-deletes"));
+            new SafeMigrationRunOptions("postgresql-managed-two-child-deletes"), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
-        var parents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM side_effect_parents;");
+        var parents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM side_effect_parents;",
+            cancellationToken: CancellationToken.None);
 
-        var children = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM side_effect_children;");
+        var children = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM side_effect_children;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
@@ -247,7 +255,8 @@ public sealed class PostgreSqlModelManagedDataSideEffectsIntegrationTests : Post
             + "CREATE TABLE side_effect_writes (id integer NOT NULL PRIMARY KEY, "
             + "managed_value character varying(64) NOT NULL); "
             + "INSERT INTO side_effect_parents (id) VALUES (1); "
-            + "INSERT INTO side_effect_children (id, parent_id) VALUES (11, 1);");
+            + "INSERT INTO side_effect_children (id, parent_id) VALUES (11, 1);",
+            cancellationToken: CancellationToken.None);
 
         const string writeKind = "INSERT";
 
@@ -256,7 +265,8 @@ public sealed class PostgreSqlModelManagedDataSideEffectsIntegrationTests : Post
             "CREATE FUNCTION side_effect_trigger_function() RETURNS trigger LANGUAGE plpgsql AS $$ "
             + "BEGIN INSERT INTO side_effect_children (id, parent_id) VALUES (99, 1); RETURN NULL; END; $$; "
             + "CREATE TRIGGER side_effect_trigger AFTER " + writeKind
-            + " ON side_effect_writes FOR EACH ROW EXECUTE FUNCTION side_effect_trigger_function();");
+            + " ON side_effect_writes FOR EACH ROW EXECUTE FUNCTION side_effect_trigger_function();",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
 
@@ -272,23 +282,25 @@ public sealed class PostgreSqlModelManagedDataSideEffectsIntegrationTests : Post
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("postgresql-managed-recreated-child"));
+            new SafeMigrationRunOptions("postgresql-managed-recreated-child"), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, [builder.Operations[0], builder.Operations[1]]);
+        await ExecuteOperationsAsync(context, [builder.Operations[0], builder.Operations[1]], CancellationToken.None);
 
         var actual = await runner.AnalyzeAsync(
             context,
             [builder.Operations[2]],
-            new SafeMigrationRunOptions("postgresql-managed-recreated-child-actual"));
+            new SafeMigrationRunOptions("postgresql-managed-recreated-child-actual"), CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(
-            () => ExecuteOperationsAsync(context, [builder.Operations[2]]));
+            () => ExecuteOperationsAsync(context, [builder.Operations[2]], CancellationToken.None));
 
-        var parents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM side_effect_parents;");
+        var parents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM side_effect_parents;",
+            cancellationToken: CancellationToken.None);
 
         var recreatedChildren = await ScalarIntAsync(
             connectionString,
-            "SELECT COUNT(*) FROM side_effect_children WHERE id = 99 AND parent_id = 1;");
+            "SELECT COUNT(*) FROM side_effect_children WHERE id = 99 AND parent_id = 1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);

@@ -3,6 +3,60 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 /// <summary>Exercises assembly-owned fixture lifetime without starting a real container.</summary>
 public sealed class SharedContainerFixtureLifecycleTests
 {
+    /// <summary>A canceled startup request must not commit fixture ownership or allocate resources.</summary>
+    [Fact]
+    public async Task InitializeAsync_PreCanceledRequestDoesNotConstructFixture()
+    {
+        // Arrange
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var constructions = 0;
+        var lifecycle = new SharedContainerFixtureLifecycle<ProbeFixture>(() =>
+        {
+            constructions++;
+
+            return new ProbeFixture();
+        });
+
+        // Act
+        var failure = await Record.ExceptionAsync(() => lifecycle.InitializeAsync(true, cancellation.Token));
+        await lifecycle.DisposeAsync();
+
+        // Assert
+        var canceled = Assert.IsAssignableFrom<OperationCanceledException>(failure);
+        Assert.Equal(cancellation.Token, canceled.CancellationToken);
+        Assert.Equal(0, constructions);
+        Assert.Null(lifecycle.Fixture);
+        Assert.Empty(lifecycle.Failures);
+    }
+
+    /// <summary>Cancellation after startup commits cannot let cleanup race the framework-owned startup task.</summary>
+    [Fact]
+    public async Task InitializeAsync_CancellationAfterCommitRetainsStartupBeforeCleanup()
+    {
+        // Arrange
+        using var cancellation = new CancellationTokenSource();
+        var releaseStartup = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var fixture = new ProbeFixture { Initialize = () => releaseStartup.Task };
+        var lifecycle = new SharedContainerFixtureLifecycle<ProbeFixture>(() => fixture);
+
+        // Act
+        var initialization = lifecycle.InitializeAsync(true, cancellation.Token);
+        cancellation.Cancel();
+        var cleanup = lifecycle.DisposeAsync();
+        var cleanupFinishedEarly = cleanup.IsCompleted;
+        var disposedBeforeStartup = fixture.DisposeCount;
+        releaseStartup.SetResult();
+        await Task.WhenAll(initialization, cleanup).WaitAsync(TimeSpan.FromSeconds(10));
+
+        // Assert
+        Assert.False(cleanupFinishedEarly);
+        Assert.Equal(0, disposedBeforeStartup);
+        Assert.Equal(1, fixture.InitializeCount);
+        Assert.Equal(1, fixture.DisposeCount);
+        Assert.Empty(lifecycle.Failures);
+    }
+
     /// <summary>A unit-only selection must not even call the resource constructor.</summary>
     [Fact]
     public async Task InitializeAsync_WhenNotRequired_NeverConstructsFixture()
@@ -17,7 +71,7 @@ public sealed class SharedContainerFixtureLifecycleTests
         });
 
         // Act
-        await lifecycle.InitializeAsync(required: false);
+        await lifecycle.InitializeAsync(required: false, cancellationToken: CancellationToken.None);
         await lifecycle.DisposeAsync();
 
         // Assert
@@ -51,7 +105,8 @@ public sealed class SharedContainerFixtureLifecycleTests
             {
                 await releaseCallers.Task;
 
-                var initialization = lifecycle.InitializeAsync(required: true);
+                var initialization = lifecycle.InitializeAsync(required: true,
+                    cancellationToken: CancellationToken.None);
 
                 initializations.Add(initialization);
 
@@ -100,7 +155,7 @@ public sealed class SharedContainerFixtureLifecycleTests
         var lifecycle = new SharedContainerFixtureLifecycle<ProbeFixture>(() => fixture);
         var entered = 0;
 
-        await lifecycle.InitializeAsync(required: true);
+        await lifecycle.InitializeAsync(required: true, cancellationToken: CancellationToken.None);
 
         // Act
         var callers = Enumerable.Range(0, 8)
@@ -152,7 +207,8 @@ public sealed class SharedContainerFixtureLifecycleTests
         var lifecycle = new SharedContainerFixtureLifecycle<ProbeFixture>(() => fixture);
 
         // Act
-        var observedFailure = await Record.ExceptionAsync(() => lifecycle.InitializeAsync(required: true));
+        var observedFailure = await Record.ExceptionAsync(() => lifecycle.InitializeAsync(required: true,
+            cancellationToken: CancellationToken.None));
 
         await lifecycle.DisposeAsync();
 
@@ -179,7 +235,8 @@ public sealed class SharedContainerFixtureLifecycleTests
         var lifecycle = new SharedContainerFixtureLifecycle<ProbeFixture>(() => fixture);
 
         // Act
-        var observedStartup = await Record.ExceptionAsync(() => lifecycle.InitializeAsync(required: true));
+        var observedStartup = await Record.ExceptionAsync(() => lifecycle.InitializeAsync(required: true,
+            cancellationToken: CancellationToken.None));
         var observedCleanup = await Record.ExceptionAsync(lifecycle.DisposeAsync);
         var repeatedCleanup = await Record.ExceptionAsync(lifecycle.DisposeAsync);
 
@@ -200,7 +257,8 @@ public sealed class SharedContainerFixtureLifecycleTests
         var lifecycle = new SharedContainerFixtureLifecycle<ProbeFixture>(() => throw constructionFailure);
 
         // Act
-        var observedFailure = await Record.ExceptionAsync(() => lifecycle.InitializeAsync(required: true));
+        var observedFailure = await Record.ExceptionAsync(() => lifecycle.InitializeAsync(required: true,
+            cancellationToken: CancellationToken.None));
 
         await lifecycle.DisposeAsync();
 
@@ -220,7 +278,7 @@ public sealed class SharedContainerFixtureLifecycleTests
         var lifecycle = new SharedContainerFixtureLifecycle<ProbeFixture>(() => fixture);
 
         // Act
-        var initialization = lifecycle.InitializeAsync(required: true);
+        var initialization = lifecycle.InitializeAsync(required: true, cancellationToken: CancellationToken.None);
         var disposal = lifecycle.DisposeAsync();
         var disposedBeforeStartupFinished = fixture.DisposeCount;
         var cleanupFinishedBeforeStartup = disposal.IsCompleted;
@@ -247,7 +305,7 @@ public sealed class SharedContainerFixtureLifecycleTests
         var lifecycle = new SharedContainerFixtureLifecycle<ProbeFixture>(() => fixture);
 
         // Act
-        var initialization = lifecycle.InitializeAsync(required: true);
+        var initialization = lifecycle.InitializeAsync(required: true, cancellationToken: CancellationToken.None);
         var disposal = lifecycle.DisposeAsync();
 
         startupCompleted.SetException(startupFailure);
@@ -272,7 +330,8 @@ public sealed class SharedContainerFixtureLifecycleTests
         await lifecycle.DisposeAsync();
 
         // Act
-        var exception = await Record.ExceptionAsync(() => lifecycle.InitializeAsync(required: true));
+        var exception = await Record.ExceptionAsync(() => lifecycle.InitializeAsync(required: true,
+            cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.IsType<InvalidOperationException>(exception);

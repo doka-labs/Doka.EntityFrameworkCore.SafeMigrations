@@ -40,7 +40,7 @@ public sealed class PostgreSqlTablesRenameTargetsIntegrationTests : PostgreSqlSa
             + (!explicitSchema || intermediateExists ? $"CREATE TABLE {decoy} (value integer); " : string.Empty)
             + (targetExists
                 ? $"CREATE TABLE {qualifiedTarget} (value integer); INSERT INTO {qualifiedTarget} VALUES (99);"
-                : string.Empty));
+                : string.Empty), cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -57,17 +57,20 @@ public sealed class PostgreSqlTablesRenameTargetsIntegrationTests : PostgreSqlSa
         var blocked = (targetExists && !dropTarget) || intermediateExists;
 
         // Act
-        var evidence = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename]);
+        var evidence = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename],
+            CancellationToken.None);
+
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("rename-target-projected-source"));
+            new SafeMigrationRunOptions("rename-target-projected-source"), CancellationToken.None);
 
         if (!blocked)
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         }
 
         var targetRows = targetExists || !blocked
-            ? await ScalarIntAsync(connectionString, $"SELECT COUNT(*) FROM {qualifiedTarget};")
+            ? await ScalarIntAsync(connectionString, $"SELECT COUNT(*) FROM {qualifiedTarget};",
+                cancellationToken: CancellationToken.None)
             : 0;
 
         // Assert
@@ -95,7 +98,7 @@ public sealed class PostgreSqlTablesRenameTargetsIntegrationTests : PostgreSqlSa
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE target_rows (value integer); INSERT INTO target_rows VALUES (99); "
             + (crossSchema ? "CREATE SCHEMA rename_scope; CREATE TABLE rename_scope.target_rows (value integer);"
-                : string.Empty));
+                : string.Empty), cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -103,10 +106,11 @@ public sealed class PostgreSqlTablesRenameTargetsIntegrationTests : PostgreSqlSa
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("rename-target-missing-replay"));
+            new SafeMigrationRunOptions("rename-target-missing-replay"), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM target_rows WHERE value = 99;");
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM target_rows WHERE value = 99;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -123,7 +127,7 @@ public sealed class PostgreSqlTablesRenameTargetsIntegrationTests : PostgreSqlSa
         await ExecuteSqlAsync(connectionString,
             "CREATE SCHEMA rename_scope; CREATE TABLE source_rows (value integer); "
             + "INSERT INTO source_rows VALUES (7); CREATE TABLE target_rows (value integer); "
-            + "INSERT INTO target_rows VALUES (99);");
+            + "INSERT INTO target_rows VALUES (99);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -131,11 +135,16 @@ public sealed class PostgreSqlTablesRenameTargetsIntegrationTests : PostgreSqlSa
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("rename-target-intermediate-runtime"));
+            new SafeMigrationRunOptions("rename-target-intermediate-runtime"), CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
-        var sourceRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM source_rows WHERE value = 7;");
-        var targetRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM target_rows WHERE value = 99;");
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            CancellationToken.None));
+
+        var sourceRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM source_rows WHERE value = 7;",
+            cancellationToken: CancellationToken.None);
+
+        var targetRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM target_rows WHERE value = 99;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -152,7 +161,8 @@ public sealed class PostgreSqlTablesRenameTargetsIntegrationTests : PostgreSqlSa
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
-            "CREATE SCHEMA rename_scope; CREATE TABLE target_rows (value integer);");
+            "CREATE SCHEMA rename_scope; CREATE TABLE target_rows (value integer);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -164,10 +174,11 @@ public sealed class PostgreSqlTablesRenameTargetsIntegrationTests : PostgreSqlSa
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("rename-target-intermediate-drop"));
+            new SafeMigrationRunOptions("rename-target-intermediate-drop"), CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        var targetRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM rename_scope.target_rows;");
+        await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        var targetRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM rename_scope.target_rows;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -181,7 +192,8 @@ public sealed class PostgreSqlTablesRenameTargetsIntegrationTests : PostgreSqlSa
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE VIEW target_rows AS SELECT 99 AS value;");
+        await ExecuteSqlAsync(connectionString, "CREATE VIEW target_rows AS SELECT 99 AS value;",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(new ExpectedTableDefinition("source_rows",
@@ -191,9 +203,10 @@ public sealed class PostgreSqlTablesRenameTargetsIntegrationTests : PostgreSqlSa
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("rename-target-view"));
+            new SafeMigrationRunOptions("rename-target-view"), CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM target_rows WHERE value = 99;");
+        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM target_rows WHERE value = 99;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -212,7 +225,8 @@ public sealed class PostgreSqlTablesRenameTargetsIntegrationTests : PostgreSqlSa
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE target_rows (value integer);");
+        await ExecuteSqlAsync(connectionString, "CREATE TABLE target_rows (value integer);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(
             new NpgsqlConnection(connectionString), nativeBatch: native);
@@ -230,7 +244,8 @@ public sealed class PostgreSqlTablesRenameTargetsIntegrationTests : PostgreSqlSa
         var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations);
+        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(130, analyses.Count);

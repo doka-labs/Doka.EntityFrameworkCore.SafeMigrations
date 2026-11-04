@@ -125,7 +125,8 @@ public sealed class SqlServerParallelSchedulingTests
             selectedClass, skipReason);
 
         // Act
-        await Task.WhenAll(lifecycle.InitializeAsync(required), lifecycle.InitializeAsync(required));
+        await Task.WhenAll(lifecycle.InitializeAsync(required, CancellationToken.None),
+            lifecycle.InitializeAsync(required, CancellationToken.None));
         await Task.WhenAll(lifecycle.DisposeAsync(), lifecycle.DisposeAsync());
 
         // Assert

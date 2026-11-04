@@ -5,7 +5,9 @@ public sealed class SqliteServiceCompositionTests
     [Fact]
     public async Task Registration_ComposesTheOfficialProviderAndSafeMigrationsServices()
     {
-        await using var connection = await SqliteIntegrationTestBase.OpenConnectionAsync();
+        await using var connection = await SqliteIntegrationTestBase.OpenConnectionAsync(
+            cancellationToken: CancellationToken.None);
+
         await using var context = new SqliteSafeMigrationTestContext(connection);
 
         var generator = context.GetService<IMigrationsSqlGenerator>();
@@ -21,7 +23,9 @@ public sealed class SqliteServiceCompositionTests
     public async Task RuntimeSqlGenerator_PassesEfHistoryBootstrapSqlToTheProviderWithoutAModel()
     {
         // Arrange
-        await using var connection = await SqliteIntegrationTestBase.OpenConnectionAsync();
+        await using var connection = await SqliteIntegrationTestBase.OpenConnectionAsync(
+            cancellationToken: CancellationToken.None);
+
         await using var context = new SqliteSafeMigrationTestContext(connection);
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var historySql = context
@@ -54,7 +58,9 @@ public sealed class SqliteServiceCompositionTests
     public async Task RuntimeSqlGenerator_PassesArbitraryModelLessSqlToTheProvider()
     {
         // Arrange
-        await using var connection = await SqliteIntegrationTestBase.OpenConnectionAsync();
+        await using var connection = await SqliteIntegrationTestBase.OpenConnectionAsync(
+            cancellationToken: CancellationToken.None);
+
         await using var context = new SqliteSafeMigrationTestContext(connection);
         var generator = context.GetService<IMigrationsSqlGenerator>();
 

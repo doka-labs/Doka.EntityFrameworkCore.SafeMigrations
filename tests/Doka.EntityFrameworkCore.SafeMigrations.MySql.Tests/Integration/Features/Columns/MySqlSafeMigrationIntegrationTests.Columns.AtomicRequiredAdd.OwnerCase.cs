@@ -19,10 +19,12 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
         {
             await ownerFixture.InitializeAsync();
             var connectionString = await ownerFixture.CreateDatabaseAsync(CancellationToken.None);
-            await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql("MixedItems"));
+            await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql("MixedItems"),
+                cancellationToken: CancellationToken.None);
             await using var context = CreateContext(connectionString);
             await context.Database.OpenConnectionAsync(CancellationToken.None);
-            await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES';");
+            await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES';",
+                cancellationToken: CancellationToken.None);
             var operation = new SafeMigrationOperation(new EnsureColumnIntent("MixedItems",
                     new ExpectedColumnDefinition("required_value", typeof(int), false, "int",
                         defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(7)))),
@@ -38,8 +40,10 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
             preflight.ThrowIfBlocked();
             await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
             await ExecuteSqlAsync(connectionString,
-                "INSERT INTO `mixeditems` (`key`, `required_value`) VALUES (1, 11);");
-            await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = '';");
+                "INSERT INTO `mixeditems` (`key`, `required_value`) VALUES (1, 11);",
+                cancellationToken: CancellationToken.None);
+            await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = '';",
+                cancellationToken: CancellationToken.None);
             var rerun = await runner.AnalyzeAsync(context, [operation],
                 new SafeMigrationRunOptions("required-sql-default-mode-one-matching"), CancellationToken.None);
 
@@ -48,23 +52,26 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
             var postflight = await runner.VerifyAsync(context, [operation],
                 new SafeMigrationRunOptions("required-sql-default-mode-one-final"), CancellationToken.None);
 
-            var ownerMode = await ScalarIntAsync(connectionString, "SELECT @@lower_case_table_names;");
+            var ownerMode = await ScalarIntAsync(connectionString, "SELECT @@lower_case_table_names;",
+                cancellationToken: CancellationToken.None);
+
             var physicalOwner = await ScalarStringAsync(connectionString,
                 "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
-                + "AND TABLE_NAME = 'MixedItems';");
+                + "AND TABLE_NAME = 'MixedItems';", cancellationToken: CancellationToken.None);
 
             var requiredColumns = await ScalarIntAsync(connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
                 + "AND BINARY TABLE_NAME = BINARY 'mixeditems' AND COLUMN_NAME = 'required_value' "
-                + "AND IS_NULLABLE = 'NO';");
+                + "AND IS_NULLABLE = 'NO';", cancellationToken: CancellationToken.None);
 
             var defaultRows = await ScalarIntAsync(connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
                 + "AND BINARY TABLE_NAME = BINARY 'mixeditems' AND COLUMN_NAME = 'required_value' "
-                + "AND COLUMN_DEFAULT = '7';");
+                + "AND COLUMN_DEFAULT = '7';", cancellationToken: CancellationToken.None);
 
             var preserved = await ScalarIntAsync(connectionString,
-                "SELECT COUNT(*) FROM `mixeditems` WHERE `key` = 1 AND `required_value` = 11;");
+                "SELECT COUNT(*) FROM `mixeditems` WHERE `key` = 1 AND `required_value` = 11;",
+                cancellationToken: CancellationToken.None);
 
             // Assert
             Assert.Equal(1, ownerMode);
@@ -97,7 +104,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
         {
             await ownerFixture.InitializeAsync();
             var connectionString = await ownerFixture.CreateDatabaseAsync(CancellationToken.None);
-            await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql("MixedItems"));
+            await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql("MixedItems"),
+                cancellationToken: CancellationToken.None);
             var operation = AtomicRequiredAddOperation(table: "MixedItems");
             var guardName = AtomicRequiredAddGuardName(operation);
             var probe = new AtomicRequiredAddStageProbe(guardName,
@@ -113,12 +121,16 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
 
             await ExecuteSqlAsync(connectionString,
                 "INSERT INTO `mixeditems` (`key`, `required_value`) VALUES (1, "
-                + AtomicRequiredAddLiteral(explicitValue) + ");");
-            var staged = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
-            var ownerMode = await ScalarIntAsync(connectionString, "SELECT @@lower_case_table_names;");
+                + AtomicRequiredAddLiteral(explicitValue) + ");", cancellationToken: CancellationToken.None);
+            var staged = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+                cancellationToken: CancellationToken.None);
+
+            var ownerMode = await ScalarIntAsync(connectionString, "SELECT @@lower_case_table_names;",
+                cancellationToken: CancellationToken.None);
+
             var physicalOwner = await ScalarStringAsync(connectionString,
                 "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
-                + "AND TABLE_NAME = 'MixedItems';");
+                + "AND TABLE_NAME = 'MixedItems';", cancellationToken: CancellationToken.None);
 
             var inventory = await context.GetService<ISafeMigrationProviderAnalyzer>().FindUnexpectedObjectsAsync(
                 context, AtomicRequiredAddOwnerInventoryOperations([operation]), CancellationToken.None);
@@ -131,9 +143,12 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
             var postflight = await runner.VerifyAsync(context, [operation],
                 new SafeMigrationRunOptions("atomic-add-mode-one-final"), CancellationToken.None);
 
-            var final = await ReadAtomicRequiredAddStateAsync(connectionString, operation);
+            var final = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+                cancellationToken: CancellationToken.None);
+
             var preserved = await ScalarStringAsync(connectionString,
-                "SELECT `required_value` FROM `mixeditems` WHERE `key` = 1;");
+                "SELECT `required_value` FROM `mixeditems` WHERE `key` = 1;",
+                cancellationToken: CancellationToken.None);
 
             // Assert
             Assert.Equal(1, ownerMode);
@@ -168,7 +183,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
         {
             await ownerFixture.InitializeAsync();
             var connectionString = await ownerFixture.CreateDatabaseAsync(CancellationToken.None);
-            await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql("MixedItems"));
+            await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql("MixedItems"),
+                cancellationToken: CancellationToken.None);
             var original = AtomicRequiredAddOperation(table: "MixedItems");
             var alias = AtomicRequiredAddOperation(table: "mixeditems");
             var originalGuard = AtomicRequiredAddGuardName(original);
@@ -198,8 +214,11 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
             var aliasFailure = await Record.ExceptionAsync(() =>
                 ExecuteOperationsAsync(context, [alias], CancellationToken.None));
 
-            var state = await ReadAtomicRequiredAddStateAsync(connectionString, original);
-            var ownerMode = await ScalarIntAsync(connectionString, "SELECT @@lower_case_table_names;");
+            var state = await ReadAtomicRequiredAddStateAsync(connectionString, original,
+                cancellationToken: CancellationToken.None);
+
+            var ownerMode = await ScalarIntAsync(connectionString, "SELECT @@lower_case_table_names;",
+                cancellationToken: CancellationToken.None);
 
             // Assert
             Assert.Equal(1, ownerMode);
@@ -235,15 +254,19 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
         var otherGuard = AtomicRequiredAddGuardName(other);
         await ExecuteSqlAsync(connectionString,
             AtomicRequiredAddStagedTableSql(original, originalGuard, "`required_value` IS NOT NULL")
-            + AtomicRequiredAddStagedTableSql(other, guardName: null, expression: "`required_value` IS NOT NULL"));
+            + AtomicRequiredAddStagedTableSql(other, guardName: null, expression: "`required_value` IS NOT NULL"),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
 
         // Act
-        var ownerMode = await ScalarIntAsync(connectionString, "SELECT @@lower_case_table_names;");
+        var ownerMode = await ScalarIntAsync(connectionString, "SELECT @@lower_case_table_names;",
+            cancellationToken: CancellationToken.None);
+
         var physicalOwners = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND BINARY TABLE_NAME IN (BINARY 'MixedItems', BINARY 'mixeditems');");
+            + "AND BINARY TABLE_NAME IN (BINARY 'MixedItems', BINARY 'mixeditems');",
+            cancellationToken: CancellationToken.None);
 
         var inventory = await context.GetService<ISafeMigrationProviderAnalyzer>().FindUnexpectedObjectsAsync(
             context, AtomicRequiredAddOwnerInventoryOperations([original, other]), CancellationToken.None);
@@ -254,8 +277,11 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
         var otherFailure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [other], CancellationToken.None));
 
-        var originalState = await ReadAtomicRequiredAddExactOwnerStateAsync(connectionString, original);
-        var otherState = await ReadAtomicRequiredAddExactOwnerStateAsync(connectionString, other);
+        var originalState = await ReadAtomicRequiredAddExactOwnerStateAsync(connectionString, original,
+            cancellationToken: CancellationToken.None);
+
+        var otherState = await ReadAtomicRequiredAddExactOwnerStateAsync(connectionString, other,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(0, ownerMode);
@@ -291,7 +317,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
                 columnType: "int", nullable: false)
             + " INSERT INTO " + AtomicRequiredAddDelimited(shadowTable)
             + " (`key`, `required_value`) VALUES (1, 7); "
-            + "CREATE TABLE `benign_required_add_owner` (`value` int NULL) ENGINE=InnoDB;");
+            + "CREATE TABLE `benign_required_add_owner` (`value` int NULL) ENGINE=InnoDB;",
+            cancellationToken: CancellationToken.None);
 
         var benign = new SafeMigrationOperation(new EnsureColumnIntent("benign_required_add_owner",
             new ExpectedColumnDefinition("value", typeof(int), true, "int")), SafeMigrationPolicy.ThrowIfDifferent);
@@ -310,7 +337,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
 
         await using var analysisContext = new SafeMigrationDbContext(options);
         await using var runtimeContext = CreateContext(connectionString);
-        var original = await ReadAtomicRequiredAddExactOwnerStateAsync(connectionString, requested);
+        var original = await ReadAtomicRequiredAddExactOwnerStateAsync(connectionString, requested,
+            cancellationToken: CancellationToken.None);
 
         // Act
         var preflight = await analysisContext.GetService<ISafeMigrationRunner>().AnalyzeAsync(analysisContext,
@@ -321,12 +349,18 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
         var postflight = await runtimeContext.GetService<ISafeMigrationRunner>().VerifyAsync(runtimeContext,
             [requested], new SafeMigrationRunOptions("atomic-add-case-distinct-final"), CancellationToken.None);
 
-        var ownerMode = await ScalarIntAsync(connectionString, "SELECT @@lower_case_table_names;");
-        var targetFinal = await ReadAtomicRequiredAddExactOwnerStateAsync(connectionString, requested);
-        var shadowFinal = await ReadAtomicRequiredAddExactOwnerStateAsync(connectionString, shadow);
+        var ownerMode = await ScalarIntAsync(connectionString, "SELECT @@lower_case_table_names;",
+            cancellationToken: CancellationToken.None);
+
+        var targetFinal = await ReadAtomicRequiredAddExactOwnerStateAsync(connectionString, requested,
+            cancellationToken: CancellationToken.None);
+
+        var shadowFinal = await ReadAtomicRequiredAddExactOwnerStateAsync(connectionString, shadow,
+            cancellationToken: CancellationToken.None);
+
         var preserved = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM " + AtomicRequiredAddDelimited(shadowTable)
-            + " WHERE `key` = 1 AND `required_value` = 7;");
+            + " WHERE `key` = 1 AND `required_value` = 7;", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(0, ownerMode);
@@ -388,11 +422,15 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
     /// <param name="connectionString">The isolated mode-zero database.</param>
     /// <param name="operation">The original authored physical owner and guard contract.</param>
     /// <returns>The exact owner state used to prove that another table was not modified.</returns>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<AtomicRequiredAddState> ReadAtomicRequiredAddExactOwnerStateAsync(
         string connectionString,
-        SafeMigrationOperation operation
+        SafeMigrationOperation operation,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var intent = Assert.IsType<EnsureColumnIntent>(operation.Intent);
         // WHY: INFORMATION_SCHEMA name columns have their own case-insensitive
         // collation even when mode zero keeps physical table owners distinct.
@@ -403,19 +441,23 @@ public sealed partial class MySqlColumnsAtomicRequiredAddOwnerCaseIntegrationTes
             + AtomicRequiredAddLiteral(intent.Definition.Name);
 
         var columns = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE " + column + ";");
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE " + column + ";",
+            cancellationToken: cancellationToken);
 
         var nullableColumns = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE " + column + " AND IS_NULLABLE = 'YES';");
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE " + column + " AND IS_NULLABLE = 'YES';",
+            cancellationToken: cancellationToken);
 
         var guards = await ScalarIntAsync(connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() "
             + "AND BINARY TABLE_NAME = BINARY " + AtomicRequiredAddLiteral(intent.Table)
             + " AND CONSTRAINT_TYPE = 'CHECK' AND BINARY CONSTRAINT_NAME = BINARY "
-            + AtomicRequiredAddLiteral(AtomicRequiredAddGuardName(operation)) + ";");
+            + AtomicRequiredAddLiteral(AtomicRequiredAddGuardName(operation)) + ";",
+            cancellationToken: cancellationToken);
 
         var rows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM " + AtomicRequiredAddDelimited(intent.Table) + ";");
+            "SELECT COUNT(*) FROM " + AtomicRequiredAddDelimited(intent.Table) + ";",
+            cancellationToken: cancellationToken);
 
         return new AtomicRequiredAddState(columns, nullableColumns, guards, rows);
     }

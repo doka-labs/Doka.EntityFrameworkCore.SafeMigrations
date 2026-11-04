@@ -33,7 +33,7 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(CreateDefinition(stored, nullable), mode, SafeMigrationPolicy.ThrowIfDifferent);
@@ -41,18 +41,21 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
 
         // Act
         var preflight = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-fresh"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-fresh"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-fresh"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-fresh"),
+            cancellationToken: CancellationToken.None);
 
         var facetCount = await ScalarIntAsync(
             connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes') "
             + "WHERE name = 'has_descendants' AND type = 'INTEGER' "
-            + $"AND \"notnull\" = {(nullable ? 0 : 1)} AND hidden = {(stored ? 3 : 2)};");
+            + $"AND \"notnull\" = {(nullable ? 0 : 1)} AND hidden = {(stored ? 3 : 2)};",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -79,14 +82,15 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     )
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE generated_nodes (id INTEGER NOT NULL CONSTRAINT pk_generated_nodes PRIMARY KEY, "
             + "left_bound INTEGER NOT NULL, right_bound INTEGER NOT NULL, "
             + $"has_descendants {storeType} {(nullable ? string.Empty : "NOT NULL")} "
             + $"GENERATED ALWAYS AS ({expression}) {storage}); "
-            + "INSERT INTO generated_nodes (id, left_bound, right_bound) VALUES (1, 2, 3);");
+            + "INSERT INTO generated_nodes (id, left_bound, right_bound) VALUES (1, 2, 3);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -97,10 +101,16 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-drift"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-drift"),
+            cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
-        var rowCount = await ScalarIntAsync(connection, "SELECT COUNT(*) FROM generated_nodes WHERE id = 1;");
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
+        var rowCount = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM generated_nodes WHERE id = 1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
@@ -115,7 +125,7 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task OrdinaryEfGeneratedTableRetainsNativeShapeAndIsNotMisclassifiedAsMatching()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var ordinary = new MigrationBuilder(context.Database.ProviderName!);
         ordinary.CreateTable(
@@ -137,14 +147,16 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        await ExecuteOperationsAsync(context, ordinary.Operations);
+        await ExecuteOperationsAsync(context, ordinary.Operations, cancellationToken: CancellationToken.None);
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, strict.Operations, new SafeMigrationRunOptions("sqlite-native-generated-shape"));
+            context, strict.Operations, new SafeMigrationRunOptions("sqlite-native-generated-shape"),
+            cancellationToken: CancellationToken.None);
 
         var nativeCount = await ScalarIntAsync(
             connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes') "
-            + "WHERE name = 'has_descendants' AND type = '' AND \"notnull\" = 0 AND hidden = 2;");
+            + "WHERE name = 'has_descendants' AND type = '' AND \"notnull\" = 0 AND hidden = 2;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, nativeCount);
@@ -156,7 +168,7 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task MixedStructuralBatchPreservesOrdinaryFreshGeneratedColumnBehavior()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTable("ordinary_generated", table => new
@@ -168,14 +180,16 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var ordinaryColumns = await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('ordinary_generated') "
-            + "WHERE name = 'derived' AND type = '' AND \"notnull\" = 0 AND hidden = 2;");
+            + "WHERE name = 'derived' AND type = '' AND \"notnull\" = 0 AND hidden = 2;",
+            cancellationToken: CancellationToken.None);
 
         var guardedColumns = await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes') "
-            + "WHERE name = 'has_descendants' AND type = 'INTEGER' AND \"notnull\" = 1 AND hidden = 2;");
+            + "WHERE name = 'has_descendants' AND type = 'INTEGER' AND \"notnull\" = 1 AND hidden = 2;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, ordinaryColumns);
@@ -187,8 +201,11 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task MixedStructuralBatchPreservesOrdinaryComputedAddBehavior()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection, "CREATE TABLE ordinary_generated (source INTEGER NOT NULL);");
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE ordinary_generated (source INTEGER NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumn<int>("derived", "ordinary_generated", type: "INTEGER", nullable: false,
@@ -198,14 +215,16 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var ordinaryColumns = await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('ordinary_generated') "
-            + "WHERE name = 'derived' AND type = '' AND \"notnull\" = 0 AND hidden = 2;");
+            + "WHERE name = 'derived' AND type = '' AND \"notnull\" = 0 AND hidden = 2;",
+            cancellationToken: CancellationToken.None);
 
         var guardedColumns = await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes') "
-            + "WHERE name = 'has_descendants' AND type = 'INTEGER' AND \"notnull\" = 1 AND hidden = 2;");
+            + "WHERE name = 'has_descendants' AND type = 'INTEGER' AND \"notnull\" = 1 AND hidden = 2;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, ordinaryColumns);
@@ -220,7 +239,7 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task SameOwnerFoldRetainsOrdinaryComputedColumnIdentity(bool ordinaryAdd)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(CreateDefinition(false, false), SafeMigrationTableMode.StrictDefinition,
@@ -260,11 +279,13 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
 
         var safeColumns = await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes') "
-            + "WHERE name = 'has_descendants' AND type = 'INTEGER' AND \"notnull\" = 1;");
+            + "WHERE name = 'has_descendants' AND type = 'INTEGER' AND \"notnull\" = 1;",
+            cancellationToken: CancellationToken.None);
 
         var otherColumns = await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes') WHERE name = 'other_computed' "
-            + (ordinaryAdd ? "AND type = '' AND \"notnull\" = 0;" : "AND type = 'INTEGER' AND \"notnull\" = 1;"));
+            + (ordinaryAdd ? "AND type = '' AND \"notnull\" = 0;" : "AND type = 'INTEGER' AND \"notnull\" = 1;"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, safeColumns);
@@ -279,13 +300,14 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task OrdinaryGeneratedRebuildRetainsNativeBehaviorWithUnrelatedSafeNeighbor(bool safeNeighbor)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE generated_nodes (id INTEGER NOT NULL CONSTRAINT pk_generated_nodes PRIMARY KEY, "
             + "left_bound INTEGER NOT NULL, right_bound INTEGER NOT NULL, label TEXT NOT NULL, "
             + "has_descendants AS (right_bound > left_bound), temporary TEXT NULL, "
             + "CONSTRAINT ck_generated_nodes_bounds CHECK (right_bound >= left_bound)); "
-            + "INSERT INTO generated_nodes (id, left_bound, right_bound, label) VALUES (1, 1, 3, 'retained');");
+            + "INSERT INTO generated_nodes (id, left_bound, right_bound, label) VALUES (1, 1, 3, 'retained');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteGeneratedTableContractContext(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -299,13 +321,15 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
         }
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var ordinaryColumns = await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes') "
-            + "WHERE name = 'has_descendants' AND type = '' AND \"notnull\" = 0 AND hidden = 2;");
+            + "WHERE name = 'has_descendants' AND type = '' AND \"notnull\" = 0 AND hidden = 2;",
+            cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM generated_nodes WHERE id = 1 AND label = 'retained' AND has_descendants = 1;");
+            "SELECT COUNT(*) FROM generated_nodes WHERE id = 1 AND label = 'retained' AND has_descendants = 1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, ordinaryColumns);
@@ -320,7 +344,7 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task GeneratedTextColumnPreservesExplicitCollation(bool stored)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(
@@ -335,13 +359,19 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteSqlAsync(connection, "INSERT INTO generated_text (id, source) VALUES (1, 'MixedCase');");
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "INSERT INTO generated_text (id, source) VALUES (1, 'MixedCase');",
+            cancellationToken: CancellationToken.None);
         var report = await context.GetService<ISafeMigrationRunner>().VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-collation"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-collation"),
+            cancellationToken: CancellationToken.None);
 
         var matchingRows = await ScalarIntAsync(
-            connection, "SELECT COUNT(*) FROM generated_text WHERE display = 'mixedcase';");
+            connection,
+            "SELECT COUNT(*) FROM generated_text WHERE display = 'mixedcase';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -354,10 +384,11 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task GeneratedCollationDriftIsRejected()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE generated_text (source TEXT NOT NULL, "
-            + "display TEXT COLLATE BINARY NOT NULL GENERATED ALWAYS AS (\"source\") VIRTUAL);");
+            + "display TEXT COLLATE BINARY NOT NULL GENERATED ALWAYS AS (\"source\") VIRTUAL);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -369,9 +400,11 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-collation-drift"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-collation-drift"),
+            cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
@@ -385,10 +418,11 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task PopulatedVirtualAddKeepsExistingRowsAndReplays()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE generated_nodes (id INTEGER NOT NULL, left_bound INTEGER NOT NULL, "
-            + "right_bound INTEGER NOT NULL); INSERT INTO generated_nodes VALUES (1, 2, 3), (2, 3, 3);");
+            + "right_bound INTEGER NOT NULL); INSERT INTO generated_nodes VALUES (1, 2, 3), (2, 3, 3);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -396,13 +430,15 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var matchingRows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM generated_nodes WHERE has_descendants = CASE id WHEN 1 THEN 1 ELSE 0 END;");
+            "SELECT COUNT(*) FROM generated_nodes WHERE has_descendants = CASE id WHEN 1 THEN 1 ELSE 0 END;",
+            cancellationToken: CancellationToken.None);
 
         var report = await context.GetService<ISafeMigrationRunner>().VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-populated-generated-add"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-populated-generated-add"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(2, matchingRows);
@@ -414,10 +450,10 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task NullProducingRequiredGeneratedAddFailsWithoutMutation()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE generated_nulls (id INTEGER NOT NULL, source INTEGER NULL); "
-            + "INSERT INTO generated_nulls VALUES (1, NULL);");
+            + "INSERT INTO generated_nulls VALUES (1, NULL);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -427,11 +463,17 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var remainingRows = await ScalarIntAsync(
-            connection, "SELECT COUNT(*) FROM generated_nulls WHERE source IS NULL;");
+            connection,
+            "SELECT COUNT(*) FROM generated_nulls WHERE source IS NULL;",
+            cancellationToken: CancellationToken.None);
+
         var generatedColumns = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nulls') WHERE name = 'derived';");
+            "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nulls') WHERE name = 'derived';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.IsType<SqliteException>(exception);
@@ -445,10 +487,10 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task NullProducingNullableGeneratedAddPreservesNullAndRows()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE generated_nulls (id INTEGER NOT NULL, source INTEGER NULL); "
-            + "INSERT INTO generated_nulls VALUES (1, NULL);");
+            + "INSERT INTO generated_nulls VALUES (1, NULL);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -458,13 +500,15 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var report = await context.GetService<ISafeMigrationRunner>().VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-nullable"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-nullable"),
+            cancellationToken: CancellationToken.None);
 
         var matchingRows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM generated_nulls WHERE id = 1 AND source IS NULL AND derived IS NULL;");
+            "SELECT COUNT(*) FROM generated_nulls WHERE id = 1 AND source IS NULL AND derived IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, matchingRows);
@@ -479,10 +523,11 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task StoredGeneratedAddRemainsRejectedBeforeMutation(bool populated)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE generated_nodes (id INTEGER NOT NULL, left_bound INTEGER NOT NULL, "
-            + "right_bound INTEGER NOT NULL);" + (populated ? "INSERT INTO generated_nodes VALUES (1, 1, 3);" : ""));
+            + "right_bound INTEGER NOT NULL);" + (populated ? "INSERT INTO generated_nodes VALUES (1, 1, 3);" : ""),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -491,13 +536,20 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-stored-generated-add-boundary"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-stored-generated-add-boundary"),
+            cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            cancellationToken: CancellationToken.None));
+
         var columns = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes') WHERE name = 'has_descendants';");
+            "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes') WHERE name = 'has_descendants';",
+            cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connection, "SELECT COUNT(*) FROM generated_nodes;");
+        var rows = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM generated_nodes;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
@@ -516,7 +568,7 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task SearchedCaseRetainsInt64BoundaryAndBooleanSemantics(bool stored)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var expression = "\"right_bound\" > CASE WHEN \"left_bound\" = 9223372036854775807 "
@@ -530,19 +582,21 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
             SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "INSERT INTO generated_nodes (id, left_bound, right_bound) VALUES "
             + "(1, 1, 3), (2, 1, 2), (3, 9223372036854775807, 9223372036854775807), "
             + "(4, 9223372036854775806, 9223372036854775807), "
-            + "(5, -9223372036854775808, 9223372036854775807);");
+            + "(5, -9223372036854775808, 9223372036854775807);", cancellationToken: CancellationToken.None);
 
         var matchingRows = await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM generated_nodes "
-            + "WHERE has_descendants = CASE WHEN id IN (1, 5) THEN 1 ELSE 0 END;");
+            + "WHERE has_descendants = CASE WHEN id IN (1, 5) THEN 1 ELSE 0 END;",
+            cancellationToken: CancellationToken.None);
 
         var report = await context.GetService<ISafeMigrationRunner>().VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-case-boundaries"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-case-boundaries"),
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(5, matchingRows);
@@ -557,7 +611,7 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task ConfiguredBaselineIsInvokedAndIncorrectGeneratedDdlRollsBack(bool correctBaseline)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(CreateDefinition(false, false), SafeMigrationTableMode.StrictDefinition,
@@ -587,7 +641,8 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
         });
 
         var tables = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'table' AND name = 'generated_nodes';");
+            "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'table' AND name = 'generated_nodes';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.True(baseline.WasInvoked);
@@ -611,7 +666,7 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task GeneratedMigrationAppliesReplaysAndRecordsHistory()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = new SqliteGeneratedTableContractContext(connection, _internalServices);
         var migrator = context.GetService<IMigrator>();
 
@@ -621,7 +676,8 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
         var history = await context.Database.GetAppliedMigrationsAsync();
         var generatedColumns = await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes') "
-            + "WHERE name = 'has_descendants' AND type = 'INTEGER' AND \"notnull\" = 1 AND hidden = 2;");
+            + "WHERE name = 'has_descendants' AND type = 'INTEGER' AND \"notnull\" = 1 AND hidden = 2;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SqliteGeneratedTableContractMigration.MigrationIdentifier, Assert.Single(history));
@@ -633,7 +689,7 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task NullProducingMigrationRollsBackDdlAndDoesNotAdvanceHistory()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = new SqliteGeneratedTableContractContext(connection, _internalServices);
         var migrator = context.GetService<IMigrator>();
         await migrator.MigrateAsync(SqliteGeneratedTableContractMigration.MigrationIdentifier);
@@ -644,7 +700,8 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
 
         var history = await context.Database.GetAppliedMigrationsAsync();
         var rejectedTables = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'table' AND name = 'generated_nulls';");
+            "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'table' AND name = 'generated_nulls';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.IsType<SqliteException>(exception);
@@ -658,13 +715,14 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task SafeRebuildPreservesUnrelatedGeneratedColumnAndRows()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE generated_nodes (id INTEGER NOT NULL CONSTRAINT pk_generated_nodes PRIMARY KEY, "
             + "left_bound INTEGER NOT NULL, right_bound INTEGER NOT NULL, label TEXT NULL, "
             + "has_descendants INTEGER NOT NULL GENERATED ALWAYS AS (right_bound > left_bound) VIRTUAL, "
             + "CONSTRAINT ck_generated_nodes_bounds CHECK (right_bound >= left_bound)); "
-            + "INSERT INTO generated_nodes (id, left_bound, right_bound, label) VALUES (1, 1, 3, 'preserved');");
+            + "INSERT INTO generated_nodes (id, left_bound, right_bound, label) VALUES (1, 1, 3, 'preserved');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = new SqliteGeneratedTableContractContext(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -674,13 +732,15 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var matchingColumns = await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes') "
-            + "WHERE name = 'has_descendants' AND type = 'INTEGER' AND \"notnull\" = 1 AND hidden = 2;");
+            + "WHERE name = 'has_descendants' AND type = 'INTEGER' AND \"notnull\" = 1 AND hidden = 2;",
+            cancellationToken: CancellationToken.None);
 
         var matchingRows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM generated_nodes WHERE id = 1 AND label = 'preserved' AND has_descendants = 1;");
+            "SELECT COUNT(*) FROM generated_nodes WHERE id = 1 AND label = 'preserved' AND has_descendants = 1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, matchingColumns);
@@ -692,26 +752,29 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task CreatedGeneratedTableAndChecksSurviveSubsequentModelRebuild()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = new SqliteGeneratedTableContractContext(connection, _internalServices);
         await context.GetService<IMigrator>().MigrateAsync(SqliteGeneratedTableContractMigration.MigrationIdentifier);
         await ExecuteSqlAsync(connection,
             "INSERT INTO generated_nodes (id, left_bound, right_bound, label) VALUES (1, 1, 3, 'retained'); "
-            + "ALTER TABLE generated_nodes ADD temporary TEXT NULL;");
+            + "ALTER TABLE generated_nodes ADD temporary TEXT NULL;", cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("temporary", "generated_nodes");
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-later-rebuild"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-later-rebuild"),
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var matchingRows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM generated_nodes WHERE id = 1 AND label = 'retained' AND has_descendants = 1;");
+            "SELECT COUNT(*) FROM generated_nodes WHERE id = 1 AND label = 'retained' AND has_descendants = 1;",
+            cancellationToken: CancellationToken.None);
 
         var remainingTemporary = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes') WHERE name = 'temporary';");
+            "SELECT COUNT(*) FROM pragma_table_xinfo('generated_nodes') WHERE name = 'temporary';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -730,15 +793,19 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task OrderedColumnChangesDoNotReuseStaleComputedSourceEvidence(string change, bool ready)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = new SqliteGeneratedTableContractContext(connection, _internalServices);
         await context.GetService<IMigrator>().MigrateAsync(SqliteGeneratedTableContractMigration.MigrationIdentifier);
         await ExecuteSqlAsync(connection,
-            "INSERT INTO generated_nodes (id, left_bound, right_bound, label) VALUES (1, 1, 3, 'preserved');");
+            "INSERT INTO generated_nodes (id, left_bound, right_bound, label) VALUES (1, 1, 3, 'preserved');",
+            cancellationToken: CancellationToken.None);
 
         if (change == "unrelated_drop")
         {
-            await ExecuteSqlAsync(connection, "ALTER TABLE generated_nodes ADD temporary TEXT NULL;");
+            await ExecuteSqlAsync(
+                connection,
+                "ALTER TABLE generated_nodes ADD temporary TEXT NULL;",
+                cancellationToken: CancellationToken.None);
         }
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -758,20 +825,29 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
             computedColumnSql: "right_bound > left_bound", stored: false));
 
         builder.CreateIndexIfNotExists("ix_generated_nodes_flag", "generated_nodes", ["has_descendants"]);
-        var versionBefore = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var versionBefore = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-ordered-generated-source"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-ordered-generated-source"),
+            cancellationToken: CancellationToken.None);
 
-        var versionAfter = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var versionAfter = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
+
         if (ready)
         {
-            await ExecuteOperationsAsync(context, builder.Operations);
+            await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         }
 
         var rows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM generated_nodes WHERE id = 1 AND has_descendants = 1;");
+            "SELECT COUNT(*) FROM generated_nodes WHERE id = 1 AND has_descendants = 1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var diagnostic = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
@@ -796,10 +872,13 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task OrdinarySqlExpiresDropOnlyGeneratedSourceCertificate()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = new SqliteGeneratedTableContractContext(connection, _internalServices);
         await context.GetService<IMigrator>().MigrateAsync(SqliteGeneratedTableContractMigration.MigrationIdentifier);
-        await ExecuteSqlAsync(connection, "ALTER TABLE generated_nodes ADD temporary TEXT NULL;");
+        await ExecuteSqlAsync(
+            connection,
+            "ALTER TABLE generated_nodes ADD temporary TEXT NULL;",
+            cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("temporary", "generated_nodes");
         builder.Sql("SELECT 1;");
@@ -807,13 +886,20 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
             "has_descendants", "generated_nodes", type: "INTEGER", nullable: false,
             computedColumnSql: "right_bound > left_bound", stored: false));
 
-        var versionBefore = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var versionBefore = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-drop-opaque-source-expiry"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-drop-opaque-source-expiry"),
+            cancellationToken: CancellationToken.None);
 
-        var versionAfter = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var versionAfter = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
@@ -831,10 +917,13 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task DropOnlyCertificateDoesNotOverrideAcceptedIndexIdentity(bool sameKeys)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = new SqliteGeneratedTableContractContext(connection, _internalServices);
         await context.GetService<IMigrator>().MigrateAsync(SqliteGeneratedTableContractMigration.MigrationIdentifier);
-        await ExecuteSqlAsync(connection, "ALTER TABLE generated_nodes ADD temporary TEXT NULL;");
+        await ExecuteSqlAsync(
+            connection,
+            "ALTER TABLE generated_nodes ADD temporary TEXT NULL;",
+            cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("temporary", "generated_nodes");
         builder.AddColumnIfNotExistsFromModel(operation => operation.AddColumn<bool>(
@@ -845,13 +934,20 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
         builder.CreateIndexIfNotExists("ix_generated_nodes_flag", "generated_nodes",
             [sameKeys ? "has_descendants" : "id"]);
 
-        var versionBefore = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var versionBefore = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-drop-index-proof-expiry"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-drop-index-proof-expiry"),
+            cancellationToken: CancellationToken.None);
 
-        var versionAfter = await ScalarIntAsync(connection, "PRAGMA schema_version;");
+        var versionAfter = await ScalarIntAsync(
+            connection,
+            "PRAGMA schema_version;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var diagnostic = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
@@ -870,7 +966,7 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task GeneratedRenameLifecycleRetainsDistinctCreateAndRenameTargetModels()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var before = new SqliteGeneratedRenameTargetContext<SqliteGeneratedOriginalShape>(
             connection, _internalServices);
 
@@ -901,19 +997,25 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
         var targetAnalyzer = (ISafeMigrationProviderTargetModelAnalyzer)analyzer;
 
         // Act
-        await ExecuteOperationsAsync(before, create.Operations);
-        await ExecuteSqlAsync(connection, "INSERT INTO source_nodes (id, source) VALUES (1, 7);");
-        await ExecuteOperationsAsync(after, rename.Operations);
-        var analyses = await targetAnalyzer.AnalyzeAsync(after, operations, [oldModel, newModel, newModel]);
+        await ExecuteOperationsAsync(before, create.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "INSERT INTO source_nodes (id, source) VALUES (1, 7);",
+            cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(after, rename.Operations, cancellationToken: CancellationToken.None);
+        var analyses = await targetAnalyzer.AnalyzeAsync(after, operations, [oldModel, newModel, newModel],
+            cancellationToken: CancellationToken.None);
+
         var probes = SafeMigrationPostflightProjection.CreateRenamedTableProbes(
             operations, analyses, (ISafeMigrationProviderObjectIdentityNormalizer)analyzer);
 
         var results = await targetAnalyzer.AnalyzeAsync(after,
             probes?.Select(static probe => probe.Operation).ToArray() ?? [],
-            probes?.Select(_ => (IModel?)oldModel).ToList());
+            probes?.Select(_ => (IModel?)oldModel).ToList(), cancellationToken: CancellationToken.None);
 
         var rows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM source_nodes WHERE id = 1 AND renamed = 7 AND derived = 8;");
+            "SELECT COUNT(*) FROM source_nodes WHERE id = 1 AND renamed = 7 AND derived = 8;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.NotSame(oldModel, newModel);
@@ -928,7 +1030,7 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task FailedSafeGenerationRestoresOrdinaryProviderRendering()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var native = Assert.IsType<SqliteSafeMigrationsBaselineSqlGenerator>(
             context.GetService<SqliteMigrationsSqlGenerator>());
@@ -960,30 +1062,33 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task FreshGeneratedTablePreservesAllNativeConstraintKinds()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE generated_parents (id INTEGER NOT NULL CONSTRAINT pk_generated_parents PRIMARY KEY); "
-            + "INSERT INTO generated_parents VALUES (1);");
+            + "INSERT INTO generated_parents VALUES (1);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
         var builder = CreateConstrainedTableBuilder(context);
 
         // Act
-        await ExecuteOperationsAsync(context, builder.Operations);
-        await ExecuteOperationsAsync(context, builder.Operations);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
+        await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
-            "INSERT INTO generated_nodes (id, left_bound, right_bound, parent_id) VALUES (1, 2, 3, 1);");
+            "INSERT INTO generated_nodes (id, left_bound, right_bound, parent_id) VALUES (1, 2, 3, 1);",
+            cancellationToken: CancellationToken.None);
 
         var report = await context.GetService<ISafeMigrationRunner>().VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-native-constraints"));
+            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-native-constraints"),
+            cancellationToken: CancellationToken.None);
 
         var foreignKeys = await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM pragma_foreign_key_list('generated_nodes') "
-            + "WHERE \"table\" = 'generated_parents' AND \"from\" = 'parent_id' AND on_delete = 'CASCADE';");
+            + "WHERE \"table\" = 'generated_parents' AND \"from\" = 'parent_id' AND on_delete = 'CASCADE';",
+            cancellationToken: CancellationToken.None);
 
         var indexes = await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM pragma_index_list('generated_nodes') "
-            + "WHERE name = 'ix_generated_nodes_parent';");
+            + "WHERE name = 'ix_generated_nodes_parent';", cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -1003,24 +1108,31 @@ public sealed class SqliteGeneratedTableContractTests : SqliteIntegrationTestBas
     public async Task GeneratedTableNativeConstraintsRejectInvalidRows(string values, int extendedCode)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE generated_parents (id INTEGER NOT NULL CONSTRAINT pk_generated_parents PRIMARY KEY); "
-            + "INSERT INTO generated_parents VALUES (1);");
+            + "INSERT INTO generated_parents VALUES (1);", cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connection);
-        await ExecuteOperationsAsync(context, CreateConstrainedTableBuilder(context).Operations);
+        await ExecuteOperationsAsync(context, CreateConstrainedTableBuilder(context).Operations,
+            cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
-            "INSERT INTO generated_nodes (id, left_bound, right_bound, parent_id) VALUES (1, 2, 3, 1);");
+            "INSERT INTO generated_nodes (id, left_bound, right_bound, parent_id) VALUES (1, 2, 3, 1);",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var exception = await Record.ExceptionAsync(() => ExecuteSqlAsync(connection,
-            "INSERT INTO generated_nodes (id, left_bound, right_bound, parent_id) VALUES " + values + ";"));
+            "INSERT INTO generated_nodes (id, left_bound, right_bound, parent_id) VALUES " + values + ";",
+            cancellationToken: CancellationToken.None));
 
         var preservedRows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM generated_nodes WHERE id = 1 AND has_descendants = 1;");
+            "SELECT COUNT(*) FROM generated_nodes WHERE id = 1 AND has_descendants = 1;",
+            cancellationToken: CancellationToken.None);
 
-        var totalRows = await ScalarIntAsync(connection, "SELECT COUNT(*) FROM generated_nodes;");
+        var totalRows = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM generated_nodes;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(extendedCode, Assert.IsType<SqliteException>(exception).SqliteExtendedErrorCode);

@@ -6,6 +6,46 @@ public sealed class SqlServerDatabaseCreationTests
     private const string RootConnectionString =
         "Server=127.0.0.1,1433;Database=master;Integrated Security=True;Pooling=True;TrustServerCertificate=False;";
 
+    /// <summary>
+    /// Cancels diagnostic creation before admission, while an active request reaches its command.
+    /// </summary>
+    /// <param name="preCanceled">Whether the caller canceled before database-creation admission.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DiagnosticCreationChecksCancellationBeforeCommandAdmission(bool preCanceled)
+    {
+        // Arrange
+        using var cancellation = new CancellationTokenSource();
+        using var connection = new SqlConnection();
+        if (preCanceled)
+        {
+            cancellation.Cancel();
+        }
+
+        var creation = typeof(SqlServerLocalCatalogDiagnostics).GetMethod("CreateDatabaseAsync",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+
+        // Act
+        var exception = await Record.ExceptionAsync(() => (Task<string>)creation.Invoke(
+            null, [connection, cancellation.Token])!);
+
+        // Assert
+        if (preCanceled)
+        {
+            var canceled = Assert.IsAssignableFrom<OperationCanceledException>(exception);
+            Assert.Equal(cancellation.Token, canceled.CancellationToken);
+        }
+        else
+        {
+            // WHY: The deliberately unopened connection proves that an active request reaches native dispatch,
+            // not an unconditional cancellation stub. It can neither connect nor create a database.
+            Assert.IsType<InvalidOperationException>(exception);
+        }
+
+        Assert.Equal(ConnectionState.Closed, connection.State);
+    }
+
     /// <summary>Retains uncertain server outcomes until idempotent fixture cleanup confirms absence.</summary>
     /// <param name="serverCreatedDatabase">Whether the server applied DDL before the response failed.</param>
     /// <param name="cancelResponse">Whether cancellation replaces the creation acknowledgement.</param>
@@ -105,8 +145,12 @@ public sealed class SqlServerDatabaseCreationTests
         }, () => Task.CompletedTask);
 
         // Act
-        var first = new SqlConnectionStringBuilder(await fixture.CreateDatabaseAsync());
-        var second = new SqlConnectionStringBuilder(await fixture.CreateDatabaseAsync());
+        var first = new SqlConnectionStringBuilder(await fixture.CreateDatabaseAsync(
+        cancellationToken: CancellationToken.None));
+
+        var second = new SqlConnectionStringBuilder(await fixture.CreateDatabaseAsync(
+        cancellationToken: CancellationToken.None));
+
         await fixture.DisposeAsync();
 
         // Assert
@@ -145,7 +189,9 @@ public sealed class SqlServerDatabaseCreationTests
         });
 
         // Act
-        var observed = await Record.ExceptionAsync(() => fixture.CreateDatabaseAsync());
+        var observed = await Record.ExceptionAsync(() => fixture.CreateDatabaseAsync(
+        cancellationToken: CancellationToken.None));
+
         await fixture.DisposeAsync();
 
         // Assert
@@ -211,7 +257,7 @@ public sealed class SqlServerDatabaseCreationTests
         }, () => Task.CompletedTask);
 
         // Act
-        var firstCreation = fixture.CreateDatabaseAsync();
+        var firstCreation = fixture.CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await firstEntered.Task;
         var waitingCreation = fixture.CreateDatabaseAsync(cancellation.Token);
         var waitedForLock = !waitingCreation.IsCompleted;

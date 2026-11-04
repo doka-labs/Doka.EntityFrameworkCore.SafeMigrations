@@ -22,20 +22,25 @@ internal static class LivePerformanceEvidence
 
     /// <summary>Warms the action once and captures twenty samples without suppressing execution failures.</summary>
     /// <param name="action">The live analysis whose exceptions and cancellation must propagate.</param>
+    /// <param name="cancellationToken">The caller token forwarded to warmup and every measured analysis.</param>
     /// <returns>The sampled percentiles and final functional report.</returns>
     public static async Task<LivePerformanceMeasurement> MeasureAsync(
-        Func<Task<SafeMigrationRunReport>> action
+        Func<CancellationToken, Task<SafeMigrationRunReport>> action,
+        CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(action);
+        cancellationToken.ThrowIfCancellationRequested();
 
-        _ = await action();
+        _ = await action(cancellationToken);
         var durations = new double[SampleCount];
         SafeMigrationRunReport? lastReport = null;
         for (var sample = 0; sample < SampleCount; sample++)
         {
+            // WHY: Cancellation checks stay outside the measured action interval.
+            cancellationToken.ThrowIfCancellationRequested();
             var started = Stopwatch.GetTimestamp();
-            lastReport = await action();
+            lastReport = await action(cancellationToken);
             durations[sample] = Stopwatch.GetElapsedTime(started)
                 .TotalMilliseconds;
         }

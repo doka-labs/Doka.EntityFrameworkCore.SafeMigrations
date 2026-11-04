@@ -30,13 +30,16 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
     public async Task GuardRejectsWithOwnerAndOriginalOrdinal(string scenario, bool asynchronous)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection, "CREATE TABLE diagnostic_left (Id INTEGER NOT NULL); "
             + "CREATE TABLE diagnostic_right (Value TEXT NULL); "
-            + "INSERT INTO diagnostic_right VALUES ('private-row-value');");
+            + "INSERT INTO diagnostic_right VALUES ('private-row-value');", cancellationToken: CancellationToken.None);
         if (scenario == "different")
         {
-            await ExecuteSqlAsync(connection, "ALTER TABLE diagnostic_right ADD Id TEXT NULL;");
+            await ExecuteSqlAsync(
+                connection,
+                "ALTER TABLE diagnostic_right ADD Id TEXT NULL;",
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connection);
@@ -49,7 +52,7 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
 
         // Act
         var exception = await Record.ExceptionAsync(() => ExecuteDiagnosticOperationsAsync(
-            context, builder.Operations, asynchronous));
+            context, builder.Operations, asynchronous, cancellationToken: CancellationToken.None));
 
         // Assert
         var rejection = Assert.IsType<InvalidOperationException>(exception);
@@ -72,7 +75,10 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
         Assert.Contains("decision=", rejection.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("private-row-value", rejection.Message, StringComparison.Ordinal);
         Assert.InRange(rejection.Message.Length, 1, 2048);
-        Assert.Equal(1, await ScalarIntAsync(connection, "SELECT COUNT(*) FROM diagnostic_right;"));
+        Assert.Equal(1, await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM diagnostic_right;",
+            cancellationToken: CancellationToken.None));
         Assert.Null(context.GetService<IRelationalConnection>().CurrentTransaction);
     }
 
@@ -84,7 +90,7 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
     public async Task IndividualGuardIncludesCapabilityAndOrdinal(bool asynchronous)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = builder.Sql("SELECT 1;");
@@ -92,7 +98,7 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
 
         // Act
         var exception = await Record.ExceptionAsync(() => ExecuteDiagnosticOperationsAsync(
-            context, builder.Operations, asynchronous));
+            context, builder.Operations, asynchronous, cancellationToken: CancellationToken.None));
 
         // Assert
         var rejection = Assert.IsType<InvalidOperationException>(exception);
@@ -112,8 +118,11 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
     public async Task NativeDdlErrorIsNotRewrittenAsSafeGuard(bool asynchronous)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection, "CREATE TABLE diagnostic_collision (Id INTEGER NOT NULL);");
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE diagnostic_collision (Id INTEGER NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = builder.CreateTable("diagnostic_collision", table => new
@@ -123,7 +132,7 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
 
         // Act
         var exception = await Record.ExceptionAsync(() => ExecuteDiagnosticOperationsAsync(
-            context, builder.Operations, asynchronous));
+            context, builder.Operations, asynchronous, cancellationToken: CancellationToken.None));
 
         // Assert
         var native = Assert.IsType<SqliteException>(exception);
@@ -131,7 +140,8 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
         Assert.Contains("diagnostic_collision", native.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("doka_sm_", native.Message, StringComparison.Ordinal);
         Assert.Equal(1, await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'diagnostic_collision';"));
+            "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'diagnostic_collision';",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Owned postcondition failures include identity and roll back the incorrect baseline DDL.</summary>
@@ -145,8 +155,11 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
     public async Task PostconditionFailureIsReadableAndRollsBack(bool batched, bool asynchronous)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection, "CREATE TABLE diagnostic_postcondition (Id INTEGER NOT NULL);");
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE diagnostic_postcondition (Id INTEGER NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<string>("Payload", "diagnostic_postcondition", type: "TEXT", nullable: true);
@@ -156,7 +169,7 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
 
         // Act
         var exception = await Record.ExceptionAsync(() => ExecuteDiagnosticCommandAsync(
-            command, relationalConnection, asynchronous));
+            command, relationalConnection, asynchronous, cancellationToken: CancellationToken.None));
 
         // Assert
         var rejection = Assert.IsType<InvalidOperationException>(exception);
@@ -167,7 +180,8 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
         Assert.Contains("next=", rejection.Message, StringComparison.Ordinal);
         Assert.Contains("analysis=classified_missing", rejection.Message, StringComparison.Ordinal);
         Assert.Equal(0, await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM pragma_table_xinfo('diagnostic_postcondition') WHERE name = 'Wrong';"));
+            "SELECT COUNT(*) FROM pragma_table_xinfo('diagnostic_postcondition') WHERE name = 'Wrong';",
+            cancellationToken: CancellationToken.None));
         Assert.Null(relationalConnection.CurrentTransaction);
     }
 
@@ -179,7 +193,7 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
     public async Task ForeignKeyValidationOmitsPrivateValuesAndRestoresEnforcement(bool asynchronous)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection,
             "CREATE TABLE constraint_parents (Id INTEGER NOT NULL, "
             + "CONSTRAINT pk_constraint_parents PRIMARY KEY (Id)); "
@@ -189,14 +203,14 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
             + "REFERENCES constraint_parents (Id) ON DELETE CASCADE); "
             + "PRAGMA foreign_keys = OFF; "
             + "INSERT INTO constraint_children (Id, ParentId) VALUES (987654321, 876543219); "
-            + "PRAGMA foreign_keys = ON;");
+            + "PRAGMA foreign_keys = ON;", cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists("ck_constraint_parents_positive", "constraint_parents", "Id > 0");
 
         // Act
         var exception = await Record.ExceptionAsync(() => ExecuteDiagnosticOperationsAsync(
-            context, builder.Operations, asynchronous));
+            context, builder.Operations, asynchronous, cancellationToken: CancellationToken.None));
 
         // Assert
         var rejection = Assert.IsType<InvalidOperationException>(exception);
@@ -208,11 +222,17 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
         Assert.Contains("foreignKeyOrdinal=0", rejection.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("987654321", rejection.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain("876543219", rejection.ToString(), StringComparison.Ordinal);
-        Assert.Equal(1, await ScalarIntAsync(connection, "PRAGMA foreign_keys;"));
-        Assert.Equal(1, await ScalarIntAsync(connection, "SELECT COUNT(*) FROM constraint_children;"));
+        Assert.Equal(1, await ScalarIntAsync(
+            connection,
+            "PRAGMA foreign_keys;",
+            cancellationToken: CancellationToken.None));
+        Assert.Equal(1, await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM constraint_children;",
+            cancellationToken: CancellationToken.None));
         Assert.Equal(0, await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'constraint_parents' "
-            + "AND sql LIKE '%ck_constraint_parents_positive%';"));
+            + "AND sql LIKE '%ck_constraint_parents_positive%';", cancellationToken: CancellationToken.None));
         Assert.Null(context.GetService<IRelationalConnection>().CurrentTransaction);
     }
 
@@ -221,8 +241,11 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
     public async Task PreCancelledGuardPreservesCancellationAndCatalog()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection, "CREATE TABLE diagnostic_cancellation (Id INTEGER NOT NULL);");
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE diagnostic_cancellation (Id INTEGER NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<string>("Payload", "diagnostic_cancellation", type: "TEXT", nullable: true);
@@ -237,9 +260,13 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
         var cancelled = Assert.IsAssignableFrom<OperationCanceledException>(exception);
         Assert.Equal(cancellation.Token, cancelled.CancellationToken);
         Assert.DoesNotContain("doka_sm_", cancelled.Message, StringComparison.Ordinal);
-        Assert.Equal(1, await ScalarIntAsync(connection, "PRAGMA foreign_keys;"));
+        Assert.Equal(1, await ScalarIntAsync(
+            connection,
+            "PRAGMA foreign_keys;",
+            cancellationToken: CancellationToken.None));
         Assert.Equal(0, await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM pragma_table_xinfo('diagnostic_cancellation') WHERE name = 'Payload';"));
+            "SELECT COUNT(*) FROM pragma_table_xinfo('diagnostic_cancellation') WHERE name = 'Payload';",
+            cancellationToken: CancellationToken.None));
         Assert.Null(context.GetService<IRelationalConnection>().CurrentTransaction);
     }
 
@@ -248,7 +275,7 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
     public async Task UnsupportedScriptExplainsCapabilityAndFirstSafeOperation()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = builder.Sql("CREATE TABLE script_native (Id INTEGER);");
@@ -266,7 +293,8 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
         Assert.Contains("operation 1", unsupported.Message, StringComparison.Ordinal);
         Assert.Contains("bundle", unsupported.Message, StringComparison.Ordinal);
         Assert.Equal(0, await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'script_native';"));
+            "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'script_native';",
+            cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Missing computed-column mappings report owner rather than only an ambiguous column name.</summary>
@@ -274,7 +302,7 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
     public async Task UnmappedGeneratedColumnNamesOwnerWithoutSqlPayload()
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn("diagnostic_generated", new ExpectedColumnDefinition(
@@ -334,19 +362,31 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
     public async Task MatchingRetryPreservesSuccessfulExecution(bool asynchronous)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
-        await ExecuteSqlAsync(connection, "CREATE TABLE diagnostic_matching (Id INTEGER NOT NULL);");
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE diagnostic_matching (Id INTEGER NOT NULL);",
+            cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<string>("Payload", "diagnostic_matching", type: "TEXT", nullable: true);
 
         // Act
-        await ExecuteDiagnosticOperationsAsync(context, builder.Operations, asynchronous);
-        await ExecuteDiagnosticOperationsAsync(context, builder.Operations, asynchronous);
+        await ExecuteDiagnosticOperationsAsync(
+            context,
+            builder.Operations,
+            asynchronous,
+            cancellationToken: CancellationToken.None);
+        await ExecuteDiagnosticOperationsAsync(
+            context,
+            builder.Operations,
+            asynchronous,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM pragma_table_xinfo('diagnostic_matching') WHERE name = 'Payload';"));
+            "SELECT COUNT(*) FROM pragma_table_xinfo('diagnostic_matching') WHERE name = 'Payload';",
+            cancellationToken: CancellationToken.None));
         Assert.Null(context.GetService<IRelationalConnection>().CurrentTransaction);
     }
 
@@ -358,9 +398,9 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
     public async Task MigratorWithoutPreflightReportsGuardAndDoesNotWriteHistory(bool asynchronous)
     {
         // Arrange
-        await using var connection = await OpenConnectionAsync();
+        await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connection, "CREATE TABLE diagnostic_migration (Id INTEGER NOT NULL); "
-            + "INSERT INTO diagnostic_migration VALUES (123456789);");
+            + "INSERT INTO diagnostic_migration VALUES (123456789);", cancellationToken: CancellationToken.None);
         await using var context = new SqliteDiagnosticMigrationContext(connection, _internalServices);
 
         // Act
@@ -383,35 +423,48 @@ public sealed class SqliteActionableDiagnosticsTests : SqliteIntegrationTestBase
         Assert.Contains("RequiredValue", rejection.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("123456789", rejection.Message, StringComparison.Ordinal);
         Assert.Equal(0, await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM pragma_table_xinfo('diagnostic_migration') WHERE name = 'RequiredValue';"));
+            "SELECT COUNT(*) FROM pragma_table_xinfo('diagnostic_migration') WHERE name = 'RequiredValue';",
+            cancellationToken: CancellationToken.None));
         Assert.Equal(0, await ScalarIntAsync(connection,
             "SELECT COUNT(*) FROM __EFMigrationsHistory WHERE MigrationId = '"
-            + SqliteDiagnosticGuardMigration.MigrationIdentifier + "';"));
+            + SqliteDiagnosticGuardMigration.MigrationIdentifier + "';", cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Routes both command entry points through the same isolated execution fixture.</summary>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task ExecuteDiagnosticOperationsAsync(
         DbContext context,
         IReadOnlyList<MigrationOperation> operations,
-        bool asynchronous)
+        bool asynchronous,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var commands = context.GetService<IMigrationsSqlGenerator>().Generate(operations, context.Model);
         var connection = context.GetService<IRelationalConnection>();
         foreach (var command in commands)
         {
-            await ExecuteDiagnosticCommandAsync(command, connection, asynchronous);
+            await ExecuteDiagnosticCommandAsync(
+                command,
+                connection,
+                asynchronous,
+                cancellationToken: cancellationToken);
         }
     }
 
     /// <summary>Preserves synchronous exceptions while adapting the fixture to an asynchronous test.</summary>
+    /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task ExecuteDiagnosticCommandAsync(
         MigrationCommand command,
         IRelationalConnection connection,
-        bool asynchronous)
+        bool asynchronous,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (asynchronous)
         {
-            _ = await command.ExecuteNonQueryAsync(connection);
+            _ = await command.ExecuteNonQueryAsync(connection, cancellationToken: cancellationToken);
         }
         else
         {

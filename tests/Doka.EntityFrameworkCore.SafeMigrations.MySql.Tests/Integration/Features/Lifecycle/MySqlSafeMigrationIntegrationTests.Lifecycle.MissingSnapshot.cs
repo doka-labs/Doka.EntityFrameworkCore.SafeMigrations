@@ -52,7 +52,8 @@ public sealed partial class MySqlLifecycleMissingSnapshotIntegrationTests : MySq
             System.Data.ConnectionState.Closed,
             context.Database.GetDbConnection()
                 .State);
-        Assert.Equal(0, await ScalarIntAsync(connectionString, SnapshotFreeCatalogCountSql));
+        Assert.Equal(0, await ScalarIntAsync(connectionString, SnapshotFreeCatalogCountSql,
+            cancellationToken: CancellationToken.None));
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var postflight = await runner.VerifyAsync(context, builder.Operations, options, CancellationToken.None);
@@ -69,7 +70,8 @@ public sealed partial class MySqlLifecycleMissingSnapshotIntegrationTests : MySq
             System.Data.ConnectionState.Closed,
             context.Database.GetDbConnection()
                 .State);
-        Assert.Equal(1, await ScalarIntAsync(connectionString, SnapshotFreeCatalogCountSql));
+        Assert.Equal(1, await ScalarIntAsync(connectionString, SnapshotFreeCatalogCountSql,
+            cancellationToken: CancellationToken.None));
     }
 
     [Theory]
@@ -117,7 +119,8 @@ public sealed partial class MySqlLifecycleMissingSnapshotIntegrationTests : MySq
         Assert.Equal(actual, exception.ActualFingerprint);
         Assert.Equal(0, connectionTransitions);
         Assert.Equal(System.Data.ConnectionState.Closed, connection.State);
-        Assert.Equal(0, await ScalarIntAsync(connectionString, SnapshotFreeCatalogCountSql));
+        Assert.Equal(0, await ScalarIntAsync(connectionString, SnapshotFreeCatalogCountSql,
+            cancellationToken: CancellationToken.None));
     }
 
     private SnapshotFreeContext CreateSnapshotFreeContext(

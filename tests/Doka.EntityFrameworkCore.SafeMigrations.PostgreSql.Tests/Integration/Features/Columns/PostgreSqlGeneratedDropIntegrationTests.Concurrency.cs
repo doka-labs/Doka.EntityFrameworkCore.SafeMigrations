@@ -12,7 +12,7 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(connectionString,
             "CREATE TABLE generated_drop(source integer, unrelated integer); "
-            + "INSERT INTO generated_drop VALUES(2,9);");
+            + "INSERT INTO generated_drop VALUES(2,9);", cancellationToken: CancellationToken.None);
 
         await using var writer = new NpgsqlConnection(connectionString);
         await writer.OpenAsync();
@@ -31,7 +31,7 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
         var committed = false;
 
         // Act
-        var pending = Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations));
+        var pending = Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations, deadline.Token));
         Exception? failure;
         try
         {
@@ -51,7 +51,8 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
         // Assert
         Assert.Equal("P1001", Assert.IsType<PostgresException>(failure).SqlState);
         Assert.Equal("2:9:3", await ScalarStringAsync(connectionString,
-            "SELECT source::text || ':' || unrelated::text || ':' || derived::text FROM generated_drop;"));
+            "SELECT source::text || ':' || unrelated::text || ':' || derived::text FROM generated_drop;",
+            cancellationToken: deadline.Token));
     }
 
     /// <summary>Coordinates on native lock state instead of a CPU-dependent delay or runtime threshold.</summary>

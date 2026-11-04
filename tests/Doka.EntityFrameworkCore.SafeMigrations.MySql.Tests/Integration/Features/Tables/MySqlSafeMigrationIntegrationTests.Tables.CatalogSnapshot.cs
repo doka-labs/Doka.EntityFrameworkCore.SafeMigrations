@@ -32,7 +32,7 @@ public sealed partial class MySqlTablesCatalogSnapshotIntegrationTests : MySqlSa
                 .Append("` (`id` int NOT NULL, `code` int NOT NULL); ");
         }
 
-        await ExecuteSqlAsync(connectionString, fixtureSql.ToString());
+        await ExecuteSqlAsync(connectionString, fixtureSql.ToString(), cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
@@ -47,13 +47,16 @@ public sealed partial class MySqlTablesCatalogSnapshotIntegrationTests : MySqlSa
 
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
         var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
-        var before = await SessionCounterAsync(context, "Created_tmp_disk_tables");
+        var before = await SessionCounterAsync(context, "Created_tmp_disk_tables",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var analysis = await analyzer.AnalyzeAsync(context, operations, CancellationToken.None);
 
         // Assert
-        var spilled = await SessionCounterAsync(context, "Created_tmp_disk_tables") - before;
+        var spilled = await SessionCounterAsync(context, "Created_tmp_disk_tables",
+            cancellationToken: CancellationToken.None) - before;
+
         Assert.Equal(tables, analysis.Count);
         Assert.All(
             analysis,
@@ -100,9 +103,12 @@ public sealed partial class MySqlTablesCatalogSnapshotIntegrationTests : MySqlSa
             + " CREATE TABLE `verdict_missing` (`id` int NOT NULL);"
             + " CREATE TABLE `verdict_surplus` (`id` int NOT NULL, `code` int NOT NULL,"
             + " `extra` int NULL);"
-            + " CREATE TABLE `snapshot_padding` (`id` int NOT NULL, `code` int NOT NULL);");
+            + " CREATE TABLE `snapshot_padding` (`id` int NOT NULL, `code` int NOT NULL);",
+            cancellationToken: CancellationToken.None);
 
-        var database = await ScalarStringAsync(connectionString, "SELECT DATABASE();");
+        var database = await ScalarStringAsync(connectionString, "SELECT DATABASE();",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var operations = SnapshotVerdictOperations(context.Database.ProviderName!, schema: null);
         var qualified = SnapshotVerdictOperations(context.Database.ProviderName!, database);
@@ -117,8 +123,11 @@ public sealed partial class MySqlTablesCatalogSnapshotIntegrationTests : MySqlSa
         ];
 
         // Act
-        var throughSnapshot = await ClassifySnapshotAsync(connectionString, operations);
-        var throughLiveViews = await ClassifySnapshotAsync(connectionString, qualified);
+        var throughSnapshot = await ClassifySnapshotAsync(connectionString, operations,
+            cancellationToken: CancellationToken.None);
+
+        var throughLiveViews = await ClassifySnapshotAsync(connectionString, qualified,
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(expected, throughSnapshot.States.Take(expected.Length));
@@ -141,7 +150,8 @@ public sealed partial class MySqlTablesCatalogSnapshotIntegrationTests : MySqlSa
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `snapshot_padding` (`id` int NOT NULL, `code` int NOT NULL);"
-            + " CREATE TABLE `snapshot_neighbor` (`id` int NOT NULL, `other` int NOT NULL);");
+            + " CREATE TABLE `snapshot_neighbor` (`id` int NOT NULL, `other` int NOT NULL);",
+            cancellationToken: CancellationToken.None);
 
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
         await using var context = CreateContext(connectionString);
@@ -156,7 +166,7 @@ public sealed partial class MySqlTablesCatalogSnapshotIntegrationTests : MySqlSa
         // Act
         var result = await ClassifySnapshotAsync(
             connectionString,
-            [.. builder.Operations.Cast<SafeMigrationOperation>()]);
+            [.. builder.Operations.Cast<SafeMigrationOperation>()], cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Different, result.States[0]);
@@ -272,16 +282,20 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     /// <param name="connectionString">The fixture database.</param>
     /// <param name="operations">The operations to classify.</param>
     /// <returns>The observed state per operation.</returns>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     protected async Task<SnapshotClassification> ClassifySnapshotAsync(
         string connectionString,
-        SafeMigrationOperation[] operations
+        SafeMigrationOperation[] operations,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(new MySqlConnection(connectionString));
         context.Database.SetDbConnection(connection);
         var analysis = await context.GetService<ISafeMigrationProviderAnalyzer>()
-            .AnalyzeAsync(context, operations, CancellationToken.None);
+            .AnalyzeAsync(context, operations, cancellationToken);
 
         return new SnapshotClassification(
             [.. analysis.Select(static entry => entry.ObservedState)],
@@ -303,17 +317,21 @@ public sealed partial class MySqlTablesCatalogSnapshotIntegrationTests : MySqlSa
     /// <param name="context">The context whose connection is inspected.</param>
     /// <param name="counter">The status counter name.</param>
     /// <returns>The counter value for that session.</returns>
+    /// <param name="cancellationToken">The caller's operation cancellation.</param>
     private static async Task<long> SessionCounterAsync(
         DbContext context,
-        string counter
+        string counter,
+        CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var connection = context.Database.GetDbConnection();
         await using var command = connection.CreateCommand();
         command.CommandText = $"SHOW SESSION STATUS LIKE '{counter}';";
-        await using var reader = await command.ExecuteReaderAsync(CancellationToken.None);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
-        return await reader.ReadAsync(CancellationToken.None)
+        return await reader.ReadAsync(cancellationToken)
             ? long.Parse(reader.GetString(1), CultureInfo.InvariantCulture)
             : throw new InvalidOperationException($"The server reported no '{counter}' status counter.");
     }

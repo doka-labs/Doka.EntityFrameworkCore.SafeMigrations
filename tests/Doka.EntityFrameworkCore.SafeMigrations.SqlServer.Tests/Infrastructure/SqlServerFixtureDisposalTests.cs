@@ -30,7 +30,7 @@ public sealed class SqlServerFixtureDisposalTests
 
             return Task.FromException(containerFailure);
         });
-        await fixture.CreateDatabaseAsync();
+        await fixture.CreateDatabaseAsync(cancellationToken: CancellationToken.None);
 
         // Act
         var observed = await Record.ExceptionAsync(fixture.DisposeAsync);
@@ -69,7 +69,7 @@ public sealed class SqlServerFixtureDisposalTests
 
                 return failDatabaseCleanup ? Task.CompletedTask : Task.FromException(expected);
             });
-        await fixture.CreateDatabaseAsync();
+        await fixture.CreateDatabaseAsync(cancellationToken: CancellationToken.None);
 
         // Act
         var observed = await Record.ExceptionAsync(fixture.DisposeAsync);
@@ -105,8 +105,8 @@ public sealed class SqlServerFixtureDisposalTests
 
             return Task.CompletedTask;
         });
-        await fixture.CreateDatabaseAsync();
-        await fixture.CreateDatabaseAsync();
+        await fixture.CreateDatabaseAsync(cancellationToken: CancellationToken.None);
+        await fixture.CreateDatabaseAsync(cancellationToken: CancellationToken.None);
 
         // Act
         await fixture.DisposeAsync();
