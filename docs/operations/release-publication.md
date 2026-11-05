@@ -5,11 +5,12 @@ untagged authorized source-line commit first, then waits at the protected `nuget
 Only after that wait begins does the operator create the signed tag and approve
 publication. Run every command separately and stop on the first failure.
 
-The release target is stable 10.6.1 for all five package IDs, retaining the
+The release target is stable 10.7.0 for all five package IDs, retaining the
 inventory introduced in 10.4.6. Review the
-[10.6.1 compatibility notes](../../CHANGELOG.md#1061---2026-10-29) and
-[upgrade procedure](../support-and-qualification.md#upgrade-to-1061), including
-the Doka 10.6.3, MySqlConnector 2.6.2, EF 10.0.14, SqlClient 6.1.8 and PKCS
+[10.7.0 compatibility notes](../../CHANGELOG.md#1070---2026-11-06) and
+[upgrade procedure](../support-and-qualification.md#upgrade-to-1070), including
+the explicit-token source break and approved SemVer exception, and the
+Doka 10.6.4, MySqlConnector 2.6.2, EF 10.0.14, SqlClient 6.1.8 and PKCS
 9.0.22 floors and retained strict release audits. Review the
 [transport rollout boundaries](../efcore-provider-upgrade-risk.md#sql-server-boundary),
 including corrected explicit certificate-name validation.
@@ -22,9 +23,15 @@ evidence failures remain blocking. Do not publish a subset or treat preparation,
 earlier engine runs or native ARM skips as proof that this candidate's complete
 qualification or public readback has succeeded.
 
-As of 2026-10-29, all five public packages have stable 10.6.0 available and
-10.6.1 is not published. The changelog date identifies release notes, not
-completed qualification or publication. Recheck unused version/tag identity at
+As of 2026-11-06, the public NuGet version indices for all five package IDs
+list 10.6.1 and do not list 10.7.0. This checks index presence only, not package
+bytes, repository signatures or public readback. The changelog date identifies
+release notes, not completed qualification or publication.
+Local ARM verification does not complete the required native x64 SQL Server
+2019/2022/2025 cells. Its partial SQL Server coverage is below the unchanged
+release thresholds, so complete merged coverage remains a blocking CI gate.
+Do not publish until the final committed candidate passes those checks and
+the rest of the required workflow. Recheck unused version/tag identity at
 admission; this observation does not reserve a release. Record actual
 qualification and publication status in the candidate run's
 release evidence, including the source commit, exact package identities,

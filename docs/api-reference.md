@@ -124,6 +124,14 @@ Version 10.6.1 retains that public surface, report schemas and fingerprint
 formats. Its serviced dependency floors and upgrade requirements are listed
 in the [10.6.1 upgrade notes](support-and-qualification.md#upgrade-to-1061).
 
+Version 10.7.0 promotes the ten required-token runner/provider-analyzer
+declarations into the Core shipped baseline. CLR method signatures remain,
+but the optional/default-argument metadata is removed: callers must pass a
+token explicitly, including late-bound callers. This is a source/API contract
+break within the retained 10.x line, not a claim of strict SemVer compatibility.
+See the [10.7.0 upgrade notes](support-and-qualification.md#upgrade-to-1070).
+Framework-owned overrides, report schemas and fingerprint formats are unchanged.
+
 The current MySQL/MariaDB adapter requires Doka `[10.6.4,10.7.0)` and
 MySqlConnector minimum 2.6.2; EF Core and dependency-injection minimums are
 10.0.14. SQL Server requires SqlClient minimum 6.1.8 and PKCS minimum 9.0.22.

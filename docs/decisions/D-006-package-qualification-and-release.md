@@ -341,6 +341,16 @@ owns independent consumer readback.
   reports and approvals are not rewritten or claimed as current BDN baselines.
   Published package dependencies, protected publication, coverage, native
   engine/tooling, supply-chain and readback gates remain unchanged.
+- 2026-11-06: Set the shared five-package stable identity to 10.7.0. The
+  operator explicitly selected the retained .NET/EF Core 10 package line
+  despite the source-breaking removal of public optional-token defaults.
+  Document this exception to strict SemVer, affected callers and unchanged
+  CLR method signatures; promote the ten required-token declarations into
+  the Core shipped baseline. Include the BenchmarkDotNet transition and
+  Doka 10.6.4 minimum without changing SQL/policies or historical releases.
+  Local ARM preparation is permitted while native x64 SQL Server and complete
+  merged coverage remain explicitly pending and blocking. This is not a
+  release waiver, extra-line activation or .NET 11 adoption.
 
 ### Implementation References
 

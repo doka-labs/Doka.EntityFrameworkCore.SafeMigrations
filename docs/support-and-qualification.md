@@ -2,9 +2,12 @@
 
 ## Support contract
 
-Version 10.6.1 services dependency minimums and release-line maintenance while
-retaining the public API, migration-policy, report and fingerprint formats
-from 10.6.0. It introduces no additional schema migration requirement.
+Version 10.7.0 requires explicit cancellation tokens on owned asynchronous
+APIs and uses BenchmarkDotNet for engineering measurements. It retains
+.NET/EF Core 10, migration policies, SQL, report/fingerprint formats and
+historical migrations. This source/API contract change is intentionally
+released within 10.x; it is not strictly SemVer-compatible. No additional
+database schema migration is required solely for this upgrade.
 
 Version 10.6.0 introduced public CASE expressions, certified generated-column
 and CHECK support, lossless signed-integer upgrades, ordered projection/DROP
@@ -21,7 +24,15 @@ see [diagnostic compatibility](diagnostics.md#runtime-provider-differences).
 Native qualification still requires the complete blocking matrix; ARM SQL Server
 skips and offline SQL-shape tests are not substitutes for its x64 cells.
 
-## Unreleased source compatibility
+## Upgrade to 10.7.0
+
+Keep every installed SafeMigrations package on version 10.7.0 and install
+only the adapters needed by the application. This release deliberately keeps
+the .NET/EF Core 10 package line despite removing public optional-token defaults.
+That is an explicitly approved exception to the
+[SemVer major-version rule](https://semver.org/spec/v2.0.0.html#spec-item-8),
+not a backward-compatible source change. Recompile and review all affected
+call sites before deployment; late-bound callers must also provide the token.
 
 Repository-owned cancellation parameters are now required. When recompiling,
 update calls to runner/provider-analyzer methods and owned helpers to pass the
@@ -32,9 +43,21 @@ change does not require a database migration or alter SQL, policies, history,
 report schemas or fingerprint formats. See the
 [cancellation contract](api-reference.md#cancellation-contract).
 
+For example, update `runner.AnalyzePendingMigrationsAsync(context, options)`
+to `runner.AnalyzePendingMigrationsAsync(context, options, cancellationToken)`.
+Use `CancellationToken.None` only when the operation is deliberately
+uncancellable; do not restore silent defaults in application wrappers.
+
 The MySQL/MariaDB adapter now requires Doka `[10.6.4,10.7.0)` and locks
 the published 10.6.4 bug-fix package. Transport minimums and provider isolation
 are unchanged; this dependency update requires no schema migration.
+
+The SDK/EF/transport floors from [10.6.1](#upgrade-to-1061) still apply.
+Applications upgrading from before 10.6.0 must also review its
+[computed/CHECK approval boundaries](#upgrade-to-1060). BenchmarkDotNet `Dry`
+runs validate execution/export only; durations and allocation measurements
+remain informational. Native provider, coverage, tooling, package and public
+readback gates are not waived by the unchanged CLR method signatures.
 
 ## Upgrade to 10.6.1
 
@@ -69,7 +92,7 @@ gates remain mandatory; see the [publication runbook](operations/release-publica
 ## Upgrade to 10.6.0
 
 The 10.6.0 minor release introduced the following boundaries. They also apply
-when upgrading an older application directly to 10.6.1. Keep all installed
+when upgrading an older application directly to 10.7.0. Keep all installed
 SafeMigrations packages on the selected shared version and review newly
 scaffolded implicit index-length changes without rewriting historical migrations.
 
@@ -231,10 +254,12 @@ The SQL Server project supplies the fifth lockfile. Releases 10.4.2 through
 10.4.5 contain four package artifacts; their inventory remains unchanged.
 
 The five-package set began with stable 10.4.6, including the optional SQL Server
-provider. Version 10.6.1 retains that inventory and the SQL Server-only PKCS
-contract, now at minimum 9.0.22. The Core API baseline includes the additive
+provider. Version 10.7.0 retains that inventory and the SQL Server-only PKCS
+minimum of 9.0.22. The Core API baseline includes the additive
 CASE surface introduced in 10.6.0; the diagnostic surface began in 10.5.0.
-This patch adds no API-baseline declarations. The current Doka
+Version 10.7.0 replaces ten optional-token declarations with required-token
+declarations in the shipped baseline; it does not add an overload or restore
+the removed defaults. The current Doka
 dependency contract is the 10.6 line above. Qualification requires the blocking
 workflow, including all three native x86-64 SQL Server cells. The
 [publication runbook](operations/release-publication.md) owns the five-package
