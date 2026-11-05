@@ -103,7 +103,7 @@ Its first release requires independent x64 Linux qualification on all three
 declared SQL Server majors; local ARM64 test skips are not qualification.
 
 The current MySQL/MariaDB adapter consumes Doka through the bounded
-`[10.6.3,10.7.0)` NuGet dependency range. Doka 10.3.0 introduced typed
+`[10.6.4,10.7.0)` NuGet dependency range. Doka 10.3.0 introduced typed
 read-only migration metadata for Guid storage, value generation, and index
 prefixes. Doka 10.4.0 adds an explicit commandless consumed result, which the
 internal design-time-services guard uses without emitting synthetic SQL.
@@ -287,6 +287,10 @@ being accepted through broad string normalization.
   remains `[10.6.3,10.7.0)`. SQL Server independently promotes its existing
   SqlClient minimum to 6.1.8. Keep Core/sibling transport isolation, PKCS
   9.0.22 and existing exact native-license exceptions unchanged.
+- 2026-11-05: Advance the Doka floor to `[10.6.4,10.7.0)` and restore the
+  published bug-fix package. NuGet repository metadata identifies source commit
+  `581047a524d25163818fd144146440ea4440a838`. Preserve the existing public
+  migration SPI, transport floors, provider isolation and historical migrations.
 
 ### 2026-09-22 Compatibility Amendment
 

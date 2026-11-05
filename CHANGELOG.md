@@ -8,6 +8,9 @@ the shared release identity described in [Release process](docs/release-process.
 
 ### Changed
 
+- Raise the MySQL/MariaDB provider's Doka dependency to `[10.6.4,10.7.0)`
+  and refresh its lockfile to the published bug-fix package. Retain existing
+  transport minimums, provider isolation, GUID storage and migration history.
 - Require an explicit `CancellationToken` on repository-owned asynchronous
   methods, including the public runner and provider-analyzer contracts.
   Extend explicit propagation to ordinary asynchronous helpers and owned action

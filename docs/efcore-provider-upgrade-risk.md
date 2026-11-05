@@ -96,8 +96,8 @@ when a GUID property belongs only to a secondary Entity Splitting table. Shared
 SQL, computed and literal defaults are resolved through actual property mappings;
 explicit generation choices remain authoritative. This is a model-metadata
 correction, not a schema migration or a change to GUID storage defaults.
-The current 10.6.3 minimum retains those fixes and raises the MySqlConnector
-minimum to 2.6.1; direct consumer pins must satisfy the new driver floor.
+The current 10.6.4 minimum retains those fixes and the MySqlConnector
+minimum of 2.6.1 introduced in 10.6.3; direct consumer pins must satisfy that floor.
 SafeMigrations 10.6.1 additionally promotes the existing connector to minimum
 2.6.2 in its own MySQL/MariaDB package. The Doka upper bound remains in effect;
 other providers do not acquire this transport. The new connector revocation-
