@@ -3,6 +3,11 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 /// <summary>Defines validated SQLite compatibility and batching limits.</summary>
 internal static class SqliteSafeMigrationLimits
 {
+    // WHY: 900 remains below SQLite's historical 999-variable default while
+    // leaving capacity for provider-added parameters in custom builds.
+    /// <summary>Gets the safe maximum number of parameters emitted per command.</summary>
+    public const int MaximumParametersPerCommand = 900;
+
     /// <summary>Gets the minimum supported SQLite engine version.</summary>
     public static readonly Version MinimumVersion = new(3, 46, 1);
 
@@ -10,9 +15,4 @@ internal static class SqliteSafeMigrationLimits
     public static bool IsSupportedVersion(
         string value
     ) => Version.TryParse(value, out var version) && version >= MinimumVersion;
-
-    // WHY: 900 remains below SQLite's historical 999-variable default while
-    // leaving capacity for provider-added parameters in custom builds.
-    /// <summary>Gets the safe maximum number of parameters emitted per command.</summary>
-    public const int MaximumParametersPerCommand = 900;
 }

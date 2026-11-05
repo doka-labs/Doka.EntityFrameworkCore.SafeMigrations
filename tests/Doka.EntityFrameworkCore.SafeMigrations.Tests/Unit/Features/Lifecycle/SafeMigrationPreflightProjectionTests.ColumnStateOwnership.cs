@@ -10,13 +10,15 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         const int tableCount = 1_000;
         var normalizer = new ColumnStateOwnershipNormalizer();
         var projection = new SafeMigrationPreflightProjection(objectIdentityNormalizer: normalizer);
-        var operations = Enumerable.Range(0, tableCount)
+        var operations = Enumerable
+            .Range(0, tableCount)
             .Select(number => new SafeMigrationOperation(
                 new EnsureTableIntent(
                     new ExpectedTableDefinition($"items_{number}", [Column("id")]),
                     SafeMigrationTableMode.StrictDefinition),
                 SafeMigrationPolicy.ThrowIfDifferent))
             .ToArray();
+
         var live = Live(SafeMigrationObservedState.Missing);
 
         // Act
@@ -74,7 +76,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Act
         if (providerOperation)
         {
-            projection.ObserveProviderPostcondition(new RenameTableOperation { Name = "items", NewName = "renamed" });
+            projection.ObserveProviderPostcondition(
+                new RenameTableOperation
+                {
+                    Name = "items",
+                    NewName = "renamed",
+                });
         }
         else
         {
@@ -112,19 +119,33 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             new EnsureTableIntent(
                 new ExpectedTableDefinition("Items", [Column("id"), Column("legacy")]),
                 SafeMigrationTableMode.StrictDefinition));
+
         Apply(
             projection,
             new EnsureTableIntent(
                 new ExpectedTableDefinition("items", [Column("id"), Column("legacy")], schema: "archive"),
                 SafeMigrationTableMode.StrictDefinition));
+
         projection.ObserveProviderPostcondition(
-            new RenameColumnOperation { Table = "ITEMS", Schema = "DBO", Name = "legacy", NewName = "current" });
+            new RenameColumnOperation
+            {
+                Table = "ITEMS",
+                Schema = "DBO",
+                Name = "legacy",
+                NewName = "current",
+            });
 
         // WHY: An ordinary provider postcondition may lack prior exact source
         // evidence. Its renamed target must stay unknown, never inherit live proof.
 
         projection.ObserveProviderPostcondition(
-            new RenameColumnOperation { Table = "ITEMS", Schema = "dbo", Name = "unobserved", NewName = "opaque" });
+            new RenameColumnOperation
+            {
+                Table = "ITEMS",
+                Schema = "dbo",
+                Name = "unobserved",
+                NewName = "opaque",
+            });
 
         // Act
         if (providerOperation)
@@ -182,7 +203,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             objectIdentityNormalizer: new ColumnStateOwnershipNormalizer(normalizeAliases: true));
 
         projection.ObserveProviderPostcondition(ProviderColumn("old", "items", isNullable: false));
-        projection.ObserveProviderPostcondition(new DropColumnOperation { Table = "items", Name = "missing" });
+        projection.ObserveProviderPostcondition(
+            new DropColumnOperation
+            {
+                Table = "items",
+                Name = "missing",
+            });
 
         var opaque = ProviderColumn("opaque", "items", isNullable: false);
 
@@ -198,9 +224,18 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Act
         if (providerOperation)
         {
-            projection.ObserveProviderPostcondition(new DropTableOperation { Name = "ITEMS", Schema = "DBO" });
+            projection.ObserveProviderPostcondition(
+                new DropTableOperation
+                {
+                    Name = "ITEMS",
+                    Schema = "DBO",
+                });
 
-            var recreated = new CreateTableOperation { Name = "ITEMS", Schema = "DBO" };
+            var recreated = new CreateTableOperation
+            {
+                Name = "ITEMS",
+                Schema = "DBO",
+            };
 
             recreated.Columns.Add(ProviderColumn("missing", "ITEMS", isNullable: false));
             recreated.Columns.Add(ProviderColumn("opaque", "ITEMS", isNullable: false));
@@ -212,6 +247,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 projection,
                 new DropTableIntent("ITEMS", schema: "DBO"),
                 SafeMigrationObservedState.Matching);
+
             Apply(
                 projection,
                 new EnsureTableIntent(
@@ -249,7 +285,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var projection = new SafeMigrationPreflightProjection();
 
         projection.ObserveProviderPostcondition(ProviderColumn("exact", "items", isNullable: false));
-        projection.ObserveProviderPostcondition(new DropColumnOperation { Table = "items", Name = "missing" });
+        projection.ObserveProviderPostcondition(
+            new DropColumnOperation
+            {
+                Table = "items",
+                Name = "missing",
+            });
 
         var opaque = ProviderColumn("opaque", "other", isNullable: false);
 
@@ -257,9 +298,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         projection.ObserveProviderPostcondition(opaque);
 
         // Act
-        projection.ObserveProviderPostcondition(sqlOperation
-            ? new SqlOperation { Sql = "SELECT 1;" }
-            : new AlterDatabaseOperation());
+        projection.ObserveProviderPostcondition(
+            sqlOperation
+                ? new SqlOperation { Sql = "SELECT 1;" }
+                : new AlterDatabaseOperation());
 
         var exact = ProjectOwnedColumn(projection, "items", null, "exact", SafeMigrationObservedState.Matching);
         var missing = ProjectOwnedColumn(projection, "items", null, "missing", SafeMigrationObservedState.Matching);
@@ -268,6 +310,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Assert
         Assert.False(
             ((ISafeMigrationProjectedColumnSource)projection).TryGetProjectedColumn("items", null, "exact", out _));
+
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, exact.ObservedState);
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, missing.ObservedState);
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, unknown.ObservedState);
@@ -301,7 +344,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         /// <inheritdoc />
         public string NormalizeIdentifier(
             string identifier
-        ) => normalizeAliases ? identifier.ToUpperInvariant() : identifier;
+        ) => normalizeAliases
+            ? identifier.ToUpperInvariant()
+            : identifier;
 
         /// <inheritdoc />
         public string? NormalizeSchema(
@@ -322,7 +367,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         bool ignoreCase
     ) : StringComparer
     {
-        private readonly StringComparer _comparer = ignoreCase ? OrdinalIgnoreCase : Ordinal;
+        private readonly StringComparer _comparer = ignoreCase
+            ? OrdinalIgnoreCase
+            : Ordinal;
 
         /// <summary>Gets the number of identifier equality comparisons.</summary>
         public int EqualityChecks { get; private set; }

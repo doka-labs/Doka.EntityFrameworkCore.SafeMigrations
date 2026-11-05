@@ -17,30 +17,57 @@ public sealed class SqlServerProjectedKeyTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var source = new ProjectedSource(new ExpectedColumnDefinition("Code", typeof(int), true, "int"),
+        var source = new ProjectedSource(
+            new ExpectedColumnDefinition("Code", typeof(int), true, "int"),
             new SafeMigrationProjectedTableState(false, false, false, false));
 
-        var snapshot = new SqlServerProjectedKeyTable(true, 2, null,
+        var snapshot = new SqlServerProjectedKeyTable(
+            true,
+            2,
+            null,
             new Dictionary<string, SqlServerProjectedKeyColumn>(StringComparer.Ordinal)
             {
-                ["TenantId"] = new("int", 4, false, true, true, null, true),
+                ["TenantId"] = new(
+                    "int",
+                    4,
+                    false,
+                    true,
+                    true,
+                    null,
+                    true),
             });
 
-        var intent = new EnsureIndexIntent(new ExpectedIndexDefinition("IX_sparse", "keys",
-            [new ExpectedIndexKeyDefinition("TenantId"), new ExpectedIndexKeyDefinition("Code")], unique: true,
-            structuredFilter: filtered ? new SafeMigrationSqlNullTestExpression(
-                new SafeMigrationSqlIdentifierExpression(["Code"]), negated: true) : null));
+        var intent = new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "IX_sparse",
+                "keys",
+                [new ExpectedIndexKeyDefinition("TenantId"), new ExpectedIndexKeyDefinition("Code")],
+                unique: true,
+                structuredFilter: filtered
+                    ? new SafeMigrationSqlNullTestExpression(
+                        new SafeMigrationSqlIdentifierExpression(["Code"]),
+                        negated: true)
+                    : null));
 
         var live = Analysis(SafeMigrationObservedState.PrerequisiteMissing);
         var projected = Analysis(SafeMigrationObservedState.Missing);
 
         // Act
-        var analysis = SqlServerProjectedKeyShape.Validate(intent, source, live, projected, snapshot,
+        var analysis = SqlServerProjectedKeyShape.Validate(
+            intent,
+            source,
+            live,
+            projected,
+            snapshot,
             context.GetService<IRelationalTypeMappingSource>());
 
         // Assert
-        Assert.Equal(filtered ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.PrerequisiteMissing,
+        Assert.Equal(
+            filtered
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.PrerequisiteMissing,
             analysis.ObservedState);
+
         if (!filtered)
         {
             Assert.Equal("projected_key_data_state_unknown", analysis.Code);
@@ -70,7 +97,12 @@ public sealed class SqlServerProjectedKeyTests
 
         // Act
         var analysis = SqlServerProjectedKeyShape.Validate(
-            intent, source, missing, missing, null, context.GetService<IRelationalTypeMappingSource>());
+            intent,
+            source,
+            missing,
+            missing,
+            null,
+            context.GetService<IRelationalTypeMappingSource>());
 
         // Assert
         Assert.Equal(expected, analysis.ObservedState);
@@ -90,7 +122,11 @@ public sealed class SqlServerProjectedKeyTests
 
         // Act
         var analysis = SqlServerProjectedKeyShape.Validate(
-            CreateKeyIntent(true), source, missing, missing, null,
+            CreateKeyIntent(true),
+            source,
+            missing,
+            missing,
+            null,
             context.GetService<IRelationalTypeMappingSource>());
 
         // Assert
@@ -115,7 +151,10 @@ public sealed class SqlServerProjectedKeyTests
             new ExpectedColumnDefinition("Code", typeof(int), true, "int"),
             new SafeMigrationProjectedTableState(false, false, false, false));
 
-        var snapshot = new SqlServerProjectedKeyTable(true, rowCount, null,
+        var snapshot = new SqlServerProjectedKeyTable(
+            true,
+            rowCount,
+            null,
             new Dictionary<string, SqlServerProjectedKeyColumn>(StringComparer.Ordinal));
 
         var live = Analysis(SafeMigrationObservedState.PrerequisiteMissing);
@@ -123,7 +162,11 @@ public sealed class SqlServerProjectedKeyTests
 
         // Act
         var analysis = SqlServerProjectedKeyShape.Validate(
-            CreateKeyIntent(false), source, live, projected, snapshot,
+            CreateKeyIntent(false),
+            source,
+            live,
+            projected,
+            snapshot,
             context.GetService<IRelationalTypeMappingSource>());
 
         // Assert
@@ -140,20 +183,33 @@ public sealed class SqlServerProjectedKeyTests
             new ExpectedColumnDefinition("Code", typeof(int), true, "int"),
             new SafeMigrationProjectedTableState(false, false, false, false));
 
-        var snapshot = new SqlServerProjectedKeyTable(true, 2, null,
+        var snapshot = new SqlServerProjectedKeyTable(
+            true,
+            2,
+            null,
             new Dictionary<string, SqlServerProjectedKeyColumn>(StringComparer.Ordinal));
 
-        var intent = new EnsureIndexIntent(new ExpectedIndexDefinition("IX_keys_Code", "keys",
-            [new ExpectedIndexKeyDefinition("Code")], unique: true,
-            structuredFilter: new SafeMigrationSqlNullTestExpression(
-                new SafeMigrationSqlIdentifierExpression(["Code"]), negated: true)));
+        var intent = new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "IX_keys_Code",
+                "keys",
+                [new ExpectedIndexKeyDefinition("Code")],
+                unique: true,
+                structuredFilter: new SafeMigrationSqlNullTestExpression(
+                    new SafeMigrationSqlIdentifierExpression(["Code"]),
+                    negated: true)));
 
         var live = Analysis(SafeMigrationObservedState.PrerequisiteMissing);
         var projected = Analysis(SafeMigrationObservedState.Missing);
 
         // Act
         var analysis = SqlServerProjectedKeyShape.Validate(
-            intent, source, live, projected, snapshot, context.GetService<IRelationalTypeMappingSource>());
+            intent,
+            source,
+            live,
+            projected,
+            snapshot,
+            context.GetService<IRelationalTypeMappingSource>());
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
@@ -169,7 +225,10 @@ public sealed class SqlServerProjectedKeyTests
             new ExpectedColumnDefinition("Code", typeof(int), true, "int"),
             new SafeMigrationProjectedTableState(false, true, false, false));
 
-        var snapshot = new SqlServerProjectedKeyTable(true, 1, null,
+        var snapshot = new SqlServerProjectedKeyTable(
+            true,
+            1,
+            null,
             new Dictionary<string, SqlServerProjectedKeyColumn>(StringComparer.Ordinal));
 
         var live = Analysis(SafeMigrationObservedState.PrerequisiteMissing);
@@ -177,7 +236,11 @@ public sealed class SqlServerProjectedKeyTests
 
         // Act
         var analysis = SqlServerProjectedKeyShape.Validate(
-            CreateKeyIntent(false), source, live, projected, snapshot,
+            CreateKeyIntent(false),
+            source,
+            live,
+            projected,
+            snapshot,
             context.GetService<IRelationalTypeMappingSource>());
 
         // Assert
@@ -200,7 +263,10 @@ public sealed class SqlServerProjectedKeyTests
             new ExpectedColumnDefinition("Code", typeof(int), false, "int"),
             new SafeMigrationProjectedTableState(false, false, wasDropped, false));
 
-        var snapshot = new SqlServerProjectedKeyTable(true, 0, "PK_existing",
+        var snapshot = new SqlServerProjectedKeyTable(
+            true,
+            0,
+            "PK_existing",
             new Dictionary<string, SqlServerProjectedKeyColumn>(StringComparer.Ordinal));
 
         var live = Analysis(SafeMigrationObservedState.Different);
@@ -208,7 +274,11 @@ public sealed class SqlServerProjectedKeyTests
 
         // Act
         var analysis = SqlServerProjectedKeyShape.Validate(
-            CreateKeyIntent(true), source, live, projected, snapshot,
+            CreateKeyIntent(true),
+            source,
+            live,
+            projected,
+            snapshot,
             context.GetService<IRelationalTypeMappingSource>());
 
         // Assert
@@ -232,20 +302,37 @@ public sealed class SqlServerProjectedKeyTests
             new ExpectedColumnDefinition("Code", typeof(int), false, "int"),
             new SafeMigrationProjectedTableState(false, false, false, false));
 
-        var snapshot = new SqlServerProjectedKeyTable(true, 2, null,
+        var snapshot = new SqlServerProjectedKeyTable(
+            true,
+            2,
+            null,
             new Dictionary<string, SqlServerProjectedKeyColumn>(StringComparer.Ordinal)
             {
-                ["Code"] = new("int", 4, false, true, true, null, false),
+                ["Code"] = new(
+                    "int",
+                    4,
+                    false,
+                    true,
+                    true,
+                    null,
+                    false),
             });
 
-        var live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.None, postconditionSatisfied: false, code);
+        var live = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.None,
+            postconditionSatisfied: false,
+            code);
 
         var projected = Analysis(SafeMigrationObservedState.Missing);
 
         // Act
         var analysis = SqlServerProjectedKeyShape.Validate(
-            CreateKeyIntent(false), source, live, projected, snapshot,
+            CreateKeyIntent(false),
+            source,
+            live,
+            projected,
+            snapshot,
             context.GetService<IRelationalTypeMappingSource>());
 
         // Assert
@@ -262,15 +349,22 @@ public sealed class SqlServerProjectedKeyTests
             new ExpectedColumnDefinition("Code", typeof(int), false, "int"),
             new SafeMigrationProjectedTableState(true, false, false, false));
 
-        var live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
-            SafeMigrationRepairCapability.None, postconditionSatisfied: false, "index_unproven_facet")
+        var live = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Unsupported,
+            SafeMigrationRepairCapability.None,
+            postconditionSatisfied: false,
+            "index_unproven_facet")
         {
             IsInvariantUnsupported = true,
         };
 
         // Act
         var analysis = SqlServerProjectedKeyShape.Validate(
-            CreateKeyIntent(false), source, live, Analysis(SafeMigrationObservedState.Missing), null,
+            CreateKeyIntent(false),
+            source,
+            live,
+            Analysis(SafeMigrationObservedState.Missing),
+            null,
             context.GetService<IRelationalTypeMappingSource>());
 
         // Assert
@@ -292,21 +386,39 @@ public sealed class SqlServerProjectedKeyTests
             new ExpectedColumnDefinition("Unrelated", typeof(int), false, "int"),
             new SafeMigrationProjectedTableState(false, false, false, false));
 
-        var snapshot = new SqlServerProjectedKeyTable(true, 0, null,
+        var snapshot = new SqlServerProjectedKeyTable(
+            true,
+            0,
+            null,
             new Dictionary<string, SqlServerProjectedKeyColumn>(StringComparer.Ordinal)
             {
-                ["Code"] = new("varchar", bytes, false, true, true, null, false),
+                ["Code"] = new(
+                    "varchar",
+                    bytes,
+                    false,
+                    true,
+                    true,
+                    null,
+                    false),
             });
 
-        var intent = new EnsureIndexIntent(new ExpectedIndexDefinition("IX_keys_Code", "keys",
-            [new ExpectedIndexKeyDefinition("Code")]));
+        var intent = new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "IX_keys_Code",
+                "keys",
+                [new ExpectedIndexKeyDefinition("Code")]));
 
         var live = Analysis(SafeMigrationObservedState.Different);
         var projected = Analysis(SafeMigrationObservedState.Missing);
 
         // Act
         var analysis = SqlServerProjectedKeyShape.Validate(
-            intent, source, live, projected, snapshot, context.GetService<IRelationalTypeMappingSource>());
+            intent,
+            source,
+            live,
+            projected,
+            snapshot,
+            context.GetService<IRelationalTypeMappingSource>());
 
         // Assert
         Assert.Equal(expected, analysis.ObservedState);
@@ -329,22 +441,41 @@ public sealed class SqlServerProjectedKeyTests
             new ExpectedColumnDefinition("Code", typeof(int), false, "int"),
             new SafeMigrationProjectedTableState(false, false, wasDropped, false));
 
-        var snapshot = new SqlServerProjectedKeyTable(true, 2, "PK_keys",
+        var snapshot = new SqlServerProjectedKeyTable(
+            true,
+            2,
+            "PK_keys",
             new Dictionary<string, SqlServerProjectedKeyColumn>(StringComparer.Ordinal)
             {
-                ["Code"] = new("int", 4, false, true, true, null, false),
+                ["Code"] = new(
+                    "int",
+                    4,
+                    false,
+                    true,
+                    true,
+                    null,
+                    false),
             });
 
-        var live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.None, postconditionSatisfied: false, code);
+        var live = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.None,
+            postconditionSatisfied: false,
+            code);
 
-        var projected = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
-            SafeMigrationRepairCapability.None, postconditionSatisfied: false,
+        var projected = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.PrerequisiteMissing,
+            SafeMigrationRepairCapability.None,
+            postconditionSatisfied: false,
             "projected_primary_key_replacement_unproven");
 
         // Act
         var analysis = SqlServerProjectedKeyShape.Validate(
-            CreateKeyIntent(true), source, live, projected, snapshot,
+            CreateKeyIntent(true),
+            source,
+            live,
+            projected,
+            snapshot,
             context.GetService<IRelationalTypeMappingSource>());
 
         // Assert
@@ -367,10 +498,20 @@ public sealed class SqlServerProjectedKeyTests
             new ExpectedColumnDefinition("Code", typeof(int), true, "int"),
             new SafeMigrationProjectedTableState(false, false, false, false));
 
-        var snapshot = new SqlServerProjectedKeyTable(true, rowCount, null,
+        var snapshot = new SqlServerProjectedKeyTable(
+            true,
+            rowCount,
+            null,
             new Dictionary<string, SqlServerProjectedKeyColumn>(StringComparer.Ordinal)
             {
-                ["Other"] = new("int", 4, false, true, true, null, false),
+                ["Other"] = new(
+                    "int",
+                    4,
+                    false,
+                    true,
+                    true,
+                    null,
+                    false),
             });
 
         var intent = new EnsureUniqueConstraintIntent(
@@ -378,8 +519,11 @@ public sealed class SqlServerProjectedKeyTests
 
         // Act
         var analysis = SqlServerProjectedKeyShape.Validate(
-            intent, source, Analysis(SafeMigrationObservedState.PrerequisiteMissing),
-            Analysis(SafeMigrationObservedState.Missing), snapshot,
+            intent,
+            source,
+            Analysis(SafeMigrationObservedState.PrerequisiteMissing),
+            Analysis(SafeMigrationObservedState.Missing),
+            snapshot,
             context.GetService<IRelationalTypeMappingSource>());
 
         // Assert
@@ -394,7 +538,9 @@ public sealed class SqlServerProjectedKeyTests
     [Theory]
     [InlineData("classified_different")]
     [InlineData("primary_key_replacement_data_blocked")]
-    public void RecreatedTable_DoesNotRetainItsOriginalPhysicalPrimaryKey(string code)
+    public void RecreatedTable_DoesNotRetainItsOriginalPhysicalPrimaryKey(
+        string code
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
@@ -402,29 +548,42 @@ public sealed class SqlServerProjectedKeyTests
             new ExpectedColumnDefinition("Code", typeof(int), false, "int"),
             new SafeMigrationProjectedTableState(true, false, false, false));
 
-        var snapshot = new SqlServerProjectedKeyTable(true, 2, "PK_old_table",
+        var snapshot = new SqlServerProjectedKeyTable(
+            true,
+            2,
+            "PK_old_table",
             new Dictionary<string, SqlServerProjectedKeyColumn>(StringComparer.Ordinal));
 
-        var live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.None, postconditionSatisfied: false, code);
+        var live = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.None,
+            postconditionSatisfied: false,
+            code);
 
         // Act
         var analysis = SqlServerProjectedKeyShape.Validate(
-            CreateKeyIntent(true), source, live,
-            Analysis(SafeMigrationObservedState.Missing), snapshot,
+            CreateKeyIntent(true),
+            source,
+            live,
+            Analysis(SafeMigrationObservedState.Missing),
+            snapshot,
             context.GetService<IRelationalTypeMappingSource>());
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
     }
 
-    private static SafeMigrationIntent CreateKeyIntent(bool primaryKey)
+    private static SafeMigrationIntent CreateKeyIntent(
+        bool primaryKey
+    )
         => primaryKey
             ? new EnsurePrimaryKeyIntent(new ExpectedPrimaryKeyDefinition("PK_keys", "keys", ["Code"]))
             : new EnsureUniqueConstraintIntent(
                 new ExpectedUniqueConstraintDefinition("UQ_keys_Code", "keys", ["Code"]));
 
-    private static SafeMigrationProviderAnalysis Analysis(SafeMigrationObservedState state)
+    private static SafeMigrationProviderAnalysis Analysis(
+        SafeMigrationObservedState state
+    )
         => new(state, SafeMigrationRepairCapability.None, state == SafeMigrationObservedState.Matching, "test_state");
 
     private sealed class ProjectedSource(
@@ -436,10 +595,12 @@ public sealed class SqlServerProjectedKeyTests
             string table,
             string? schema,
             string column,
-            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ExpectedColumnDefinition? result
+            [NotNullWhen(true)] out ExpectedColumnDefinition? result
         )
         {
-            result = StringComparer.Ordinal.Equals(column, definition.Name) ? definition : null;
+            result = StringComparer.Ordinal.Equals(column, definition.Name)
+                ? definition
+                : null;
 
             return result is not null;
         }

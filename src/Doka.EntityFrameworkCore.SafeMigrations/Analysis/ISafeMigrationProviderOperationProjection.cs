@@ -12,9 +12,9 @@ internal interface ISafeMigrationProviderOperationProjection
     /// </summary>
     /// <param name="operation">The provider operation to classify.</param>
     /// <returns>
-    /// <see langword="true"/> only when the provider guarantees that all
+    /// <see langword="true" /> only when the provider guarantees that all
     /// existing table-scoped evidence remains valid; otherwise,
-    /// <see langword="false"/>.
+    /// <see langword="false" />.
     /// </returns>
     bool PreservesExistingTableState(
         MigrationOperation operation
@@ -25,7 +25,7 @@ internal interface ISafeMigrationProviderOperationProjection
     /// unrelated column, even when dependent schema objects may change.
     /// </summary>
     /// <param name="operation">The accepted column rename.</param>
-    /// <returns><see langword="true"/> only for a provider with this guarantee.</returns>
+    /// <returns><see langword="true" /> only for a provider with this guarantee.</returns>
     bool PreservesUnrelatedColumnAbsence(
         RenameColumnIntent operation
     ) => false;
@@ -37,8 +37,8 @@ internal interface ISafeMigrationProviderOperationProjection
     /// <param name="operation">The safe operation being projected.</param>
     /// <param name="analysis">The provider analysis captured for the operation.</param>
     /// <returns>
-    /// <see langword="true"/> only when generic projection must retain the
-    /// provider result; otherwise, <see langword="false"/>.
+    /// <see langword="true" /> only when generic projection must retain the
+    /// provider result; otherwise, <see langword="false" />.
     /// </returns>
     bool IsSequenceAwareAnalysis(
         SafeMigrationOperation operation,

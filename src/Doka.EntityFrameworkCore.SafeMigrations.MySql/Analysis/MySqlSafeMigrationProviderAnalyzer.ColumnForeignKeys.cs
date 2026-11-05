@@ -2,58 +2,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 {
-    private Dictionary<SafeMigrationOperation, IReadOnlySet<string>>? _columnSetNullDependencies;
     private HashSet<SafeMigrationOperation>? _columnPrimaryKeyDependencies;
-
-    /// <summary>Captures bounded SET NULL and PRIMARY dependencies for source-proven column transitions.</summary>
-    /// <param name="context">The active provider context.</param>
-    /// <param name="operations">The immutable analyzed operations.</param>
-    /// <param name="analyses">Their independently captured source and row proofs.</param>
-    /// <param name="maximumPayloadBytes">The bounded catalog transport payload.</param>
-    /// <param name="commandTimeout">The caller's command timeout.</param>
-    /// <param name="cancellationToken">The caller's cancellation token.</param>
-    private async Task CaptureColumnDependenciesAsync(
-        DbContext context,
-        IReadOnlyList<SafeMigrationOperation> operations,
-        SafeMigrationProviderAnalysis[] analyses,
-        int maximumPayloadBytes,
-        int? commandTimeout,
-        CancellationToken cancellationToken
-    )
-    {
-        _columnSetNullDependencies = null;
-        _columnPrimaryKeyDependencies = null;
-        var (requests, aliases) = CreateColumnDependencyRequests(operations, analyses, _currentDatabase);
-        if (requests.Count == 0)
-        {
-            return;
-        }
-
-        HashSet<SafeMigrationOperation>? primary = null;
-        Dictionary<SafeMigrationOperation, IReadOnlySet<string>>? setNull = null;
-        await ReadColumnDependenciesAsync(
-            context.Database.GetDbConnection(), requests, maximumPayloadBytes, commandTimeout,
-            (ordinal, hasPrimaryKey, names) =>
-            {
-                AddColumnDependencyFact(requests[ordinal].Operation, hasPrimaryKey, names, ref primary, ref setNull);
-                if (aliases?.TryGetValue(ordinal, out var consumers) == true)
-                {
-                    foreach (var consumer in consumers)
-                    {
-                        AddColumnDependencyFact(consumer, hasPrimaryKey, names, ref primary, ref setNull);
-                    }
-                }
-            },
-            cancellationToken);
-
-        cancellationToken.ThrowIfCancellationRequested();
-
-        // WHY: No partial certificate becomes visible if transport, validation
-        // or cancellation fails. Completed FK sets are shared without mutation
-        // between independently source-bound operation-reference consumers.
-        _columnPrimaryKeyDependencies = primary;
-        _columnSetNullDependencies = setNull;
-    }
+    private Dictionary<SafeMigrationOperation, IReadOnlySet<string>>? _columnSetNullDependencies;
 
     /// <inheritdoc />
     SafeMigrationProviderAnalysis? ISafeMigrationProjectedDependencyAnalyzer.ValidateCapturedProjection(
@@ -81,7 +31,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         if (column.IsNullable)
         {
             var primaryMembership = columns.IsProjectedPrimaryKeyColumn(
-                table, schema, column.Name, StringComparer.OrdinalIgnoreCase);
+                table,
+                schema,
+                column.Name,
+                StringComparer.OrdinalIgnoreCase);
 
             if (primaryMembership == true)
             {
@@ -106,8 +59,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
             if (columns is ISafeMigrationProjectedTableSource primaryTables
                 && primaryTables.TryGetProjectedTableState(table, schema, out var primaryState)
-                && (primaryState.IsNewlyCreated || (primaryState.HasUnknownStructure && !certifiedSurvivingSource)
-                    || primaryState.HasDataMutation || primaryState.PrimaryKeyWasDropped))
+                && (primaryState.IsNewlyCreated
+                    || (primaryState.HasUnknownStructure && !certifiedSurvivingSource)
+                    || primaryState.HasDataMutation
+                    || primaryState.PrimaryKeyWasDropped))
             {
                 return null;
             }
@@ -119,7 +74,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         }
 
         if (columns.HasProjectedSetNullForeignKey(
-                table, schema, column.Name, StringComparer.OrdinalIgnoreCase))
+            table,
+            schema,
+            column.Name,
+            StringComparer.OrdinalIgnoreCase))
         {
             return RequiredColumnSetNullDependency();
         }
@@ -148,6 +106,59 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         }
 
         return null;
+    }
+
+    /// <summary>Captures bounded SET NULL and PRIMARY dependencies for source-proven column transitions.</summary>
+    /// <param name="context">The active provider context.</param>
+    /// <param name="operations">The immutable analyzed operations.</param>
+    /// <param name="analyses">Their independently captured source and row proofs.</param>
+    /// <param name="maximumPayloadBytes">The bounded catalog transport payload.</param>
+    /// <param name="commandTimeout">The caller's command timeout.</param>
+    /// <param name="cancellationToken">The caller's cancellation token.</param>
+    private async Task CaptureColumnDependenciesAsync(
+        DbContext context,
+        IReadOnlyList<SafeMigrationOperation> operations,
+        SafeMigrationProviderAnalysis[] analyses,
+        int maximumPayloadBytes,
+        int? commandTimeout,
+        CancellationToken cancellationToken
+    )
+    {
+        _columnSetNullDependencies = null;
+        _columnPrimaryKeyDependencies = null;
+        var (requests, aliases) = CreateColumnDependencyRequests(operations, analyses, _currentDatabase);
+        if (requests.Count == 0)
+        {
+            return;
+        }
+
+        HashSet<SafeMigrationOperation>? primary = null;
+        Dictionary<SafeMigrationOperation, IReadOnlySet<string>>? setNull = null;
+        await ReadColumnDependenciesAsync(
+            context.Database.GetDbConnection(),
+            requests,
+            maximumPayloadBytes,
+            commandTimeout,
+            (ordinal, hasPrimaryKey, names) =>
+            {
+                AddColumnDependencyFact(requests[ordinal].Operation, hasPrimaryKey, names, ref primary, ref setNull);
+                if (aliases?.TryGetValue(ordinal, out var consumers) == true)
+                {
+                    foreach (var consumer in consumers)
+                    {
+                        AddColumnDependencyFact(consumer, hasPrimaryKey, names, ref primary, ref setNull);
+                    }
+                }
+            },
+            cancellationToken);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // WHY: No partial certificate becomes visible if transport, validation
+        // or cancellation fails. Completed FK sets are shared without mutation
+        // between independently source-bound operation-reference consumers.
+        _columnPrimaryKeyDependencies = primary;
+        _columnSetNullDependencies = setNull;
     }
 
     /// <summary>Shares dependency checks between explicit alters and existence-based column repairs.</summary>
@@ -180,12 +191,18 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     /// <summary>Reports a structural dependency refusal without discarding the authored target.</summary>
     /// <returns>The explicit NOT NULL compatibility rejection.</returns>
     private static SafeMigrationProviderAnalysis RequiredColumnSetNullDependency()
-        => new(SafeMigrationObservedState.Different, SafeMigrationRepairCapability.None,
-            postconditionSatisfied: false, "column_set_null_dependency");
+        => new(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.None,
+            postconditionSatisfied: false,
+            "column_set_null_dependency");
 
     /// <summary>Refuses nullable-column DDL while a current physical primary key requires NOT NULL.</summary>
     /// <returns>The explicit PRIMARY compatibility rejection.</returns>
     private static SafeMigrationProviderAnalysis NullableColumnPrimaryKeyDependency()
-        => new(SafeMigrationObservedState.Different, SafeMigrationRepairCapability.None,
-            postconditionSatisfied: false, "column_primary_key_dependency");
+        => new(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.None,
+            postconditionSatisfied: false,
+            "column_primary_key_dependency");
 }

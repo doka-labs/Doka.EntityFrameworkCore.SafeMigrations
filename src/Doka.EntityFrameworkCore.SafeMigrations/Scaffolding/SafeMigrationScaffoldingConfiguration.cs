@@ -14,7 +14,8 @@ internal sealed record SafeMigrationScaffoldingConfiguration(
     bool IsEnabled,
     SafeMigrationScaffoldingMode Mode,
     SafeMigrationPolicy LegacyConvergencePolicy = SafeMigrationPolicy.ThrowIfDifferent,
-    bool ExcludeModelManagedDataForExcludedTables = false)
+    bool ExcludeModelManagedDataForExcludedTables = false
+)
 {
     /// <summary>Creates a configuration snapshot from EF Core context options.</summary>
     /// <param name="options">The active context options, or null when unavailable.</param>
@@ -23,7 +24,10 @@ internal sealed record SafeMigrationScaffoldingConfiguration(
         IDbContextOptions? options
     )
     {
-        var extension = options?.Extensions.OfType<ISafeMigrationScaffoldingOptions>().SingleOrDefault();
+        var extension = options
+            ?.Extensions
+            .OfType<ISafeMigrationScaffoldingOptions>()
+            .SingleOrDefault();
 
         return extension is null
             ? new SafeMigrationScaffoldingConfiguration(false, SafeMigrationScaffoldingMode.Strict)

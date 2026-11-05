@@ -20,7 +20,8 @@ public sealed class SqlServerCheckValidationSqlTests
         using var context = new SafeMigrationDbContext(ConnectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists("CK_items", "items", sql);
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
         // Act
@@ -30,14 +31,19 @@ public sealed class SqlServerCheckValidationSqlTests
         Assert.True(plan.RequiresDelayedBinding);
         Assert.Contains("WHERE NOT (", plan.StateExpression, StringComparison.Ordinal);
         Assert.Contains("ty.is_user_defined = 0", plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
-        Assert.Contains("N'tinyint', N'smallint', N'int', N'bigint'", plan.StateEvaluationGuardExpression,
+        Assert.Contains(
+            "N'tinyint', N'smallint', N'int', N'bigint'",
+            plan.StateEvaluationGuardExpression,
             StringComparison.Ordinal);
+
         Assert.Contains("HAS_PERMS_BY_NAME", plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
         Assert.Equal("N'unsupported'", plan.StateEvaluationGuardFailureExpression);
         Assert.Contains("check_row_data_unproven", plan.PrerequisiteFailureCodeExpression, StringComparison.Ordinal);
-        Assert.Contains("check_row_data_unproven",
+        Assert.Contains(
+            "check_row_data_unproven",
             SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate(plan),
             StringComparison.Ordinal);
+
         Assert.Contains("cc.is_not_trusted = 0", plan.Postcondition, StringComparison.Ordinal);
     }
 
@@ -60,7 +66,8 @@ public sealed class SqlServerCheckValidationSqlTests
         using var context = new SafeMigrationDbContext(ConnectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists("CK_items", "items", sql);
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
         // Act
@@ -80,11 +87,14 @@ public sealed class SqlServerCheckValidationSqlTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
-        var operation = new SafeMigrationOperation(new EnsureCheckConstraintIntent(
-            new ExpectedCheckConstraintDefinition("CK_items", "items", sql)), SafeMigrationPolicy.ThrowIfDifferent);
+        var operation = new SafeMigrationOperation(
+            new EnsureCheckConstraintIntent(
+                new ExpectedCheckConstraintDefinition("CK_items", "items", sql)),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var plan = catalog.Build(operation);
@@ -99,7 +109,8 @@ public sealed class SqlServerCheckValidationSqlTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
         var intent = new EnsureCheckConstraintIntent(
@@ -109,8 +120,11 @@ public sealed class SqlServerCheckValidationSqlTests
         var plan = catalog.BuildCheckPredicateCapturePlan(intent);
 
         // Assert
-        Assert.Contains("AND NOT (EXISTS (SELECT 1 FROM sys.check_constraints", plan.StateExpression,
+        Assert.Contains(
+            "AND NOT (EXISTS (SELECT 1 FROM sys.check_constraints",
+            plan.StateExpression,
             StringComparison.Ordinal);
+
         Assert.Contains("cc.parent_object_id", plan.StateExpression, StringComparison.Ordinal);
         Assert.Contains("WHERE NOT ([Value]>=1)", plan.StateExpression, StringComparison.Ordinal);
         Assert.Contains("ty.is_user_defined = 0", plan.StateEvaluationGuardExpression, StringComparison.Ordinal);

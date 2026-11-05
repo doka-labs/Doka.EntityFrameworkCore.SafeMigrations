@@ -8,14 +8,16 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
     [InlineData("ensure")]
     [InlineData("update")]
     [InlineData("delete")]
-    public async Task ManagedRowsAndCompleteTableAreRevalidatedAfterCertifiedRename(string kind)
+    public async Task ManagedRowsAndCompleteTableAreRevalidatedAfterCertifiedRename(
+        string kind
+    )
     {
         // Arrange
         var initial = Table("source");
         var final = Table("renamed");
         var originalData = ManagedRenameIntent(kind, "source");
         var expectedData = ManagedRenameIntent(kind, "renamed");
-        var analyzer = new FinalCatalogAnalyzer(final) { FinalManagedContracts = [expectedData], };
+        var analyzer = new FinalCatalogAnalyzer(final) { FinalManagedContracts = [expectedData] };
         var dataOperation = Safe(originalData);
         MigrationOperation[] operations =
         [
@@ -33,8 +35,11 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(report.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
         Assert.Equal([3, 2], analyzer.Batches.Select(static batch => batch.Length));
-        var rows = Assert.Single(analyzer.Batches[1].Select(static operation => operation.Intent)
-            .OfType<ModelManagedDataIntent>());
+        var rows = Assert.Single(
+            analyzer
+                .Batches[1]
+                .Select(static operation => operation.Intent)
+                .OfType<ModelManagedDataIntent>());
 
         Assert.Equal(["renamed"], rows.KeyColumns);
         Assert.Same(originalData.KeyValues, rows.KeyValues);
@@ -43,7 +48,10 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         switch (originalData)
         {
             case EnsureModelManagedDataIntent ensure:
-                Assert.Same(ensure.Values, Assert.IsType<EnsureModelManagedDataIntent>(rows).Values);
+                Assert.Same(ensure.Values,
+                    Assert.IsType<EnsureModelManagedDataIntent>(rows)
+                        .Values);
+
                 break;
             case UpdateModelManagedDataIntent update:
                 var rewrittenUpdate = Assert.IsType<UpdateModelManagedDataIntent>(rows);
@@ -53,8 +61,14 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
             case DeleteModelManagedDataIntent delete:
                 var rewrittenDelete = Assert.IsType<DeleteModelManagedDataIntent>(rows);
                 Assert.Same(delete.OldValues, rewrittenDelete.OldValues);
-                Assert.Equal(["renamed"], Assert.Single(rewrittenDelete.ForeignKeys).PrincipalColumns);
-                Assert.Equal(["owner"], Assert.Single(rewrittenDelete.ForeignKeys).Columns);
+                Assert.Equal(["renamed"],
+                    Assert.Single(rewrittenDelete.ForeignKeys)
+                        .PrincipalColumns);
+
+                Assert.Equal(["owner"],
+                    Assert.Single(rewrittenDelete.ForeignKeys)
+                        .Columns);
+
                 break;
         }
     }
@@ -64,14 +78,29 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ManagedRenameReclassificationKeepsTableAndRowDriftVisible(bool rowDrift)
+    public async Task ManagedRenameReclassificationKeepsTableAndRowDriftVisible(
+        bool rowDrift
+    )
     {
         // Arrange
         var initial = Table("source");
         var originalData = ManagedRenameIntent("ensure", "source");
-        var analyzer = new FinalCatalogAnalyzer(Table("renamed", rowDrift ? null : "default"))
+        var analyzer = new FinalCatalogAnalyzer(
+            Table(
+                "renamed",
+                rowDrift
+                    ? null
+                    : "default"))
         {
-            FinalManagedContracts = [ManagedRenameIntent("ensure", "renamed", rowDrift ? 8 : 7)],
+            FinalManagedContracts =
+            [
+                ManagedRenameIntent(
+                    "ensure",
+                    "renamed",
+                    rowDrift
+                        ? 8
+                        : 7),
+            ],
         };
 
         MigrationOperation[] operations =
@@ -98,7 +127,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         // Arrange
         var initial = Table("source");
         var finalUpdate = ManagedRenameIntent("update", "renamed", 8);
-        var analyzer = new FinalCatalogAnalyzer(Table("renamed")) { FinalManagedContracts = [finalUpdate], };
+        var analyzer = new FinalCatalogAnalyzer(Table("renamed")) { FinalManagedContracts = [finalUpdate] };
         MigrationOperation[] operations =
         [
             Safe(new EnsureTableIntent(initial, SafeMigrationTableMode.StrictDefinition)),
@@ -123,7 +152,9 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
     [InlineData("sql")]
     [InlineData("structure")]
     [InlineData("identity")]
-    public async Task ManagedRenameRejectsUnprovenLineage(string boundary)
+    public async Task ManagedRenameRejectsUnprovenLineage(
+        string boundary
+    )
     {
         // Arrange
         var analyzer = new FinalCatalogAnalyzer(Table("renamed"))
@@ -140,9 +171,13 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
 
         if (boundary != "identity")
         {
-            operations.Add(boundary == "sql" ? new SqlOperation { Sql = "SELECT 1;", }
-                : Safe(new EnsureColumnIntent("source_nodes",
-                    new ExpectedColumnDefinition("added", typeof(int), true))));
+            operations.Add(
+                boundary == "sql"
+                    ? new SqlOperation { Sql = "SELECT 1;" }
+                    : Safe(
+                        new EnsureColumnIntent(
+                            "source_nodes",
+                            new ExpectedColumnDefinition("added", typeof(int), true))));
         }
 
         operations.Add(Safe(new RenameColumnIntent("source", "source_nodes", "renamed")));
@@ -156,18 +191,42 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         Assert.Single(analyzer.Batches);
     }
 
-    private static ModelManagedDataIntent ManagedRenameIntent(string kind, string keyColumn, int value = 7)
+    private static ModelManagedDataIntent ManagedRenameIntent(
+        string kind,
+        string keyColumn,
+        int value = 7
+    )
         => kind switch
         {
-            "ensure" => new EnsureModelManagedDataIntent("source_nodes", [keyColumn], ["int"],
-                [keyColumn, "payload"], ["int", "int"], new object?[,] { { 42, value } }, null,
+            "ensure" => new EnsureModelManagedDataIntent(
+                "source_nodes",
+                [keyColumn],
+                ["int"],
+                [keyColumn, "payload"],
+                ["int", "int"],
+                new object?[,] { { 42, value } },
+                null,
                 [new ExpectedModelManagedDataUniqueKeyDefinition(["payload"])]),
-            "update" => new UpdateModelManagedDataIntent("source_nodes", [keyColumn], ["int"],
-                new object?[,] { { 42 } }, ["payload"], ["int"], new object?[,] { { 6 } },
-                new object?[,] { { value } }, null, [new ExpectedModelManagedDataUniqueKeyDefinition(["payload"])]),
-            "delete" => new DeleteModelManagedDataIntent("source_nodes", [keyColumn], ["int"],
-                new object?[,] { { 42 } }, [keyColumn, "payload"], ["int", "int"],
-                new object?[,] { { 42, 6 } }, null,
+            "update" => new UpdateModelManagedDataIntent(
+                "source_nodes",
+                [keyColumn],
+                ["int"],
+                new object?[,] { { 42 } },
+                ["payload"],
+                ["int"],
+                new object?[,] { { 6 } },
+                new object?[,] { { value } },
+                null,
+                [new ExpectedModelManagedDataUniqueKeyDefinition(["payload"])]),
+            "delete" => new DeleteModelManagedDataIntent(
+                "source_nodes",
+                [keyColumn],
+                ["int"],
+                new object?[,] { { 42 } },
+                [keyColumn, "payload"],
+                ["int", "int"],
+                new object?[,] { { 42, 6 } },
+                null,
                 [new ExpectedModelManagedDataForeignKeyDefinition("dependents", ["owner"], [keyColumn])]),
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };

@@ -13,7 +13,9 @@ public sealed class SqlServerScalarProofRegressionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ScalarCancellationScopeRetainsOneWayCallerLink(bool cancelCaller)
+    public void ScalarCancellationScopeRetainsOneWayCallerLink(
+        bool cancelCaller
+    )
     {
         // Arrange
         using var caller = new CancellationTokenSource();
@@ -50,7 +52,10 @@ public sealed class SqlServerScalarProofRegressionTests
 
         // Assert
         Assert.True(rawBytes < SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes);
-        Assert.Contains("exceeds a bounded query limit", Assert.IsType<InvalidOperationException>(failure).Message,
+        Assert.Contains(
+            "exceeds a bounded query limit",
+            Assert.IsType<InvalidOperationException>(failure)
+                .Message,
             StringComparison.Ordinal);
     }
 
@@ -90,7 +95,10 @@ public sealed class SqlServerScalarProofRegressionTests
         var previousGate = -1;
         foreach (var variable in variables)
         {
-            var type = variable == "@doka_layout" ? "nvarchar(128)" : "int";
+            var type = variable == "@doka_layout"
+                ? "nvarchar(128)"
+                : "int";
+
             var declaration = "DECLARE " + variable + " " + type + "; EXEC sys.sp_executesql N'SELECT @doka_proof";
             var declarationIndex = template.IndexOf(declaration, StringComparison.Ordinal);
             var outputIndex = template.IndexOf("@doka_proof = " + variable + " OUTPUT;", StringComparison.Ordinal);
@@ -132,6 +140,7 @@ public sealed class SqlServerScalarProofRegressionTests
 
         const string evidence = "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(max), NULL), "
             + "CONVERT(nvarchar(max), NULL), CONVERT(nvarchar(128), NULL)";
+
         string[] codes =
         [
             SqlServerSafeMigrationRuntimePlan.PhysicalTableUnsupportedCode,
@@ -146,15 +155,26 @@ public sealed class SqlServerScalarProofRegressionTests
         // Assert
         foreach (var code in codes)
         {
-            Assert.Contains("SELECT @doka_ordinal, N'unsupported', 0, 0, N'" + code + "', " + evidence,
-                template, StringComparison.Ordinal);
+            Assert.Contains(
+                "SELECT @doka_ordinal, N'unsupported', 0, 0, N'" + code + "', " + evidence,
+                template,
+                StringComparison.Ordinal);
         }
 
-        Assert.Contains("SELECT @doka_ordinal, N'unsupported', 0, 0, @doka_layout, " + evidence,
-            template, StringComparison.Ordinal);
-        Assert.Contains("ELSE EXEC sys.sp_executesql N'SELECT @doka_ordinal, "
+        Assert.Contains(
+            "SELECT @doka_ordinal, N'unsupported', 0, 0, @doka_layout, " + evidence,
+            template,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "ELSE EXEC sys.sp_executesql N'SELECT @doka_ordinal, "
             + "CASE WHEN COALESCE((1), 0) = 1 THEN (N''different'') ELSE N''prerequisite_missing'' END, "
-            + "0, 0, N''outer_guard_rejected'', " + evidence + ";'", template, StringComparison.Ordinal);
+            + "0, 0, N''outer_guard_rejected'', "
+            + evidence
+            + ";'",
+            template,
+            StringComparison.Ordinal);
+
         Assert.Contains("DECLARE @doka_layout nvarchar(128);", template, StringComparison.Ordinal);
     }
 
@@ -179,8 +199,12 @@ public sealed class SqlServerScalarProofRegressionTests
         foreach (var parameter in plan.AnalysisParameters)
         {
             Assert.Contains(parameter.Name + " = " + parameter.Name + ",", template, StringComparison.Ordinal);
-            Assert.Contains(parameter.Name + " = @doka_source0_"
-                + parameter.Name["@doka_value".Length..], dispatch, StringComparison.Ordinal);
+            Assert.Contains(
+                parameter.Name
+                + " = @doka_source0_"
+                + parameter.Name["@doka_value".Length..],
+                dispatch,
+                StringComparison.Ordinal);
         }
     }
 
@@ -212,7 +236,10 @@ public sealed class SqlServerScalarProofRegressionTests
     /// <param name="connection">The unique owned connection, which this helper neither closes nor disposes.</param>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     /// <returns>The asynchronous verification operation.</returns>
-    internal static async Task VerifyLocalAsync(SqlConnection connection, CancellationToken cancellationToken)
+    internal static async Task VerifyLocalAsync(
+        SqlConnection connection,
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -233,12 +260,18 @@ public sealed class SqlServerScalarProofRegressionTests
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task VerifyNameAndCollationGatesAsync(
         SqlConnection connection,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         const string missingState = "(SELECT TOP (1) N'matching' FROM dbo.doka_scalar_proof_missing_object)";
-        var absent = Plan() with { PrerequisiteExpression = "0", StateExpression = missingState };
+        var absent = Plan() with
+        {
+            PrerequisiteExpression = "0",
+            StateExpression = missingState,
+        };
+
         await AssertResultAsync(
             connection,
             absent,
@@ -249,6 +282,7 @@ public sealed class SqlServerScalarProofRegressionTests
 
         const string invalidCollation = "CASE WHEN N'x' COLLATE doka_scalar_proof_invalid_collation = N'x' "
             + "THEN 1 ELSE 0 END";
+
         var collation = GuardedPlan() with
         {
             ColumnCollationSupportExpression = "0",
@@ -257,15 +291,21 @@ public sealed class SqlServerScalarProofRegressionTests
             StateExpression = "CASE WHEN (" + invalidCollation + ") = 1 THEN N'matching' ELSE N'different' END",
         };
 
-        await AssertResultAsync(connection, collation, 12, "unsupported",
-            SqlServerSafeMigrationRuntimePlan.ColumnCollationUnsupportedCode, cancellationToken: cancellationToken);
+        await AssertResultAsync(
+            connection,
+            collation,
+            12,
+            "unsupported",
+            SqlServerSafeMigrationRuntimePlan.ColumnCollationUnsupportedCode,
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>False or NULL support proofs reject before compiling later proofs.</summary>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task VerifySupportRejectionsAsync(
         SqlConnection connection,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -325,7 +365,8 @@ public sealed class SqlServerScalarProofRegressionTests
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task VerifyLayoutAndOuterFallbackAsync(
         SqlConnection connection,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -335,6 +376,7 @@ public sealed class SqlServerScalarProofRegressionTests
             ColumnLayoutFailureExpression = "N'" + layoutCode + "'",
             ColumnCollationSupportExpression = "(SELECT missing FROM dbo.doka_scalar_proof_missing_object)",
         };
+
         await AssertResultAsync(
             connection,
             layout,
@@ -342,6 +384,7 @@ public sealed class SqlServerScalarProofRegressionTests
             "unsupported",
             layoutCode[..128],
             cancellationToken: cancellationToken);
+
         await AssertResultAsync(connection, GuardedPlan(), 15, "matching", null, cancellationToken: cancellationToken);
 
         var outer = Plan() with
@@ -372,17 +415,29 @@ public sealed class SqlServerScalarProofRegressionTests
         cancellationToken.ThrowIfCancellationRequested();
 
         Assert.True(connection.CanCreateBatch);
-        var numeric = s_proofValues.Select((value, ordinal) => BoundPlan(mappings, ordinal, value) with
-        {
-            PhysicalTableSupportExpression = "CASE WHEN @doka_value0 = 1 THEN 1 ELSE 0 END",
-            CatalogPreambleSql = "DECLARE @private_proof int = @doka_value0;",
-            StateExpression = "CASE WHEN @private_proof = 1 THEN N'matching' ELSE N'different' END",
-        }).ToArray();
+        var numeric = s_proofValues
+            .Select((value, ordinal) => BoundPlan(mappings, ordinal, value) with
+            {
+                PhysicalTableSupportExpression = "CASE WHEN @doka_value0 = 1 THEN 1 ELSE 0 END",
+                CatalogPreambleSql = "DECLARE @private_proof int = @doka_value0;",
+                StateExpression = "CASE WHEN @private_proof = 1 THEN N'matching' ELSE N'different' END",
+            })
+            .ToArray();
 
-        Assert.Single(numeric.Select(SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate).Distinct());
+        Assert.Single(numeric
+            .Select(SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate)
+            .Distinct());
+
         var numericResults = new SafeMigrationProviderAnalysis[numeric.Length];
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, 10, numeric, 0, numericResults, cancellationToken);
+            connection,
+            null,
+            10,
+            numeric,
+            0,
+            numericResults,
+            cancellationToken);
+
         Assert.Equal(SafeMigrationObservedState.Matching, numericResults[0].ObservedState);
         Assert.Equal(SafeMigrationObservedState.Unsupported, numericResults[1].ObservedState);
         Assert.Equal(SqlServerSafeMigrationRuntimePlan.PhysicalTableUnsupportedCode, numericResults[1].Code);
@@ -394,15 +449,32 @@ public sealed class SqlServerScalarProofRegressionTests
             .Select((value, ordinal) => BoundPlan(mappings, ordinal, value) with
             {
                 DefaultValueSupportExpression = "CASE WHEN CONVERT(varbinary(max), @doka_value0) = 0x"
-                    + sourceHex + " THEN 1 ELSE 0 END",
-            }).ToArray();
+                + sourceHex
+                + " THEN 1 ELSE 0 END",
+            })
+            .ToArray();
 
-        Assert.Single(unicode.Select(SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate).Distinct());
-        Assert.All(unicode, plan => Assert.Equal("nvarchar(max)",
-            Assert.Single(plan.AnalysisParameters).Mapping.StoreType));
+        Assert.Single(unicode
+            .Select(SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate)
+            .Distinct());
+
+        Assert.All(
+            unicode,
+            plan => Assert.Equal(
+                "nvarchar(max)",
+                Assert.Single(plan.AnalysisParameters)
+                    .Mapping.StoreType));
+
         var unicodeResults = new SafeMigrationProviderAnalysis[unicode.Length];
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, 10, unicode, 0, unicodeResults, cancellationToken);
+            connection,
+            null,
+            10,
+            unicode,
+            0,
+            unicodeResults,
+            cancellationToken);
+
         Assert.Equal(SafeMigrationObservedState.Matching, unicodeResults[0].ObservedState);
         Assert.Equal(SafeMigrationObservedState.Unsupported, unicodeResults[1].ObservedState);
         Assert.Equal(SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode, unicodeResults[1].Code);
@@ -411,8 +483,13 @@ public sealed class SqlServerScalarProofRegressionTests
         // WHY: The analyzer already rejects any extra, empty, or non-nine-column result set. Direct reads
         // additionally pin the raw engine shape, independently of the provider's result projection.
         await AssertResultAsync(connection, numeric[0], 17, "matching", null, cancellationToken: cancellationToken);
-        await AssertResultAsync(connection, numeric[1], 18, "unsupported",
-            SqlServerSafeMigrationRuntimePlan.PhysicalTableUnsupportedCode, cancellationToken: cancellationToken);
+        await AssertResultAsync(
+            connection,
+            numeric[1],
+            18,
+            "unsupported",
+            SqlServerSafeMigrationRuntimePlan.PhysicalTableUnsupportedCode,
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>Every source participates in a real boundary proof, including the final source.</summary>
@@ -429,40 +506,58 @@ public sealed class SqlServerScalarProofRegressionTests
         await AssertResultAsync(connection, plan, 19, "matching", null, cancellationToken: cancellationToken);
         var changed = plan with
         {
-            AnalysisParameters = plan.AnalysisParameters.Select((parameter, index) =>
-                index == 1_999 ? parameter with { Value = -1 } : parameter).ToArray(),
+            AnalysisParameters = plan
+                .AnalysisParameters
+                .Select((parameter, index) =>
+                    index == 1_999
+                        ? parameter with { Value = -1 }
+                        : parameter)
+                .ToArray(),
         };
 
-        await AssertResultAsync(connection, changed, 20, "unsupported",
-            SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode, cancellationToken: cancellationToken);
+        await AssertResultAsync(
+            connection,
+            changed,
+            20,
+            "unsupported",
+            SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode,
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>Cancels a running scalar metadata query with one owned session and no time-delay SQL.</summary>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
     private static async Task VerifyScalarCancellationAsync(
         SqlConnection connection,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         var plan = Plan() with
         {
             PhysicalTableSupportExpression = "(SELECT CASE WHEN SUM(CONVERT(bigint, "
-                + "CHECKSUM(a.object_id, b.object_id, c.object_id, d.object_id, e.object_id))) = 0 THEN 1 ELSE 0 END "
-                + "FROM sys.all_objects a CROSS JOIN sys.all_objects b CROSS JOIN sys.all_objects c "
-                + "CROSS JOIN sys.all_objects d CROSS JOIN sys.all_objects e)",
+            + "CHECKSUM(a.object_id, b.object_id, c.object_id, d.object_id, e.object_id))) = 0 THEN 1 ELSE 0 END "
+            + "FROM sys.all_objects a CROSS JOIN sys.all_objects b CROSS JOIN sys.all_objects c "
+            + "CROSS JOIN sys.all_objects d CROSS JOIN sys.all_objects e)",
         };
 
         using var cancellation = CreateScalarCancellationSource(cancellationToken);
         cancellation.CancelAfter(TimeSpan.FromMilliseconds(250));
         var results = new SafeMigrationProviderAnalysis[1];
         var stopwatch = Stopwatch.StartNew();
+
         // WHY: Exercise the actual native capture path. An informational prefix can make SqlClient
         // return a reader before scalar execution; synchronously reading its metadata then loses the
         // ExecuteReaderAsync cancellation scope and tests a different path from catalog capture.
         var failure = await Record.ExceptionAsync(() =>
             SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-                connection, null, 10, [plan], 0, results, cancellation.Token));
+                connection,
+                null,
+                10,
+                [plan],
+                0,
+                results,
+                cancellation.Token));
 
         Assert.True(cancellation.IsCancellationRequested);
         if (failure is SqlException sqlFailure)
@@ -480,8 +575,9 @@ public sealed class SqlServerScalarProofRegressionTests
 
         // WHY: Scheduling and engine contention affect cancellation latency without changing
         // its outcome. Keep elapsed time informational; timeout errors remain rejected above.
-        Console.WriteLine(FormattableString.Invariant(
-            $"Scalar capture cancellation duration-ms={stopwatch.Elapsed.TotalMilliseconds:F3} (informational)."));
+        Console.WriteLine(
+            FormattableString.Invariant(
+                $"Scalar capture cancellation duration-ms={stopwatch.Elapsed.TotalMilliseconds:F3} (informational)."));
 
         await using var probe = connection.CreateCommand();
         probe.CommandText = "SELECT 1;";
@@ -492,7 +588,10 @@ public sealed class SqlServerScalarProofRegressionTests
     /// <summary>Creates an independently cancelable capture scope that also observes caller cancellation.</summary>
     /// <param name="cancellationToken">The caller whose cancellation must reach the native capture.</param>
     /// <returns>The linked source whose disposal belongs to the caller.</returns>
-    private static CancellationTokenSource CreateScalarCancellationSource(CancellationToken cancellationToken)
+    private static CancellationTokenSource CreateScalarCancellationSource(
+            CancellationToken cancellationToken
+        )
+
         // WHY: Keep linking separate from the injected timer so offline controls do not depend on elapsed time.
         => CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
@@ -528,16 +627,25 @@ public sealed class SqlServerScalarProofRegressionTests
         command.CommandTimeout = 10;
         foreach (var parameter in plan.AnalysisParameters)
         {
-            command.Parameters.Add(parameter.Mapping.CreateParameter(command, parameter.ExternalName,
-                parameter.Value, nullable: false));
+            command.Parameters.Add(
+                parameter.Mapping.CreateParameter(
+                    command,
+                    parameter.ExternalName,
+                    parameter.Value,
+                    nullable: false));
         }
 
         Assert.Equal(plan.AnalysisParameters.Count, command.Parameters.Count);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         Assert.Equal(9, reader.FieldCount);
         Assert.True(await reader.ReadAsync(cancellationToken));
-        var result = new ScalarResult(reader.GetInt32(0), reader.GetString(1),
-            reader.IsDBNull(4) ? null : reader.GetString(4));
+        var result = new ScalarResult(
+            reader.GetInt32(0),
+            reader.GetString(1),
+            reader.IsDBNull(4)
+                ? null
+                : reader.GetString(4));
+
         Assert.IsType<int>(reader.GetValue(2));
         Assert.IsType<int>(reader.GetValue(3));
         for (var column = 5; column < 9; column++)
@@ -580,7 +688,9 @@ public sealed class SqlServerScalarProofRegressionTests
     }
 
     /// <summary>Uses every admitted source in one support proof rather than forwarding unused placeholders.</summary>
-    private static SqlServerSafeMigrationRuntimePlan MaximumSourcePlan(IRelationalTypeMappingSource mappings)
+    private static SqlServerSafeMigrationRuntimePlan MaximumSourcePlan(
+        IRelationalTypeMappingSource mappings
+    )
     {
         var bindings = new SqlServerCatalogParameterBindings(mappings, 0);
         var comparisons = new List<string>(2_000);
@@ -598,12 +708,21 @@ public sealed class SqlServerScalarProofRegressionTests
     }
 
     /// <summary>Counts an exact statement token without conflating different proof variables.</summary>
-    private static int Occurrences(string text, string token)
-        => text.Split(token, StringSplitOptions.None).Length - 1;
+    private static int Occurrences(
+        string text,
+        string token
+    )
+        => text.Split(token)
+                .Length
+            - 1;
 
     /// <summary>Carries raw engine evidence independently of provider result projection.</summary>
     /// <param name="Ordinal">The original classifier ordinal.</param>
     /// <param name="State">The raw observed-state label.</param>
     /// <param name="Code">The raw nullable classification code.</param>
-    private sealed record ScalarResult(int Ordinal, string State, string? Code);
+    private sealed record ScalarResult(
+        int Ordinal,
+        string State,
+        string? Code
+    );
 }

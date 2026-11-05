@@ -4,15 +4,15 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
 {
     private const string Table = "maintenance_model_0000";
+    private readonly SqliteSafeMigrationProviderAnalyzer _analyzer;
     private readonly SqliteConnection _connection;
     private readonly DbContext _first;
-    private readonly DbContext _second;
-    private readonly SqliteSafeMigrationProviderAnalyzer _analyzer;
-    private readonly MigrationOperation[] _operations;
-    private readonly IModel?[] _models;
-    private readonly MigrationOperation[][] _prefixes;
-    private readonly MigrationOperation[][] _segments;
     private readonly IModel[] _modelSequence;
+    private readonly IModel?[] _models;
+    private readonly MigrationOperation[] _operations;
+    private readonly MigrationOperation[][] _prefixes;
+    private readonly DbContext _second;
+    private readonly MigrationOperation[][] _segments;
     private int _captureCount;
 
     /// <summary>Prepares one embedded workload and verifies fresh capture and operation-reference ownership.</summary>
@@ -37,8 +37,12 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
 
         _first = Context(_connection, tableCount, alternate: false);
         _second = Context(_connection, tableCount, alternate: true);
-        var firstModel = _first.GetService<IDesignTimeModel>().Model;
-        var secondModel = _second.GetService<IDesignTimeModel>().Model;
+        var firstModel = _first.GetService<IDesignTimeModel>()
+            .Model;
+
+        var secondModel = _second.GetService<IDesignTimeModel>()
+            .Model;
+
         MaintenanceAttribution.Require(
             !ReferenceEquals(firstModel, secondModel),
             "The changing-model workload accidentally reuses the same EF model reference.");
@@ -50,27 +54,47 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
 
         _operations = Operations(windows, interleaved);
         _models = _operations
-            .Select((_, ordinal) => changingModel && ordinal % 4 >= 2 ? secondModel : firstModel)
+            .Select((_, ordinal) => changingModel && ordinal % 4 >= 2
+                ? secondModel
+                : firstModel)
             .ToArray();
 
         _prefixes = Enumerable
             .Range(0, windows)
-            .Select(index => _operations.Take((index * (interleaved ? 2 : 1)) + 1).ToArray())
+            .Select(index => _operations
+                .Take(
+                    index
+                    * (interleaved
+                        ? 2
+                        : 1)
+                    + 1)
+                .ToArray())
             .ToArray();
 
         _segments = Enumerable
             .Range(0, windows)
-            .Select(index => new[] { _operations[index * (interleaved ? 2 : 1)] })
+            .Select(index => new[]
+            {
+                _operations[index
+                    * (interleaved
+                        ? 2
+                        : 1)],
+            })
             .ToArray();
 
         _modelSequence = Enumerable
             .Range(0, windows)
-            .Select(index => changingModel && index % 2 != 0 ? secondModel : firstModel)
+            .Select(index => changingModel && index % 2 != 0
+                ? secondModel
+                : firstModel)
             .ToArray();
 
         ObserveCaptures(_connection);
-        var observed = _analyzer.AnalyzeAsync(_first, _operations, _models, CancellationToken.None)
-            .GetAwaiter().GetResult();
+        var observed = _analyzer
+            .AnalyzeAsync(_first, _operations, _models, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
         MaintenanceAttribution.Require(
             observed.Count == windows
             && observed.All(static result => result.ObservedState == SafeMigrationObservedState.Missing)
@@ -79,14 +103,21 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
 
         // WHY: Compare exact ordered classification output on replay, not workload identity. Different
         // models can intentionally yield the same states; ModelTables/Windows/ChangingModel identify the case.
-        var stateHash = MaintenanceAttribution.Hash(string.Join(
-            "\n", observed.Select(static result => $"{result.ObservedState}:{result.Code}")));
+        var stateHash = MaintenanceAttribution.Hash(
+            string.Join(
+                "\n",
+                observed.Select(static result => $"{result.ObservedState}:{result.Code}")));
 
         _captureCount = 0;
-        var replay = _analyzer.AnalyzeAsync(_first, _operations, _models, CancellationToken.None)
-            .GetAwaiter().GetResult();
-        var replayHash = MaintenanceAttribution.Hash(string.Join(
-            "\n", replay.Select(static result => $"{result.ObservedState}:{result.Code}")));
+        var replay = _analyzer
+            .AnalyzeAsync(_first, _operations, _models, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        var replayHash = MaintenanceAttribution.Hash(
+            string.Join(
+                "\n",
+                replay.Select(static result => $"{result.ObservedState}:{result.Code}")));
 
         MaintenanceAttribution.Require(
             stateHash == replayHash && _captureCount == 1,
@@ -98,17 +129,29 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
             _ = MaintenanceAttribution.Write(
                 Path.Combine(output, $"sqlite-{tableCount}-{windows}-{interleaved}-{changingModel}.json"),
                 "Functional/source evidence; SQLite embedded engine and client substrate; not timing evidence",
-                [new
-                {
-                    Id = "PERF-05",
-                    Workload = interleaved ? "interleaved_structural_windows" : "contiguous_structural_window",
-                    ModelTables = tableCount,
-                    Windows = windows,
-                    ChangingModel = changingModel,
-                    CatalogCapturesPerInvocation = 1,
-                    ExactStateHash = stateHash,
-                }]);
+                [
+                    new
+                    {
+                        Id = "PERF-05",
+                        Workload = interleaved
+                            ? "interleaved_structural_windows"
+                            : "contiguous_structural_window",
+                        ModelTables = tableCount,
+                        Windows = windows,
+                        ChangingModel = changingModel,
+                        CatalogCapturesPerInvocation = 1,
+                        ExactStateHash = stateHash,
+                    },
+                ]);
         }
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        _second.Dispose();
+        _first.Dispose();
+        _connection.Dispose();
     }
 
     /// <summary>Captures one model-owned rebuild contract per prebuilt structural window.</summary>
@@ -119,10 +162,14 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
         for (var window = 0; window < _segments.Length; window++)
         {
             var contract = SqliteRebuildArtifactContract.FromModel(
-                _modelSequence[window], _prefixes[window], _segments[window]);
+                _modelSequence[window],
+                _prefixes[window],
+                _segments[window]);
 
             var operation = (SafeMigrationOperation)_segments[window][0];
-            checksum += contract.MayRebuildMissingColumn(operation) ? 1 : 0;
+            checksum += contract.MayRebuildMissingColumn(operation)
+                ? 1
+                : 0;
         }
 
         return checksum;
@@ -135,16 +182,11 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
         // WHY: BDN owns invocation counts; fixture observations must stay bounded during calibration too.
         _captureCount = 0;
 
-        return _analyzer.AnalyzeAsync(_first, _operations, _models, CancellationToken.None)
-            .GetAwaiter().GetResult().Count;
-    }
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        _second.Dispose();
-        _first.Dispose();
-        _connection.Dispose();
+        return _analyzer
+            .AnalyzeAsync(_first, _operations, _models, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult()
+            .Count;
     }
 
     /// <summary>Preserves exact operation-reference ownership across opaque and typed-DML boundaries.</summary>
@@ -182,12 +224,15 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
         MaintenanceAttribution.Require(
             contract.MayRebuildMissingColumn(drop),
             "The exact SQLite ADD-to-DROP operation lost its source candidate.");
+
         MaintenanceAttribution.Require(
             !contract.MayRebuildMissingColumn(clone),
             "A cloned SQLite DROP incorrectly inherited another operation's source candidate.");
+
         MaintenanceAttribution.Require(
             !opaque.MayRebuildMissingColumn(drop),
             "An opaque SQLite boundary incorrectly retained an earlier source candidate.");
+
         MaintenanceAttribution.Require(
             data.MayRebuildMissingColumn(drop),
             "Known SQLite DML incorrectly erased structural source-candidate ownership.");
@@ -202,7 +247,12 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
         bool interleaved
     )
     {
-        var operations = new List<MigrationOperation>(count * (interleaved ? 2 : 1));
+        var operations = new List<MigrationOperation>(
+            count
+            * (interleaved
+                ? 2
+                : 1));
+
         for (var index = 0; index < count; index++)
         {
             operations.Add(
@@ -232,7 +282,9 @@ internal sealed class SqliteMaintenanceAttributionFixture : IDisposable
         var version = (string)(command.ExecuteScalar()
             ?? throw new InvalidOperationException("SQLite did not report its native version."));
 
-        connection.CreateFunction("sqlite_version", () =>
+        connection.CreateFunction(
+            "sqlite_version",
+            () =>
             {
                 _captureCount++;
 

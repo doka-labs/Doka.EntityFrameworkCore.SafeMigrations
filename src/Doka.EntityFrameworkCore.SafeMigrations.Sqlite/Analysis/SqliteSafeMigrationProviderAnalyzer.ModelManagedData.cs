@@ -20,8 +20,8 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         if (intent is DeleteModelManagedDataIntent deletion)
         {
             if (deletion.ForeignKeys.Any(foreignKey =>
-                    !snapshot.Tables.TryGetValue(foreignKey.Table, out var dependentTable)
-                    || foreignKey.Columns.Any(column => !dependentTable.Columns.ContainsKey(column))))
+                !snapshot.Tables.TryGetValue(foreignKey.Table, out var dependentTable)
+                || foreignKey.Columns.Any(column => !dependentTable.Columns.ContainsKey(column))))
             {
                 return PrerequisiteMissing();
             }
@@ -158,7 +158,9 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             1
             + intent.KeyColumns.Count
             + source.ColumnCount
-            + (target is null || ReferenceEquals(source, target) ? 0 : target.ColumnCount))
+            + (target is null || ReferenceEquals(source, target)
+                ? 0
+                : target.ColumnCount))
         {
             "ordinal",
         };
@@ -167,10 +169,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             Enumerable
                 .Range(0, intent.KeyColumns.Count)
                 .Select(static index => $"key_{index}"));
+
         cteColumns.AddRange(
             Enumerable
                 .Range(0, source.ColumnCount)
                 .Select(static index => $"source_{index}"));
+
         if (target is not null
             && !ReferenceEquals(source, target))
         {
@@ -232,17 +236,13 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
 
         var keyPredicate = string.Join(
             " AND ",
-            intent.KeyColumns.Select((
-                    column,
-                    index
-                ) => $"stored.{Delimit(column)} IS expected.{Delimit($"key_{index}")}"));
+            intent.KeyColumns.Select((column,
+                    index) => $"stored.{Delimit(column)} IS expected.{Delimit($"key_{index}")}"));
 
         var sourcePredicate = string.Join(
             " AND ",
-            intent.Columns.Select((
-                    column,
-                    index
-                ) => $"stored.{Delimit(column)} IS expected.{Delimit($"source_{index}")}"));
+            intent.Columns.Select((column,
+                    index) => $"stored.{Delimit(column)} IS expected.{Delimit($"source_{index}")}"));
 
         var targetPredicate = target is null
             ? "0"
@@ -250,10 +250,8 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
                 ? sourcePredicate
                 : string.Join(
                     " AND ",
-                    intent.Columns.Select((
-                            column,
-                            index
-                        ) => $"stored.{Delimit(column)} IS expected.{Delimit($"target_{index}")}"));
+                    intent.Columns.Select((column,
+                            index) => $"stored.{Delimit(column)} IS expected.{Delimit($"target_{index}")}"));
 
         const string marker = "__doka_sm_present_8f29d0d2";
         command.CommandText = $"WITH expected ({string.Join(", ", cteColumns.Select(Delimit))}) AS ("
@@ -318,14 +316,14 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             {
                 var count = Math.Min(batchSize, intent.RowCount - offset);
                 if (HasModelManagedUniqueCollisionBatch(
-                        connection,
-                        transaction,
-                        intent,
-                        targetValues,
-                        uniqueKey,
-                        uniqueOrdinals,
-                        offset,
-                        count))
+                    connection,
+                    transaction,
+                    intent,
+                    targetValues,
+                    uniqueKey,
+                    uniqueOrdinals,
+                    offset,
+                    count))
                 {
                     return true;
                 }
@@ -394,24 +392,18 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
 
         var uniqueMatch = string.Join(
             " AND ",
-            uniqueKey.Columns.Select((
-                    column,
-                    index
-                ) => $"stored.{Delimit(column)} IS incoming.{Delimit($"unique_{index}")}"));
+            uniqueKey.Columns.Select((column,
+                    index) => $"stored.{Delimit(column)} IS incoming.{Delimit($"unique_{index}")}"));
 
         var nonNullTarget = string.Join(
             " AND ",
-            uniqueKey.Columns.Select((
-                    _,
-                    index
-                ) => $"incoming.{Delimit($"unique_{index}")} IS NOT NULL"));
+            uniqueKey.Columns.Select((_,
+                    index) => $"incoming.{Delimit($"unique_{index}")} IS NOT NULL"));
 
         var samePrimaryKey = string.Join(
             " AND ",
-            intent.KeyColumns.Select((
-                    column,
-                    index
-                ) => $"stored.{Delimit(column)} IS incoming.{Delimit($"key_{index}")}"));
+            intent.KeyColumns.Select((column,
+                    index) => $"stored.{Delimit(column)} IS incoming.{Delimit($"key_{index}")}"));
 
         command.CommandText = $"WITH incoming ({string.Join(", ", cteColumns.Select(Delimit))}) AS ("
             + $"VALUES {string.Join(", ", rows)}) SELECT 1 FROM incoming "
@@ -507,10 +499,8 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
 
         var dependencyMatch = string.Join(
             " AND ",
-            foreignKey.Columns.Select((
-                    column,
-                    index
-                ) => $"dependent.{Delimit(column)} IS incoming.{Delimit($"principal_{index}")}"));
+            foreignKey.Columns.Select((column,
+                    index) => $"dependent.{Delimit(column)} IS incoming.{Delimit($"principal_{index}")}"));
 
         command.CommandText = $"WITH incoming ({string.Join(", ", cteColumns.Select(Delimit))}) AS ("
             + $"VALUES {string.Join(", ", rows)}) SELECT COUNT(*) FROM incoming "

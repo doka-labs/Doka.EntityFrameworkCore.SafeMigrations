@@ -12,7 +12,9 @@ public sealed class MySqlBinaryDefaultProofRecoveryIntegrationTests : MySqlInteg
 
     /// <summary>Shares only the native engine and retains per-test database cleanup ownership.</summary>
     /// <param name="fixture">The lazily activated assembly-owned native engine.</param>
-    public MySqlBinaryDefaultProofRecoveryIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlBinaryDefaultProofRecoveryIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>
     /// A completed proof is cleared after cancellation before the guarded body, then safely reacquired.
@@ -22,10 +24,13 @@ public sealed class MySqlBinaryDefaultProofRecoveryIntegrationTests : MySqlInteg
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `binary_default_recovery` (`id` int NOT NULL, "
             + "`value` varbinary(4) NOT NULL DEFAULT X'A0B1'); "
-            + "INSERT INTO `binary_default_recovery` VALUES (1, X'1020');", cancellationToken: CancellationToken.None);
+            + "INSERT INTO `binary_default_recovery` VALUES (1, X'1020');",
+            cancellationToken: CancellationToken.None);
+
         using var cancellation = new CancellationTokenSource();
         var observer = new AcquiredBinaryDefaultCancellationInterceptor(cancellation);
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>()
@@ -37,50 +42,76 @@ public sealed class MySqlBinaryDefaultProofRecoveryIntegrationTests : MySqlInteg
         await using var context = new SafeMigrationDbContext(options);
         await context.Database.OpenConnectionAsync(cancellation.Token);
         var connection = context.Database.GetDbConnection();
-        var sessionBefore = await SessionScalarAsync(connection, "SELECT CONNECTION_ID();",
+        var sessionBefore = await SessionScalarAsync(
+            connection,
+            "SELECT CONNECTION_ID();",
             cancellationToken: cancellation.Token);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureColumn("binary_default_recovery",
-            new ExpectedColumnDefinition("value", typeof(byte[]), false, "varbinary(4)", maxLength: 4,
+        builder.EnsureColumn(
+            "binary_default_recovery",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(byte[]),
+                false,
+                "varbinary(4)",
+                maxLength: 4,
                 defaultValue: SafeMigrationDefaultValue.Literal(new byte[] { 0xA0, 0xB1 })),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellation.Token));
 
         var bodiesBeforeRetry = observer.GuardedBodiesStarted;
+
         // WHY: The execution token is now canceled; cleanup proof and retry must remain independently observable.
-        var variablesAfterCancellation = await SessionScalarAsync(connection, ClearedVariables,
+        var variablesAfterCancellation = await SessionScalarAsync(
+            connection,
+            ClearedVariables,
             cancellationToken: CancellationToken.None);
 
-        var temporaryTableError = await ResourceFailureCodeAsync(connection,
-            "SELECT 1 FROM `__doka_sm_assert` LIMIT 1;", cancellationToken: CancellationToken.None);
-
-        var preparedStatementError = await ResourceFailureCodeAsync(connection,
-            "DEALLOCATE PREPARE doka_sm_statement;", cancellationToken: CancellationToken.None);
-
-        var sessionAfterCancellation = await SessionScalarAsync(connection, "SELECT CONNECTION_ID();",
+        var temporaryTableError = await ResourceFailureCodeAsync(
+            connection,
+            "SELECT 1 FROM `__doka_sm_assert` LIMIT 1;",
             cancellationToken: CancellationToken.None);
 
-        var preservedBeforeRetry = await SessionScalarAsync(connection,
+        var preparedStatementError = await ResourceFailureCodeAsync(
+            connection,
+            "DEALLOCATE PREPARE doka_sm_statement;",
+            cancellationToken: CancellationToken.None);
+
+        var sessionAfterCancellation = await SessionScalarAsync(
+            connection,
+            "SELECT CONNECTION_ID();",
+            cancellationToken: CancellationToken.None);
+
+        var preservedBeforeRetry = await SessionScalarAsync(
+            connection,
             "SELECT COUNT(*) FROM `binary_default_recovery` WHERE `id` = 1 AND `value` = X'1020';",
             cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var variablesAfterRetry = await SessionScalarAsync(connection, ClearedVariables,
+        var variablesAfterRetry = await SessionScalarAsync(
+            connection,
+            ClearedVariables,
             cancellationToken: CancellationToken.None);
 
-        var sessionAfterRetry = await SessionScalarAsync(connection, "SELECT CONNECTION_ID();",
+        var sessionAfterRetry = await SessionScalarAsync(
+            connection,
+            "SELECT CONNECTION_ID();",
             cancellationToken: CancellationToken.None);
 
         await using var insert = connection.CreateCommand();
         insert.CommandText = "INSERT INTO `binary_default_recovery` (`id`) VALUES (2);";
         await insert.ExecuteNonQueryAsync(CancellationToken.None);
-        var defaultRows = await SessionScalarAsync(connection,
+        var defaultRows = await SessionScalarAsync(
+            connection,
             "SELECT COUNT(*) FROM `binary_default_recovery` WHERE `id` = 2 "
-            + "AND HEX(`value`) = 'A0B1';", cancellationToken: CancellationToken.None);
+            + "AND HEX(`value`) = 'A0B1';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.IsAssignableFrom<OperationCanceledException>(failure);
@@ -173,8 +204,12 @@ public sealed class MySqlBinaryDefaultProofRecoveryIntegrationTests : MySqlInteg
         public long? AcquiredSessionId { get; private set; }
 
         /// <inheritdoc />
-        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command,
-            CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default
+        )
         {
             if (command.CommandText.Contains("SET @doka_sm_post_ok", StringComparison.Ordinal))
             {
@@ -185,8 +220,12 @@ public sealed class MySqlBinaryDefaultProofRecoveryIntegrationTests : MySqlInteg
         }
 
         /// <inheritdoc />
-        public override async ValueTask<int> NonQueryExecutedAsync(DbCommand command,
-            CommandExecutedEventData eventData, int result, CancellationToken cancellationToken = default)
+        public override async ValueTask<int> NonQueryExecutedAsync(
+            DbCommand command,
+            CommandExecutedEventData eventData,
+            int result,
+            CancellationToken cancellationToken = default
+        )
         {
             if (CancellationTriggered
                 || !command.CommandText.Contains(ProofReset, StringComparison.Ordinal)
@@ -235,7 +274,10 @@ public sealed class MySqlBinaryDefaultProofRecoveryIntegrationTests : MySqlInteg
         /// <summary>Uses the fixture's explicit engine selector rather than treating MariaDB as equivalent.</summary>
         public MySqlBinaryDefaultFactAttribute()
         {
-            var engine = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_MYSQL_ENGINE")?.Trim();
+            var engine = Environment
+                .GetEnvironmentVariable("SAFE_MIGRATIONS_MYSQL_ENGINE")
+                ?.Trim();
+
             if (!string.Equals(engine, "mysql", StringComparison.OrdinalIgnoreCase))
             {
                 Skip = "The operation-local native binary-default proof is a MySQL-specific runtime contract.";

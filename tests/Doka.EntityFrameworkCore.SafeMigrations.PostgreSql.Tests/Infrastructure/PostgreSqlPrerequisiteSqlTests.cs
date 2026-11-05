@@ -29,27 +29,34 @@ public sealed class PostgreSqlPrerequisiteSqlTests
         var sqlHelper = context.GetService<ISqlGenerationHelper>();
         var literalBuilder = new PostgreSqlSafeMigrationCatalogSqlBuilder(mappingSource, sqlHelper);
         var parameterBuilder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
-            mappingSource, sqlHelper, parameters.AddString);
+            mappingSource,
+            sqlHelper,
+            parameters.AddString);
 
         var migration = new MigrationBuilder(context.Database.ProviderName!);
         if (scenario == "table")
         {
             migration.EnsureTable(
                 new ExpectedTableDefinition(
-                    "prerequisite_parent", [new ExpectedColumnDefinition("id", typeof(int), false, "integer")]),
-                SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+                    "prerequisite_parent",
+                    [new ExpectedColumnDefinition("id", typeof(int), false, "integer")]),
+                SafeMigrationTableMode.StrictDefinition,
+                SafeMigrationPolicy.ThrowIfDifferent);
         }
         else if (scenario == "prefix")
         {
             migration.EnsureIndex(
                 new ExpectedIndexDefinition(
-                    "prefix_index", "prerequisite_parent", [new ExpectedIndexKeyDefinition("value", prefixLength: 4)]),
+                    "prefix_index",
+                    "prerequisite_parent",
+                    [new ExpectedIndexKeyDefinition("value", prefixLength: 4)]),
                 SafeMigrationPolicy.ThrowIfDifferent);
         }
         else
         {
             migration.EnsureColumn(
-                "prerequisite_parent", new ExpectedColumnDefinition("value", typeof(int), true, "integer"),
+                "prerequisite_parent",
+                new ExpectedColumnDefinition("value", typeof(int), true, "integer"),
                 SafeMigrationPolicy.ThrowIfDifferent);
         }
 

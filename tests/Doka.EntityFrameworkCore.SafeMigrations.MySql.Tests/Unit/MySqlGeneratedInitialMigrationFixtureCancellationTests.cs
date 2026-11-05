@@ -8,7 +8,9 @@ public sealed class MySqlGeneratedInitialMigrationFixtureCancellationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task CancellationStopsOnlyTheObserverWhileThePeerRetainsTheOwner(bool legacy)
+    public async Task CancellationStopsOnlyTheObserverWhileThePeerRetainsTheOwner(
+        bool legacy
+    )
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
@@ -53,7 +55,9 @@ public sealed class MySqlGeneratedInitialMigrationFixtureCancellationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void PreCanceledObserverDoesNotStartInitialization(bool legacy)
+    public void PreCanceledObserverDoesNotStartInitialization(
+        bool legacy
+    )
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
@@ -148,7 +152,9 @@ public sealed class MySqlGeneratedInitialMigrationFixtureCancellationTests
     [InlineData("integer")]
     [InlineData("string")]
     [InlineData("context")]
-    public async Task PreCanceledSqlHelpersDoNotBeginDatabaseWork(string operation)
+    public async Task PreCanceledSqlHelpersDoNotBeginDatabaseWork(
+        string operation
+    )
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
@@ -171,7 +177,9 @@ public sealed class MySqlGeneratedInitialMigrationFixtureCancellationTests
     [InlineData("integer")]
     [InlineData("string")]
     [InlineData("context")]
-    public async Task UncancelableSqlHelpersRetainNormalValidation(string operation)
+    public async Task UncancelableSqlHelpersRetainNormalValidation(
+        string operation
+    )
     {
         // Arrange
         using var context = new DbContext(new DbContextOptionsBuilder().Options);
@@ -201,18 +209,20 @@ public sealed class MySqlGeneratedInitialMigrationFixtureCancellationTests
         var unrelated = new InvalidOperationException("Not an owned guard failure.");
 
         // Act
-        var exception = await Record.ExceptionAsync(() => HelperProbe.ObserveGuard(operationToken =>
-        {
-            calls++;
-            observedToken = operationToken;
+        var exception = await Record.ExceptionAsync(() => HelperProbe.ObserveGuard(
+            operationToken =>
+            {
+                calls++;
+                observedToken = operationToken;
 
-            return Task.FromException(unrelated);
-        }, cancellation.Token));
+                return Task.FromException(unrelated);
+            },
+            cancellation.Token));
 
         // Assert
         Assert.Equal(1, calls);
         Assert.Equal(cancellation.Token, observedToken);
-        Assert.IsType<Xunit.Sdk.ThrowsException>(exception);
+        Assert.IsType<ThrowsException>(exception);
     }
 
     /// <summary>Pre-cancellation prevents entering an owned asynchronous action.</summary>
@@ -225,12 +235,14 @@ public sealed class MySqlGeneratedInitialMigrationFixtureCancellationTests
         var calls = 0;
 
         // Act
-        var exception = await Record.ExceptionAsync(() => HelperProbe.ObserveGuard(_ =>
-        {
-            calls++;
+        var exception = await Record.ExceptionAsync(() => HelperProbe.ObserveGuard(
+            _ =>
+            {
+                calls++;
 
-            return Task.CompletedTask;
-        }, cancellation.Token));
+                return Task.CompletedTask;
+            },
+            cancellation.Token));
 
         // Assert
         var canceled = Assert.IsAssignableFrom<OperationCanceledException>(exception);
@@ -241,7 +253,11 @@ public sealed class MySqlGeneratedInitialMigrationFixtureCancellationTests
     /// <summary>Creates inert identity evidence without provider reports or a database context.</summary>
     /// <returns>A distinct immutable result whose identity can be asserted independently.</returns>
     private static GeneratedInitialMigrationObservation CreateObservation() => new(
-        null!, null!, null!, 1, static () => throw new NotSupportedException("The observer owns no database context."));
+        null!,
+        null!,
+        null!,
+        1,
+        static () => throw new NotSupportedException("The observer owns no database context."));
 
     /// <summary>Routes one helper without a parseable connection or configured EF provider.</summary>
     /// <param name="operation">The independently tested helper kind.</param>
@@ -270,32 +286,43 @@ public sealed class MySqlGeneratedInitialMigrationFixtureCancellationTests
         /// <summary>Executes statement validation against intentionally malformed connection settings.</summary>
         /// <param name="cancellationToken">The caller cancellation forwarded to the SQL helper.</param>
         /// <returns>The actual SQL helper task.</returns>
-        internal static Task ExecuteStatement(CancellationToken cancellationToken) =>
+        internal static Task ExecuteStatement(
+            CancellationToken cancellationToken
+        ) =>
             ExecuteSqlAsync("not a connection string", "SELECT 1;", cancellationToken);
 
         /// <summary>Executes script validation against intentionally malformed connection settings.</summary>
         /// <param name="cancellationToken">The caller cancellation forwarded to the script helper.</param>
         /// <returns>The actual migration script helper task.</returns>
-        internal static Task ExecuteScript(CancellationToken cancellationToken) =>
+        internal static Task ExecuteScript(
+            CancellationToken cancellationToken
+        ) =>
             ExecuteMigrationScriptAsync("not a connection string", "SELECT 1;", cancellationToken);
 
         /// <summary>Reads integer validation against intentionally malformed connection settings.</summary>
         /// <param name="cancellationToken">The caller cancellation forwarded to the scalar helper.</param>
         /// <returns>The actual integer observation task.</returns>
-        internal static Task<int> ReadInteger(CancellationToken cancellationToken) =>
+        internal static Task<int> ReadInteger(
+            CancellationToken cancellationToken
+        ) =>
             ScalarIntAsync("not a connection string", "SELECT 1;", cancellationToken);
 
         /// <summary>Reads string validation against intentionally malformed connection settings.</summary>
         /// <param name="cancellationToken">The caller cancellation forwarded to the scalar helper.</param>
         /// <returns>The actual string observation task.</returns>
-        internal static Task<string> ReadString(CancellationToken cancellationToken) =>
+        internal static Task<string> ReadString(
+            CancellationToken cancellationToken
+        ) =>
             ScalarStringAsync("not a connection string", "SELECT 1;", cancellationToken);
 
         /// <summary>Reads context scalar validation without a configured relational provider.</summary>
         /// <param name="context">The intentionally unconfigured context.</param>
         /// <param name="cancellationToken">The caller cancellation forwarded to the scalar helper.</param>
         /// <returns>The actual context observation task.</returns>
-        internal static Task<int> ReadContext(DbContext context, CancellationToken cancellationToken) =>
+        internal static Task<int> ReadContext(
+            DbContext context,
+            CancellationToken cancellationToken
+        ) =>
             ContextScalarIntAsync(context, "SELECT 1;", cancellationToken);
 
         /// <summary>Invokes the production test assertion with a token-aware action.</summary>

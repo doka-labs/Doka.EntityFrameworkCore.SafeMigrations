@@ -64,7 +64,8 @@ internal static class SqliteCatalogEquivalence
         SqliteTableSnapshot table,
         IReadOnlyList<SqliteIndexKeySnapshot> keys,
         IReadOnlyList<string> columns,
-        bool requireDefaultSortOrder = false)
+        bool requireDefaultSortOrder = false
+    )
     {
         var ordinal = 0;
         foreach (var key in keys)
@@ -74,8 +75,10 @@ internal static class SqliteCatalogEquivalence
                 continue;
             }
 
-            if (ordinal >= columns.Count || key.Ordinal != ordinal
-                || key.Column is null || key.Expression is not null
+            if (ordinal >= columns.Count
+                || key.Ordinal != ordinal
+                || key.Column is null
+                || key.Expression is not null
                 || (requireDefaultSortOrder && key.Descending)
                 || !s_identifierComparer.Equals(key.Column, columns[ordinal])
                 || !table.Columns.TryGetValue(key.Column, out var column)

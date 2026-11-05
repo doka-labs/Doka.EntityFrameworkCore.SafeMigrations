@@ -13,31 +13,33 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
     /// <param name="referentialAction">The native incoming foreign-key delete action.</param>
     /// <param name="isolationLevel">The caller-owned transaction isolation preserved by execution.</param>
     [Theory]
-    [InlineData("CASCADE", System.Data.IsolationLevel.ReadCommitted)]
-    [InlineData("SET NULL", System.Data.IsolationLevel.ReadCommitted)]
-    [InlineData("SET DEFAULT", System.Data.IsolationLevel.ReadCommitted)]
-    [InlineData("NO ACTION", System.Data.IsolationLevel.ReadCommitted)]
-    [InlineData("RESTRICT", System.Data.IsolationLevel.ReadCommitted)]
-    [InlineData("CASCADE", System.Data.IsolationLevel.RepeatableRead)]
-    [InlineData("SET NULL", System.Data.IsolationLevel.RepeatableRead)]
-    [InlineData("SET DEFAULT", System.Data.IsolationLevel.RepeatableRead)]
-    [InlineData("NO ACTION", System.Data.IsolationLevel.RepeatableRead)]
-    [InlineData("RESTRICT", System.Data.IsolationLevel.RepeatableRead)]
-    [InlineData("CASCADE", System.Data.IsolationLevel.Serializable)]
-    [InlineData("SET NULL", System.Data.IsolationLevel.Serializable)]
-    [InlineData("SET DEFAULT", System.Data.IsolationLevel.Serializable)]
-    [InlineData("NO ACTION", System.Data.IsolationLevel.Serializable)]
-    [InlineData("RESTRICT", System.Data.IsolationLevel.Serializable)]
+    [InlineData("CASCADE", IsolationLevel.ReadCommitted)]
+    [InlineData("SET NULL", IsolationLevel.ReadCommitted)]
+    [InlineData("SET DEFAULT", IsolationLevel.ReadCommitted)]
+    [InlineData("NO ACTION", IsolationLevel.ReadCommitted)]
+    [InlineData("RESTRICT", IsolationLevel.ReadCommitted)]
+    [InlineData("CASCADE", IsolationLevel.RepeatableRead)]
+    [InlineData("SET NULL", IsolationLevel.RepeatableRead)]
+    [InlineData("SET DEFAULT", IsolationLevel.RepeatableRead)]
+    [InlineData("NO ACTION", IsolationLevel.RepeatableRead)]
+    [InlineData("RESTRICT", IsolationLevel.RepeatableRead)]
+    [InlineData("CASCADE", IsolationLevel.Serializable)]
+    [InlineData("SET NULL", IsolationLevel.Serializable)]
+    [InlineData("SET DEFAULT", IsolationLevel.Serializable)]
+    [InlineData("NO ACTION", IsolationLevel.Serializable)]
+    [InlineData("RESTRICT", IsolationLevel.Serializable)]
     public async Task ModelManagedDeleteFencePreservesConcurrentDependents(
         string referentialAction,
-        System.Data.IsolationLevel isolationLevel
+        IsolationLevel isolationLevel
     )
     {
         // Arrange
-        var connectionString = await CreateModelDeleteFenceFixtureAsync(referentialAction,
+        var connectionString = await CreateModelDeleteFenceFixtureAsync(
+            referentialAction,
             cancellationToken: CancellationToken.None);
 
-        var nativeDeleteAction = await ScalarStringAsync(connectionString,
+        var nativeDeleteAction = await ScalarStringAsync(
+            connectionString,
             "SELECT confdeltype::text FROM pg_catalog.pg_constraint "
             + "WHERE conname = 'fk_model_fence_users_role' AND conrelid = 'model_fence_users'::regclass;",
             cancellationToken: CancellationToken.None);
@@ -51,21 +53,30 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         await using var writer = new NpgsqlConnection(connectionString);
         await writer.OpenAsync();
         await using var writerTransaction = await writer.BeginTransactionAsync();
-        await ExecuteModelDeleteFenceSqlAsync(writer, "INSERT INTO model_fence_users VALUES (11, 1);",
+        await ExecuteModelDeleteFenceSqlAsync(
+            writer,
+            "INSERT INTO model_fence_users VALUES (11, 1);",
             cancellationToken: CancellationToken.None);
+
         await using var observer = new NpgsqlConnection(connectionString);
         await observer.OpenAsync();
         var writerCommitted = false;
         Exception? failure;
 
         // Act
-        var deletionTask = Record.ExceptionAsync(() => ExecuteOperationsAsync(context, deletion.Operations,
+        var deletionTask = Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            deletion.Operations,
             CancellationToken.None));
 
         try
         {
-            await WaitForModelDeleteFenceBlockerAsync(observer, migrationPid, writer.ProcessID,
+            await WaitForModelDeleteFenceBlockerAsync(
+                observer,
+                migrationPid,
+                writer.ProcessID,
                 cancellationToken: CancellationToken.None);
+
             await writerTransaction.CommitAsync();
             writerCommitted = true;
             failure = await deletionTask;
@@ -82,18 +93,20 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         }
 
         // Assert
-        Assert.Equal(referentialAction switch
-        {
-            "CASCADE" => "c",
-            "SET NULL" => "n",
-            "SET DEFAULT" => "d",
-            "NO ACTION" => "a",
-            "RESTRICT" => "r",
-            _ => throw new ArgumentOutOfRangeException(nameof(referentialAction)),
-        }, nativeDeleteAction);
+        Assert.Equal(
+            referentialAction switch
+            {
+                "CASCADE" => "c",
+                "SET NULL" => "n",
+                "SET DEFAULT" => "d",
+                "NO ACTION" => "a",
+                "RESTRICT" => "r",
+                _ => throw new ArgumentOutOfRangeException(nameof(referentialAction)),
+            },
+            nativeDeleteAction);
 
         var exception = Assert.IsType<PostgresException>(failure);
-        if (isolationLevel == System.Data.IsolationLevel.ReadCommitted)
+        if (isolationLevel == IsolationLevel.ReadCommitted)
         {
             Assert.Equal("P1003", exception.SqlState);
             Assert.StartsWith("doka_sm_data_blocked:", exception.MessageText, StringComparison.Ordinal);
@@ -107,7 +120,7 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
             // Only these restrictive actions may use those native diagnostics.
             var expectedFailure = exception.SqlState is "40001" or "P1003"
                 || (referentialAction == "NO ACTION" && exception.SqlState == "23503")
-                || (referentialAction == "RESTRICT" && (exception.SqlState is "23503" or "23001"));
+                || (referentialAction == "RESTRICT" && exception.SqlState is "23503" or "23001");
 
             Assert.True(expectedFailure, exception.SqlState);
             if (exception.SqlState is "23503" or "23001")
@@ -120,12 +133,19 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
             }
         }
 
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1 AND name = 'source';",
-            cancellationToken: CancellationToken.None));
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_users WHERE id = 11 AND role_id = 1;",
-            cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1 AND name = 'source';",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_users WHERE id = 11 AND role_id = 1;",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>
@@ -133,15 +153,16 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
     /// </summary>
     /// <param name="isolationLevel">The explicit caller-owned transaction isolation.</param>
     [Theory]
-    [InlineData(System.Data.IsolationLevel.ReadCommitted)]
-    [InlineData(System.Data.IsolationLevel.RepeatableRead)]
-    [InlineData(System.Data.IsolationLevel.Serializable)]
+    [InlineData(IsolationLevel.ReadCommitted)]
+    [InlineData(IsolationLevel.RepeatableRead)]
+    [InlineData(IsolationLevel.Serializable)]
     public async Task ModelManagedDeleteFenceAllowsExactSourceAndReplay(
-        System.Data.IsolationLevel isolationLevel
+        IsolationLevel isolationLevel
     )
     {
         // Arrange
-        var connectionString = await CreateModelDeleteFenceFixtureAsync("CASCADE",
+        var connectionString = await CreateModelDeleteFenceFixtureAsync(
+            "CASCADE",
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -154,13 +175,26 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         await transaction.CommitAsync();
 
         // Assert
-        Assert.Equal(0, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1;", cancellationToken: CancellationToken.None));
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_roles WHERE id = 2 AND name = 'default';",
-            cancellationToken: CancellationToken.None));
-        Assert.Equal(0, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_users;", cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_roles WHERE id = 2 AND name = 'default';",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_users;",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Already committed dependencies remain blocked without applying any referential action.</summary>
@@ -176,28 +210,41 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
     )
     {
         // Arrange
-        var connectionString = await CreateModelDeleteFenceFixtureAsync(referentialAction,
+        var connectionString = await CreateModelDeleteFenceFixtureAsync(
+            referentialAction,
             cancellationToken: CancellationToken.None);
 
-        await ExecuteSqlAsync(connectionString, "INSERT INTO model_fence_users VALUES (11, 1);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "INSERT INTO model_fence_users VALUES (11, 1);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var deletion = ModelDeleteFenceOperation(context.Database.ProviderName!);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, deletion.Operations,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            deletion.Operations,
             CancellationToken.None));
 
         // Assert
         var exception = Assert.IsType<PostgresException>(failure);
         Assert.Equal("P1003", exception.SqlState);
         Assert.StartsWith("doka_sm_data_blocked:", exception.MessageText, StringComparison.Ordinal);
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1 AND name = 'source';",
-            cancellationToken: CancellationToken.None));
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_users WHERE id = 11 AND role_id = 1;",
-            cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1 AND name = 'source';",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_users WHERE id = 11 AND role_id = 1;",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>
@@ -213,7 +260,8 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
     )
     {
         // Arrange
-        var connectionString = await CreateModelDeleteFenceFixtureAsync("CASCADE",
+        var connectionString = await CreateModelDeleteFenceFixtureAsync(
+            "CASCADE",
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -228,21 +276,28 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
             _ => throw new ArgumentOutOfRangeException(nameof(bypass)),
         };
 
-        await ExecuteModelDeleteFenceSqlAsync(migrationConnection, bypassSql,
+        await ExecuteModelDeleteFenceSqlAsync(
+            migrationConnection,
+            bypassSql,
             cancellationToken: CancellationToken.None);
+
         Exception? failure;
 
         // Act
         try
         {
-            failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, deletion.Operations,
+            failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+                context,
+                deletion.Operations,
                 CancellationToken.None));
         }
         finally
         {
             if (StringComparer.Ordinal.Equals(bypass, "replica"))
             {
-                await ExecuteModelDeleteFenceSqlAsync(migrationConnection, "RESET session_replication_role;",
+                await ExecuteModelDeleteFenceSqlAsync(
+                    migrationConnection,
+                    "RESET session_replication_role;",
                     cancellationToken: CancellationToken.None);
             }
         }
@@ -251,11 +306,19 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         var exception = Assert.IsType<PostgresException>(failure);
         Assert.Equal("P1002", exception.SqlState);
         Assert.StartsWith("doka_sm_unsupported:", exception.MessageText, StringComparison.Ordinal);
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1 AND name = 'source';",
-            cancellationToken: CancellationToken.None));
-        Assert.Equal(0, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_users;", cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1 AND name = 'source';",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_users;",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>
@@ -267,25 +330,37 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         // Arrange
         var supportsNotEnforced = Fixture.ServerVersion.Major >= 18;
         var connectionString = await CreateModelDeleteFenceFixtureAsync(
-            "CASCADE", CancellationToken.None, enforced: supportsNotEnforced ? false : null);
+            "CASCADE",
+            CancellationToken.None,
+            enforced: supportsNotEnforced
+                ? false
+                : null);
 
         await using var context = CreateContext(connectionString);
         var deletion = ModelDeleteFenceOperation(context.Database.ProviderName!);
-        var nativeTriggers = await ScalarIntAsync(connectionString,
+        var nativeTriggers = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_trigger native_trigger "
             + "JOIN pg_catalog.pg_constraint native_constraint ON native_constraint.oid = native_trigger.tgconstraint "
             + "WHERE native_constraint.conname = 'fk_model_fence_users_role' AND native_trigger.tgisinternal;",
             cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, deletion.Operations, new SafeMigrationRunOptions("model-delete-native-enforcement"),
-            CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                deletion.Operations,
+                new SafeMigrationRunOptions("model-delete-native-enforcement"),
+                CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, deletion.Operations,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            deletion.Operations,
             CancellationToken.None));
 
-        var remaining = await ScalarIntAsync(connectionString,
+        var remaining = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1 AND name = 'source';",
             cancellationToken: CancellationToken.None);
 
@@ -322,33 +397,60 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
     {
         // Arrange
         var connectionString = await CreateModelDeleteFenceFixtureAsync(
-            hasConstraint ? "CASCADE" : null,
-            CancellationToken.None, enforced: hasConstraint && Fixture.ServerVersion.Major >= 18 ? true : null);
+            hasConstraint
+                ? "CASCADE"
+                : null,
+            CancellationToken.None,
+            enforced: hasConstraint && Fixture.ServerVersion.Major >= 18
+                ? true
+                : null);
 
         await using var context = CreateContext(connectionString);
         var deletion = ModelDeleteFenceOperation(context.Database.ProviderName!, includeForeignKey: hasConstraint);
-        var nativeEnforcement = await ScalarStringAsync(connectionString,
+        var nativeEnforcement = await ScalarStringAsync(
+            connectionString,
             "SELECT COALESCE((SELECT COALESCE(pg_catalog.to_jsonb(native_constraint)->>'conenforced', 'before_18') "
             + "FROM pg_catalog.pg_constraint native_constraint "
             + "WHERE native_constraint.conname = 'fk_model_fence_users_role'), 'absent');",
             cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, deletion.Operations, new SafeMigrationRunOptions("model-delete-enforced-control"),
-            CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                deletion.Operations,
+                new SafeMigrationRunOptions("model-delete-enforced-control"),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, deletion.Operations, CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationObservedState.TransitionReady, Assert.Single(report.Assessments).ObservedState);
-        Assert.Equal(hasConstraint ? Fixture.ServerVersion.Major >= 18 ? "true" : "before_18" : "absent",
+        Assert.Equal(SafeMigrationObservedState.TransitionReady,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
+        Assert.Equal(
+            hasConstraint
+                ? Fixture.ServerVersion.Major >= 18
+                    ? "true"
+                    : "before_18"
+                : "absent",
             nativeEnforcement);
-        Assert.Equal(0, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1;", cancellationToken: CancellationToken.None));
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_roles WHERE id = 2 AND name = 'default';",
-            cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_roles WHERE id = 2 AND name = 'default';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>
@@ -358,48 +460,68 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
     public async Task ModelManagedDeleteFenceRejectsCapturedRelationshipWithoutNativeForeignKey()
     {
         // Arrange
-        var connectionString = await CreateModelDeleteFenceFixtureAsync(referentialAction: null,
+        var connectionString = await CreateModelDeleteFenceFixtureAsync(
+            referentialAction: null,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var deletion = ModelDeleteFenceOperation(context.Database.ProviderName!, includeForeignKey: true);
-        var nativeConstraints = await ScalarIntAsync(connectionString,
+        var nativeConstraints = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE contype = 'f';",
             cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, deletion.Operations, new SafeMigrationRunOptions("model-delete-missing-native-fk"),
-            CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                deletion.Operations,
+                new SafeMigrationRunOptions("model-delete-missing-native-fk"),
+                CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, deletion.Operations,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            deletion.Operations,
             CancellationToken.None));
 
         // Assert
         Assert.Equal(0, nativeConstraints);
-        Assert.Equal(SafeMigrationObservedState.Unsupported, Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Unsupported,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
         var exception = Assert.IsType<PostgresException>(failure);
 
         Assert.Equal("P1002", exception.SqlState);
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1 AND name = 'source';",
-            cancellationToken: CancellationToken.None));
-        Assert.Equal(0, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_users;", cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1 AND name = 'source';",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_users;",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Reclassifies source drift that commits while the generated delete is waiting.</summary>
     /// <param name="isolationLevel">The caller-owned isolation controlling concurrent source visibility.</param>
     [Theory]
-    [InlineData(System.Data.IsolationLevel.ReadCommitted)]
-    [InlineData(System.Data.IsolationLevel.RepeatableRead)]
-    [InlineData(System.Data.IsolationLevel.Serializable)]
+    [InlineData(IsolationLevel.ReadCommitted)]
+    [InlineData(IsolationLevel.RepeatableRead)]
+    [InlineData(IsolationLevel.Serializable)]
     public async Task ModelManagedDeleteFenceRechecksConcurrentSourceChanges(
-        System.Data.IsolationLevel isolationLevel
+        IsolationLevel isolationLevel
     )
     {
         // Arrange
-        var connectionString = await CreateModelDeleteFenceFixtureAsync("CASCADE",
+        var connectionString = await CreateModelDeleteFenceFixtureAsync(
+            "CASCADE",
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -410,22 +532,30 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         await using var writer = new NpgsqlConnection(connectionString);
         await writer.OpenAsync();
         await using var writerTransaction = await writer.BeginTransactionAsync();
-        await ExecuteModelDeleteFenceSqlAsync(writer,
+        await ExecuteModelDeleteFenceSqlAsync(
+            writer,
             "UPDATE model_fence_roles SET name = 'concurrent' WHERE id = 1;",
             cancellationToken: CancellationToken.None);
+
         await using var observer = new NpgsqlConnection(connectionString);
         await observer.OpenAsync();
         var writerCommitted = false;
         Exception? failure;
 
         // Act
-        var deletionTask = Record.ExceptionAsync(() => ExecuteOperationsAsync(context, deletion.Operations,
+        var deletionTask = Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            deletion.Operations,
             CancellationToken.None));
 
         try
         {
             await WaitForModelDeleteFenceBlockerAsync(
-                observer, migrationConnection.ProcessID, writer.ProcessID, cancellationToken: CancellationToken.None);
+                observer,
+                migrationConnection.ProcessID,
+                writer.ProcessID,
+                cancellationToken: CancellationToken.None);
+
             await writerTransaction.CommitAsync();
             writerCommitted = true;
             failure = await deletionTask;
@@ -443,7 +573,7 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
 
         // Assert
         var exception = Assert.IsType<PostgresException>(failure);
-        if (isolationLevel == System.Data.IsolationLevel.ReadCommitted)
+        if (isolationLevel == IsolationLevel.ReadCommitted)
         {
             Assert.Equal("P1001", exception.SqlState);
             Assert.StartsWith("doka_sm_different:", exception.MessageText, StringComparison.Ordinal);
@@ -453,9 +583,12 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
             Assert.Equal("40001", exception.SqlState);
         }
 
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1 AND name = 'concurrent';",
-            cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1 AND name = 'concurrent';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Rechecks incoming topology after waiting for a concurrent native foreign-key addition.</summary>
@@ -463,7 +596,8 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
     public async Task ModelManagedDeleteFenceRejectsConcurrentUnmodeledForeignKey()
     {
         // Arrange
-        var connectionString = await CreateModelDeleteFenceFixtureAsync(referentialAction: null,
+        var connectionString = await CreateModelDeleteFenceFixtureAsync(
+            referentialAction: null,
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -473,23 +607,32 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         await using var writer = new NpgsqlConnection(connectionString);
         await writer.OpenAsync();
         await using var writerTransaction = await writer.BeginTransactionAsync();
-        await ExecuteModelDeleteFenceSqlAsync(writer,
+        await ExecuteModelDeleteFenceSqlAsync(
+            writer,
             "ALTER TABLE model_fence_users ADD CONSTRAINT fk_model_fence_users_role "
             + "FOREIGN KEY (role_id) REFERENCES model_fence_roles (id) ON DELETE CASCADE;"
-            + "INSERT INTO model_fence_users VALUES (11, 1);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO model_fence_users VALUES (11, 1);",
+            cancellationToken: CancellationToken.None);
+
         await using var observer = new NpgsqlConnection(connectionString);
         await observer.OpenAsync();
         var writerCommitted = false;
         Exception? failure;
 
         // Act
-        var deletionTask = Record.ExceptionAsync(() => ExecuteOperationsAsync(context, deletion.Operations,
+        var deletionTask = Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            deletion.Operations,
             CancellationToken.None));
 
         try
         {
             await WaitForModelDeleteFenceBlockerAsync(
-                observer, migrationConnection.ProcessID, writer.ProcessID, cancellationToken: CancellationToken.None);
+                observer,
+                migrationConnection.ProcessID,
+                writer.ProcessID,
+                cancellationToken: CancellationToken.None);
+
             await writerTransaction.CommitAsync();
             writerCommitted = true;
             failure = await deletionTask;
@@ -508,12 +651,19 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         var exception = Assert.IsType<PostgresException>(failure);
         Assert.Equal("P1002", exception.SqlState);
         Assert.StartsWith("doka_sm_unsupported:", exception.MessageText, StringComparison.Ordinal);
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1 AND name = 'source';",
-            cancellationToken: CancellationToken.None));
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_users WHERE id = 11 AND role_id = 1;",
-            cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1 AND name = 'source';",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_users WHERE id = 11 AND role_id = 1;",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Cancellation while waiting leaves source rows unchanged and releases the owned fence.</summary>
@@ -521,7 +671,8 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
     public async Task ModelManagedDeleteFenceCancellationPreservesSourceAndAllowsRetry()
     {
         // Arrange
-        var connectionString = await CreateModelDeleteFenceFixtureAsync("CASCADE",
+        var connectionString = await CreateModelDeleteFenceFixtureAsync(
+            "CASCADE",
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -531,8 +682,11 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         await using var writer = new NpgsqlConnection(connectionString);
         await writer.OpenAsync();
         await using var writerTransaction = await writer.BeginTransactionAsync();
-        await ExecuteModelDeleteFenceSqlAsync(writer, "INSERT INTO model_fence_users VALUES (11, 1);",
+        await ExecuteModelDeleteFenceSqlAsync(
+            writer,
+            "INSERT INTO model_fence_users VALUES (11, 1);",
             cancellationToken: CancellationToken.None);
+
         await using var observer = new NpgsqlConnection(connectionString);
         await observer.OpenAsync();
         using var cancellation = new CancellationTokenSource();
@@ -545,7 +699,11 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         try
         {
             await WaitForModelDeleteFenceBlockerAsync(
-                observer, migrationConnection.ProcessID, writer.ProcessID, cancellation.Token);
+                observer,
+                migrationConnection.ProcessID,
+                writer.ProcessID,
+                cancellation.Token);
+
             cancellation.Cancel();
             failure = await deletionTask;
         }
@@ -555,7 +713,8 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
             await deletionTask;
         }
 
-        var remainingSource = await ScalarIntAsync(connectionString,
+        var remainingSource = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1 AND name = 'source';",
             cancellationToken: CancellationToken.None);
 
@@ -565,10 +724,19 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         // Assert
         Assert.IsAssignableFrom<OperationCanceledException>(failure);
         Assert.Equal(1, remainingSource);
-        Assert.Equal(0, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1;", cancellationToken: CancellationToken.None));
-        Assert.Equal(0, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_users;", cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_users;",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Writers arriving after the owned fence cannot become hidden referential-action targets.</summary>
@@ -576,23 +744,36 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
     public async Task ModelManagedDeleteFenceExcludesNewDependencyWritersUntilCommit()
     {
         // Arrange
-        var connectionString = await CreateModelDeleteFenceFixtureAsync("CASCADE",
+        var connectionString = await CreateModelDeleteFenceFixtureAsync(
+            "CASCADE",
             cancellationToken: CancellationToken.None);
 
-        var rendezvous = Random.Shared.NextInt64(1, long.MaxValue).ToString(CultureInfo.InvariantCulture);
-        await ExecuteSqlAsync(connectionString,
+        var rendezvous = Random
+            .Shared
+            .NextInt64(1, long.MaxValue)
+            .ToString(CultureInfo.InvariantCulture);
+
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE FUNCTION model_fence_pause_delete() RETURNS trigger LANGUAGE plpgsql AS $$ "
-            + "BEGIN PERFORM pg_catalog.pg_advisory_xact_lock(" + rendezvous + "); RETURN OLD; END; $$;"
+            + "BEGIN PERFORM pg_catalog.pg_advisory_xact_lock("
+            + rendezvous
+            + "); RETURN OLD; END; $$;"
             + "CREATE TRIGGER model_fence_pause_delete BEFORE DELETE ON model_fence_roles "
-            + "FOR EACH ROW EXECUTE FUNCTION model_fence_pause_delete();", cancellationToken: CancellationToken.None);
+            + "FOR EACH ROW EXECUTE FUNCTION model_fence_pause_delete();",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync();
         var migrationConnection = (NpgsqlConnection)context.Database.GetDbConnection();
         var deletion = ModelDeleteFenceOperation(context.Database.ProviderName!);
         await using var controller = new NpgsqlConnection(connectionString);
         await controller.OpenAsync();
-        await ExecuteModelDeleteFenceSqlAsync(controller,
-            "SELECT pg_catalog.pg_advisory_lock(" + rendezvous + ");", cancellationToken: CancellationToken.None);
+        await ExecuteModelDeleteFenceSqlAsync(
+            controller,
+            "SELECT pg_catalog.pg_advisory_lock(" + rendezvous + ");",
+            cancellationToken: CancellationToken.None);
+
         await using var writer = new NpgsqlConnection(connectionString);
         await writer.OpenAsync();
         await using var observer = new NpgsqlConnection(connectionString);
@@ -603,22 +784,36 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         Exception? insertionFailure;
 
         // Act
-        var deletionTask = Record.ExceptionAsync(() => ExecuteOperationsAsync(context, deletion.Operations,
+        var deletionTask = Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            deletion.Operations,
             CancellationToken.None));
 
         try
         {
             await WaitForModelDeleteFenceBlockerAsync(
-                observer, migrationConnection.ProcessID, controller.ProcessID,
+                observer,
+                migrationConnection.ProcessID,
+                controller.ProcessID,
                 cancellationToken: CancellationToken.None);
+
             insertionTask = Record.ExceptionAsync(() =>
-                ExecuteModelDeleteFenceSqlAsync(writer, "INSERT INTO model_fence_users VALUES (11, 1);",
+                ExecuteModelDeleteFenceSqlAsync(
+                    writer,
+                    "INSERT INTO model_fence_users VALUES (11, 1);",
                     cancellationToken: CancellationToken.None));
 
             await WaitForModelDeleteFenceBlockerAsync(
-                observer, writer.ProcessID, migrationConnection.ProcessID, cancellationToken: CancellationToken.None);
-            await ExecuteModelDeleteFenceSqlAsync(controller,
-                "SELECT pg_catalog.pg_advisory_unlock(" + rendezvous + ");", cancellationToken: CancellationToken.None);
+                observer,
+                writer.ProcessID,
+                migrationConnection.ProcessID,
+                cancellationToken: CancellationToken.None);
+
+            await ExecuteModelDeleteFenceSqlAsync(
+                controller,
+                "SELECT pg_catalog.pg_advisory_unlock(" + rendezvous + ");",
+                cancellationToken: CancellationToken.None);
+
             released = true;
             deletionFailure = await deletionTask;
             insertionFailure = await insertionTask;
@@ -627,7 +822,8 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         {
             if (!released)
             {
-                await ExecuteModelDeleteFenceSqlAsync(controller,
+                await ExecuteModelDeleteFenceSqlAsync(
+                    controller,
                     "SELECT pg_catalog.pg_advisory_unlock(" + rendezvous + ");",
                     cancellationToken: CancellationToken.None);
             }
@@ -643,10 +839,19 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         Assert.Null(deletionFailure);
         var exception = Assert.IsType<PostgresException>(insertionFailure);
         Assert.Equal("23503", exception.SqlState);
-        Assert.Equal(0, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1;", cancellationToken: CancellationToken.None));
-        Assert.Equal(0, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_users;", cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_users;",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Deferred incoming checks cannot commit a new child after the fenced delete.</summary>
@@ -662,8 +867,10 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
     )
     {
         // Arrange
-        var connectionString = await CreateModelDeleteFenceFixtureAsync(referentialAction,
-            CancellationToken.None, deferred: true);
+        var connectionString = await CreateModelDeleteFenceFixtureAsync(
+            referentialAction,
+            CancellationToken.None,
+            deferred: true);
 
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync();
@@ -673,8 +880,11 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         await using var writer = new NpgsqlConnection(connectionString);
         await writer.OpenAsync();
         await using var writerTransaction = await writer.BeginTransactionAsync();
-        await ExecuteModelDeleteFenceSqlAsync(writer, "INSERT INTO model_fence_users VALUES (11, 1);",
+        await ExecuteModelDeleteFenceSqlAsync(
+            writer,
+            "INSERT INTO model_fence_users VALUES (11, 1);",
             cancellationToken: CancellationToken.None);
+
         await using var observer = new NpgsqlConnection(connectionString);
         await observer.OpenAsync();
         var migrationCommitted = false;
@@ -687,7 +897,11 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
             await ExecuteOperationsAsync(context, deletion.Operations, CancellationToken.None);
             writerCommitTask = Record.ExceptionAsync(() => writerTransaction.CommitAsync());
             await WaitForModelDeleteFenceBlockerAsync(
-                observer, writer.ProcessID, migrationConnection.ProcessID, cancellationToken: CancellationToken.None);
+                observer,
+                writer.ProcessID,
+                migrationConnection.ProcessID,
+                cancellationToken: CancellationToken.None);
+
             await migrationTransaction.CommitAsync();
             migrationCommitted = true;
             failure = await writerCommitTask;
@@ -708,10 +922,19 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         // Assert
         var exception = Assert.IsType<PostgresException>(failure);
         Assert.Equal("23503", exception.SqlState);
-        Assert.Equal(0, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1;", cancellationToken: CancellationToken.None));
-        Assert.Equal(0, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_users;", cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_users;",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Exercises the generated fence without granting any new UPDATE or child-write privileges.</summary>
@@ -719,14 +942,30 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
     public async Task ModelManagedDeleteFenceUsesExistingDeleteAndSelectPrivileges()
     {
         // Arrange
-        var connectionString = await CreateModelDeleteFenceFixtureAsync("CASCADE",
+        var connectionString = await CreateModelDeleteFenceFixtureAsync(
+            "CASCADE",
             cancellationToken: CancellationToken.None);
 
-        var role = "model_delete_reader_" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture);
-        await ExecuteSqlAsync(connectionString,
-            "CREATE ROLE " + role + "; GRANT USAGE ON SCHEMA public TO " + role + ";"
-            + "GRANT SELECT, DELETE ON model_fence_roles TO " + role + ";"
-            + "GRANT SELECT ON model_fence_users TO " + role + ";", cancellationToken: CancellationToken.None);
+        var role = "model_delete_reader_"
+            + Guid
+                .NewGuid()
+                .ToString("N", CultureInfo.InvariantCulture);
+
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE ROLE "
+            + role
+            + "; GRANT USAGE ON SCHEMA public TO "
+            + role
+            + ";"
+            + "GRANT SELECT, DELETE ON model_fence_roles TO "
+            + role
+            + ";"
+            + "GRANT SELECT ON model_fence_users TO "
+            + role
+            + ";",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync();
         var migrationConnection = (NpgsqlConnection)context.Database.GetDbConnection();
@@ -735,23 +974,40 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         // Act
         try
         {
-            await ExecuteModelDeleteFenceSqlAsync(migrationConnection, "SET ROLE " + role + ";",
+            await ExecuteModelDeleteFenceSqlAsync(
+                migrationConnection,
+                "SET ROLE " + role + ";",
                 cancellationToken: CancellationToken.None);
+
             await ExecuteOperationsAsync(context, deletion.Operations, CancellationToken.None);
         }
         finally
         {
-            await ExecuteModelDeleteFenceSqlAsync(migrationConnection, "RESET ROLE;",
+            await ExecuteModelDeleteFenceSqlAsync(
+                migrationConnection,
+                "RESET ROLE;",
                 cancellationToken: CancellationToken.None);
-            await ExecuteSqlAsync(connectionString, "DROP OWNED BY " + role + "; DROP ROLE " + role + ";",
+
+            await ExecuteSqlAsync(
+                connectionString,
+                "DROP OWNED BY " + role + "; DROP ROLE " + role + ";",
                 cancellationToken: CancellationToken.None);
         }
 
         // Assert
-        Assert.Equal(0, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1;", cancellationToken: CancellationToken.None));
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM model_fence_roles WHERE id = 2;", cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_roles WHERE id = 1;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM model_fence_roles WHERE id = 2;",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Creates an isolated frozen-source fixture with an optional native incoming foreign key.</summary>
@@ -770,16 +1026,26 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
         cancellationToken.ThrowIfCancellationRequested();
 
         var connectionString = await CreateDatabaseAsync(cancellationToken);
-        var foreignKey = referentialAction is null ? string.Empty
+        var foreignKey = referentialAction is null
+            ? string.Empty
             : ", CONSTRAINT fk_model_fence_users_role FOREIGN KEY (role_id) "
-            + "REFERENCES model_fence_roles (id) ON DELETE " + referentialAction
-            + (deferred ? " DEFERRABLE INITIALLY DEFERRED" : string.Empty)
-            + (enforced is null ? string.Empty : enforced.Value ? " ENFORCED" : " NOT ENFORCED");
+            + "REFERENCES model_fence_roles (id) ON DELETE "
+            + referentialAction
+            + (deferred
+                ? " DEFERRABLE INITIALLY DEFERRED"
+                : string.Empty)
+            + (enforced is null
+                ? string.Empty
+                : enforced.Value
+                    ? " ENFORCED"
+                    : " NOT ENFORCED");
 
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE model_fence_roles (id integer NOT NULL PRIMARY KEY, name varchar(64) NOT NULL);"
             + "CREATE TABLE model_fence_users (id integer NOT NULL PRIMARY KEY, role_id integer NULL DEFAULT 2"
-            + foreignKey + "); INSERT INTO model_fence_roles VALUES (1, 'source'), (2, 'default');",
+            + foreignKey
+            + "); INSERT INTO model_fence_roles VALUES (1, 'source'), (2, 'default');",
             cancellationToken: cancellationToken);
 
         return connectionString;
@@ -857,5 +1123,4 @@ public sealed class PostgreSqlModelManagedDataDeleteFenceIntegrationTests : Post
             await Task.Delay(TimeSpan.FromMilliseconds(10), timeout.Token);
         }
     }
-
 }

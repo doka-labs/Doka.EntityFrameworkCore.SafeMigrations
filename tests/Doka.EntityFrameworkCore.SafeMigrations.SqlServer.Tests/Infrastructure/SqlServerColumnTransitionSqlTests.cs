@@ -12,15 +12,18 @@ public sealed class SqlServerColumnTransitionSqlTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
         var before = new ExpectedColumnDefinition("Caption", typeof(string), true, "nvarchar(80)");
         var after = new ExpectedColumnDefinition("Caption", typeof(string), false, "nvarchar(20)");
-        var alteration = new SafeMigrationOperation(new AlterColumnIntent("items", after, before),
+        var alteration = new SafeMigrationOperation(
+            new AlterColumnIntent("items", after, before),
             SafeMigrationPolicy.RepairIfSafe);
 
-        var deletion = new SafeMigrationOperation(new DropColumnIntent("Caption", "items"),
+        var deletion = new SafeMigrationOperation(
+            new DropColumnIntent("Caption", "items"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act

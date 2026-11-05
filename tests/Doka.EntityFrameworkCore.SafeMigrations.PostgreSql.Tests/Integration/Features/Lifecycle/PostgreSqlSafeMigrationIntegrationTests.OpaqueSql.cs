@@ -28,7 +28,8 @@ public sealed class PostgreSqlOpaqueSqlIntegrationTests : PostgreSqlSafeMigratio
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("postgresql-opaque-sql"), CancellationToken.None);
+            new SafeMigrationRunOptions("postgresql-opaque-sql"),
+            CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -63,10 +64,13 @@ public sealed class PostgreSqlOpaqueSqlIntegrationTests : PostgreSqlSafeMigratio
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("postgresql-opaque-sql-reject"), CancellationToken.None);
+            new SafeMigrationRunOptions("postgresql-opaque-sql-reject"),
+            CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(
-            () => ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            CancellationToken.None));
 
         var indexCount = await ScalarIntAsync(
             connectionString,
@@ -87,19 +91,21 @@ public sealed class PostgreSqlOpaqueSqlIntegrationTests : PostgreSqlSafeMigratio
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = builder.Sql("SELECT 1;");
-        builder.CreateIndexIfNotExists("ix_unapproved", "missing_table", ["code"])
+        builder
+            .CreateIndexIfNotExists("ix_unapproved", "missing_table", ["code"])
             .Annotation("Unapproved:Test", true);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("postgresql-opaque-unsupported-annotation"), CancellationToken.None);
+            new SafeMigrationRunOptions("postgresql-opaque-unsupported-annotation"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[1].Action);
         Assert.Equal("operation_annotation", preflight.Assessments[1].AnalysisCode);
         Assert.Null(preflight.Assessments[1].DeferredOrigin);
     }
-
 }

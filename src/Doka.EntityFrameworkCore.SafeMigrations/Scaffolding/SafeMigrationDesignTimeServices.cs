@@ -5,7 +5,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// </summary>
 /// <remarks>
 /// Applications normally do not call this type. Provider package build assets
-/// expose it to EF Core through <see cref="DesignTimeServicesReferenceAttribute"/>.
+/// expose it to EF Core through <see cref="DesignTimeServicesReferenceAttribute" />.
 /// </remarks>
 internal sealed class SafeMigrationDesignTimeServices : IDesignTimeServices
 {
@@ -24,12 +24,15 @@ internal sealed class SafeMigrationDesignTimeServices : IDesignTimeServices
 
         serviceCollection.AddSingleton(static provider =>
             SafeMigrationScaffoldingConfiguration.From(provider.GetService<IDbContextOptions>()));
+
         serviceCollection.Replace(
             ServiceDescriptor.Singleton<ICSharpMigrationOperationGenerator,
                 SafeMigrationCSharpMigrationOperationGenerator>());
+
         serviceCollection.Replace(
             ServiceDescriptor.Singleton<IMigrationsCodeGeneratorSelector,
                 SafeMigrationMigrationsCodeGeneratorSelector>());
+
         SafeMigrationServiceCollectionDecorator.DecorateMigrationsModelDiffer(serviceCollection);
     }
 }

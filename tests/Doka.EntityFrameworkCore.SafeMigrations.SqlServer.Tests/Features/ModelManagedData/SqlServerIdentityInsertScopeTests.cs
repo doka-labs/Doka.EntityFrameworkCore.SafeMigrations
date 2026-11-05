@@ -14,7 +14,8 @@ public sealed class SqlServerIdentityInsertScopeTests
 
         // Act
         var sql = SqlServerSafeMigrationIdentityInsertScope.BuildRecoverySql(
-            token, "SET IDENTITY_INSERT [dbo].[roles] OFF;");
+            token,
+            "SET IDENTITY_INSERT [dbo].[roles] OFF;");
 
         var off = sql.IndexOf("SET IDENTITY_INSERT", StringComparison.Ordinal);
         var tokenProof = sql.IndexOf("<> 0x" + token + " RETURN;", StringComparison.Ordinal);
@@ -22,8 +23,11 @@ public sealed class SqlServerIdentityInsertScopeTests
 
         // Assert
         Assert.Contains("N'BaseType') <> N'varbinary' RETURN;", sql, StringComparison.Ordinal);
-        Assert.Contains("DATALENGTH(CONVERT(varbinary(max), @doka_identity_owner)) <> 17 RETURN;", sql,
+        Assert.Contains(
+            "DATALENGTH(CONVERT(varbinary(max), @doka_identity_owner)) <> 17 RETURN;",
+            sql,
             StringComparison.Ordinal);
+
         Assert.True(tokenProof >= 0 && tokenProof < acquiredProof && acquiredProof < off);
         Assert.Contains("doka_sm_identity_acquisition_unproven", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("sys.identity_columns", sql, StringComparison.Ordinal);
@@ -59,7 +63,9 @@ public sealed class SqlServerIdentityInsertScopeTests
 
         // Act
         var sql = SqlServerSafeMigrationIdentityInsertScope.BuildRecoverySql(
-            token, "SET IDENTITY_INSERT [dbo].[roles] OFF;", allowAcquiredIdentity: false);
+            token,
+            "SET IDENTITY_INSERT [dbo].[roles] OFF;",
+            allowAcquiredIdentity: false);
 
         // Assert
         Assert.DoesNotContain("SET IDENTITY_INSERT", sql, StringComparison.Ordinal);
@@ -100,15 +106,27 @@ public sealed class SqlServerIdentityInsertScopeTests
         // Arrange
         using var context = new SafeMigrationDbContext(
             "Server=localhost;Database=ownership;TrustServerCertificate=True");
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureModelManagedDataFromModel("roles", ["Id"], ["int"], ["Id"], ["int"],
+        builder.EnsureModelManagedDataFromModel(
+            "roles",
+            ["Id"],
+            ["int"],
+            ["Id"],
+            ["int"],
             new object?[,] { { 7 } });
+
         var generator = context.GetService<IMigrationsSqlGenerator>();
 
         // Act
-        var first = generator.Generate(builder.Operations, context.Model).Select(static command => command.CommandText)
+        var first = generator
+            .Generate(builder.Operations, context.Model)
+            .Select(static command => command.CommandText)
             .ToArray();
-        var second = generator.Generate(builder.Operations, context.Model).Select(static command => command.CommandText)
+
+        var second = generator
+            .Generate(builder.Operations, context.Model)
+            .Select(static command => command.CommandText)
             .ToArray();
 
         // Assert
@@ -123,15 +141,28 @@ public sealed class SqlServerIdentityInsertScopeTests
         // Arrange
         using var context = new SafeMigrationDbContext(
             "Server=localhost;Database=ownership;TrustServerCertificate=True");
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureModelManagedDataFromModel("roles", ["Id"], ["int"], ["Id"], ["int"],
+        builder.EnsureModelManagedDataFromModel(
+            "roles",
+            ["Id"],
+            ["int"],
+            ["Id"],
+            ["int"],
             new object?[,] { { 7 } });
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model,
-            MigrationsSqlGenerationOptions.Script);
-        var seed = Assert.Single(commands, static command =>
-            command.CommandText.Contains("DECLARE @doka_identity_insert", StringComparison.Ordinal));
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(
+                builder.Operations,
+                context.Model,
+                MigrationsSqlGenerationOptions.Script);
+
+        var seed = Assert.Single(
+            commands,
+            static command =>
+                command.CommandText.Contains("DECLARE @doka_identity_insert", StringComparison.Ordinal));
 
         var scope = SqlServerGuardedSqlTestContract.DecodeScope(seed.CommandText);
 

@@ -13,7 +13,10 @@ public sealed class SafeMigrationCancellationContractTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public async Task LocalFunctionCapturePreservesTheOperationToken(bool canceled, bool captureSource)
+    public async Task LocalFunctionCapturePreservesTheOperationToken(
+        bool canceled,
+        bool captureSource
+    )
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
@@ -25,7 +28,10 @@ public sealed class SafeMigrationCancellationContractTests
         }
 
         // Act
-        var failure = await Record.ExceptionAsync(captureSource ? ObserveSourceAsync : ObserveTokenAsync);
+        var failure = await Record.ExceptionAsync(
+            captureSource
+                ? ObserveSourceAsync
+                : ObserveTokenAsync);
 
         // Assert
         Assert.Equal(operationToken, observed);
@@ -64,12 +70,14 @@ public sealed class SafeMigrationCancellationContractTests
         var observed = new List<CancellationToken>();
 
         // Act
-        var measurement = await LivePerformanceEvidence.MeasureAsync(token =>
-        {
-            observed.Add(token);
+        var measurement = await LivePerformanceEvidence.MeasureAsync(
+            token =>
+            {
+                observed.Add(token);
 
-            return Task.FromResult(report);
-        }, cancellation.Token);
+                return Task.FromResult(report);
+            },
+            cancellation.Token);
 
         // Assert
         Assert.Same(report, measurement.LastReport);
@@ -87,12 +95,14 @@ public sealed class SafeMigrationCancellationContractTests
         var calls = 0;
 
         // Act
-        var failure = await Record.ExceptionAsync(() => LivePerformanceEvidence.MeasureAsync(_ =>
-        {
-            calls++;
+        var failure = await Record.ExceptionAsync(() => LivePerformanceEvidence.MeasureAsync(
+            _ =>
+            {
+                calls++;
 
-            return Task.FromResult(MeasurementReport());
-        }, cancellation.Token));
+                return Task.FromResult(MeasurementReport());
+            },
+            cancellation.Token));
 
         // Assert
         var canceled = Assert.IsAssignableFrom<OperationCanceledException>(failure);
@@ -110,13 +120,15 @@ public sealed class SafeMigrationCancellationContractTests
         var calls = 0;
 
         // Act
-        var failure = await Record.ExceptionAsync(() => LivePerformanceEvidence.MeasureAsync(token =>
-        {
-            calls++;
-            cancellation.Cancel();
+        var failure = await Record.ExceptionAsync(() => LivePerformanceEvidence.MeasureAsync(
+            token =>
+            {
+                calls++;
+                cancellation.Cancel();
 
-            return Task.FromResult(report);
-        }, cancellation.Token));
+                return Task.FromResult(report);
+            },
+            cancellation.Token));
 
         // Assert
         var canceled = Assert.IsAssignableFrom<OperationCanceledException>(failure);
@@ -133,12 +145,14 @@ public sealed class SafeMigrationCancellationContractTests
         var observed = CancellationToken.None;
 
         // Act
-        var measurement = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(token =>
-        {
-            observed = token;
+        var measurement = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(
+            token =>
+            {
+                observed = token;
 
-            return Task.FromResult(42);
-        }, cancellation.Token);
+                return Task.FromResult(42);
+            },
+            cancellation.Token);
 
         // Assert
         Assert.Equal(cancellation.Token, observed);
@@ -154,12 +168,14 @@ public sealed class SafeMigrationCancellationContractTests
         var observed = CancellationToken.None;
 
         // Act
-        await ModelManagedDataLargeExecutionEvidence.MeasureAsync(token =>
-        {
-            observed = token;
+        await ModelManagedDataLargeExecutionEvidence.MeasureAsync(
+            token =>
+            {
+                observed = token;
 
-            return Task.CompletedTask;
-        }, cancellation.Token);
+                return Task.CompletedTask;
+            },
+            cancellation.Token);
 
         // Assert
         Assert.Equal(cancellation.Token, observed);
@@ -170,25 +186,31 @@ public sealed class SafeMigrationCancellationContractTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task PhaseMeasurementRejectsCancellationBeforeAction(bool typed)
+    public async Task PhaseMeasurementRejectsCancellationBeforeAction(
+        bool typed
+    )
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         var calls = 0;
         Func<Task> execute = typed
-            ? () => ModelManagedDataLargeExecutionEvidence.MeasureAsync(_ =>
-            {
-                calls++;
+            ? () => ModelManagedDataLargeExecutionEvidence.MeasureAsync(
+                _ =>
+                {
+                    calls++;
 
-                return Task.FromResult(42);
-            }, cancellation.Token)
-            : () => ModelManagedDataLargeExecutionEvidence.MeasureAsync(_ =>
-            {
-                calls++;
+                    return Task.FromResult(42);
+                },
+                cancellation.Token)
+            : () => ModelManagedDataLargeExecutionEvidence.MeasureAsync(
+                _ =>
+                {
+                    calls++;
 
-                return Task.CompletedTask;
-            }, cancellation.Token);
+                    return Task.CompletedTask;
+                },
+                cancellation.Token);
 
         // Act
         var failure = await Record.ExceptionAsync(execute);
@@ -216,7 +238,9 @@ public sealed class SafeMigrationCancellationContractTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task RunnerObservesCancellationBeforeCatalogAccess(bool postflight)
+    public async Task RunnerObservesCancellationBeforeCatalogAccess(
+        bool postflight
+    )
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
@@ -243,15 +267,20 @@ public sealed class SafeMigrationCancellationContractTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task OrderedRunnerForwardsCancellationToEveryProviderRead(bool postflight)
+    public async Task OrderedRunnerForwardsCancellationToEveryProviderRead(
+        bool postflight
+    )
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
         using var context = new DbContext(new DbContextOptionsBuilder().Options);
         var analyzer = new RecordingAnalyzer();
         var runner = new SafeMigrationRunner(analyzer);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items",
-            new ExpectedColumnDefinition("Id", typeof(int), true, "int")), SafeMigrationPolicy.ThrowIfDifferent);
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "items",
+                new ExpectedColumnDefinition("Id", typeof(int), true, "int")),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         var mode = postflight
             ? SafeMigrationReportMode.Postflight
@@ -302,19 +331,20 @@ public sealed class SafeMigrationCancellationContractTests
             : string.Empty;
 
         var source = $$"""
-            using Doka.EntityFrameworkCore.SafeMigrations;
-            using Microsoft.EntityFrameworkCore;
-            using Microsoft.EntityFrameworkCore.Migrations.Operations;
-            public static class Consumer
-            {
-                public static object Invoke({{contract}} service, DbContext context, SafeMigrationRunOptions options,
-                    MigrationOperation[] operations, SafeMigrationOperation[] safeOperations)
-                    => service.{{invocation}}{{token}});
-            }
-            """;
+                       using Doka.EntityFrameworkCore.SafeMigrations;
+                       using Microsoft.EntityFrameworkCore;
+                       using Microsoft.EntityFrameworkCore.Migrations.Operations;
+                       public static class Consumer
+                       {
+                           public static object Invoke({{contract}} service, DbContext context, SafeMigrationRunOptions options,
+                               MigrationOperation[] operations, SafeMigrationOperation[] safeOperations)
+                               => service.{{invocation}}{{token}});
+                       }
+                       """;
 
         // Act
-        var errors = Compile(source).GetDiagnostics()
+        var errors = Compile(source)
+            .GetDiagnostics()
             .Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
             .ToArray();
 
@@ -327,7 +357,9 @@ public sealed class SafeMigrationCancellationContractTests
         {
             var error = Assert.Single(errors);
             Assert.Equal("CS7036", error.Id);
-            Assert.Contains("cancellationToken", error.GetMessage(CultureInfo.InvariantCulture),
+            Assert.Contains(
+                "cancellationToken",
+                error.GetMessage(CultureInfo.InvariantCulture),
                 StringComparison.Ordinal);
         }
     }
@@ -338,18 +370,22 @@ public sealed class SafeMigrationCancellationContractTests
     [Theory]
     [InlineData("Microsoft.EntityFrameworkCore.Migrations.IMigrator", "MigrateAsync()")]
     [InlineData("System.Data.Common.DbCommand", "ExecuteNonQueryAsync()")]
-    public void ExternalFrameworkConsumersKeepTheirOptionalTokens(string contract, string invocation)
+    public void ExternalFrameworkConsumersKeepTheirOptionalTokens(
+        string contract,
+        string invocation
+    )
     {
         // Arrange
         var source = $$"""
-            public static class Consumer
-            {
-                public static object Invoke({{contract}} service) => service.{{invocation}};
-            }
-            """;
+                       public static class Consumer
+                       {
+                           public static object Invoke({{contract}} service) => service.{{invocation}};
+                       }
+                       """;
 
         // Act
-        var errors = Compile(source).GetDiagnostics()
+        var errors = Compile(source)
+            .GetDiagnostics()
             .Where(static diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
             .ToArray();
 
@@ -407,80 +443,126 @@ public sealed class SafeMigrationCancellationContractTests
     /// <param name="source">The complete isolated declaration to inspect without executing its methods.</param>
     /// <param name="expectedViolations">The exact count of ordinary tokenless asynchronous declarations.</param>
     [Theory]
-    [InlineData("public class Fixture { public System.Threading.Tasks.Task Helper() => "
-        + "System.Threading.Tasks.Task.CompletedTask; }", 1)]
+    [InlineData(
+        "public class Fixture { public System.Threading.Tasks.Task Helper() => "
+        + "System.Threading.Tasks.Task.CompletedTask; }",
+        1)]
     [InlineData("public class Fixture { public System.Threading.Tasks.ValueTask Helper() => default; }", 1)]
-    [InlineData("public class Fixture { public async void Helper() "
-        + "{ await System.Threading.Tasks.Task.Yield(); } }", 1)]
-    [InlineData("public class Fixture { public System.Threading.Tasks.Task DisposeAsync() => "
-        + "System.Threading.Tasks.Task.CompletedTask; }", 1)]
-    [InlineData("public class Fixture { public System.Threading.Tasks.Task InitializeAsync() => "
-        + "System.Threading.Tasks.Task.CompletedTask; }", 1)]
-    [InlineData("public class Fixture { public System.Threading.Tasks.Task Main() => "
-        + "System.Threading.Tasks.Task.CompletedTask; }", 1)]
-    [InlineData("public class Fixture { public System.Threading.Tasks.Task Run("
+    [InlineData(
+        "public class Fixture { public async void Helper() "
+        + "{ await System.Threading.Tasks.Task.Yield(); } }",
+        1)]
+    [InlineData(
+        "public class Fixture { public System.Threading.Tasks.Task DisposeAsync() => "
+        + "System.Threading.Tasks.Task.CompletedTask; }",
+        1)]
+    [InlineData(
+        "public class Fixture { public System.Threading.Tasks.Task InitializeAsync() => "
+        + "System.Threading.Tasks.Task.CompletedTask; }",
+        1)]
+    [InlineData(
+        "public class Fixture { public System.Threading.Tasks.Task Main() => "
+        + "System.Threading.Tasks.Task.CompletedTask; }",
+        1)]
+    [InlineData(
+        "public class Fixture { public System.Threading.Tasks.Task Run("
         + "System.Threading.CancellationToken token) "
         + "{ return Inner(); async System.Threading.Tasks.Task Inner() "
-        + "{ await System.Threading.Tasks.Task.Yield(); token.ThrowIfCancellationRequested(); } } }", 0)]
-    [InlineData("public class Fixture { public System.Threading.Tasks.Task Run("
+        + "{ await System.Threading.Tasks.Task.Yield(); token.ThrowIfCancellationRequested(); } } }",
+        0)]
+    [InlineData(
+        "public class Fixture { public System.Threading.Tasks.Task Run("
         + "System.Threading.CancellationToken token) "
         + "{ var source = System.Threading.CancellationTokenSource.CreateLinkedTokenSource(token); "
         + "return Inner(); async System.Threading.Tasks.Task Inner() "
-        + "{ await System.Threading.Tasks.Task.Yield(); source.Token.ThrowIfCancellationRequested(); } } }", 0)]
-    [InlineData("public class Fixture { public System.Threading.Tasks.Task Run("
+        + "{ await System.Threading.Tasks.Task.Yield(); source.Token.ThrowIfCancellationRequested(); } } }",
+        0)]
+    [InlineData(
+        "public class Fixture { public System.Threading.Tasks.Task Run("
         + "System.Threading.CancellationToken token) "
         + "{ return First(); System.Threading.Tasks.Task First() "
         + "{ var value = 1; return Inner(); async System.Threading.Tasks.Task Inner() "
         + "{ await System.Threading.Tasks.Task.Yield(); token.ThrowIfCancellationRequested(); "
-        + "System.GC.KeepAlive(value); } } } }", 0)]
-    [InlineData("public class Fixture { public System.Threading.Tasks.Task Run("
+        + "System.GC.KeepAlive(value); } } } }",
+        0)]
+    [InlineData(
+        "public class Fixture { public System.Threading.Tasks.Task Run("
         + "System.Threading.CancellationToken token) "
         + "{ var value = 1; return Inner(); async System.Threading.Tasks.Task Inner() "
-        + "{ await System.Threading.Tasks.Task.Yield(); System.GC.KeepAlive(value); } } }", 1)]
-    [InlineData("public class Fixture { public System.Threading.Tasks.Task Run("
+        + "{ await System.Threading.Tasks.Task.Yield(); System.GC.KeepAlive(value); } } }",
+        1)]
+    [InlineData(
+        "public class Fixture { public System.Threading.Tasks.Task Run("
         + "System.Threading.CancellationToken token) "
         + "{ return Inner(); static async System.Threading.Tasks.Task Inner() "
-        + "{ await System.Threading.Tasks.Task.Yield(); } } }", 1)]
-    [InlineData("public class Fixture { public System.Threading.Tasks.Task Run("
+        + "{ await System.Threading.Tasks.Task.Yield(); } } }",
+        1)]
+    [InlineData(
+        "public class Fixture { public System.Threading.Tasks.Task Run("
         + "System.Threading.CancellationToken token) "
         + "{ return Inner(); async System.Threading.Tasks.Task Inner() "
-        + "{ await System.Threading.Tasks.Task.Yield(); } } }", 1)]
-    [InlineData("public class Fixture { private readonly System.Threading.CancellationToken token; "
+        + "{ await System.Threading.Tasks.Task.Yield(); } } }",
+        1)]
+    [InlineData(
+        "public class Fixture { private readonly System.Threading.CancellationToken token; "
         + "public Fixture(System.Threading.CancellationToken token) { this.token = token; } "
         + "public async System.Threading.Tasks.Task Helper() "
-        + "{ await System.Threading.Tasks.Task.Yield(); token.ThrowIfCancellationRequested(); } }", 1)]
-    [InlineData("public class Fixture { public System.Threading.Tasks.Task Run("
+        + "{ await System.Threading.Tasks.Task.Yield(); token.ThrowIfCancellationRequested(); } }",
+        1)]
+    [InlineData(
+        "public class Fixture { public System.Threading.Tasks.Task Run("
         + "System.Threading.CancellationToken token) "
         + "{ return Inner(token); async System.Threading.Tasks.Task Inner(System.Threading.CancellationToken value) "
-        + "{ await System.Threading.Tasks.Task.Yield(); value.ThrowIfCancellationRequested(); } } }", 0)]
-    [InlineData("public class Fixture { public System.Threading.Tasks.Task Ready => "
+        + "{ await System.Threading.Tasks.Task.Yield(); value.ThrowIfCancellationRequested(); } } }",
+        0)]
+    [InlineData(
+        "public class Fixture { public System.Threading.Tasks.Task Ready => "
         + "System.Threading.Tasks.Task.CompletedTask; public System.Threading.Tasks.Task Run("
         + "System.Threading.CancellationToken token) => System.Threading.Tasks.Task.Run(async () => "
-        + "{ await System.Threading.Tasks.Task.Yield(); token.ThrowIfCancellationRequested(); }); }", 0)]
-    [InlineData("public class Fixture : System.IAsyncDisposable "
-        + "{ public System.Threading.Tasks.ValueTask DisposeAsync() => default; }", 0)]
-    [InlineData("public class Fixture : System.IO.MemoryStream { public override async "
-        + "System.Threading.Tasks.ValueTask DisposeAsync() { await base.DisposeAsync(); } }", 0)]
-    [InlineData("public class Fixture { [Xunit.Fact] public System.Threading.Tasks.Task Test() => "
-        + "System.Threading.Tasks.Task.CompletedTask; }", 0)]
-    [InlineData("public class DerivedFactAttribute : Xunit.FactAttribute {} public class Fixture "
+        + "{ await System.Threading.Tasks.Task.Yield(); token.ThrowIfCancellationRequested(); }); }",
+        0)]
+    [InlineData(
+        "public class Fixture : System.IAsyncDisposable "
+        + "{ public System.Threading.Tasks.ValueTask DisposeAsync() => default; }",
+        0)]
+    [InlineData(
+        "public class Fixture : System.IO.MemoryStream { public override async "
+        + "System.Threading.Tasks.ValueTask DisposeAsync() { await base.DisposeAsync(); } }",
+        0)]
+    [InlineData(
+        "public class Fixture { [Xunit.Fact] public System.Threading.Tasks.Task Test() => "
+        + "System.Threading.Tasks.Task.CompletedTask; }",
+        0)]
+    [InlineData(
+        "public class DerivedFactAttribute : Xunit.FactAttribute {} public class Fixture "
         + "{ [DerivedFact] public System.Threading.Tasks.Task Test() "
-        + "=> System.Threading.Tasks.Task.CompletedTask; }", 0)]
-    [InlineData("namespace Xunit { public class FactAttribute : System.Attribute {} } public class Fixture "
+        + "=> System.Threading.Tasks.Task.CompletedTask; }",
+        0)]
+    [InlineData(
+        "namespace Xunit { public class FactAttribute : System.Attribute {} } public class Fixture "
         + "{ [Xunit.Fact] public System.Threading.Tasks.Task Test() "
-        + "=> System.Threading.Tasks.Task.CompletedTask; }", 1)]
-    [InlineData("public class Fixture { [BenchmarkDotNet.Attributes.Benchmark] "
+        + "=> System.Threading.Tasks.Task.CompletedTask; }",
+        1)]
+    [InlineData(
+        "public class Fixture { [BenchmarkDotNet.Attributes.Benchmark] "
         + "public System.Threading.Tasks.Task Run() "
-        + "=> System.Threading.Tasks.Task.CompletedTask; }", 0)]
-    [InlineData("namespace BenchmarkDotNet.Attributes { public class BenchmarkAttribute : System.Attribute {} } "
+        + "=> System.Threading.Tasks.Task.CompletedTask; }",
+        0)]
+    [InlineData(
+        "namespace BenchmarkDotNet.Attributes { public class BenchmarkAttribute : System.Attribute {} } "
         + "public class Fixture { [BenchmarkDotNet.Attributes.Benchmark] public System.Threading.Tasks.Task Run() "
-        + "=> System.Threading.Tasks.Task.CompletedTask; }", 1)]
-    [InlineData("namespace Doka.EntityFrameworkCore.SafeMigrations.MySql { public class MySqlCatalogSnapshot "
+        + "=> System.Threading.Tasks.Task.CompletedTask; }",
+        1)]
+    [InlineData(
+        "namespace Doka.EntityFrameworkCore.SafeMigrations.MySql { public class MySqlCatalogSnapshot "
         + "{ public System.Threading.Tasks.Task DisposeAfterFailureAsync(System.Exception failure) "
-        + "=> System.Threading.Tasks.Task.CompletedTask; } }", 1)]
-    [InlineData("namespace Doka.EntityFrameworkCore.SafeMigrations.Testing "
+        + "=> System.Threading.Tasks.Task.CompletedTask; } }",
+        1)]
+    [InlineData(
+        "namespace Doka.EntityFrameworkCore.SafeMigrations.Testing "
         + "{ public class SharedContainerFixtureLifecycle<T> { public System.Threading.Tasks.Task DisposeAsync() "
-        + "=> System.Threading.Tasks.Task.CompletedTask; } }", 1)]
+        + "=> System.Threading.Tasks.Task.CompletedTask; } }",
+        1)]
     [InlineData("public delegate System.Threading.Tasks.Task Operation(System.Threading.CancellationToken token);", 0)]
     [InlineData("public delegate System.Threading.Tasks.Task Operation();", 1)]
     public void TokenlessGuardDistinguishesOwnedOperationsFromActualFrameworkContracts(
@@ -490,7 +572,8 @@ public sealed class SafeMigrationCancellationContractTests
     {
         // Arrange
         using var image = new MemoryStream();
-        var emitted = Compile(source).Emit(image);
+        var emitted = Compile(source)
+            .Emit(image);
 
         Assert.True(emitted.Success, string.Join(Environment.NewLine, emitted.Diagnostics));
         image.Position = 0;
@@ -517,20 +600,27 @@ public sealed class SafeMigrationCancellationContractTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void TokenlessGuardPreservesActualAsyncExecutableEntryPoints(bool returnsCode)
+    public void TokenlessGuardPreservesActualAsyncExecutableEntryPoints(
+        bool returnsCode
+    )
     {
         // Arrange
         var result = returnsCode
             ? "System.Threading.Tasks.Task<int>"
             : "System.Threading.Tasks.Task";
+
         var returned = returnsCode
             ? "return 0;"
             : string.Empty;
+
         var source = $"public static class Entry {{ public static async {result} Main(string[] args) "
             + $"{{ await System.Threading.Tasks.Task.Yield(); {returned} }} }}";
+
         using var image = new MemoryStream();
-        var emitted = Compile(source).WithOptions(
-            new CSharpCompilationOptions(OutputKind.ConsoleApplication)).Emit(image);
+        var emitted = Compile(source)
+            .WithOptions(
+                new CSharpCompilationOptions(OutputKind.ConsoleApplication))
+            .Emit(image);
 
         Assert.True(emitted.Success, string.Join(Environment.NewLine, emitted.Diagnostics));
         image.Position = 0;
@@ -556,10 +646,14 @@ public sealed class SafeMigrationCancellationContractTests
     /// <summary>Compiles a consumer against the tests' loaded runtime and current product assemblies.</summary>
     /// <param name="source">The isolated source probe, never persisted as a product declaration.</param>
     /// <returns>The compilation whose diagnostics or emitted metadata are asserted by the caller.</returns>
-    private static CSharpCompilation Compile(string source)
+    private static CSharpCompilation Compile(
+        string source
+    )
     {
         var platform = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator);
-        var references = platform.Concat([
+        var references = platform
+            .Concat(
+            [
                 typeof(DbContext).Assembly.Location, typeof(Migration).Assembly.Location,
                 typeof(ISafeMigrationRunner).Assembly.Location, typeof(FactAttribute).Assembly.Location,
                 typeof(BenchmarkAttribute).Assembly.Location,
@@ -568,7 +662,10 @@ public sealed class SafeMigrationCancellationContractTests
             .Select(static path => MetadataReference.CreateFromFile(path));
 
         return CSharpCompilation.Create(
-            "Doka.EntityFrameworkCore.SafeMigrations.CancellationProbe_" + Guid.NewGuid().ToString("N"),
+            "Doka.EntityFrameworkCore.SafeMigrations.CancellationProbe_"
+            + Guid
+                .NewGuid()
+                .ToString("N"),
             [CSharpSyntaxTree.ParseText(source)],
             references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
@@ -589,26 +686,25 @@ public sealed class SafeMigrationCancellationContractTests
         CancellationToken cancellationToken
     )
     {
-        var method = typeof(SafeMigrationRunner).GetMethod("AnalyzeOperationsAsync",
+        var method = typeof(SafeMigrationRunner).GetMethod(
+            "AnalyzeOperationsAsync",
             BindingFlags.Instance | BindingFlags.NonPublic)!;
 
         // WHY: Core has no concrete database provider. The established ordered seam isolates real dispatch
         // and inventory from EF model/history discovery without replacing either provider call with a report stub.
-        return (Task<SafeMigrationRunReport>)method.Invoke(runner,
-        [
-            context, operations, mode, new SafeMigrationRunOptions("cancellation-contract"),
-            $"safe-relational-model:v1:sqlite:sha256:{new string('a', 64)}", new string('b', 64),
-            DateTimeOffset.UnixEpoch, new SafeMigrationProviderEnvironment("sqlite", "sqlite", "test"),
-            null, null, cancellationToken,
-        ])!;
+        return (Task<SafeMigrationRunReport>)method.Invoke(
+            runner,
+            [
+                context, operations, mode, new SafeMigrationRunOptions("cancellation-contract"),
+                $"safe-relational-model:v1:sqlite:sha256:{new string('a', 64)}", new string('b', 64),
+                DateTimeOffset.UnixEpoch, new SafeMigrationProviderEnvironment("sqlite", "sqlite", "test"),
+                null, null, cancellationToken,
+            ])!;
     }
 
     /// <summary>Captures exact cancellation identities at the runner's provider boundary without I/O.</summary>
     private sealed class RecordingAnalyzer : ISafeMigrationProviderAnalyzer
     {
-        /// <inheritdoc />
-        public string ProviderId => "sqlite";
-
         /// <summary>Gets the count of side-effect-free context validation calls.</summary>
         public int ValidationCount { get; private set; }
 
@@ -616,7 +712,12 @@ public sealed class SafeMigrationCancellationContractTests
         public List<CancellationToken> ObservedTokens { get; } = [];
 
         /// <inheritdoc />
-        public void ValidateContext(DbContext context)
+        public string ProviderId => "sqlite";
+
+        /// <inheritdoc />
+        public void ValidateContext(
+            DbContext context
+        )
         {
             ArgumentNullException.ThrowIfNull(context);
             ValidationCount++;
@@ -629,7 +730,10 @@ public sealed class SafeMigrationCancellationContractTests
         ) => throw new NotSupportedException("The isolated ordered seam receives its captured environment.");
 
         /// <inheritdoc />
-        public Task<IAsyncDisposable> AcquireAnalysisScopeAsync(DbContext context, CancellationToken cancellationToken)
+        public Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
+            DbContext context,
+            CancellationToken cancellationToken
+        )
             => throw new NotSupportedException("The isolated ordered seam performs no database I/O.");
 
         /// <inheritdoc />
@@ -642,9 +746,15 @@ public sealed class SafeMigrationCancellationContractTests
             ObservedTokens.Add(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
-            return Task.FromResult<IReadOnlyList<SafeMigrationProviderAnalysis>>(operations.Select(static _ =>
-                new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Matching,
-                    SafeMigrationRepairCapability.None, true, "classified_matching")).ToArray());
+            return Task.FromResult<IReadOnlyList<SafeMigrationProviderAnalysis>>(
+                operations
+                    .Select(static _ =>
+                        new SafeMigrationProviderAnalysis(
+                            SafeMigrationObservedState.Matching,
+                            SafeMigrationRepairCapability.None,
+                            true,
+                            "classified_matching"))
+                    .ToArray());
         }
 
         /// <inheritdoc />

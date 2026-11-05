@@ -136,7 +136,7 @@ internal sealed partial class SafeMigrationPreflightProjection
                 return ValidateProjectedPrimaryKey(intent, liveAnalysis, accepted);
             }
 
-            if (prerequisites is { PrimaryKeyWasDropped: true, })
+            if (prerequisites is { PrimaryKeyWasDropped: true })
             {
                 if (liveAnalysis.ObservedState is SafeMigrationObservedState.Unsupported
                     or SafeMigrationObservedState.DataBlocked)
@@ -299,13 +299,16 @@ internal sealed partial class SafeMigrationPreflightProjection
     ) => liveAnalysis.ObservedState == SafeMigrationObservedState.Unsupported
         || (!PrimaryKeyUsesNameIndependentIdentity
             && liveAnalysis.ObservedState == SafeMigrationObservedState.Different)
-        ? liveAnalysis
-        : Analysis(SafeMigrationObservedState.Missing);
+            ? liveAnalysis
+            : Analysis(SafeMigrationObservedState.Missing);
 
     /// <summary>Captures physical PK identity only from actual creation or retained exact accepted evidence.</summary>
     /// <param name="definition">The accepted table-contained primary-key shape.</param>
     /// <param name="newlyCreated">Whether this operation creates the physical table and constraint.</param>
-    private string? GetCapturedPrimaryKeyPhysicalName(ExpectedPrimaryKeyDefinition definition, bool newlyCreated)
+    private string? GetCapturedPrimaryKeyPhysicalName(
+        ExpectedPrimaryKeyDefinition definition,
+        bool newlyCreated
+    )
     {
         if (PrimaryKeyUsesNameIndependentIdentity)
         {
@@ -347,12 +350,16 @@ internal sealed partial class SafeMigrationPreflightProjection
                 : decision.Action == SafeMigrationAction.Apply
                     ? intent.Definition.Name
                     : prerequisites.PrimaryKeyPhysicalName
-                        ?? (analysis.ObservedState == SafeMigrationObservedState.Matching
-                            ? analysis.MatchedObjectName : null)
-                        ?? (liveAnalysis.ObservedState == SafeMigrationObservedState.Matching
-                            ? liveAnalysis.MatchedObjectName : null);
+                    ?? (analysis.ObservedState == SafeMigrationObservedState.Matching
+                        ? analysis.MatchedObjectName
+                        : null)
+                    ?? (liveAnalysis.ObservedState == SafeMigrationObservedState.Matching
+                        ? liveAnalysis.MatchedObjectName
+                        : null);
 
-            prerequisites.AcceptPrimaryKey(intent.Definition, physicalName,
+            prerequisites.AcceptPrimaryKey(
+                intent.Definition,
+                physicalName,
                 createdByProjection: decision.Action == SafeMigrationAction.Apply);
         }
 
@@ -365,8 +372,13 @@ internal sealed partial class SafeMigrationPreflightProjection
         if (decision.Action == SafeMigrationAction.Apply)
         {
             _droppedPhysicalKeys.Remove(
-                new IndexKey(intent.Definition.Table, intent.Definition.Schema,
-                    PrimaryKeyUsesNameIndependentIdentity ? "PRIMARY" : intent.Definition.Name));
+                new IndexKey(
+                    intent.Definition.Table,
+                    intent.Definition.Schema,
+                    PrimaryKeyUsesNameIndependentIdentity
+                        ? "PRIMARY"
+                        : intent.Definition.Name));
+
             _projectedCandidateKeyMutationTables.Add(
                 new TableKey(intent.Definition.Table, intent.Definition.Schema));
         }
@@ -385,7 +397,9 @@ internal sealed partial class SafeMigrationPreflightProjection
         if (decision.Action == SafeMigrationAction.Apply || provesAbsent)
         {
             var prerequisites = GetOrCreateProviderPrerequisites(intent.Table, intent.Schema);
-            var physicalName = PrimaryKeyUsesNameIndependentIdentity ? "PRIMARY" : intent.Name;
+            var physicalName = PrimaryKeyUsesNameIndependentIdentity
+                ? "PRIMARY"
+                : intent.Name;
 
             // WHY: A singleton PRIMARY can already be absent after an interrupted
             // prefix. Missing a named alias does not prove that another key is

@@ -13,7 +13,9 @@ public sealed class SqlServerSqlLiteralAppendTests
     [InlineData("O'Brien")]
     [InlineData("a\\path")]
     [InlineData("line1\nline2")]
-    public void NativeLiteral_OrdinaryValuesRetainExactRendering(string value)
+    public void NativeLiteral_OrdinaryValuesRetainExactRendering(
+        string value
+    )
     {
         // Arrange
         var expected = "N'" + value.Replace("'", "''", StringComparison.Ordinal) + "'";
@@ -31,16 +33,21 @@ public sealed class SqlServerSqlLiteralAppendTests
     [InlineData("\\\n")]
     [InlineData("\\\r")]
     [InlineData("\\\r\n")]
-    public void NativeLiteral_ContinuationExpressionsReconstructExactLongUnicode(string continuation)
+    public void NativeLiteral_ContinuationExpressionsReconstructExactLongUnicode(
+        string continuation
+    )
     {
         // Arrange
         var original = new string('x', 4097) + "O'Brien" + continuation + "\u20ac\ud83d\ude00";
 
         // Act
         var expression = SqlServerSqlStringLiteral.Render(original);
-        var wrapper = SqlServerSafeMigrationsSqlGenerator.BuildIsolatedGuardSql(new StringBuilder(
-            "DECLARE @doka_script_payload nvarchar(max) = " + expression
-            + "; EXEC sys.sp_executesql @doka_script_payload;"));
+        var wrapper = SqlServerSafeMigrationsSqlGenerator.BuildIsolatedGuardSql(
+            new StringBuilder(
+                "DECLARE @doka_script_payload nvarchar(max) = "
+                + expression
+                + "; EXEC sys.sp_executesql @doka_script_payload;"));
+
         var decoded = SqlServerGeneratedHistoryScriptTests.DecodeIdempotentPayloads(wrapper);
 
         // Assert
@@ -58,7 +65,10 @@ public sealed class SqlServerSqlLiteralAppendTests
         const string captured = "@captured_value";
 
         // Act
-        var argument = SqlServerSqlStringLiteral.ProcedureArgument(value, captured, "@private_value",
+        var argument = SqlServerSqlStringLiteral.ProcedureArgument(
+            value,
+            captured,
+            "@private_value",
             out var declaration);
 
         // Assert
@@ -74,7 +84,10 @@ public sealed class SqlServerSqlLiteralAppendTests
         const string rendered = "N'ordinary'";
 
         // Act
-        var argument = SqlServerSqlStringLiteral.ProcedureArgument("ordinary", rendered, string.Empty,
+        var argument = SqlServerSqlStringLiteral.ProcedureArgument(
+            "ordinary",
+            rendered,
+            string.Empty,
             out var declaration);
 
         // Assert
@@ -93,7 +106,9 @@ public sealed class SqlServerSqlLiteralAppendTests
         var failure = Record.Exception(() => SqlServerSqlStringLiteral.Render(value!));
 
         // Assert
-        Assert.Equal("value", Assert.IsType<ArgumentNullException>(failure).ParamName);
+        Assert.Equal("value",
+            Assert.IsType<ArgumentNullException>(failure)
+                .ParamName);
     }
 
     /// <summary>Appends the exact reference escaping while preserving existing prefix and suffix text.</summary>
@@ -138,14 +153,17 @@ public sealed class SqlServerSqlLiteralAppendTests
         var expected = "kept-prefix|" + payload.Replace("'", "''", StringComparison.Ordinal) + "|kept-suffix";
 
         // Act
-        SqlServerSafeMigrationsSqlGenerator.AppendEscapedSqlLiteral(builder,
+        SqlServerSafeMigrationsSqlGenerator.AppendEscapedSqlLiteral(
+            builder,
             source.AsSpan("excluded-prefix|".Length, payload.Length));
 
         builder.Append("|kept-suffix");
         var chunks = 0;
         foreach (var chunk in builder.GetChunks())
         {
-            chunks += chunk.IsEmpty ? 0 : 1;
+            chunks += chunk.IsEmpty
+                ? 0
+                : 1;
         }
 
         // Assert
@@ -160,16 +178,27 @@ public sealed class SqlServerSqlLiteralAppendTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var intent = new EnsureModelManagedDataIntent("O'Brien", ["Id"], ["int"], ["Id", "Caption"],
-            ["int", "nvarchar(80)"], new object?[,] { { 7, "O'Brien \uD83D\uDE80" } }, null, null);
+        var intent = new EnsureModelManagedDataIntent(
+            "O'Brien",
+            ["Id"],
+            ["int"],
+            ["Id", "Caption"],
+            ["int", "nvarchar(80)"],
+            new object?[,] { { 7, "O'Brien \uD83D\uDE80" } },
+            null,
+            null);
 
         var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         var plan = catalog.Build(operation);
         var expectedState = ScalarReference(
-            plan.StateExpression, "nvarchar(32)", "@doka_state", plan.CatalogPreambleSql);
+            plan.StateExpression,
+            "nvarchar(32)",
+            "@doka_state",
+            plan.CatalogPreambleSql);
 
         var postconditionExpression = $"COALESCE(({plan.ExecutionPostcondition ?? plan.Postcondition}), 0)";
         var expectedPostcondition = ScalarReference(postconditionExpression, "int", "@doka_postcondition");
@@ -197,7 +226,9 @@ public sealed class SqlServerSqlLiteralAppendTests
             SqlServerSafeMigrationsSqlGenerator.AppendEscapedSqlLiteral(builder!, ReadOnlySpan<char>.Empty));
 
         // Assert
-        Assert.Equal("builder", Assert.IsType<ArgumentNullException>(failure).ParamName);
+        Assert.Equal("builder",
+            Assert.IsType<ArgumentNullException>(failure)
+                .ParamName);
     }
 
     /// <summary>Retains the previous scalar template as an independent byte-level reference.</summary>
@@ -206,7 +237,13 @@ public sealed class SqlServerSqlLiteralAppendTests
         string type,
         string targetVariable,
         string? preamble = null
-    ) => "EXEC sys.sp_executesql N'" + (preamble?.Replace("'", "''", StringComparison.Ordinal) ?? string.Empty)
-        + "\nSET @doka_value = (" + expression.Replace("'", "''", StringComparison.Ordinal)
-        + ");', N'@doka_value " + type + " OUTPUT', @doka_value = " + targetVariable + " OUTPUT;\n";
+    ) => "EXEC sys.sp_executesql N'"
+        + (preamble?.Replace("'", "''", StringComparison.Ordinal) ?? string.Empty)
+        + "\nSET @doka_value = ("
+        + expression.Replace("'", "''", StringComparison.Ordinal)
+        + ");', N'@doka_value "
+        + type
+        + " OUTPUT', @doka_value = "
+        + targetVariable
+        + " OUTPUT;\n";
 }

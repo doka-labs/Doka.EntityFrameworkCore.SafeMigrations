@@ -6,8 +6,9 @@ public sealed partial class MySqlProofMarkerRenderingTests
     /// <returns>The expression consumer and structural marker lacking an owning descriptor.</returns>
     public static IEnumerable<object[]> UnboundProofRenderCases()
     {
-        foreach (var consumer in BinaryRenderCases().Select(static row => (string)row[0]!)
-                     .Distinct(StringComparer.Ordinal))
+        foreach (var consumer in BinaryRenderCases()
+            .Select(static row => (string)row[0]!)
+            .Distinct(StringComparer.Ordinal))
         {
             yield return [consumer, BinaryMarker];
             yield return [consumer, IdentifierMarker];
@@ -19,10 +20,17 @@ public sealed partial class MySqlProofMarkerRenderingTests
     /// <param name="marker">The binary-default or identifier-reference proof without a descriptor.</param>
     [Theory]
     [MemberData(nameof(UnboundProofRenderCases))]
-    public void EveryConsumerRejectsUnownedProofFamilies(string consumer, string marker)
+    public void EveryConsumerRejectsUnownedProofFamilies(
+        string consumer,
+        string marker
+    )
     {
         // Arrange
-        var plan = CreatePlan(marker, null) with { BinaryDefaultProofs = [], IdentifierReferenceProofs = [] };
+        var plan = CreatePlan(marker, null) with
+        {
+            BinaryDefaultProofs = [],
+            IdentifierReferenceProofs = [],
+        };
 
         // Act
         var exception = Record.Exception(() => Render(plan, consumer));
@@ -40,7 +48,9 @@ public sealed partial class MySqlProofMarkerRenderingTests
     [Theory]
     [InlineData(BinaryMarker)]
     [InlineData(IdentifierMarker)]
-    public void ReplacementBoundaryRejectsEitherUnboundProofDomainPrecisely(string marker)
+    public void ReplacementBoundaryRejectsEitherUnboundProofDomainPrecisely(
+        string marker
+    )
     {
         // Arrange
         var replace = ReplacementBoundary();
@@ -51,7 +61,8 @@ public sealed partial class MySqlProofMarkerRenderingTests
         // Assert
         var invalid = Assert.IsType<InvalidOperationException>(exception);
 
-        Assert.Equal("Binary-default and identifier-reference proofs must be bound before replacement.",
+        Assert.Equal(
+            "Binary-default and identifier-reference proofs must be bound before replacement.",
             invalid.Message);
     }
 
@@ -60,7 +71,9 @@ public sealed partial class MySqlProofMarkerRenderingTests
     [Theory]
     [InlineData(BinaryMarker)]
     [InlineData(IdentifierMarker)]
-    public void ReplacementBoundaryPreservesQuotedProofPayloads(string marker)
+    public void ReplacementBoundaryPreservesQuotedProofPayloads(
+        string marker
+    )
     {
         // Arrange
         var expression = "'a''" + marker + "' AND \"b\"\"" + marker + "\" AND `c``" + marker + "`";
@@ -78,7 +91,9 @@ public sealed partial class MySqlProofMarkerRenderingTests
     public void ReplacementBoundaryPreservesExistingProofDomainOrder()
     {
         // Arrange
-        var expression = string.Join(" AND ", MySqlSafeMigrationRuntimePlan.DataProbePlaceholder,
+        var expression = string.Join(
+            " AND ",
+            MySqlSafeMigrationRuntimePlan.DataProbePlaceholder,
             MySqlSafeMigrationRuntimePlan.TransitionInvariantPlaceholder,
             MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder,
             MySqlSafeMigrationRuntimePlan.ColumnRepairInvariantPlaceholder,
@@ -99,7 +114,8 @@ public sealed partial class MySqlProofMarkerRenderingTests
         // WHY: Normal renderers bind both domains before replacement. Reflection
         // isolates the defensive failure without broadening the product API or
         // pretending its immutable second pass can see a different marker kind.
-        var method = typeof(MySqlSafeMigrationRuntimePlan).GetMethod("ReplaceTransitionPlaceholders",
+        var method = typeof(MySqlSafeMigrationRuntimePlan).GetMethod(
+            "ReplaceTransitionPlaceholders",
             BindingFlags.NonPublic | BindingFlags.Static)!;
 
         return method.CreateDelegate<Func<string, string, string, string, string, string?, string>>();

@@ -10,7 +10,9 @@ public sealed class SqliteSafeMigrationMigrationsIntegrationTests : SqliteSafeMi
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE pipeline_state (Id INTEGER NOT NULL, "
-            + "CONSTRAINT pk_pipeline_state PRIMARY KEY (Id));", cancellationToken: CancellationToken.None);
+            + "CONSTRAINT pk_pipeline_state PRIMARY KEY (Id));",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
 
         await context.Database.MigrateAsync(cancellationToken: CancellationToken.None);
@@ -22,6 +24,7 @@ public sealed class SqliteSafeMigrationMigrationsIntegrationTests : SqliteSafeMi
                 connection,
                 "SELECT COUNT(*) FROM pragma_table_xinfo('pipeline_state') WHERE name = 'payload';",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -47,6 +50,7 @@ public sealed class SqliteSafeMigrationMigrationsIntegrationTests : SqliteSafeMi
                 "SELECT COUNT(*) FROM main.sqlite_schema "
                 + "WHERE type = 'table' AND name IN ('pipeline_probe', 'pipeline_state');",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             0,
             await ScalarIntAsync(

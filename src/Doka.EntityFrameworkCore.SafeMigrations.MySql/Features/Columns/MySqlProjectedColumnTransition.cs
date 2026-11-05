@@ -35,7 +35,8 @@ internal static class MySqlProjectedColumnTransition
         }
 
         var storeType = definition.StoreType?.TrimStart();
-        if (storeType is null || (!storeType.StartsWith("enum", StringComparison.OrdinalIgnoreCase)
+        if (storeType is null
+            || (!storeType.StartsWith("enum", StringComparison.OrdinalIgnoreCase)
                 && !storeType.StartsWith("set", StringComparison.OrdinalIgnoreCase)))
         {
             return !requiresBackslashEscapes;
@@ -43,8 +44,11 @@ internal static class MySqlProjectedColumnTransition
 
         // WHY: A declaration valid under both backslash modes can still use
         // double-quoted members, which ANSI_QUOTES interprets as identifiers.
-        return MySqlSafeMigrationCatalogSqlBuilder.BuildEnumSetCatalogDisplay(storeType, backslashEscapesEnabled,
-            out var doubleQuotes) is not null && (!doubleQuotes || doubleQuotesAreLiteral);
+        return MySqlSafeMigrationCatalogSqlBuilder.BuildEnumSetCatalogDisplay(
+                storeType,
+                backslashEscapesEnabled,
+                out var doubleQuotes) is not null
+            && (!doubleQuotes || doubleQuotesAreLiteral);
     }
 
     /// <summary>Qualifies atomic required SQL-default adds without claiming that an expression is non-null.</summary>
@@ -60,9 +64,12 @@ internal static class MySqlProjectedColumnTransition
         bool isInnoDb,
         bool strictSqlMode,
         bool explicitTimestampDefaults
-    ) => isInnoDb && strictSqlMode
-        && (!MySqlSafeMigrationCatalogSqlBuilder.RequiresExplicitTimestampDefaults(definition,
-                ResolveStoreType(definition, mappings)) || explicitTimestampDefaults);
+    ) => isInnoDb
+        && strictSqlMode
+        && (!MySqlSafeMigrationCatalogSqlBuilder.RequiresExplicitTimestampDefaults(
+                definition,
+                ResolveStoreType(definition, mappings))
+            || explicitTimestampDefaults);
 
     /// <summary>Checks source-family, row and dependent-key feasibility without live row assumptions.</summary>
     /// <param name="intent">The exact reviewed transition.</param>
@@ -107,7 +114,10 @@ internal static class MySqlProjectedColumnTransition
         var nullableColumns = 0;
         foreach (var column in table.Columns)
         {
-            var definition = StringComparer.OrdinalIgnoreCase.Equals(column.Name, target.Name) ? target : column;
+            var definition = StringComparer.OrdinalIgnoreCase.Equals(column.Name, target.Name)
+                ? target
+                : column;
+
             if (!MySqlProjectedAlterPhysicalSnapshot.TryCreateProjectedColumn(definition, mappings, 4, out var shape)
                 || !MySqlProjectedAlterPhysicalSnapshot.TryGetInlineBytes(
                     shape,
@@ -120,10 +130,12 @@ internal static class MySqlProjectedColumnTransition
 
             rowBytes += shape.DeclaredRowBytes;
             inlineBytes += inline;
-            nullableColumns += definition.IsNullable ? 1 : 0;
+            nullableColumns += definition.IsNullable
+                ? 1
+                : 0;
         }
 
-        if (rowBytes + ((nullableColumns + 7) / 8) > 65535
+        if (rowBytes + (nullableColumns + 7) / 8 > 65535
             || !MySqlProjectedAlterPhysicalSnapshot.InlineRowFits(inlineBytes, nullableColumns, environment))
         {
             return false;
@@ -131,17 +143,17 @@ internal static class MySqlProjectedColumnTransition
 
         if (table.PrimaryKey is { } primaryKey
             && MySqlProjectedIndexPhysicalShape.Validate(primaryKey, projected, environment, mappings)
-                != MySqlProjectedIndexPhysicalShapeResult.Feasible)
+            != MySqlProjectedIndexPhysicalShapeResult.Feasible)
         {
             return false;
         }
 
         return table.UniqueConstraints.All(key =>
                 MySqlProjectedIndexPhysicalShape.Validate(key, projected, environment, mappings)
-                    == MySqlProjectedIndexPhysicalShapeResult.Feasible)
+                == MySqlProjectedIndexPhysicalShapeResult.Feasible)
             && table.Indexes.All(key =>
                 MySqlProjectedIndexPhysicalShape.Validate(key, projected, environment, mappings)
-                    == MySqlProjectedIndexPhysicalShapeResult.Feasible);
+                == MySqlProjectedIndexPhysicalShapeResult.Feasible);
     }
 
     private static bool SupportedFamily(
@@ -191,10 +203,15 @@ internal static class MySqlProjectedColumnTransition
         }
 
         return MySqlSafeMigrationCatalogSqlBuilder.TryGetTextCapacity(targetType, out var targetCapacity)
-            && (sourceVarchar ? (ulong)sourceLength * 4 : sourceCapacity) <= targetCapacity;
+            && (sourceVarchar
+                ? (ulong)sourceLength * 4
+                : sourceCapacity)
+            <= targetCapacity;
     }
 
-    private static bool BooleanDefault(SafeMigrationDefaultValue value) =>
+    private static bool BooleanDefault(
+        SafeMigrationDefaultValue value
+    ) =>
         value.Kind == SafeMigrationDefaultValueKind.None
         || (value.Kind == SafeMigrationDefaultValueKind.Literal && value.GetLiteralValue() is null or bool);
 
@@ -222,20 +239,30 @@ internal static class MySqlProjectedColumnTransition
         // WHY: AlterDatabase preserves existing tables but can replace the
         // charset inherited by a later table. Such a table cannot reuse the
         // original default; an explicit, captured column collation still can.
-        var characterSet = canReuseCreationCharacterSet ? environment.DefaultCharacterSet : null;
+        var characterSet = canReuseCreationCharacterSet
+            ? environment.DefaultCharacterSet
+            : null;
+
         if (source.Collation is { } collation)
         {
             characterSet = collation.Schema is null
                 && environment.CollationCharacterSets is { } characterSets
-                && characterSets.TryGetValue(collation.Name, out var resolved) ? resolved : null;
+                && characterSets.TryGetValue(collation.Name, out var resolved)
+                    ? resolved
+                    : null;
         }
 
         // WHY: Empty projection must obey the same DDL/backfill contract as
         // runtime, even though its UPDATE would affect no rows. Only captured
         // charset facts can authorize literal encoding; names are not guessed.
         return MySqlSafeMigrationCatalogSqlBuilder.CanRepresentAlterColumnBackfill(
-            source, target, ResolveStoreType(source, mappings)!, ResolveStoreType(target, mappings)!,
-            characterSet, environment.StrictSqlMode, environment.SupportsQuotedExpressionDefaults,
+            source,
+            target,
+            ResolveStoreType(source, mappings)!,
+            ResolveStoreType(target, mappings)!,
+            characterSet,
+            environment.StrictSqlMode,
+            environment.SupportsQuotedExpressionDefaults,
             environment.SupportsTextExpressionControlCharacters);
     }
 
@@ -248,12 +275,22 @@ internal static class MySqlProjectedColumnTransition
         IRelationalTypeMappingSource mappings
     )
     {
-        var storeType = definition.StoreType ?? mappings.FindMapping(
-            definition.ClrType, definition.StoreType, keyOrIndex: false, definition.IsUnicode,
-            definition.MaxLength, definition.IsRowVersion, definition.IsFixedLength,
-            definition.Precision, definition.Scale)?.StoreType;
+        var storeType = definition.StoreType
+            ?? mappings.FindMapping(
+                    definition.ClrType,
+                    definition.StoreType,
+                    keyOrIndex: false,
+                    definition.IsUnicode,
+                    definition.MaxLength,
+                    definition.IsRowVersion,
+                    definition.IsFixedLength,
+                    definition.Precision,
+                    definition.Scale)
+                ?.StoreType;
 
-        return storeType?.Trim().ToLowerInvariant();
+        return storeType
+            ?.Trim()
+            .ToLowerInvariant();
     }
 
     private sealed class TargetColumns(

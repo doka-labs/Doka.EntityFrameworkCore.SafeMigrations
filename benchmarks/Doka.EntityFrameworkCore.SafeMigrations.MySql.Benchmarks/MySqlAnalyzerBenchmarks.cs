@@ -5,13 +5,20 @@ public class MySqlAnalyzerBenchmarks : IDisposable
 {
     private MySqlGenerationContext _context = null!;
     private IMigrationsSqlGenerator _generator = null!;
-    private MySqlSafeMigrationPlanCapture _planCapture = null!;
     private IModel _model = null!;
     private IReadOnlyList<MigrationOperation> _operations = null!;
+    private MySqlSafeMigrationPlanCapture _planCapture = null!;
 
     /// <summary>Gets or sets the number of column operations analyzed per invocation.</summary>
     [Params(1, 512, 1000)]
     public int OperationCount { get; set; }
+
+    /// <summary>Releases the owned benchmark context.</summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
 
     /// <summary>Creates the native provider services, model and operations outside the measurement.</summary>
     [GlobalSetup]
@@ -32,13 +39,6 @@ public class MySqlAnalyzerBenchmarks : IDisposable
     /// <summary>Disposes the native provider context after measurement.</summary>
     [GlobalCleanup]
     public void Cleanup() => Dispose();
-
-    /// <summary>Releases the owned benchmark context.</summary>
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
 
     /// <summary>Releases managed resources owned by this benchmark fixture.</summary>
     /// <param name="disposing">Whether managed resources should be released.</param>
@@ -69,6 +69,7 @@ internal static class MySqlBenchmarkPlanCapture
         using var lease = planCapture.Begin(safeOperations);
         _ = generator.Generate(operations, model);
 
-        return lease.Complete().Length;
+        return lease.Complete()
+            .Length;
     }
 }

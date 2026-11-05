@@ -15,7 +15,9 @@ public sealed class SqlServerSafeMigrationKeyLimitsIntegrationTests : SqlServerS
     [SqlServerLiveTheory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task CandidateKey_DuplicateRowsAreDataBlocked(bool primaryKey)
+    public async Task CandidateKey_DuplicateRowsAreDataBlocked(
+        bool primaryKey
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
@@ -24,9 +26,12 @@ public sealed class SqlServerSafeMigrationKeyLimitsIntegrationTests : SqlServerS
             "CREATE TABLE dbo.duplicate_keys (Id int NOT NULL, Code int NOT NULL); "
             + "INSERT INTO dbo.duplicate_keys (Id, Code) VALUES (1, 7), (1, 7);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        var constraintName = primaryKey ? "PK_duplicate_keys" : "UQ_duplicate_keys_Code";
+        var constraintName = primaryKey
+            ? "PK_duplicate_keys"
+            : "UQ_duplicate_keys_Code";
 
         if (primaryKey)
         {
@@ -38,10 +43,13 @@ public sealed class SqlServerSafeMigrationKeyLimitsIntegrationTests : SqlServerS
         }
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-duplicate-key"), cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-duplicate-key"),
+                cancellationToken: CancellationToken.None);
 
         var keyCount = await ScalarIntAsync(
             connectionString,
@@ -50,7 +58,10 @@ public sealed class SqlServerSafeMigrationKeyLimitsIntegrationTests : SqlServerS
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.DataBlocked, Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.DataBlocked,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
         Assert.Equal(0, keyCount);
     }
 
@@ -71,9 +82,12 @@ public sealed class SqlServerSafeMigrationKeyLimitsIntegrationTests : SqlServerS
             connectionString,
             $"CREATE TABLE dbo.wide_keys (Code nvarchar({length}) NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        var constraintName = primaryKey ? "PK_wide_keys" : "UQ_wide_keys_Code";
+        var constraintName = primaryKey
+            ? "PK_wide_keys"
+            : "UQ_wide_keys_Code";
 
         if (primaryKey)
         {
@@ -85,10 +99,13 @@ public sealed class SqlServerSafeMigrationKeyLimitsIntegrationTests : SqlServerS
         }
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-key-width"), cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-key-width"),
+                cancellationToken: CancellationToken.None);
 
         var keyCount = await ScalarIntAsync(
             connectionString,
@@ -97,7 +114,10 @@ public sealed class SqlServerSafeMigrationKeyLimitsIntegrationTests : SqlServerS
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Unsupported, Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Unsupported,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
         Assert.Equal(0, keyCount);
     }
 }

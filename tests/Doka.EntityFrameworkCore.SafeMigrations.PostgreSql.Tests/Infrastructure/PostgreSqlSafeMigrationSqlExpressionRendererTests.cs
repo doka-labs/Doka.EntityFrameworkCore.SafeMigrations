@@ -28,7 +28,9 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
     [InlineData("current-timestamp")]
     [InlineData("provider-fragment")]
     [InlineData("opaque")]
-    public void Render_ProducesDeterministicSqlForStructuredNode(string caseId)
+    public void Render_ProducesDeterministicSqlForStructuredNode(
+        string caseId
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -157,8 +159,11 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
         var candidate = renderer.RenderCatalogDeparsedCandidateSql(expression, Literal);
 
         // Assert
-        Assert.Contains("'lower(' || pg_catalog.quote_ident('value') || ' COLLATE '", candidate,
+        Assert.Contains(
+            "'lower(' || pg_catalog.quote_ident('value') || ' COLLATE '",
+            candidate,
             StringComparison.Ordinal);
+
         Assert.DoesNotContain("'lower(('", candidate, StringComparison.Ordinal);
         Assert.Contains("pg_catalog.to_regcollation(", candidate, StringComparison.Ordinal);
     }
@@ -180,7 +185,10 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
     [InlineData(SafeMigrationSqlBinaryOperator.Multiply, "*")]
     [InlineData(SafeMigrationSqlBinaryOperator.Divide, "/")]
     [InlineData(SafeMigrationSqlBinaryOperator.Modulo, "%")]
-    public void Render_ProducesBinaryOperator(SafeMigrationSqlBinaryOperator value, string token)
+    public void Render_ProducesBinaryOperator(
+        SafeMigrationSqlBinaryOperator value,
+        string token
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -203,14 +211,19 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
             .GetMethod(nameof(Render_ProducesBinaryOperator))!;
 
         // Act
-        var covered = method.GetCustomAttributes<InlineDataAttribute>()
+        var covered = method
+            .GetCustomAttributes<InlineDataAttribute>()
             .SelectMany(attribute => attribute.GetData(method))
             .Select(static data => Assert.IsType<SafeMigrationSqlBinaryOperator>(data[0]))
             .OrderBy(static value => value)
             .ToArray();
 
         // Assert
-        Assert.Equal(Enum.GetValues<SafeMigrationSqlBinaryOperator>().OrderBy(static value => value), covered);
+        Assert.Equal(Enum
+                .GetValues<SafeMigrationSqlBinaryOperator>()
+                .OrderBy(static value => value),
+            covered);
+
         Assert.Equal(13, covered.Length);
     }
 
@@ -237,7 +250,10 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
     [InlineData("unsafe-cast-literal", "structured_cast_type")]
     [InlineData("unsafe-cast-identifier", "structured_cast_type")]
     [InlineData("foreign-fragment", "provider_fragment_mismatch")]
-    public void Render_RejectsUnsupportedValue(string caseId, string expectedFeature)
+    public void Render_RejectsUnsupportedValue(
+        string caseId,
+        string expectedFeature
+    )
     {
         // Arrange
         using var context = CreateContext();

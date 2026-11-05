@@ -16,7 +16,10 @@ public sealed class SqlServerRuntimeRepairEvaluationTests
     {
         // Arrange
         var operation = CreateOperation(policy);
-        var plan = new SqlServerSafeMigrationRuntimePlan("N'matching'", "1", capability,
+        var plan = new SqlServerSafeMigrationRuntimePlan(
+            "N'matching'",
+            "1",
+            capability,
             "SELECT forbidden_repair_binding") { RequiresDelayedBinding = true };
 
         // Act
@@ -35,12 +38,17 @@ public sealed class SqlServerRuntimeRepairEvaluationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void EligibleRepair_IsGuardedByFreshDifferentState(bool delayed)
+    public void EligibleRepair_IsGuardedByFreshDifferentState(
+        bool delayed
+    )
     {
         // Arrange
         var operation = CreateOperation(SafeMigrationPolicy.RepairIfSafe);
-        var plan = new SqlServerSafeMigrationRuntimePlan("N'different'", "1",
-            SafeMigrationRepairCapability.Safe, "CASE WHEN 7 = 7 THEN 1 ELSE 0 END")
+        var plan = new SqlServerSafeMigrationRuntimePlan(
+            "N'different'",
+            "1",
+            SafeMigrationRepairCapability.Safe,
+            "CASE WHEN 7 = 7 THEN 1 ELSE 0 END")
         {
             RequiresDelayedBinding = delayed,
         };
@@ -65,12 +73,17 @@ public sealed class SqlServerRuntimeRepairEvaluationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void FreshClassifier_FollowsSafetyGatesBeforeEligibleRepair(bool delayed)
+    public void FreshClassifier_FollowsSafetyGatesBeforeEligibleRepair(
+        bool delayed
+    )
     {
         // Arrange
         var operation = CreateOperation(SafeMigrationPolicy.RepairIfSafe);
-        var plan = new SqlServerSafeMigrationRuntimePlan("N'different'", "1",
-            SafeMigrationRepairCapability.Safe, "CASE WHEN 9 = 9 THEN 1 ELSE 0 END")
+        var plan = new SqlServerSafeMigrationRuntimePlan(
+            "N'different'",
+            "1",
+            SafeMigrationRepairCapability.Safe,
+            "CASE WHEN 9 = 9 THEN 1 ELSE 0 END")
         {
             RequiresDelayedBinding = delayed,
             PrerequisiteExpression = "prerequisite_sentinel",
@@ -86,7 +99,10 @@ public sealed class SqlServerRuntimeRepairEvaluationTests
         Assert.Contains("physical_sentinel", sql, StringComparison.Ordinal);
         Assert.Contains("prerequisite_sentinel", sql, StringComparison.Ordinal);
         Assert.Contains("permission_sentinel", sql, StringComparison.Ordinal);
-        var classification = sql.IndexOf(delayed ? "EXEC sys.sp_executesql" : "SET @doka_state = (N'different')",
+        var classification = sql.IndexOf(
+            delayed
+                ? "EXEC sys.sp_executesql"
+                : "SET @doka_state = (N'different')",
             StringComparison.Ordinal);
 
         Assert.True(classification > sql.IndexOf("physical_sentinel", StringComparison.Ordinal));
@@ -98,7 +114,16 @@ public sealed class SqlServerRuntimeRepairEvaluationTests
     }
 
     /// <summary>Creates a metadata-independent fixture for the policy rendering boundary.</summary>
-    private static SafeMigrationOperation CreateOperation(SafeMigrationPolicy policy)
-        => new(new EnsureColumnIntent("items", new ExpectedColumnDefinition("Caption", typeof(string), true,
-            "nvarchar(80)")), policy);
+    private static SafeMigrationOperation CreateOperation(
+        SafeMigrationPolicy policy
+    )
+        => new(
+            new EnsureColumnIntent(
+                "items",
+                new ExpectedColumnDefinition(
+                    "Caption",
+                    typeof(string),
+                    true,
+                    "nvarchar(80)")),
+            policy);
 }

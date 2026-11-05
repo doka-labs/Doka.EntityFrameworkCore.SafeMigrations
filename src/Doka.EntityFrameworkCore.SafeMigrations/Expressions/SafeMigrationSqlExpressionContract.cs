@@ -220,7 +220,11 @@ internal static class SafeMigrationSqlExpressionContract
                         WriteStrings(writer, value.Parts);
                         break;
                     case SafeMigrationSqlLiteralExpression value:
-                        writer.Add(value.NumericSourceToken.IsEmpty ? "literal" : "sql_numeric_literal");
+                        writer.Add(
+                            value.NumericSourceToken.IsEmpty
+                                ? "literal"
+                                : "sql_numeric_literal");
+
                         if (!value.NumericSourceToken.IsEmpty)
                         {
                             writer.Add(value.NumericSourceToken.Span);
@@ -254,7 +258,11 @@ internal static class SafeMigrationSqlExpressionContract
                         writer.Add(value.Name);
                         break;
                     case SafeMigrationSqlCastExpression value:
-                        writer.Add(value.UsesSqlServerConvert ? "sqlserver_convert" : "cast");
+                        writer.Add(
+                            value.UsesSqlServerConvert
+                                ? "sqlserver_convert"
+                                : "cast");
+
                         writer.Add(value.StoreType);
                         break;
                     case SafeMigrationSqlCaseExpression:
@@ -319,11 +327,20 @@ internal static class SafeMigrationSqlExpressionContract
 
                 pending.Push(
                     frame.Result
-                        ? frame with { Index = frame.Index + 1, Result = false }
+                        ? frame with
+                        {
+                            Index = frame.Index + 1,
+                            Result = false,
+                        }
                         : frame with { Result = true });
 
-                left = frame.Result ? firstClause.Result : firstClause.Condition;
-                right = frame.Result ? secondClause.Result : secondClause.Condition;
+                left = frame.Result
+                    ? firstClause.Result
+                    : firstClause.Condition;
+
+                right = frame.Result
+                    ? secondClause.Result
+                    : secondClause.Condition;
 
                 return true;
             default:
@@ -362,14 +379,6 @@ internal static class SafeMigrationSqlExpressionContract
         return true;
     }
 
-    /// <summary>Retains a branch or collection continuation without copying or mutating expression nodes.</summary>
-    private readonly record struct ComparisonFrame(
-        SafeMigrationSqlExpression? Left,
-        SafeMigrationSqlExpression? Right,
-        int Index = -1,
-        bool Result = false
-    );
-
     private static bool LiteralEquivalent(
         object? left,
         object? right
@@ -402,7 +411,11 @@ internal static class SafeMigrationSqlExpressionContract
             return;
         }
 
-        writer.Add(value.GetType().FullName ?? value.GetType().Name);
+        writer.Add(value.GetType()
+                .FullName
+            ?? value.GetType()
+                .Name);
+
         if (value is byte[] bytes)
         {
             writer.Add(bytes);
@@ -424,6 +437,14 @@ internal static class SafeMigrationSqlExpressionContract
                 _ => Convert.ToString(value, CultureInfo.InvariantCulture),
             });
     }
+
+    /// <summary>Retains a branch or collection continuation without copying or mutating expression nodes.</summary>
+    private readonly record struct ComparisonFrame(
+        SafeMigrationSqlExpression? Left,
+        SafeMigrationSqlExpression? Right,
+        int Index = -1,
+        bool Result = false
+    );
 }
 
 /// <summary>Emits the existing preorder expression and collection-count contract without recursive calls.</summary>
@@ -475,37 +496,40 @@ internal ref struct SafeMigrationSqlExpressionTraversal(SafeMigrationSqlExpressi
         }
 
         collectionCount = -1;
-        expression = frame.Index < 0 ? frame.Expression : ResumeCollection(frame);
+        expression = frame.Index < 0
+            ? frame.Expression
+            : ResumeCollection(frame);
+
         switch (expression)
         {
             case SafeMigrationSqlUnaryExpression value:
-                SetNext(new(value.Operand));
+                SetNext(new TraversalFrame(value.Operand));
                 break;
             case SafeMigrationSqlBinaryExpression value:
-                _pending.Push(new(value.Right));
-                SetNext(new(value.Left));
+                _pending.Push(new TraversalFrame(value.Right));
+                SetNext(new TraversalFrame(value.Left));
                 break;
             case SafeMigrationSqlNullTestExpression value:
-                SetNext(new(value.Operand));
+                SetNext(new TraversalFrame(value.Operand));
                 break;
             case SafeMigrationSqlBetweenExpression value:
-                _pending.Push(new(value.Upper));
-                _pending.Push(new(value.Lower));
-                SetNext(new(value.Operand));
+                _pending.Push(new TraversalFrame(value.Upper));
+                _pending.Push(new TraversalFrame(value.Lower));
+                SetNext(new TraversalFrame(value.Operand));
                 break;
             case SafeMigrationSqlInExpression value:
                 // WHY: IN serializes its operand before the collection count; moving this count changes fingerprints.
-                _pending.Push(new(value, -2));
-                SetNext(new(value.Operand));
+                _pending.Push(new TraversalFrame(value, -2));
+                SetNext(new TraversalFrame(value.Operand));
                 break;
             case SafeMigrationSqlFunctionExpression or SafeMigrationSqlCaseExpression:
-                SetNext(new(expression, -2));
+                SetNext(new TraversalFrame(expression, -2));
                 break;
             case SafeMigrationSqlCastExpression value:
-                SetNext(new(value.Operand));
+                SetNext(new TraversalFrame(value.Operand));
                 break;
             case SafeMigrationSqlCollateExpression value:
-                SetNext(new(value.Operand));
+                SetNext(new TraversalFrame(value.Operand));
                 break;
         }
 
@@ -558,10 +582,16 @@ internal ref struct SafeMigrationSqlExpressionTraversal(SafeMigrationSqlExpressi
 
                 _pending.Push(
                     frame.Result
-                        ? frame with { Index = frame.Index + 1, Result = false }
+                        ? frame with
+                        {
+                            Index = frame.Index + 1,
+                            Result = false,
+                        }
                         : frame with { Result = true });
 
-                return frame.Result ? value.WhenClauses[frame.Index].Result : value.WhenClauses[frame.Index].Condition;
+                return frame.Result
+                    ? value.WhenClauses[frame.Index].Result
+                    : value.WhenClauses[frame.Index].Condition;
             default:
                 throw new UnreachableException();
         }

@@ -8,8 +8,9 @@ public sealed class MySqlBackfillConstraintCatalogTests
     public void Create_ReusesEmptyCatalogWithoutRelevantBackfill()
     {
         // Arrange
-        var unrelated = new SafeMigrationOperation(new EnsureUniqueConstraintIntent(
-            new ExpectedUniqueConstraintDefinition("uq_value", "rows", ["value"])),
+        var unrelated = new SafeMigrationOperation(
+            new EnsureUniqueConstraintIntent(
+                new ExpectedUniqueConstraintDefinition("uq_value", "rows", ["value"])),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -31,8 +32,14 @@ public sealed class MySqlBackfillConstraintCatalogTests
         var otherTable = Alter("other_rows", "renamed_value");
         SafeMigrationOperation[] operations =
         [
-            new(new EnsureUniqueConstraintIntent(new ExpectedUniqueConstraintDefinition(
-                "uq_value", "rows", ["value"], schema: "selected")), SafeMigrationPolicy.ThrowIfDifferent),
+            new(
+                new EnsureUniqueConstraintIntent(
+                    new ExpectedUniqueConstraintDefinition(
+                        "uq_value",
+                        "rows",
+                        ["value"],
+                        schema: "selected")),
+                SafeMigrationPolicy.ThrowIfDifferent),
             new(new RenameColumnIntent("value", "rows", "renamed_value"), SafeMigrationPolicy.ThrowIfDifferent),
             new(new RenameTableIntent("rows", "renamed_rows"), SafeMigrationPolicy.ThrowIfDifferent),
             altered,
@@ -59,8 +66,13 @@ public sealed class MySqlBackfillConstraintCatalogTests
         var otherTable = Alter("ROWS", "value");
         SafeMigrationOperation[] operations =
         [
-            new(new EnsureUniqueConstraintIntent(new ExpectedUniqueConstraintDefinition(
-                "uq_value", "rows", ["VALUE"])), SafeMigrationPolicy.ThrowIfDifferent),
+            new(
+                new EnsureUniqueConstraintIntent(
+                    new ExpectedUniqueConstraintDefinition(
+                        "uq_value",
+                        "rows",
+                        ["VALUE"])),
+                SafeMigrationPolicy.ThrowIfDifferent),
             altered,
             otherTable,
         ];
@@ -83,8 +95,13 @@ public sealed class MySqlBackfillConstraintCatalogTests
         var different = Alter("rows", "value");
         var catalog = MySqlBackfillConstraintCatalog.Create(
         [
-            new(new EnsureUniqueConstraintIntent(new ExpectedUniqueConstraintDefinition(
-                "uq_value", "rows", ["value"])), SafeMigrationPolicy.ThrowIfDifferent),
+            new SafeMigrationOperation(
+                new EnsureUniqueConstraintIntent(
+                    new ExpectedUniqueConstraintDefinition(
+                        "uq_value",
+                        "rows",
+                        ["value"])),
+                SafeMigrationPolicy.ThrowIfDifferent),
             original,
         ]);
 
@@ -106,9 +123,13 @@ public sealed class MySqlBackfillConstraintCatalogTests
     {
         // Arrange
         var operation = Alter("rows", "value");
-        var operations = Enumerable.Repeat(operation, 100_000).ToArray();
-        operations[0] = new SafeMigrationOperation(new EnsureUniqueConstraintIntent(
-            new ExpectedUniqueConstraintDefinition("uq_value", "rows", ["value"])),
+        var operations = Enumerable
+            .Repeat(operation, 100_000)
+            .ToArray();
+
+        operations[0] = new SafeMigrationOperation(
+            new EnsureUniqueConstraintIntent(
+                new ExpectedUniqueConstraintDefinition("uq_value", "rows", ["value"])),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -122,9 +143,15 @@ public sealed class MySqlBackfillConstraintCatalogTests
     private static SafeMigrationOperation Alter(
         string table,
         string column
-    ) => new(new AlterColumnIntent(table,
-        new ExpectedColumnDefinition(column, typeof(string), false, "varchar(20)",
-            defaultValue: SafeMigrationDefaultValue.Literal("x")),
-        new ExpectedColumnDefinition(column, typeof(string), true, "varchar(10)")),
+    ) => new(
+        new AlterColumnIntent(
+            table,
+            new ExpectedColumnDefinition(
+                column,
+                typeof(string),
+                false,
+                "varchar(20)",
+                defaultValue: SafeMigrationDefaultValue.Literal("x")),
+            new ExpectedColumnDefinition(column, typeof(string), true, "varchar(10)")),
         SafeMigrationPolicy.RepairIfSafe);
 }

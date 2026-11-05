@@ -13,41 +13,81 @@ public sealed class CatalogStatementCaptureModeTests
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(false, false)]
-    public async Task RepeatedReads_PreserveResultsAndResourceCleanup(bool native, bool capture)
+    public async Task RepeatedReads_PreserveResultsAndResourceCleanup(
+        bool native,
+        bool capture
+    )
     {
         // Arrange
         const int repetitions = 16;
         var readers = new List<DbDataReader>();
         var calls = new List<(string Sql, object? Value)>();
-        await using var connection = new CatalogStatementTestConnection(native, (sql, parameters) =>
-        {
-            var value = parameters[0].Value;
-            calls.Add((sql, value));
-            var rows = new DataTable();
-            rows.Columns.Add("value", typeof(int));
-            rows.Rows.Add(value);
+        await using var connection = new CatalogStatementTestConnection(
+            native,
+            (sql, parameters) =>
+            {
+                var value = parameters[0].Value;
+                calls.Add((sql, value));
+                var rows = new DataTable();
+                rows.Columns.Add("value", typeof(int));
+                rows.Rows.Add(value);
 
-            return rows;
-        }) { CaptureObservations = capture };
+                return rows;
+            }) { CaptureObservations = capture };
 
         var results = new List<int>();
 
         // Act
         for (var repetition = 0; repetition < repetitions; repetition++)
         {
-            results.AddRange(await ReadValuesAsync(connection, native, readers,
-                cancellationToken: CancellationToken.None));
+            results.AddRange(
+                await ReadValuesAsync(
+                    connection,
+                    native,
+                    readers,
+                    cancellationToken: CancellationToken.None));
         }
 
         // Assert
-        Assert.Equal(Enumerable.Range(0, repetitions).SelectMany(static _ => s_values), results);
+        Assert.Equal(Enumerable
+                .Range(0, repetitions)
+                .SelectMany(static _ => s_values),
+            results);
+
         Assert.Equal(repetitions, calls.Count(static call => call is ("SELECT @value;", 17)));
         Assert.Equal(repetitions, calls.Count(static call => call is ("SELECT @value;", 29)));
-        Assert.Equal(capture ? repetitions * 2 : 0, connection.Submissions.Count);
-        Assert.Equal(capture && native ? repetitions : 0, connection.BatchCounts.Count);
-        Assert.Equal(capture && !native ? repetitions * 2 : 0, connection.CommandsDisposed);
-        Assert.Equal(capture && native ? repetitions : 0, connection.BatchesDisposed);
-        Assert.Equal(capture ? native ? repetitions : repetitions * 2 : 0, connection.ReadersDisposed);
+        Assert.Equal(
+            capture
+                ? repetitions * 2
+                : 0,
+            connection.Submissions.Count);
+
+        Assert.Equal(
+            capture && native
+                ? repetitions
+                : 0,
+            connection.BatchCounts.Count);
+
+        Assert.Equal(
+            capture && !native
+                ? repetitions * 2
+                : 0,
+            connection.CommandsDisposed);
+
+        Assert.Equal(
+            capture && native
+                ? repetitions
+                : 0,
+            connection.BatchesDisposed);
+
+        Assert.Equal(
+            capture
+                ? native
+                    ? repetitions
+                    : repetitions * 2
+                : 0,
+            connection.ReadersDisposed);
+
         Assert.Equal(ConnectionState.Open, connection.State);
         Assert.All(readers, static reader => Assert.True(reader.IsClosed));
     }
@@ -68,7 +108,9 @@ public sealed class CatalogStatementCaptureModeTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void ScalarAndTransaction_PreserveExecutionWithoutMandatoryRecording(bool capture)
+    public void ScalarAndTransaction_PreserveExecutionWithoutMandatoryRecording(
+        bool capture
+    )
     {
         // Arrange
         var scalarCalls = 0;
@@ -91,9 +133,24 @@ public sealed class CatalogStatementCaptureModeTests
         // Assert
         Assert.Equal(1, result);
         Assert.Equal(1, scalarCalls);
-        Assert.Equal(capture ? 1 : 0, connection.Submissions.Count);
-        Assert.Equal(capture ? 1 : 0, connection.TransactionsDisposed);
-        Assert.Equal(capture ? 1 : 0, connection.CommandsDisposed);
+        Assert.Equal(
+            capture
+                ? 1
+                : 0,
+            connection.Submissions.Count);
+
+        Assert.Equal(
+            capture
+                ? 1
+                : 0,
+            connection.TransactionsDisposed);
+
+        Assert.Equal(
+            capture
+                ? 1
+                : 0,
+            connection.CommandsDisposed);
+
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 

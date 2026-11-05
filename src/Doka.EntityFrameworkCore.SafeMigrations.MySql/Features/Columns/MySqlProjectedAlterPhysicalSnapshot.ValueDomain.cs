@@ -14,15 +14,15 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot
     {
         var target = intent.Definition;
         if (!columns.TryGetValue(target.Name, out var original)
-            || source.IsNullable && !target.IsNullable && !environment.StrictSqlMode
+            || (source.IsNullable && !target.IsNullable && !environment.StrictSqlMode)
             || source.ClrType != typeof(string)
             || target.ClrType != typeof(string)
             || !MySqlSafeMigrationColumnMetadata.CanSafelyConverge(source)
             || !MySqlSafeMigrationColumnMetadata.CanSafelyConverge(target)
             || !Equals(source.Collation, target.Collation)
             || original.HasForeignKey
-            || original.IsNullable
-                && !target.IsNullable
+            || (original.IsNullable
+                && !target.IsNullable)
             || source.StoreType is not { } sourceType
             || target.StoreType is not { } targetType)
         {
@@ -37,12 +37,14 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot
         {
             characterSet = collation.Schema is null
                 && environment.CollationCharacterSets is { } characterSets
-                && characterSets.TryGetValue(collation.Name, out var resolved) ? resolved : null;
+                && characterSets.TryGetValue(collation.Name, out var resolved)
+                    ? resolved
+                    : null;
         }
 
         if (!sourceIsString
-            || MySqlProjectedColumnTransition.RequiresStrictConversion(sourceType, targetType)
-                && !environment.StrictSqlMode
+            || (MySqlProjectedColumnTransition.RequiresStrictConversion(sourceType, targetType)
+                && !environment.StrictSqlMode)
             || !MySqlSafeMigrationCatalogSqlBuilder.CanRepresentAlterColumnBackfill(
                 source,
                 target,
@@ -64,7 +66,8 @@ internal sealed partial class MySqlProjectedAlterPhysicalSnapshot
             && original.IndexShape.MaximumPrefixUnits is > 0;
 
         var originalText = MySqlSafeMigrationCatalogSqlBuilder.TryGetTextCapacity(
-            original.StoreTypeFamily, out var textCapacity);
+            original.StoreTypeFamily,
+            out var textCapacity);
 
         if (!originalVarchar
             && !originalText)

@@ -72,8 +72,10 @@ public sealed class MySqlCatalogQueryParameterizerTests
     {
         Assert.Throws<InvalidOperationException>(() =>
             MySqlCatalogSqlTemplate.Render("x = \u001e0", ["value"], static value => value));
+
         Assert.Throws<InvalidOperationException>(() =>
             MySqlCatalogSqlTemplate.Render("x = \u001einvalid\u001f", ["value"], static value => value));
+
         Assert.Throws<InvalidOperationException>(() =>
             MySqlCatalogSqlTemplate.Render("x = \u001e1\u001f", ["value"], static value => value));
     }

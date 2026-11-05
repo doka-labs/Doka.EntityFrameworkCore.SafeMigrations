@@ -13,12 +13,26 @@ public sealed class SqlServerComputedKeyProofTests
     [InlineData("other_nodes", null, false)]
     [InlineData("nodes", "other_schema", false)]
     [InlineData("Nodes", null, false)]
-    public void NativeProofRequiresItsQualifiedOwner(string table, string? schema, bool expected)
+    public void NativeProofRequiresItsQualifiedOwner(
+        string table,
+        string? schema,
+        bool expected
+    )
     {
         // Arrange
-        var shape = new SqlServerProjectedKeyColumn("bit", 1, true, true, true, null, true);
-        var proof = new SqlServerProjectedComputedKeyProof(shape,
-            new Dictionary<string, ExpectedColumnDefinition?> { ["L"] = null }, "nodes")
+        var shape = new SqlServerProjectedKeyColumn(
+            "bit",
+            1,
+            true,
+            true,
+            true,
+            null,
+            true);
+
+        var proof = new SqlServerProjectedComputedKeyProof(
+            shape,
+            new Dictionary<string, ExpectedColumnDefinition?> { ["L"] = null },
+            "nodes")
         {
             LiveOperandIdentities = new Dictionary<string, int> { ["L"] = 7 },
             CurrentColumnBindings = new Dictionary<string, int> { ["L"] = 7 },
@@ -38,15 +52,30 @@ public sealed class SqlServerComputedKeyProofTests
     public void ReusedDefinitionRetainsIndependentNativePrecisionPerOwner()
     {
         // Arrange
-        var shape = new SqlServerProjectedKeyColumn("bit", 1, true, true, true, null, true);
-        var precise = new SqlServerProjectedComputedKeyProof(shape,
-            new Dictionary<string, ExpectedColumnDefinition?> { ["L"] = null }, "precise_nodes")
+        var shape = new SqlServerProjectedKeyColumn(
+            "bit",
+            1,
+            true,
+            true,
+            true,
+            null,
+            true);
+
+        var precise = new SqlServerProjectedComputedKeyProof(
+            shape,
+            new Dictionary<string, ExpectedColumnDefinition?> { ["L"] = null },
+            "precise_nodes")
         {
             LiveOperandIdentities = new Dictionary<string, int> { ["L"] = 7 },
             CurrentColumnBindings = new Dictionary<string, int> { ["L"] = 7 },
         };
 
-        var imprecise = precise with { Table = "imprecise_nodes", Shape = shape with { KeyEligible = false, }, };
+        var imprecise = precise with
+        {
+            Table = "imprecise_nodes",
+            Shape = shape with { KeyEligible = false },
+        };
+
         SqlServerProjectedComputedKeyProof[] captured = [precise, imprecise];
         var source = new Source(null, recreated: false);
 
@@ -65,16 +94,32 @@ public sealed class SqlServerComputedKeyProofTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void AuthoredProofRequiresIdenticalOperandBindings(bool sameBinding)
+    public void AuthoredProofRequiresIdenticalOperandBindings(
+        bool sameBinding
+    )
     {
         // Arrange
         var original = new ExpectedColumnDefinition("L", typeof(long), false, "bigint");
         var replacement = new ExpectedColumnDefinition("L", typeof(long), true, "bigint");
-        var shape = new SqlServerProjectedKeyColumn("bit", 1, true, true, true, null, true);
-        var proof = new SqlServerProjectedComputedKeyProof(shape,
-            new Dictionary<string, ExpectedColumnDefinition?> { ["L"] = original }, "nodes");
+        var shape = new SqlServerProjectedKeyColumn(
+            "bit",
+            1,
+            true,
+            true,
+            true,
+            null,
+            true);
 
-        var source = new Source(sameBinding ? original : replacement, recreated: false);
+        var proof = new SqlServerProjectedComputedKeyProof(
+            shape,
+            new Dictionary<string, ExpectedColumnDefinition?> { ["L"] = original },
+            "nodes");
+
+        var source = new Source(
+            sameBinding
+                ? original
+                : replacement,
+            recreated: false);
 
         // Act
         var matches = proof.Matches(source, "nodes", null);
@@ -99,12 +144,25 @@ public sealed class SqlServerComputedKeyProofTests
     )
     {
         // Arrange
-        var shape = new SqlServerProjectedKeyColumn("bit", 1, true, true, true, null, true);
-        var proof = new SqlServerProjectedComputedKeyProof(shape,
-            new Dictionary<string, ExpectedColumnDefinition?> { ["L"] = null }, "nodes");
+        var shape = new SqlServerProjectedKeyColumn(
+            "bit",
+            1,
+            true,
+            true,
+            true,
+            null,
+            true);
 
-        var source = new Source(projectedOperand
-            ? new ExpectedColumnDefinition("L", typeof(double), true, "float") : null, recreated);
+        var proof = new SqlServerProjectedComputedKeyProof(
+            shape,
+            new Dictionary<string, ExpectedColumnDefinition?> { ["L"] = null },
+            "nodes");
+
+        var source = new Source(
+            projectedOperand
+                ? new ExpectedColumnDefinition("L", typeof(double), true, "float")
+                : null,
+            recreated);
 
         // Act
         var matches = proof.Matches(source, "nodes", null);
@@ -118,12 +176,24 @@ public sealed class SqlServerComputedKeyProofTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void LiveProofRequiresKnownOwnerWhenNoProjectedOperandExists(bool unknown)
+    public void LiveProofRequiresKnownOwnerWhenNoProjectedOperandExists(
+        bool unknown
+    )
     {
         // Arrange
-        var shape = new SqlServerProjectedKeyColumn("bit", 1, true, true, true, null, true);
-        var proof = new SqlServerProjectedComputedKeyProof(shape,
-            new Dictionary<string, ExpectedColumnDefinition?> { ["L"] = null }, "nodes");
+        var shape = new SqlServerProjectedKeyColumn(
+            "bit",
+            1,
+            true,
+            true,
+            true,
+            null,
+            true);
+
+        var proof = new SqlServerProjectedComputedKeyProof(
+            shape,
+            new Dictionary<string, ExpectedColumnDefinition?> { ["L"] = null },
+            "nodes");
 
         var source = new Source(null, recreated: false, unknown);
 
@@ -141,7 +211,9 @@ public sealed class SqlServerComputedKeyProofTests
     [InlineData(0)]
     [InlineData(-1)]
     [InlineData(8)]
-    public void CapturedPhysicalSourceRequiresItsExactRemainingIdentity(int currentIdentity)
+    public void CapturedPhysicalSourceRequiresItsExactRemainingIdentity(
+        int currentIdentity
+    )
     {
         // Arrange
         var current = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -150,9 +222,19 @@ public sealed class SqlServerComputedKeyProofTests
             current.Add("L", currentIdentity);
         }
 
-        var shape = new SqlServerProjectedKeyColumn("bit", 1, true, true, true, null, true);
-        var proof = new SqlServerProjectedComputedKeyProof(shape,
-            new Dictionary<string, ExpectedColumnDefinition?> { ["L"] = null }, "nodes")
+        var shape = new SqlServerProjectedKeyColumn(
+            "bit",
+            1,
+            true,
+            true,
+            true,
+            null,
+            true);
+
+        var proof = new SqlServerProjectedComputedKeyProof(
+            shape,
+            new Dictionary<string, ExpectedColumnDefinition?> { ["L"] = null },
+            "nodes")
         {
             LiveOperandIdentities = new Dictionary<string, int> { ["L"] = 7 },
             CurrentColumnBindings = current,
@@ -175,16 +257,31 @@ public sealed class SqlServerComputedKeyProofTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void RenamedProofRequiresExplicitLineageAndIdenticalFacets(bool renamed, bool changed)
+    public void RenamedProofRequiresExplicitLineageAndIdenticalFacets(
+        bool renamed,
+        bool changed
+    )
     {
         // Arrange
         var native = new ExpectedColumnDefinition("L", typeof(long), false, "bigint");
         var accepted = new ExpectedColumnDefinition("L", typeof(long), changed, "bigint");
-        var shape = new SqlServerProjectedKeyColumn("bit", 1, true, true, true, null, true);
-        var proof = new SqlServerProjectedComputedKeyProof(shape,
-            new Dictionary<string, ExpectedColumnDefinition?> { ["L"] = native }, "nodes")
+        var shape = new SqlServerProjectedKeyColumn(
+            "bit",
+            1,
+            true,
+            true,
+            true,
+            null,
+            true);
+
+        var proof = new SqlServerProjectedComputedKeyProof(
+            shape,
+            new Dictionary<string, ExpectedColumnDefinition?> { ["L"] = native },
+            "nodes")
         {
-            RenamedOperandDefinitions = renamed ? new HashSet<ExpectedColumnDefinition> { native } : null,
+            RenamedOperandDefinitions = renamed
+                ? new HashSet<ExpectedColumnDefinition> { native }
+                : null,
         };
 
         var source = new Source(accepted, recreated: true);
@@ -223,8 +320,10 @@ public sealed class SqlServerComputedKeyProofTests
         var definition = SqlServerGeneratedColumnSqlTests.Flag();
 
         // Act
-        var shape = SqlServerProjectedKeyShape.CreateComputedColumnProof(definition,
-            context.GetService<IRelationalTypeMappingSource>(), nativeProof);
+        var shape = SqlServerProjectedKeyShape.CreateComputedColumnProof(
+            definition,
+            context.GetService<IRelationalTypeMappingSource>(),
+            nativeProof);
 
         // Assert
         Assert.NotNull(shape);
@@ -234,18 +333,32 @@ public sealed class SqlServerComputedKeyProofTests
         Assert.Equal(1, shape.DeclaredBytes);
     }
 
-    private sealed class Source(ExpectedColumnDefinition? definition, bool recreated, bool unknown = false)
+    private sealed class Source(
+        ExpectedColumnDefinition? definition,
+        bool recreated,
+        bool unknown = false
+    )
         : ISafeMigrationProjectedColumnSource, ISafeMigrationProjectedTableSource
     {
-        public bool TryGetProjectedColumn(string table, string? schema, string column,
-            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ExpectedColumnDefinition? result)
+        public bool TryGetProjectedColumn(
+            string table,
+            string? schema,
+            string column,
+            [NotNullWhen(true)] out ExpectedColumnDefinition? result
+        )
         {
-            result = definition?.Name == column ? definition : null;
+            result = definition?.Name == column
+                ? definition
+                : null;
 
             return result is not null;
         }
 
-        public bool TryGetProjectedTableState(string table, string? schema, out SafeMigrationProjectedTableState result)
+        public bool TryGetProjectedTableState(
+            string table,
+            string? schema,
+            out SafeMigrationProjectedTableState result
+        )
         {
             result = new SafeMigrationProjectedTableState(recreated, false, false, unknown);
 

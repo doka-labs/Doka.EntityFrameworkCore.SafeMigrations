@@ -11,7 +11,9 @@ public sealed class MySqlExplicitBackfillMetadataTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ExplicitBackfillBooleanPreservesSupportedColumn(bool required)
+    public void ExplicitBackfillBooleanPreservesSupportedColumn(
+        bool required
+    )
     {
         // Arrange
         var definition = BackfillDefinition(required);
@@ -20,7 +22,8 @@ public sealed class MySqlExplicitBackfillMetadataTests
         // Act
         var supported = MySqlSafeMigrationColumnMetadata.TryCreate(definition, out var metadata);
         var oppositeSupported = MySqlSafeMigrationColumnMetadata.TryCreate(
-            oppositeDefinition, out var oppositeMetadata);
+            oppositeDefinition,
+            out var oppositeMetadata);
 
         // Assert
         Assert.True(supported);
@@ -28,9 +31,12 @@ public sealed class MySqlExplicitBackfillMetadataTests
         Assert.Equal(DokaMySqlGuidFormat.Char36, metadata.GuidFormat);
         Assert.Equal(MySqlValueGenerationStrategy.ClientGuid, metadata.ValueGenerationStrategy);
         Assert.Equal(metadata, oppositeMetadata);
-        var annotation = Assert.Single(definition.ProviderAnnotations,
+        var annotation = Assert.Single(
+            definition.ProviderAnnotations,
             value => value.Name == MySqlSafeMigrationColumnMetadata.ExplicitBackfillAnnotation);
-        var oppositeAnnotation = Assert.Single(oppositeDefinition.ProviderAnnotations,
+
+        var oppositeAnnotation = Assert.Single(
+            oppositeDefinition.ProviderAnnotations,
             value => value.Name == MySqlSafeMigrationColumnMetadata.ExplicitBackfillAnnotation);
 
         Assert.Equal(required, Assert.IsType<bool>(annotation.CreateValueSnapshot()));
@@ -44,7 +50,9 @@ public sealed class MySqlExplicitBackfillMetadataTests
     [InlineData(null)]
     [InlineData(1)]
     [InlineData("true")]
-    public void ExplicitBackfillRejectsNonBooleanMetadata(object? value)
+    public void ExplicitBackfillRejectsNonBooleanMetadata(
+        object? value
+    )
     {
         // Arrange
         var definition = BackfillDefinition(value);
@@ -84,25 +92,46 @@ public sealed class MySqlExplicitBackfillMetadataTests
         var operation = new SafeMigrationOperation(
             new EnsureColumnIntent(authored.Table, definition),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var generator = context.GetService<IMigrationsSqlGenerator>();
 
         // Act
-        var first = Assert.Single(generator.Generate([operation], context.Model)).CommandText;
-        var second = Assert.Single(generator.Generate([operation], context.Model)).CommandText;
+        var first = Assert.Single(generator.Generate([operation], context.Model))
+            .CommandText;
+
+        var second = Assert.Single(generator.Generate([operation], context.Model))
+            .CommandText;
+
         var payloads = DecodePayloads(first);
 
         // Assert
-        var guard = Assert.Single(payloads, sql => sql.StartsWith(
-            "SELECT CASE WHEN NOT COALESCE(", StringComparison.Ordinal));
-        var add = Assert.Single(payloads, sql => sql.StartsWith(
-            "ALTER TABLE `items` ADD ", StringComparison.Ordinal));
-        var finish = Assert.Single(payloads, sql => sql.StartsWith(
-            "ALTER TABLE `items` MODIFY COLUMN ", StringComparison.Ordinal));
+        var guard = Assert.Single(
+            payloads,
+            sql => sql.StartsWith(
+                "SELECT CASE WHEN NOT COALESCE(",
+                StringComparison.Ordinal));
 
-        Assert.Contains("WHEN EXISTS (SELECT 1 FROM `items` LIMIT 1) THEN 'data_blocked' ELSE 'missing'",
-            guard, StringComparison.Ordinal);
-        Assert.True(guard.IndexOf("THEN 'data_blocked'", StringComparison.Ordinal)
+        var add = Assert.Single(
+            payloads,
+            sql => sql.StartsWith(
+                "ALTER TABLE `items` ADD ",
+                StringComparison.Ordinal));
+
+        var finish = Assert.Single(
+            payloads,
+            sql => sql.StartsWith(
+                "ALTER TABLE `items` MODIFY COLUMN ",
+                StringComparison.Ordinal));
+
+        Assert.Contains(
+            "WHEN EXISTS (SELECT 1 FROM `items` LIMIT 1) THEN 'data_blocked' ELSE 'missing'",
+            guard,
+            StringComparison.Ordinal);
+
+        Assert.True(
+            guard.IndexOf("THEN 'data_blocked'", StringComparison.Ordinal)
             < guard.IndexOf("ELSE 'missing'", StringComparison.Ordinal));
+
         Assert.True(payloads.IndexOf(guard) < payloads.IndexOf(add));
         Assert.Contains(StrictSqlModeCondition, first, StringComparison.Ordinal);
         Assert.Contains("ADD CONSTRAINT `doka_sm_add1_nn_", add, StringComparison.Ordinal);
@@ -115,11 +144,19 @@ public sealed class MySqlExplicitBackfillMetadataTests
         Assert.True(payloads.IndexOf(add) < payloads.IndexOf(finish));
         Assert.DoesNotContain("DEFAULT", add, StringComparison.Ordinal);
         Assert.DoesNotContain(payloads, sql => sql.StartsWith("UPDATE ", StringComparison.Ordinal));
-        Assert.Equal(MySqlRuntimeSqlCanonicalizer.NormalizeOwnedCorrelation(first),
+        Assert.Equal(
+            MySqlRuntimeSqlCanonicalizer.NormalizeOwnedCorrelation(first),
             MySqlRuntimeSqlCanonicalizer.NormalizeOwnedCorrelation(second));
+
         Assert.True(Assert.IsType<bool>(authored["Doka:MySql:RequiresExplicitBackfill"]));
-        Assert.True(Assert.IsType<bool>(Assert.Single(definition.ProviderAnnotations,
-            annotation => annotation.Name == "Doka:MySql:RequiresExplicitBackfill").CreateValueSnapshot()));
+        Assert.True(
+            Assert.IsType<bool>(
+                Assert
+                    .Single(
+                        definition.ProviderAnnotations,
+                        annotation => annotation.Name == "Doka:MySql:RequiresExplicitBackfill")
+                    .CreateValueSnapshot()));
+
         Assert.Equal(SafeMigrationDefaultValueKind.None, definition.DefaultValue.Kind);
     }
 
@@ -128,28 +165,41 @@ public sealed class MySqlExplicitBackfillMetadataTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ExplicitBackfillTighteningWithoutNonNullDefaultUsesFreshNullProof(bool nullDefault)
+    public void ExplicitBackfillTighteningWithoutNonNullDefaultUsesFreshNullProof(
+        bool nullDefault
+    )
     {
         // Arrange
         using var context = CreateContext();
         var source = BackfillColumn(true);
         source.IsNullable = true;
         var target = BackfillColumn(true);
-        target.DefaultValueSql = nullDefault ? "NULL" : null;
+        target.DefaultValueSql = nullDefault
+            ? "NULL"
+            : null;
+
         var definition = SafeMigrationExpectedDefinitionFactory.From(target);
         var operation = new SafeMigrationOperation(
             new AlterColumnIntent(target.Table, definition, SafeMigrationExpectedDefinitionFactory.From(source)),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var command = Assert.Single(context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+        var command = Assert.Single(context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model));
+
         var payloads = DecodePayloads(command.CommandText);
 
         // Assert
-        var proof = Assert.Single(payloads, sql => sql.Contains(
-            "EXISTS (SELECT 1 FROM `items` WHERE `id` IS NULL LIMIT 1)", StringComparison.Ordinal));
+        var proof = Assert.Single(
+            payloads,
+            sql => sql.Contains(
+                "EXISTS (SELECT 1 FROM `items` WHERE `id` IS NULL LIMIT 1)",
+                StringComparison.Ordinal));
+
         var state = Assert.Single(payloads, sql => sql.EndsWith("INTO @doka_sm_state", StringComparison.Ordinal));
-        var alterations = payloads.Where(sql => sql.StartsWith("ALTER TABLE `items`", StringComparison.Ordinal))
+        var alterations = payloads
+            .Where(sql => sql.StartsWith("ALTER TABLE `items`", StringComparison.Ordinal))
             .ToArray();
 
         Assert.EndsWith("INTO @doka_sm_nullability_blocked", proof, StringComparison.Ordinal);
@@ -158,16 +208,23 @@ public sealed class MySqlExplicitBackfillMetadataTests
         AssertStrictModeEligibility(command.CommandText);
         Assert.Equal(2, alterations.Length);
         Assert.Equal(alterations[0], alterations[1]);
-        Assert.All(alterations, alter =>
-        {
-            Assert.True(payloads.IndexOf(proof) < payloads.IndexOf(alter));
-            Assert.Equal(nullDefault, alter.Contains("DEFAULT", StringComparison.Ordinal));
-        });
+        Assert.All(
+            alterations,
+            alter =>
+            {
+                Assert.True(payloads.IndexOf(proof) < payloads.IndexOf(alter));
+                Assert.Equal(nullDefault, alter.Contains("DEFAULT", StringComparison.Ordinal));
+            });
 
         Assert.DoesNotContain(payloads, sql => sql.StartsWith("UPDATE ", StringComparison.Ordinal));
         Assert.True(source.IsNullable);
         Assert.False(target.IsNullable);
-        Assert.Equal(nullDefault ? "NULL" : null, target.DefaultValueSql);
+        Assert.Equal(
+            nullDefault
+                ? "NULL"
+                : null,
+            target.DefaultValueSql);
+
         Assert.True(Assert.IsType<bool>(target["Doka:MySql:RequiresExplicitBackfill"]));
     }
 
@@ -188,29 +245,46 @@ public sealed class MySqlExplicitBackfillMetadataTests
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
-        var payloads = commands.SelectMany(command => DecodePayloads(command.CommandText)).ToList();
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
+
+        var payloads = commands
+            .SelectMany(command => DecodePayloads(command.CommandText))
+            .ToList();
 
         // Assert
-        AssertRuntimeSetNullGuard(Assert.Single(commands).CommandText);
-        AssertStrictModeEligibility(Assert.Single(commands).CommandText);
-        var updates = payloads.Where(sql => sql.StartsWith("UPDATE `items`", StringComparison.Ordinal)).ToArray();
-        var alterations = payloads.Where(sql => sql.StartsWith("ALTER TABLE `items`", StringComparison.Ordinal))
+        AssertRuntimeSetNullGuard(Assert.Single(commands)
+            .CommandText);
+
+        AssertStrictModeEligibility(Assert.Single(commands)
+            .CommandText);
+
+        var updates = payloads
+            .Where(sql => sql.StartsWith("UPDATE `items`", StringComparison.Ordinal))
+            .ToArray();
+
+        var alterations = payloads
+            .Where(sql => sql.StartsWith("ALTER TABLE `items`", StringComparison.Ordinal))
             .ToArray();
 
         Assert.Equal(2, updates.Length);
         Assert.Equal(2, alterations.Length);
         Assert.Equal(updates[0], updates[1]);
         Assert.Equal(alterations[0], alterations[1]);
-        Assert.All(updates, update =>
-        {
-            Assert.Contains(replacement.ToString(), update, StringComparison.Ordinal);
-            Assert.Contains("WHERE `id` IS NULL", update, StringComparison.Ordinal);
-        });
+        Assert.All(
+            updates,
+            update =>
+            {
+                Assert.Contains(replacement.ToString(), update, StringComparison.Ordinal);
+                Assert.Contains("WHERE `id` IS NULL", update, StringComparison.Ordinal);
+            });
 
         Assert.All(alterations, alter => Assert.Contains(replacement.ToString(), alter, StringComparison.Ordinal));
-        Assert.True(payloads.FindLastIndex(sql => sql.StartsWith("UPDATE `items`", StringComparison.Ordinal))
+        Assert.True(
+            payloads.FindLastIndex(sql => sql.StartsWith("UPDATE `items`", StringComparison.Ordinal))
             < payloads.FindIndex(sql => sql.StartsWith("ALTER TABLE `items`", StringComparison.Ordinal)));
+
         Assert.Equal(replacement, definition.DefaultValue.GetLiteralValue());
         Assert.Equal(replacement, target.DefaultValue);
         Assert.True(source.IsNullable);
@@ -221,26 +295,38 @@ public sealed class MySqlExplicitBackfillMetadataTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void CapturedTighteningRetainsSourceProofWithoutRuntimeForeignKeyGuard(bool explicitDefault)
+    public void CapturedTighteningRetainsSourceProofWithoutRuntimeForeignKeyGuard(
+        bool explicitDefault
+    )
     {
         // Arrange
         using var context = CreateContext();
         var source = BackfillColumn(true);
         source.IsNullable = true;
         var target = BackfillColumn(true);
-        target.DefaultValue = explicitDefault ? Guid.Parse("00000000-0000-0000-0000-000000000001") : null;
+        target.DefaultValue = explicitDefault
+            ? Guid.Parse("00000000-0000-0000-0000-000000000001")
+            : null;
+
         var oldDefinition = SafeMigrationExpectedDefinitionFactory.From(source);
-        var intent = new AlterColumnIntent(target.Table, SafeMigrationExpectedDefinitionFactory.From(target),
+        var intent = new AlterColumnIntent(
+            target.Table,
+            SafeMigrationExpectedDefinitionFactory.From(target),
             oldDefinition);
+
         var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.RepairIfSafe);
         var capture = context.GetService<MySqlSafeMigrationPlanCapture>();
         using var lease = capture.Begin([operation]);
         using var command = new MySqlCommand();
         var parameterizer = new MySqlCatalogQueryParameterizer(
-            command, context.GetService<IRelationalTypeMappingSource>());
+            command,
+            context.GetService<IRelationalTypeMappingSource>());
 
         // Act
-        _ = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        _ = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
+
         var plan = Assert.Single(lease.Complete());
         var repair = plan.RenderRepairPrecondition(parameterizer.Add);
         var matching = plan.RenderPostcondition(parameterizer.Add);
@@ -265,16 +351,23 @@ public sealed class MySqlExplicitBackfillMetadataTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void EnsureRepairUsesRelevantRuntimeDependencyGuard(bool nullable, bool annotated)
+    public void EnsureRepairUsesRelevantRuntimeDependencyGuard(
+        bool nullable,
+        bool annotated
+    )
     {
         // Arrange
         using var context = CreateContext();
         var definition = EnsureDefinition(nullable, annotated);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items", definition),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", definition),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var command = Assert.Single(context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+        var command = Assert.Single(context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model));
+
         var sql = command.CommandText;
 
         // Assert
@@ -289,26 +382,41 @@ public sealed class MySqlExplicitBackfillMetadataTests
             AssertRuntimeSetNullGuard(sql);
             AssertEnsureStrictModeEligibility(sql);
             Assert.DoesNotContain("nullable_primary", sql, StringComparison.Ordinal);
-            var guard = Assert.Single(DecodePayloads(sql), payload => payload.StartsWith(
-                "SELECT CASE WHEN NOT COALESCE(", StringComparison.Ordinal)
-                && payload.EndsWith("INTO @doka_sm_state", StringComparison.Ordinal));
+            var guard = Assert.Single(
+                DecodePayloads(sql),
+                payload => payload.StartsWith(
+                        "SELECT CASE WHEN NOT COALESCE(",
+                        StringComparison.Ordinal)
+                    && payload.EndsWith("INTO @doka_sm_state", StringComparison.Ordinal));
 
-            Assert.Contains("WHEN EXISTS (SELECT 1 FROM `items` LIMIT 1) THEN 'data_blocked' ELSE 'missing'",
-                guard, StringComparison.Ordinal);
-            Assert.True(guard.IndexOf("THEN 'data_blocked'", StringComparison.Ordinal)
+            Assert.Contains(
+                "WHEN EXISTS (SELECT 1 FROM `items` LIMIT 1) THEN 'data_blocked' ELSE 'missing'",
+                guard,
+                StringComparison.Ordinal);
+
+            Assert.True(
+                guard.IndexOf("THEN 'data_blocked'", StringComparison.Ordinal)
                 < guard.IndexOf("ELSE 'missing'", StringComparison.Ordinal));
+
             Assert.DoesNotContain("nullable_fk", guard, StringComparison.Ordinal);
             Assert.Contains("@doka_sm_add_status", guard, StringComparison.Ordinal);
             Assert.DoesNotContain(StrictSqlModeCondition, guard, StringComparison.Ordinal);
         }
 
-        var dependencyGuard = nullable ? "nullable_primary" : "nullable_fk";
+        var dependencyGuard = nullable
+            ? "nullable_primary"
+            : "nullable_fk";
+
         Assert.Contains("'matching'", sql, StringComparison.Ordinal);
-        var matchingDecision = nullable ? "'matching'" : "THEN 'complete'";
+        var matchingDecision = nullable
+            ? "'matching'"
+            : "THEN 'complete'";
 
         Assert.Contains(matchingDecision, sql, StringComparison.Ordinal);
-        Assert.True(sql.IndexOf(matchingDecision, StringComparison.Ordinal)
+        Assert.True(
+            sql.IndexOf(matchingDecision, StringComparison.Ordinal)
             < sql.IndexOf(dependencyGuard, StringComparison.Ordinal));
+
         Assert.DoesNotContain(DecodePayloads(sql), payload => payload.StartsWith("UPDATE ", StringComparison.Ordinal));
     }
 
@@ -320,33 +428,43 @@ public sealed class MySqlExplicitBackfillMetadataTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void CapturedEnsureRepairOmitsRuntimeDependencyGuards(bool nullable, bool annotated)
+    public void CapturedEnsureRepairOmitsRuntimeDependencyGuards(
+        bool nullable,
+        bool annotated
+    )
     {
         // Arrange
         using var context = CreateContext();
         var operation = new SafeMigrationOperation(
             new EnsureColumnIntent("items", EnsureDefinition(nullable, annotated)),
             SafeMigrationPolicy.RepairIfSafe);
+
         var capture = context.GetService<MySqlSafeMigrationPlanCapture>();
         using var lease = capture.Begin([operation]);
         using var command = new MySqlCommand();
         var parameterizer = new MySqlCatalogQueryParameterizer(
-            command, context.GetService<IRelationalTypeMappingSource>());
+            command,
+            context.GetService<IRelationalTypeMappingSource>());
 
         // Act
-        _ = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        _ = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
+
         var plan = Assert.Single(lease.Complete());
+
         // WHY: Atomic resume has its own dependency feasibility. This test
         // isolates the ordinary captured repair certificate, not that branch.
         var ordinaryPlan = plan.RequiredColumnAddPlan is { } protocol
-                ? plan with
+            ? plan with
+            {
+                RequiredColumnAddPlan = protocol with
                 {
-                    RequiredColumnAddPlan = protocol with
-                    {
-                        StatusBinding = "'ordinary'",
-                    },
-                }
-                : plan;
+                    StatusBinding = "'ordinary'",
+                },
+            }
+            : plan;
+
         var repair = ordinaryPlan.RenderRepairPrecondition(parameterizer.Add);
         var matching = plan.RenderPostcondition(parameterizer.Add);
 
@@ -371,18 +489,25 @@ public sealed class MySqlExplicitBackfillMetadataTests
         var replacement = Guid.Parse("00000000-0000-0000-0000-000000000001");
         authored.DefaultValue = replacement;
         var definition = SafeMigrationExpectedDefinitionFactory.From(authored);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items", definition),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", definition),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var command = Assert.Single(context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+        var command = Assert.Single(context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model));
+
         var payloads = DecodePayloads(command.CommandText);
 
         // Assert
         AssertEnsureStrictModeEligibility(command.CommandText);
         Assert.DoesNotContain(payloads, sql => sql.StartsWith("UPDATE ", StringComparison.Ordinal));
-        Assert.Contains(payloads, sql => sql.StartsWith("ALTER TABLE `items` MODIFY", StringComparison.Ordinal)
-            && sql.Contains(replacement.ToString(), StringComparison.Ordinal));
+        Assert.Contains(
+            payloads,
+            sql => sql.StartsWith("ALTER TABLE `items` MODIFY", StringComparison.Ordinal)
+                && sql.Contains(replacement.ToString(), StringComparison.Ordinal));
+
         Assert.Equal(replacement, authored.DefaultValue);
         Assert.Equal(replacement, definition.DefaultValue.GetLiteralValue());
     }
@@ -392,15 +517,20 @@ public sealed class MySqlExplicitBackfillMetadataTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void EnsureWithoutRepairUsesDependencyGuardOnlyForAtomicResume(bool nullable)
+    public void EnsureWithoutRepairUsesDependencyGuardOnlyForAtomicResume(
+        bool nullable
+    )
     {
         // Arrange
         using var context = CreateContext();
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items", EnsureDefinition(nullable, false)),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", EnsureDefinition(nullable, false)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var command = Assert.Single(context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+        var command = Assert.Single(context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model));
 
         // Assert
         Assert.Equal(!nullable, command.CommandText.Contains("nullable_fk", StringComparison.Ordinal));
@@ -418,16 +548,24 @@ public sealed class MySqlExplicitBackfillMetadataTests
         var target = BackfillColumn(true);
         target.IsNullable = true;
         var operation = new SafeMigrationOperation(
-            new AlterColumnIntent(target.Table, SafeMigrationExpectedDefinitionFactory.From(target),
-                SafeMigrationExpectedDefinitionFactory.From(source)), SafeMigrationPolicy.RepairIfSafe);
+            new AlterColumnIntent(
+                target.Table,
+                SafeMigrationExpectedDefinitionFactory.From(target),
+                SafeMigrationExpectedDefinitionFactory.From(source)),
+            SafeMigrationPolicy.RepairIfSafe);
+
         var capture = context.GetService<MySqlSafeMigrationPlanCapture>();
         using var lease = capture.Begin([operation]);
         using var command = new MySqlCommand();
         var parameterizer = new MySqlCatalogQueryParameterizer(
-            command, context.GetService<IRelationalTypeMappingSource>());
+            command,
+            context.GetService<IRelationalTypeMappingSource>());
 
         // Act
-        _ = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        _ = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
+
         var plan = Assert.Single(lease.Complete());
         var repair = plan.RenderRepairPrecondition(parameterizer.Add);
 
@@ -449,47 +587,65 @@ public sealed class MySqlExplicitBackfillMetadataTests
         var target = BackfillColumn(true);
         target.IsNullable = true;
         var operation = new SafeMigrationOperation(
-            new AlterColumnIntent(target.Table, SafeMigrationExpectedDefinitionFactory.From(target),
+            new AlterColumnIntent(
+                target.Table,
+                SafeMigrationExpectedDefinitionFactory.From(target),
                 SafeMigrationExpectedDefinitionFactory.From(source)),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var command = Assert.Single(context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+        var command = Assert.Single(context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model));
 
         // Assert
         AssertRuntimePrimaryGuard(command.CommandText);
-        Assert.DoesNotContain(DecodePayloads(command.CommandText), sql => sql.StartsWith("UPDATE ",
-            StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            DecodePayloads(command.CommandText),
+            sql => sql.StartsWith(
+                "UPDATE ",
+                StringComparison.Ordinal));
+
         Assert.DoesNotContain("nullable_fk", command.CommandText, StringComparison.Ordinal);
         Assert.DoesNotContain(StrictSqlModeCondition, command.CommandText, StringComparison.Ordinal);
     }
 
     /// <summary>Checks strict conversion depends on live nullability, preserving already-required repairs.</summary>
     /// <param name="sql">The generated required Ensure command.</param>
-    private static void AssertEnsureStrictModeEligibility(string sql)
+    private static void AssertEnsureStrictModeEligibility(
+        string sql
+    )
     {
         AssertStrictModeEligibility(sql);
         var nativeOwner = sql.Contains(
-            "CAST(c.TABLE_NAME AS BINARY) = CAST('items' AS BINARY)", StringComparison.Ordinal)
+            "CAST(c.TABLE_NAME AS BINARY) = CAST('items' AS BINARY)",
+            StringComparison.Ordinal)
             ? "AND (CASE WHEN @@lower_case_table_names = 0 THEN "
-                + "CAST(c.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY) "
-                + "WHEN @@lower_case_table_names IN (1, 2) THEN "
-                + "CAST(LOWER(c.TABLE_SCHEMA) AS BINARY) = CAST(LOWER(DATABASE()) AS BINARY) ELSE FALSE END) "
-                + "AND (CASE WHEN @@lower_case_table_names = 0 THEN "
-                + "CAST(c.TABLE_NAME AS BINARY) = CAST('items' AS BINARY) "
-                + "WHEN @@lower_case_table_names IN (1, 2) THEN "
-                + "CAST(LOWER(c.TABLE_NAME) AS BINARY) = CAST(LOWER('items') AS BINARY) ELSE FALSE END) "
+            + "CAST(c.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY) "
+            + "WHEN @@lower_case_table_names IN (1, 2) THEN "
+            + "CAST(LOWER(c.TABLE_SCHEMA) AS BINARY) = CAST(LOWER(DATABASE()) AS BINARY) ELSE FALSE END) "
+            + "AND (CASE WHEN @@lower_case_table_names = 0 THEN "
+            + "CAST(c.TABLE_NAME AS BINARY) = CAST('items' AS BINARY) "
+            + "WHEN @@lower_case_table_names IN (1, 2) THEN "
+            + "CAST(LOWER(c.TABLE_NAME) AS BINARY) = CAST(LOWER('items') AS BINARY) ELSE FALSE END) "
             : string.Empty;
 
-        Assert.Contains("NOT (EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c "
+        Assert.Contains(
+            "NOT (EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS c "
             + "WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = 'items' AND c.COLUMN_NAME = 'id' "
-            + nativeOwner + "AND (c.IS_NULLABLE = 'YES'))) OR (" + StrictSqlModeCondition + ")", sql,
+            + nativeOwner
+            + "AND (c.IS_NULLABLE = 'YES'))) OR ("
+            + StrictSqlModeCondition
+            + ")",
+            sql,
             StringComparison.Ordinal);
     }
 
     /// <summary>Checks strict eligibility precedes action selection and follows exact-match classification.</summary>
     /// <param name="sql">The generated no-backfill tightening command.</param>
-    private static void AssertStrictModeEligibility(string sql)
+    private static void AssertStrictModeEligibility(
+        string sql
+    )
     {
         Assert.Contains(StrictSqlModeCondition, sql, StringComparison.Ordinal);
         Assert.Contains("'matching'", sql, StringComparison.Ordinal);
@@ -498,9 +654,12 @@ public sealed class MySqlExplicitBackfillMetadataTests
             : "'matching'";
 
         Assert.Contains(matchingDecision, sql, StringComparison.Ordinal);
-        Assert.True(sql.IndexOf(matchingDecision, StringComparison.Ordinal)
+        Assert.True(
+            sql.IndexOf(matchingDecision, StringComparison.Ordinal)
             < sql.IndexOf(StrictSqlModeCondition, StringComparison.Ordinal));
-        Assert.True(sql.IndexOf(StrictSqlModeCondition, StringComparison.Ordinal)
+
+        Assert.True(
+            sql.IndexOf(StrictSqlModeCondition, StringComparison.Ordinal)
             < sql.IndexOf("SET @doka_sm_action", StringComparison.Ordinal));
     }
 
@@ -508,7 +667,10 @@ public sealed class MySqlExplicitBackfillMetadataTests
     /// <param name="nullable">The requested target nullability.</param>
     /// <param name="annotated">Whether to retain Doka's GUID/backfill metadata.</param>
     /// <returns>The immutable Ensure target.</returns>
-    private static ExpectedColumnDefinition EnsureDefinition(bool nullable, bool annotated)
+    private static ExpectedColumnDefinition EnsureDefinition(
+        bool nullable,
+        bool annotated
+    )
     {
         if (!annotated)
         {
@@ -523,21 +685,30 @@ public sealed class MySqlExplicitBackfillMetadataTests
 
     /// <summary>Checks PRIMARY exclusion is local-column bounded and materialized before choosing an action.</summary>
     /// <param name="sql">The generated runtime command before any mutation.</param>
-    private static void AssertRuntimePrimaryGuard(string sql)
+    private static void AssertRuntimePrimaryGuard(
+        string sql
+    )
     {
-        Assert.Contains("NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS nullable_primary "
+        Assert.Contains(
+            "NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS nullable_primary "
             + "WHERE nullable_primary.TABLE_SCHEMA = DATABASE() AND nullable_primary.TABLE_NAME = 'items' "
             + "AND nullable_primary.COLUMN_NAME = 'id' AND nullable_primary.INDEX_NAME = 'PRIMARY')",
-            sql, StringComparison.Ordinal);
-        Assert.True(sql.IndexOf("nullable_primary.INDEX_NAME = 'PRIMARY'", StringComparison.Ordinal)
+            sql,
+            StringComparison.Ordinal);
+
+        Assert.True(
+            sql.IndexOf("nullable_primary.INDEX_NAME = 'PRIMARY'", StringComparison.Ordinal)
             < sql.IndexOf("SET @doka_sm_action", StringComparison.Ordinal));
     }
 
     /// <summary>Checks a fresh FK guard is bound to the local column and only the two SET NULL actions.</summary>
     /// <param name="sql">The generated runtime command before any mutation.</param>
-    private static void AssertRuntimeSetNullGuard(string sql)
+    private static void AssertRuntimeSetNullGuard(
+        string sql
+    )
     {
-        Assert.Contains("NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS nullable_fk "
+        Assert.Contains(
+            "NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS nullable_fk "
             + "JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE nullable_fk_column "
             + "ON nullable_fk_column.CONSTRAINT_SCHEMA = nullable_fk.CONSTRAINT_SCHEMA "
             + "AND nullable_fk_column.CONSTRAINT_NAME = nullable_fk.CONSTRAINT_NAME "
@@ -546,10 +717,13 @@ public sealed class MySqlExplicitBackfillMetadataTests
             + "WHERE nullable_fk.CONSTRAINT_SCHEMA = DATABASE() AND nullable_fk.TABLE_NAME = 'items' "
             + "AND nullable_fk_column.COLUMN_NAME = 'id' "
             + "AND (nullable_fk.DELETE_RULE = 'SET NULL' OR nullable_fk.UPDATE_RULE = 'SET NULL'))",
-            sql, StringComparison.Ordinal);
+            sql,
+            StringComparison.Ordinal);
+
         Assert.DoesNotContain("nullable_fk.DELETE_RULE = 'CASCADE'", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("nullable_fk.UPDATE_RULE = 'CASCADE'", sql, StringComparison.Ordinal);
-        Assert.True(sql.IndexOf("nullable_fk.DELETE_RULE = 'SET NULL'", StringComparison.Ordinal)
+        Assert.True(
+            sql.IndexOf("nullable_fk.DELETE_RULE = 'SET NULL'", StringComparison.Ordinal)
             < sql.IndexOf("SET @doka_sm_action", StringComparison.Ordinal));
     }
 
@@ -558,7 +732,8 @@ public sealed class MySqlExplicitBackfillMetadataTests
     private static DbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<DbContext>()
-            .UseMySql("Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
+            .UseMySql(
+                "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
                 MySqlServerVersion.MySql(new Version(8, 4, 11)))
             .UseMySqlSafeMigrations()
             .Options;
@@ -569,7 +744,9 @@ public sealed class MySqlExplicitBackfillMetadataTests
     /// <summary>Decodes guarded statements so tests inspect the actual SQL rather than its transport.</summary>
     /// <param name="sql">The complete generated guarded command.</param>
     /// <returns>The prepared statements in transport order, including alternative action branches.</returns>
-    private static List<string> DecodePayloads(string sql)
+    private static List<string> DecodePayloads(
+        string sql
+    )
     {
         const string prefix = "CONVERT(0x";
         const string suffix = " USING utf8mb4)";
@@ -594,13 +771,17 @@ public sealed class MySqlExplicitBackfillMetadataTests
     /// <summary>Reads a marker through the real captured EF column boundary.</summary>
     /// <param name="value">The marker value to capture without coercion.</param>
     /// <returns>The immutable target definition.</returns>
-    private static ExpectedColumnDefinition BackfillDefinition(object? value)
+    private static ExpectedColumnDefinition BackfillDefinition(
+        object? value
+    )
         => SafeMigrationExpectedDefinitionFactory.From(BackfillColumn(value));
 
     /// <summary>Creates the provider's required GUID-add shape without synthetic data.</summary>
     /// <param name="value">The marker value to preserve.</param>
     /// <returns>The annotated EF operation.</returns>
-    private static AddColumnOperation BackfillColumn(object? value)
+    private static AddColumnOperation BackfillColumn(
+        object? value
+    )
     {
         var operation = new AddColumnOperation
         {

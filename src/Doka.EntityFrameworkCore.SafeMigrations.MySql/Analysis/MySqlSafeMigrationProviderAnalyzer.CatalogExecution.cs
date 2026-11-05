@@ -64,7 +64,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             cancellationToken.ThrowIfCancellationRequested();
 
             while (ordinal < plans.Length
-                   && plans[ordinal].CurrentDatabaseQualificationExpression is null)
+                && plans[ordinal].CurrentDatabaseQualificationExpression is null)
             {
                 ordinal++;
             }
@@ -84,7 +84,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             var batchParameterCount = 0;
             var batchPayloadBytes = 0;
             while (batch.Count < SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch
-                   && ordinal < plans.Length)
+                && ordinal < plans.Length)
             {
                 var command = batch.CreateCommand();
                 var parameterizer = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
@@ -92,7 +92,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 var statementOrdinals = new List<int>(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
                 var sqlBytes = trailerBytes;
                 while (ordinal < plans.Length
-                       && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+                    && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
                 {
                     var plan = plans[ordinal];
                     if (plan.CurrentDatabaseQualificationExpression is null)
@@ -108,15 +108,17 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                         + $"WHEN NOT COALESCE(({qualification}), FALSE) THEN 'unsupported' ELSE NULL END";
 
                     var selectionBytes = Encoding.UTF8.GetByteCount(selection)
-                        + (selections.Count == 0 ? 0 : separatorBytes);
+                        + (selections.Count == 0
+                            ? 0
+                            : separatorBytes);
 
                     var statementPayload = sqlBytes + selectionBytes + parameterizer.Utf8PayloadBytes;
                     var prospectiveBatchParameters = batchParameterCount + parameterizer.Count;
                     var prospectiveBatchPayload = batchPayloadBytes + statementPayload;
                     if (SafeMigrationCatalogQueryLimits.Exceeded(
-                            prospectiveBatchParameters,
-                            prospectiveBatchPayload,
-                            maximumPayloadBytes))
+                        prospectiveBatchParameters,
+                        prospectiveBatchPayload,
+                        maximumPayloadBytes))
                     {
                         parameterizer.Rollback(checkpoint);
                         if (selections.Count == 0
@@ -182,9 +184,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             cancellationToken.ThrowIfCancellationRequested();
 
             while (ordinal < plans.Length
-                   && (states[ordinal] is not null
-                       || (StringComparer.Ordinal.Equals(plans[ordinal].PrerequisiteExpression, "TRUE")
-                           && plans[ordinal].CapturedSourceSyntaxExpression is null)))
+                && (states[ordinal] is not null
+                    || (StringComparer.Ordinal.Equals(plans[ordinal].PrerequisiteExpression, "TRUE")
+                        && plans[ordinal].CapturedSourceSyntaxExpression is null)))
             {
                 ordinal++;
             }
@@ -204,7 +206,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             var batchParameterCount = 0;
             var batchPayloadBytes = 0;
             while (batch.Count < SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch
-                   && ordinal < plans.Length)
+                && ordinal < plans.Length)
             {
                 var command = batch.CreateCommand();
                 var parameterizer = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
@@ -214,7 +216,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 var statementOrdinals = new List<int>(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
                 var sqlBytes = trailerBytes;
                 while (ordinal < plans.Length
-                       && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+                    && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
                 {
                     // WHY: Only the builder's exact constant is proof that
                     // this catalog-only phase has nothing to evaluate. SQL
@@ -236,7 +238,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                         : plan.RenderCapturedSourceSyntaxExpression(parameterizer.Add);
 
                     var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, CASE "
-                        + (syntax is null ? string.Empty : $"WHEN NOT COALESCE(({syntax}), FALSE) THEN 'unsupported' ")
+                        + (syntax is null
+                            ? string.Empty
+                            : $"WHEN NOT COALESCE(({syntax}), FALSE) THEN 'unsupported' ")
                         + $"WHEN NOT COALESCE(({prerequisite}), FALSE) THEN 'prerequisite_missing' "
                         + "ELSE NULL END";
 
@@ -248,15 +252,17 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     }
 
                     var selectionBytes = Encoding.UTF8.GetByteCount(selection)
-                        + (selections.Count == 0 ? 0 : separatorBytes);
+                        + (selections.Count == 0
+                            ? 0
+                            : separatorBytes);
 
                     var statementPayload = sqlBytes + selectionBytes + parameterizer.Utf8PayloadBytes;
                     var prospectiveBatchParameters = batchParameterCount + parameterizer.Count;
                     var prospectiveBatchPayload = batchPayloadBytes + statementPayload;
                     if (SafeMigrationCatalogQueryLimits.Exceeded(
-                            prospectiveBatchParameters,
-                            prospectiveBatchPayload,
-                            maximumPayloadBytes))
+                        prospectiveBatchParameters,
+                        prospectiveBatchPayload,
+                        maximumPayloadBytes))
                     {
                         parameterizer.Rollback(checkpoint);
                         if (selections.Count == 0)
@@ -337,7 +343,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             cancellationToken.ThrowIfCancellationRequested();
 
             while (ordinal < plans.Length
-                   && (states[ordinal] is not null || plans[ordinal].StateEvaluationGuardFailureExpression is null))
+                && (states[ordinal] is not null || plans[ordinal].StateEvaluationGuardFailureExpression is null))
             {
                 ordinal++;
             }
@@ -358,7 +364,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             var batchParameterCount = 0;
             var batchPayloadBytes = 0;
             while (batch.Count < SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch
-                   && ordinal < plans.Length)
+                && ordinal < plans.Length)
             {
                 var command = batch.CreateCommand();
                 var parameterizer = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
@@ -366,7 +372,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 var statementOrdinals = new List<int>(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
                 var sqlBytes = trailerBytes;
                 while (ordinal < plans.Length
-                       && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+                    && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
                 {
                     if (states[ordinal] is not null
                         || plans[ordinal].StateEvaluationGuardFailureExpression is null)
@@ -389,15 +395,17 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                         + $"({stateEvaluationGuard}), FALSE) THEN ({classificationCode}) ELSE NULL END";
 
                     var selectionBytes = Encoding.UTF8.GetByteCount(selection)
-                        + (selections.Count == 0 ? 0 : separatorBytes);
+                        + (selections.Count == 0
+                            ? 0
+                            : separatorBytes);
 
                     var statementPayload = sqlBytes + selectionBytes + parameterizer.Utf8PayloadBytes;
                     var prospectiveBatchParameters = batchParameterCount + parameterizer.Count;
                     var prospectiveBatchPayload = batchPayloadBytes + statementPayload;
                     if (SafeMigrationCatalogQueryLimits.Exceeded(
-                            prospectiveBatchParameters,
-                            prospectiveBatchPayload,
-                            maximumPayloadBytes))
+                        prospectiveBatchParameters,
+                        prospectiveBatchPayload,
+                        maximumPayloadBytes))
                     {
                         parameterizer.Rollback(checkpoint);
                         if (selections.Count == 0)
@@ -490,7 +498,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             : ensure.Definition.DefaultValue is
             {
                 Kind: SafeMigrationDefaultValueKind.Sql,
-                StructuredExpression: SafeMigrationSqlLiteralExpression { Value: null }
+                StructuredExpression: SafeMigrationSqlLiteralExpression { Value: null },
             };
     }
 
@@ -520,7 +528,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
         var value = await command.ExecuteScalarAsync(cancellationToken);
 
-        return value is null or DBNull ? null : Convert.ToString(value, CultureInfo.InvariantCulture);
+        return value is null or DBNull
+            ? null
+            : Convert.ToString(value, CultureInfo.InvariantCulture);
     }
 
     private async Task<int> GetMaximumPayloadBytesAsync(
@@ -531,6 +541,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     {
         await using var command = connection.CreateCommand();
         ApplyCommandTimeout(command, commandTimeout);
+
         // WHY: Both values are connection-qualified immutable server facts.
         // Sharing the required packet probe avoids a new normal-path roundtrip
         // while preventing metadata readers from guessing owner casing.
@@ -645,7 +656,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                         : SafeMigrationModelManagedDataEvidence.Parse(
                             reader.GetString(5),
                             plan.ModelManagedRowCount,
-                            plan.ModelManagedDependencyCountsExpression is null ? string.Empty : reader.GetString(6),
+                            plan.ModelManagedDependencyCountsExpression is null
+                                ? string.Empty
+                                : reader.GetString(6),
                             plan.ModelManagedDependencyCount,
                             "MySQL");
 
@@ -705,6 +718,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                             RequiredColumnAddResumesOwnedStaging = state == SafeMigrationObservedState.Missing
                                 && plan.RequiredColumnAddPlan is not null
                                 && StringComparer.Ordinal.Equals(code, "column_atomic_add_resume"),
+
                             // WHY: Every VARCHAR transition carries a probe template,
                             // but widening is catalog-only. Only a catalog-confirmed
                             // narrowing or nullable-to-required result becomes stale
@@ -717,6 +731,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                                     plan,
                                     state,
                                     code),
+
                             // WHY: Provider backfill executes UPDATE before MODIFY.
                             // Triggers can change any table, so ordered projection
                             // must invalidate all row proofs after accepted repair.
@@ -732,6 +747,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                                 }
                                 && SafeMigrationColumnRepairHelper.HasProvablyNonNullDefault(
                                     alterIntent.Definition.DefaultValue),
+
                             // WHY: Ensure's full-definition repair never emits
                             // UPDATE. Only its non-narrowing string proof can retain
                             // a captured source-domain bound across ordered DDL.
@@ -810,7 +826,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         await batch.ForEachResultSetAsync(
             async (reader, token) =>
             {
-                if (reader.FieldCount != (captureIndexIdentity ? 3 : 2))
+                if (reader.FieldCount
+                    != (captureIndexIdentity
+                        ? 3
+                        : 2))
                 {
                     throw new InvalidOperationException("The MySQL prerequisite classifier returned an invalid shape.");
                 }
@@ -891,7 +910,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
                         states[resultOrdinal] = new MySqlShortCircuitState(
                             state,
-                            reader.IsDBNull(2) ? $"classified_{StateCode(state)}" : reader.GetString(2));
+                            reader.IsDBNull(2)
+                                ? $"classified_{StateCode(state)}"
+                                : reader.GetString(2));
                     }
 
                     row++;

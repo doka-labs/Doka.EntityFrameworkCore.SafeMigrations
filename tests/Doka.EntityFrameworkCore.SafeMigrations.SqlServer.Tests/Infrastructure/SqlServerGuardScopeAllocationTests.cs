@@ -42,10 +42,18 @@ public sealed class SqlServerGuardScopeAllocationTests
     {
         // Arrange
         var buffer = new StringBuilder(initialCapacity);
-        buffer.Append('x', initialCapacity - 1).Append('\'').Append('\'');
+        buffer
+            .Append('x', initialCapacity - 1)
+            .Append('\'')
+            .Append('\'');
+
         for (var index = 0; index < repetitions; index++)
         {
-            buffer.Append('x', 1023).Append('\'').Append("\uD83D\uDE80").Append('\'');
+            buffer
+                .Append('x', 1023)
+                .Append('\'')
+                .Append("\uD83D\uDE80")
+                .Append('\'');
         }
 
         var original = buffer.ToString();
@@ -73,8 +81,16 @@ public sealed class SqlServerGuardScopeAllocationTests
         // Arrange
         const int operationCount = 64;
         var body = string.Concat(Enumerable.Repeat("SELECT N'O''Brien';\n", 1024));
-        var immutableBuffers = Enumerable.Range(0, operationCount).Select(_ => new StringBuilder(body)).ToArray();
-        var mutableBuffers = Enumerable.Range(0, operationCount).Select(_ => new StringBuilder(body)).ToArray();
+        var immutableBuffers = Enumerable
+            .Range(0, operationCount)
+            .Select(_ => new StringBuilder(body))
+            .ToArray();
+
+        var mutableBuffers = Enumerable
+            .Range(0, operationCount)
+            .Select(_ => new StringBuilder(body))
+            .ToArray();
+
         Func<int, string> renderImmutable = index =>
             SqlServerSafeMigrationsSqlGenerator.BuildIsolatedGuardSql(immutableBuffers[index]);
 
@@ -107,7 +123,9 @@ public sealed class SqlServerGuardScopeAllocationTests
         var failure = Record.Exception(() => SqlServerSafeMigrationsSqlGenerator.BuildIsolatedGuardSql(buffer!));
 
         // Assert
-        Assert.Equal("body", Assert.IsType<ArgumentNullException>(failure).ParamName);
+        Assert.Equal("body",
+            Assert.IsType<ArgumentNullException>(failure)
+                .ParamName);
     }
 
     /// <summary>Builds the independent literal reference without relying on the optimized implementation.</summary>
@@ -132,7 +150,11 @@ public sealed class SqlServerGuardScopeAllocationTests
     /// <summary>Retains the former wrapper as the allocation comparison without modifying product budgets.</summary>
     private static string RenderExpandedMutableScope(
         StringBuilder body
-    ) => body.Replace("'", "''").Insert(0, "EXEC sys.sp_executesql N'").Append("';\n").ToString();
+    ) => body
+        .Replace("'", "''")
+        .Insert(0, "EXEC sys.sp_executesql N'")
+        .Append("';\n")
+        .ToString();
 
     /// <summary>Counts only rendering allocations on the executing test thread.</summary>
     private static (long Bytes, string Sql) MeasureAllocations(

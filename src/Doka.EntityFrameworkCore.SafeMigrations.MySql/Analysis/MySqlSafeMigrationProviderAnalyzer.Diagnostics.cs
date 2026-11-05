@@ -18,6 +18,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     )
     {
         var candidates = new List<MySqlDiagnosticCandidate>();
+
         // WHY: Keep bounded diagnostic selections aligned with their original operation ordinals.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -62,6 +63,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
                 var parameterizer = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
                 var selections = new List<string>(count);
+
                 // WHY: Keep bounded diagnostic selections aligned with their original operation ordinals.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery

@@ -6,15 +6,18 @@ internal sealed class SqlServerSafeMigrationRuntimeDiagnostic
     private const int MaximumNativeArgumentLength = 2048;
     private const string PolicySuffix = "; policy=";
     private const string OperationSuffix = "; operation ";
-    private readonly SafeMigrationOperation _operation;
     private readonly SafeMigrationOperationIdentity _identity;
+    private readonly SafeMigrationOperation _operation;
     private readonly int? _ordinal;
     private readonly StringBuilder _scratch = new(256);
 
     /// <summary>Captures the immutable identifier-only identity once for one generated operation.</summary>
     /// <param name="operation">The exact authored operation whose native guard is generated.</param>
     /// <param name="ordinal">The known stream ordinal, or null when unavailable.</param>
-    internal SqlServerSafeMigrationRuntimeDiagnostic(SafeMigrationOperation operation, int? ordinal)
+    internal SqlServerSafeMigrationRuntimeDiagnostic(
+        SafeMigrationOperation operation,
+        int? ordinal
+    )
     {
         _operation = operation;
         _identity = SafeMigrationOperationIdentity.Create(operation.Intent);
@@ -26,9 +29,18 @@ internal sealed class SqlServerSafeMigrationRuntimeDiagnostic
     /// <param name="number">The unchanged native SafeMigrations guard number.</param>
     /// <param name="guardCode">The stable native guard token.</param>
     /// <param name="reasonCode">A proven branch-specific reason, or null when unknown.</param>
-    internal void AppendThrow(StringBuilder destination, int number, string guardCode, string? reasonCode = null)
+    internal void AppendThrow(
+        StringBuilder destination,
+        int number,
+        string guardCode,
+        string? reasonCode = null
+    )
     {
-        destination.Append("THROW ").Append(number.ToString(CultureInfo.InvariantCulture)).Append(", ");
+        destination
+            .Append("THROW ")
+            .Append(number.ToString(CultureInfo.InvariantCulture))
+            .Append(", ");
+
         AppendLiteral(destination, guardCode, reasonCode);
         destination.Append(", 1;");
     }
@@ -37,11 +49,21 @@ internal sealed class SqlServerSafeMigrationRuntimeDiagnostic
     /// <param name="destination">The operation-owned SQL buffer.</param>
     /// <param name="guardCode">The unchanged native guard token.</param>
     /// <param name="reasonCode">The selected branch's proven reason code.</param>
-    internal void AppendLiteral(StringBuilder destination, string guardCode, string? reasonCode = null)
+    internal void AppendLiteral(
+        StringBuilder destination,
+        string guardCode,
+        string? reasonCode = null
+    )
     {
         _scratch.Clear();
-        SafeMigrationDiagnosticMessages.AppendRuntime(_scratch, _operation, _identity, guardCode, _ordinal,
+        SafeMigrationDiagnosticMessages.AppendRuntime(
+            _scratch,
+            _operation,
+            _identity,
+            guardCode,
+            _ordinal,
             reasonCode);
+
         destination.Append("N'");
         AppendEscaped(destination, _scratch);
         destination.Append('\'');
@@ -50,11 +72,17 @@ internal sealed class SqlServerSafeMigrationRuntimeDiagnostic
     /// <summary>Creates a bounded literal for independently owned session bootstrap and recovery templates.</summary>
     /// <param name="message">The already bounded, identifier-only diagnostic.</param>
     /// <returns>The Unicode T-SQL literal, with percent formatting and quote escapes preserved.</returns>
-    internal static string FormatLiteral(string message)
+    internal static string FormatLiteral(
+        string message
+    )
     {
         var destination = new StringBuilder(Math.Min(message.Length, MaximumNativeArgumentLength) + 3).Append("N'");
         var truncate = GetNativeLength(message.AsSpan()) > MaximumNativeArgumentLength;
-        var remaining = MaximumNativeArgumentLength - (truncate ? 3 : 0);
+        var remaining = MaximumNativeArgumentLength
+            - (truncate
+                ? 3
+                : 0);
+
         foreach (var character in message)
         {
             var width = GetNativeWidth(character);
@@ -72,13 +100,18 @@ internal sealed class SqlServerSafeMigrationRuntimeDiagnostic
             destination.Append("...");
         }
 
-        return destination.Append('\'').ToString();
+        return destination
+            .Append('\'')
+            .ToString();
     }
 
     /// <summary>Copies scratch chunks into the final guard without a flattened message allocation.</summary>
     /// <param name="destination">The final operation-owned SQL builder.</param>
     /// <param name="message">The bounded printable ASCII scratch message.</param>
-    private void AppendEscaped(StringBuilder destination, StringBuilder message)
+    private void AppendEscaped(
+        StringBuilder destination,
+        StringBuilder message
+    )
     {
         if (GetNativeLength(message, 0) <= MaximumNativeArgumentLength)
         {
@@ -115,7 +148,11 @@ internal sealed class SqlServerSafeMigrationRuntimeDiagnostic
     /// <param name="end">The exclusive identity prefix end, before the trusted structural suffix.</param>
     /// <param name="remaining">The available pre-format native width, including doubled percent.</param>
     /// <returns>The absolute logical end that fits the native width.</returns>
-    private static int GetLogicalPrefixEnd(StringBuilder message, int end, int remaining)
+    private static int GetLogicalPrefixEnd(
+        StringBuilder message,
+        int end,
+        int remaining
+    )
     {
         var offset = 0;
         foreach (var chunk in message.GetChunks())
@@ -141,7 +178,6 @@ internal sealed class SqlServerSafeMigrationRuntimeDiagnostic
             {
                 return end;
             }
-
         }
 
         return end;
@@ -152,7 +188,9 @@ internal sealed class SqlServerSafeMigrationRuntimeDiagnostic
     /// </summary>
     /// <param name="message">The bounded message produced directly by Core, not arbitrary caller text.</param>
     /// <returns>The trusted suffix offset, or the end when no structural suffix exists.</returns>
-    private int FindTrustedSuffix(StringBuilder message)
+    private int FindTrustedSuffix(
+        StringBuilder message
+    )
     {
         Span<char> digits = stackalloc char[10];
         var ordinalLength = 0;
@@ -182,7 +220,6 @@ internal sealed class SqlServerSafeMigrationRuntimeDiagnostic
                 {
                     return operationOffset;
                 }
-
             }
 
             return offset;
@@ -196,7 +233,11 @@ internal sealed class SqlServerSafeMigrationRuntimeDiagnostic
     /// <param name="offset">The candidate marker offset.</param>
     /// <param name="expected">The marker or formatted ordinal being checked.</param>
     /// <returns>Whether every expected character matches at the candidate offset.</returns>
-    private static bool Matches(StringBuilder message, int offset, ReadOnlySpan<char> expected)
+    private static bool Matches(
+        StringBuilder message,
+        int offset,
+        ReadOnlySpan<char> expected
+    )
     {
         // WHY: Compare the expected token with the message at the exact candidate offset.
         // ReSharper disable once ForCanBeConvertedToForeach
@@ -207,7 +248,6 @@ internal sealed class SqlServerSafeMigrationRuntimeDiagnostic
             {
                 return false;
             }
-
         }
 
         return true;
@@ -217,7 +257,10 @@ internal sealed class SqlServerSafeMigrationRuntimeDiagnostic
     /// <param name="message">The bounded Core scratch text.</param>
     /// <param name="start">The first logical character being counted.</param>
     /// <returns>The argument width, capped immediately after exceeding the native limit.</returns>
-    private static int GetNativeLength(StringBuilder message, int start)
+    private static int GetNativeLength(
+        StringBuilder message,
+        int start
+    )
     {
         var offset = 0;
         var length = 0;
@@ -231,7 +274,6 @@ internal sealed class SqlServerSafeMigrationRuntimeDiagnostic
                 {
                     return length;
                 }
-
             }
 
             offset += chunk.Length;
@@ -245,7 +287,9 @@ internal sealed class SqlServerSafeMigrationRuntimeDiagnostic
     /// </summary>
     /// <param name="message">The literal text supplied to the session-template codec.</param>
     /// <returns>The native argument width, capped immediately after exceeding the limit.</returns>
-    private static int GetNativeLength(ReadOnlySpan<char> message)
+    private static int GetNativeLength(
+        ReadOnlySpan<char> message
+    )
     {
         var length = 0;
         foreach (var character in message)
@@ -255,7 +299,6 @@ internal sealed class SqlServerSafeMigrationRuntimeDiagnostic
             {
                 return length;
             }
-
         }
 
         return length;
@@ -267,8 +310,13 @@ internal sealed class SqlServerSafeMigrationRuntimeDiagnostic
     /// <param name="start">The first logical character to copy.</param>
     /// <param name="end">The exclusive logical end of the copied range.</param>
     /// <param name="remaining">The remaining pre-format native argument budget.</param>
-    private static void AppendEscapedRange(StringBuilder destination, StringBuilder message, int start,
-        int end, int remaining)
+    private static void AppendEscapedRange(
+        StringBuilder destination,
+        StringBuilder message,
+        int start,
+        int end,
+        int remaining
+    )
     {
         var offset = 0;
         foreach (var chunk in message.GetChunks())
@@ -292,19 +340,25 @@ internal sealed class SqlServerSafeMigrationRuntimeDiagnostic
             {
                 return;
             }
-
         }
     }
 
     /// <summary>Counts percent twice, while SQL quote pairs decode to one argument character.</summary>
     /// <param name="character">The printable ASCII diagnostic character.</param>
     /// <returns>The width before native percent formatting, after SQL quote parsing.</returns>
-    private static int GetNativeWidth(char character) => character == '%' ? 2 : 1;
+    private static int GetNativeWidth(
+        char character
+    ) => character == '%'
+        ? 2
+        : 1;
 
     /// <summary>Writes one indivisible SQL quote or native percent escape pair.</summary>
     /// <param name="destination">The final SQL literal buffer.</param>
     /// <param name="character">The logical diagnostic character.</param>
-    private static void AppendEscapedCharacter(StringBuilder destination, char character)
+    private static void AppendEscapedCharacter(
+        StringBuilder destination,
+        char character
+    )
     {
         if (character is '\'' or '%')
         {

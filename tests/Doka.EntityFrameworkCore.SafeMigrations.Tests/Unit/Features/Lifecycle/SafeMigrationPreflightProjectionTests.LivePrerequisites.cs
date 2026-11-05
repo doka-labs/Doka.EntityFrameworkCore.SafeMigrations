@@ -29,16 +29,31 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         };
 
         var projection = new SafeMigrationPreflightProjection(livePrerequisiteSource: source);
-        ObserveAccepted(projection, new EnsureColumnIntent("live_parent",
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent(
+                "live_parent",
                 new ExpectedColumnDefinition("id", typeof(int), isNullable: false, storeType: "int")),
             SafeMigrationObservedState.Matching);
-        ObserveAccepted(projection, new EnsurePrimaryKeyIntent(
+
+        ObserveAccepted(
+            projection,
+            new EnsurePrimaryKeyIntent(
                 new ExpectedPrimaryKeyDefinition("pk_parent", "live_parent", ["id"])),
-            newKey ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.Matching);
-        ObserveAccepted(projection, new EnsureTableIntent(new ExpectedTableDefinition("live_child",
-                [new ExpectedColumnDefinition("id", typeof(int), isNullable: false, storeType: "int"),
-                    new ExpectedColumnDefinition("parent_id", typeof(int), isNullable: true, storeType: "int")],
-                primaryKey: new ExpectedPrimaryKeyDefinition("pk_child", "live_child", ["id"])),
+            newKey
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.Matching);
+
+        ObserveAccepted(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "live_child",
+                    [
+                        new ExpectedColumnDefinition("id", typeof(int), isNullable: false, storeType: "int"),
+                        new ExpectedColumnDefinition("parent_id", typeof(int), isNullable: true, storeType: "int"),
+                    ],
+                    primaryKey: new ExpectedPrimaryKeyDefinition("pk_child", "live_child", ["id"])),
                 SafeMigrationTableMode.StrictDefinition),
             SafeMigrationObservedState.Missing);
 
@@ -46,9 +61,17 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var analysis = Project(projection, SparseLiveForeignKey(), SafeMigrationObservedState.PrerequisiteMissing);
 
         // Assert
-        Assert.Equal(forceNative && !compatible ? SafeMigrationObservedState.PrerequisiteMissing
-            : SafeMigrationObservedState.Missing, analysis.ObservedState);
-        Assert.Equal(forceNative ? 1 : 0, source.ForeignKeyQueries);
+        Assert.Equal(
+            forceNative && !compatible
+                ? SafeMigrationObservedState.PrerequisiteMissing
+                : SafeMigrationObservedState.Missing,
+            analysis.ObservedState);
+
+        Assert.Equal(
+            forceNative
+                ? 1
+                : 0,
+            source.ForeignKeyQueries);
     }
 
     /// <summary>Unchanged live members complete sparse accepted additions without model seeding.</summary>
@@ -56,7 +79,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void SparseForeignKeyUsesCertifiedLivePrincipal(bool composite)
+    public void SparseForeignKeyUsesCertifiedLivePrincipal(
+        bool composite
+    )
     {
         // Arrange
         var source = new LivePrerequisiteProbe();
@@ -79,17 +104,24 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("column")]
     [InlineData("compatibility")]
     [InlineData("key")]
-    public void SparseForeignKeyRejectsMissingLiveProof(string missingProof)
+    public void SparseForeignKeyRejectsMissingLiveProof(
+        string missingProof
+    )
     {
         // Arrange
         var source = new LivePrerequisiteProbe
         {
             HasPrincipalColumn = missingProof != "column",
             EndpointsCompatible = missingProof != "compatibility",
-            CandidateKeys = missingProof == "key" ? [] : [new(SafeMigrationDatabaseObjectKind.PrimaryKey, "pk_parent")],
+            CandidateKeys = missingProof == "key"
+                ? []
+                : [new(SafeMigrationDatabaseObjectKind.PrimaryKey, "pk_parent")],
         };
 
-        var projection = SparseLiveProjection(missingProof == "provider" ? null : source);
+        var projection = SparseLiveProjection(
+            missingProof == "provider"
+                ? null
+                : source);
 
         // Act
         var analysis = Project(projection, SparseLiveForeignKey(), SafeMigrationObservedState.PrerequisiteMissing);
@@ -109,45 +141,69 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("computed")]
     [InlineData("dml")]
     [InlineData("raw_sql")]
-    public void SparseForeignKeyRejectsUnprovenExistingRows(string rowProof)
+    public void SparseForeignKeyRejectsUnprovenExistingRows(
+        string rowProof
+    )
     {
         // Arrange
         var source = new LivePrerequisiteProbe();
         var projection = new SafeMigrationPreflightProjection(livePrerequisiteSource: source);
-        var column = new ExpectedColumnDefinition("parent_id", typeof(int), isNullable: true, storeType: "int",
-            defaultValue: rowProof == "default" ? SafeMigrationDefaultValue.Literal(999) : null,
-            computedColumnSql: rowProof == "computed" ? "999" : null);
+        var column = new ExpectedColumnDefinition(
+            "parent_id",
+            typeof(int),
+            isNullable: true,
+            storeType: "int",
+            defaultValue: rowProof == "default"
+                ? SafeMigrationDefaultValue.Literal(999)
+                : null,
+            computedColumnSql: rowProof == "computed"
+                ? "999"
+                : null);
 
         if (rowProof == "rejected")
         {
-            var operation = new SafeMigrationOperation(new EnsureColumnIntent("live_child", column),
+            var operation = new SafeMigrationOperation(
+                new EnsureColumnIntent("live_child", column),
                 SafeMigrationPolicy.ThrowIfDifferent);
+
             var rejected = Live(SafeMigrationObservedState.DataBlocked);
-            var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, rejected.ObservedState,
-                operation.Policy, rejected.RepairCapability);
+            var decision = SafeMigrationDecisionPlanner.Plan(
+                operation.Intent.Kind,
+                rejected.ObservedState,
+                operation.Policy,
+                rejected.RepairCapability);
 
             projection.Observe(operation, rejected, rejected, decision);
         }
         else if (rowProof != "no_add")
         {
-            ObserveAccepted(projection, new EnsureColumnIntent("live_child", column),
-                rowProof == "matching" ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Missing);
+            ObserveAccepted(
+                projection,
+                new EnsureColumnIntent("live_child", column),
+                rowProof == "matching"
+                    ? SafeMigrationObservedState.Matching
+                    : SafeMigrationObservedState.Missing);
         }
 
         if (rowProof == "dml")
         {
-            projection.ObserveProviderPostcondition(new UpdateDataOperation
-            {
-                Table = "live_child", KeyColumns = ["id"], KeyValues = new object[,] { { 1 } },
-                Columns = ["parent_id"], Values = new object[,] { { 999 } },
-            });
+            projection.ObserveProviderPostcondition(
+                new UpdateDataOperation
+                {
+                    Table = "live_child",
+                    KeyColumns = ["id"],
+                    KeyValues = new object[,] { { 1 } },
+                    Columns = ["parent_id"],
+                    Values = new object[,] { { 999 } },
+                });
         }
         else if (rowProof == "raw_sql")
         {
-            projection.ObserveProviderPostcondition(new SqlOperation
-            {
-                Sql = "UPDATE live_child SET parent_id = 999;",
-            });
+            projection.ObserveProviderPostcondition(
+                new SqlOperation
+                {
+                    Sql = "UPDATE live_child SET parent_id = 999;",
+                });
         }
 
         // Act
@@ -178,12 +234,14 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var candidate = new SafeMigrationLiveCandidateKey(kind, "live_key", "live_backing");
         var source = new LivePrerequisiteProbe
         {
-            CandidateKeys = survivingAlias ? [candidate, new(SafeMigrationDatabaseObjectKind.Index, "other_key")]
+            CandidateKeys = survivingAlias
+                ? [candidate, new(SafeMigrationDatabaseObjectKind.Index, "other_key")]
                 : [candidate],
         };
 
         var projection = SparseLiveProjection(source);
-        SafeMigrationIntent removal = dropBacking ? new DropIndexIntent("live_backing", "live_parent")
+        SafeMigrationIntent removal = dropBacking
+            ? new DropIndexIntent("live_backing", "live_parent")
             : kind switch
             {
                 SafeMigrationDatabaseObjectKind.PrimaryKey => new DropPrimaryKeyIntent("live_key", "live_parent"),
@@ -198,7 +256,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var analysis = Project(projection, SparseLiveForeignKey(), SafeMigrationObservedState.PrerequisiteMissing);
 
         // Assert
-        Assert.Equal(survivingAlias ? SafeMigrationObservedState.Missing
+        Assert.Equal(
+            survivingAlias
+                ? SafeMigrationObservedState.Missing
                 : SafeMigrationObservedState.PrerequisiteMissing,
             analysis.ObservedState);
     }
@@ -209,7 +269,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData(SafeMigrationDatabaseObjectKind.PrimaryKey)]
     [InlineData(SafeMigrationDatabaseObjectKind.UniqueConstraint)]
     [InlineData(SafeMigrationDatabaseObjectKind.Index)]
-    public void SparseForeignKeyRejectsDifferentSameNameReplacement(SafeMigrationDatabaseObjectKind kind)
+    public void SparseForeignKeyRejectsDifferentSameNameReplacement(
+        SafeMigrationDatabaseObjectKind kind
+    )
     {
         // Arrange
         var source = new LivePrerequisiteProbe { CandidateKeys = [new(kind, "live_key")] };
@@ -228,8 +290,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 new ExpectedPrimaryKeyDefinition("live_key", "live_parent", ["other"])),
             SafeMigrationDatabaseObjectKind.UniqueConstraint => new EnsureUniqueConstraintIntent(
                 new ExpectedUniqueConstraintDefinition("live_key", "live_parent", ["other"])),
-            _ => new EnsureIndexIntent(new ExpectedIndexDefinition("live_key", "live_parent",
-                [new ExpectedIndexKeyDefinition(column: "other")], unique: true)),
+            _ => new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "live_key",
+                    "live_parent",
+                    [new ExpectedIndexKeyDefinition(column: "other")],
+                    unique: true)),
         };
 
         ObserveAccepted(projection, removal, SafeMigrationObservedState.Matching);
@@ -237,9 +303,14 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         {
             // WHY: A primary-key replacement needs an independent current empty
             // certificate; the nullable child addition cannot supply parent rows.
-            ObserveAccepted(projection, new EnsureColumnIntent("live_parent", Column("other")),
+            ObserveAccepted(
+                projection,
+                new EnsureColumnIntent("live_parent", Column("other")),
                 SafeMigrationObservedState.Matching);
-            ObserveAccepted(projection, new EnsureColumnIntent("live_parent", Column("empty_marker")),
+
+            ObserveAccepted(
+                projection,
+                new EnsureColumnIntent("live_parent", Column("empty_marker")),
                 SafeMigrationObservedState.Missing);
         }
 
@@ -259,7 +330,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("recreate_table")]
     [InlineData("drop_column")]
     [InlineData("rename_column")]
-    public void SparseForeignKeyRejectsInvalidatedLiveOwner(string mutation)
+    public void SparseForeignKeyRejectsInvalidatedLiveOwner(
+        string mutation
+    )
     {
         // Arrange
         var source = new LivePrerequisiteProbe();
@@ -270,8 +343,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             ObserveAccepted(projection, new DropTableIntent("live_parent"), SafeMigrationObservedState.Matching);
             if (mutation == "recreate_table")
             {
-                Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("live_parent", [Column("id")]),
-                    SafeMigrationTableMode.StrictDefinition));
+                Apply(
+                    projection,
+                    new EnsureTableIntent(
+                        new ExpectedTableDefinition("live_parent", [Column("id")]),
+                        SafeMigrationTableMode.StrictDefinition));
             }
         }
         else if (mutation == "drop_column")
@@ -280,7 +356,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         }
         else
         {
-            ObserveAccepted(projection, new RenameColumnIntent("id", "live_parent", "renamed"),
+            ObserveAccepted(
+                projection,
+                new RenameColumnIntent("id", "live_parent", "renamed"),
                 SafeMigrationObservedState.Matching);
         }
 
@@ -308,9 +386,15 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     {
         // Arrange
         var projection = SparseLiveProjection(new LivePrerequisiteProbe());
-        var intent = new EnsureIndexIntent(new ExpectedIndexDefinition("ix_child", "live_child",
-            [new ExpectedIndexKeyDefinition(column: "id"), new ExpectedIndexKeyDefinition(column: "parent_id")],
-            unique: unique, nullsDistinct: unique ? nullsDistinct : null));
+        var intent = new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "ix_child",
+                "live_child",
+                [new ExpectedIndexKeyDefinition(column: "id"), new ExpectedIndexKeyDefinition(column: "parent_id")],
+                unique: unique,
+                nullsDistinct: unique
+                    ? nullsDistinct
+                    : null));
 
         // Act
         var analysis = Project(projection, intent, SafeMigrationObservedState.PrerequisiteMissing);
@@ -333,34 +417,58 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("prefix", true)]
     [InlineData("partial", false)]
     [InlineData("partial", true)]
-    public void SparseForeignKeyChecksAcceptedIndexEquality(string facet, bool projectPrincipalColumn)
+    public void SparseForeignKeyChecksAcceptedIndexEquality(
+        string facet,
+        bool projectPrincipalColumn
+    )
     {
         // Arrange
         var source = new LivePrerequisiteProbe { CandidateKeys = [] };
         var projection = SparseLiveProjection(source);
-        var key = new ExpectedIndexKeyDefinition(column: "id",
-            prefixLength: facet == "prefix" ? 1 : null,
-            collation: facet == "collation" ? new SafeMigrationCollationIdentifier("NOCASE") : null,
-            operatorClass: facet == "operator_class" ? "custom_ops" : null);
+        var key = new ExpectedIndexKeyDefinition(
+            column: "id",
+            prefixLength: facet == "prefix"
+                ? 1
+                : null,
+            collation: facet == "collation"
+                ? new SafeMigrationCollationIdentifier("NOCASE")
+                : null,
+            operatorClass: facet == "operator_class"
+                ? "custom_ops"
+                : null);
 
         if (projectPrincipalColumn)
         {
-            ObserveAccepted(projection, new EnsureColumnIntent("live_parent", Column("id")),
+            ObserveAccepted(
+                projection,
+                new EnsureColumnIntent("live_parent", Column("id")),
                 SafeMigrationObservedState.Matching);
         }
 
-        ObserveAccepted(projection, new EnsureIndexIntent(new ExpectedIndexDefinition("new_key", "live_parent",
-                [key], unique: true, filter: facet == "partial" ? "id > 0" : null)),
+        ObserveAccepted(
+            projection,
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "new_key",
+                    "live_parent",
+                    [key],
+                    unique: true,
+                    filter: facet == "partial"
+                        ? "id > 0"
+                        : null)),
             SafeMigrationObservedState.Missing);
 
         // Act
         var analysis = Project(projection, SparseLiveForeignKey(), SafeMigrationObservedState.PrerequisiteMissing);
 
         // Assert
-        Assert.Equal(facet == "ordinary" ? SafeMigrationObservedState.Missing
+        Assert.Equal(
+            facet == "ordinary"
+                ? SafeMigrationObservedState.Missing
                 : SafeMigrationObservedState.PrerequisiteMissing,
             analysis.ObservedState);
-        Assert.True(facet == "ordinary" && projectPrincipalColumn || source.ForeignKeyQueries == 1);
+
+        Assert.True((facet == "ordinary" && projectPrincipalColumn) || source.ForeignKeyQueries == 1);
     }
 
     /// <summary>The same sparse member proof supports constraints without changing their row-safety rules.</summary>
@@ -373,14 +481,22 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("primary", true)]
     [InlineData("check", false)]
     [InlineData("check", true)]
-    public void SparseMixedConstraintsPreserveIndependentRowGates(string kind, bool empty)
+    public void SparseMixedConstraintsPreserveIndependentRowGates(
+        string kind,
+        bool empty
+    )
     {
         // Arrange
         var source = new LivePrerequisiteProbe();
         var projection = new SafeMigrationPreflightProjection(livePrerequisiteSource: source);
 
-        ObserveAccepted(projection,
-            new EnsureColumnIntent("live_child", empty ? Column("parent_id") : NullableColumn("parent_id")),
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent(
+                "live_child",
+                empty
+                    ? Column("parent_id")
+                    : NullableColumn("parent_id")),
             SafeMigrationObservedState.Missing);
 
         SafeMigrationIntent intent = kind switch
@@ -389,17 +505,25 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 new ExpectedUniqueConstraintDefinition("uq_child", "live_child", ["id", "parent_id"])),
             "primary" => new EnsurePrimaryKeyIntent(
                 new ExpectedPrimaryKeyDefinition("pk_child", "live_child", ["id", "parent_id"])),
-            _ => new EnsureCheckConstraintIntent(ExpectedCheckConstraintDefinition.FromExpression(
-                "ck_child", "live_child", SafeMigrationSql.Binary(Positive("id"),
-                    SafeMigrationSqlBinaryOperator.And, Positive("parent_id")))),
+            _ => new EnsureCheckConstraintIntent(
+                ExpectedCheckConstraintDefinition.FromExpression(
+                    "ck_child",
+                    "live_child",
+                    SafeMigrationSql.Binary(
+                        Positive("id"),
+                        SafeMigrationSqlBinaryOperator.And,
+                        Positive("parent_id")))),
         };
 
         // Act
         var analysis = Project(projection, intent, SafeMigrationObservedState.PrerequisiteMissing);
 
         // Assert
-        Assert.Equal(empty || kind == "unique" ? SafeMigrationObservedState.Missing
-            : SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
+        Assert.Equal(
+            empty || kind == "unique"
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.PrerequisiteMissing,
+            analysis.ObservedState);
     }
 
     /// <summary>Rejected and absent removals do not destroy valid untouched live key evidence.</summary>
@@ -407,20 +531,27 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(SafeMigrationObservedState.Missing)]
     [InlineData(SafeMigrationObservedState.Unsupported)]
-    public void SparseLiveKeySurvivesNonExecutingDrop(SafeMigrationObservedState dropState)
+    public void SparseLiveKeySurvivesNonExecutingDrop(
+        SafeMigrationObservedState dropState
+    )
     {
         // Arrange
         var source = new LivePrerequisiteProbe
         {
             CandidateKeys = [new(SafeMigrationDatabaseObjectKind.Index, "live_key")],
         };
+
         var projection = SparseLiveProjection(source);
-        var operation = new SafeMigrationOperation(new DropIndexIntent("live_key", "live_parent"),
+        var operation = new SafeMigrationOperation(
+            new DropIndexIntent("live_key", "live_parent"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var live = Live(dropState);
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, dropState,
-            operation.Policy, live.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            dropState,
+            operation.Policy,
+            live.RepairCapability);
 
         projection.Observe(operation, live, live, decision);
 
@@ -429,8 +560,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
-        Assert.Equal(dropState == SafeMigrationObservedState.Missing ? SafeMigrationAction.NoOp
-            : SafeMigrationAction.RejectUnsupported, decision.Action);
+        Assert.Equal(
+            dropState == SafeMigrationObservedState.Missing
+                ? SafeMigrationAction.NoOp
+                : SafeMigrationAction.RejectUnsupported,
+            decision.Action);
     }
 
     /// <summary>A proven equivalent new key can replace its removed snapshot lifetime.</summary>
@@ -442,12 +576,22 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         {
             CandidateKeys = [new(SafeMigrationDatabaseObjectKind.Index, "live_key")],
         };
+
         var projection = SparseLiveProjection(source);
 
-        ObserveAccepted(projection, new DropIndexIntent("live_key", "live_parent"),
+        ObserveAccepted(
+            projection,
+            new DropIndexIntent("live_key", "live_parent"),
             SafeMigrationObservedState.Matching);
-        ObserveAccepted(projection, new EnsureIndexIntent(new ExpectedIndexDefinition("live_key", "live_parent",
-                [new ExpectedIndexKeyDefinition(column: "id")], unique: true)),
+
+        ObserveAccepted(
+            projection,
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "live_key",
+                    "live_parent",
+                    [new ExpectedIndexKeyDefinition(column: "id")],
+                    unique: true)),
             SafeMigrationObservedState.Missing);
 
         // Act
@@ -482,23 +626,36 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         {
             ForceNativeQualification = true,
             EndpointsCompatible = compatible,
-            CandidateKeys = nativeCandidate ? [new(SafeMigrationDatabaseObjectKind.PrimaryKey, "pk_parent")] : [],
+            CandidateKeys = nativeCandidate
+                ? [new(SafeMigrationDatabaseObjectKind.PrimaryKey, "pk_parent")]
+                : [],
         };
 
         var projection = SparseLiveProjection(source);
 
-        ObserveAccepted(projection, new EnsureColumnIntent("live_parent", Column("id")),
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("live_parent", Column("id")),
             SafeMigrationObservedState.Matching);
-        ObserveAccepted(projection, new EnsureUniqueConstraintIntent(
+
+        ObserveAccepted(
+            projection,
+            new EnsureUniqueConstraintIntent(
                 new ExpectedUniqueConstraintDefinition("candidate", "live_parent", ["id"])),
-            created ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.Matching);
+            created
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.Matching);
 
         // Act
         var analysis = Project(projection, SparseLiveForeignKey(), SafeMigrationObservedState.PrerequisiteMissing);
 
         // Assert
-        Assert.Equal(compatible && (created || nativeCandidate) ? SafeMigrationObservedState.Missing
-            : SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
+        Assert.Equal(
+            compatible && (created || nativeCandidate)
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.PrerequisiteMissing,
+            analysis.ObservedState);
+
         Assert.Equal(1, source.ForeignKeyQueries);
     }
 
@@ -510,15 +667,26 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("created_then_alias", true)]
     [InlineData("matching_only", false)]
     [InlineData("created_then_dropped", false)]
-    public void SparseForeignKeyRetainsOnlySurvivingCreatedPrimaryKey(string history, bool survives)
+    public void SparseForeignKeyRetainsOnlySurvivingCreatedPrimaryKey(
+        string history,
+        bool survives
+    )
     {
         // Arrange
-        var source = new LivePrerequisiteProbe { ForceNativeQualification = true, CandidateKeys = [] };
+        var source = new LivePrerequisiteProbe
+        {
+            ForceNativeQualification = true,
+            CandidateKeys = [],
+        };
+
         var projection = SparseLiveProjection(source);
         var key = new EnsurePrimaryKeyIntent(new ExpectedPrimaryKeyDefinition("pk_parent", "live_parent", ["id"]));
 
-        ObserveAccepted(projection, new EnsureColumnIntent("live_parent", Column("id")),
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("live_parent", Column("id")),
             SafeMigrationObservedState.Matching);
+
         if (history != "matching_only")
         {
             ObserveAccepted(projection, key, SafeMigrationObservedState.Missing);
@@ -526,7 +694,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         if (history == "created_then_dropped")
         {
-            ObserveAccepted(projection, new DropPrimaryKeyIntent("pk_parent", "live_parent"),
+            ObserveAccepted(
+                projection,
+                new DropPrimaryKeyIntent("pk_parent", "live_parent"),
                 SafeMigrationObservedState.Matching);
         }
         else
@@ -542,8 +712,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var analysis = Project(projection, SparseLiveForeignKey(), SafeMigrationObservedState.PrerequisiteMissing);
 
         // Assert
-        Assert.Equal(survives ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.PrerequisiteMissing,
+        Assert.Equal(
+            survives
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.PrerequisiteMissing,
             analysis.ObservedState);
+
         Assert.Equal(1, source.ForeignKeyQueries);
     }
 
@@ -559,7 +733,8 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("opaque_sql", SafeMigrationObservedState.PrerequisiteMissing)]
     public void SparseDynamicForeignKeyRequalificationPreservesIndependentGates(
         string scenario,
-        SafeMigrationObservedState expected)
+        SafeMigrationObservedState expected
+    )
     {
         // Arrange
         var source = new LivePrerequisiteProbe
@@ -569,8 +744,14 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         };
 
         var projection = new SafeMigrationPreflightProjection(livePrerequisiteSource: source);
-        var column = new ExpectedColumnDefinition("parent_id", typeof(int), isNullable: true, storeType: "int",
-            defaultValue: scenario == "no_row_proof" ? SafeMigrationDefaultValue.Literal(999) : null);
+        var column = new ExpectedColumnDefinition(
+            "parent_id",
+            typeof(int),
+            isNullable: true,
+            storeType: "int",
+            defaultValue: scenario == "no_row_proof"
+                ? SafeMigrationDefaultValue.Literal(999)
+                : null);
 
         ObserveAccepted(projection, new EnsureColumnIntent("live_child", column), SafeMigrationObservedState.Missing);
         if (scenario == "opaque_sql")
@@ -579,8 +760,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         }
 
         var operation = new SafeMigrationOperation(SparseLiveForeignKey(), SafeMigrationPolicy.ThrowIfDifferent);
-        var live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
-            SafeMigrationRepairCapability.None, postconditionSatisfied: false, "test_dynamic_native_fk")
+        var live = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Unsupported,
+            SafeMigrationRepairCapability.None,
+            postconditionSatisfied: false,
+            "test_dynamic_native_fk")
         {
             IsInvariantUnsupported = scenario == "invariant",
         };
@@ -591,7 +775,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Assert
         Assert.Equal(expected, analysis.ObservedState);
         Assert.False(analysis.PostconditionSatisfied);
-        Assert.Equal(scenario is "invariant" or "opaque_sql" ? 0 : 1, source.RequalificationQueries);
+        Assert.Equal(
+            scenario is "invariant" or "opaque_sql"
+                ? 0
+                : 1,
+            source.RequalificationQueries);
     }
 
     /// <summary>
@@ -607,7 +795,8 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("removed_owner", SafeMigrationObservedState.Missing)]
     public void SparseDynamicDropIndexRequalificationPreservesIndependentGates(
         string scenario,
-        SafeMigrationObservedState expected)
+        SafeMigrationObservedState expected
+    )
     {
         // Arrange
         var source = new LivePrerequisiteProbe
@@ -626,11 +815,15 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             ObserveAccepted(projection, new DropTableIntent("live_child"), SafeMigrationObservedState.Matching);
         }
 
-        var operation = new SafeMigrationOperation(new DropIndexIntent("ix_child", "live_child"),
+        var operation = new SafeMigrationOperation(
+            new DropIndexIntent("ix_child", "live_child"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
-            SafeMigrationRepairCapability.None, postconditionSatisfied: false, "test_dynamic_native_index")
+        var live = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Unsupported,
+            SafeMigrationRepairCapability.None,
+            postconditionSatisfied: false,
+            "test_dynamic_native_index")
         {
             IsInvariantUnsupported = scenario == "invariant",
         };
@@ -640,24 +833,42 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         // Assert
         Assert.Equal(expected, analysis.ObservedState);
-        Assert.Equal(scenario is "invariant" or "opaque_sql" ? 0 : 1, source.RequalificationQueries);
+        Assert.Equal(
+            scenario is "invariant" or "opaque_sql"
+                ? 0
+                : 1,
+            source.RequalificationQueries);
     }
 
     /// <summary>Creates a sparse child certificate without converging either owner or its old members.</summary>
-    private static SafeMigrationPreflightProjection SparseLiveProjection(LivePrerequisiteProbe? source)
+    private static SafeMigrationPreflightProjection SparseLiveProjection(
+        LivePrerequisiteProbe? source
+    )
     {
         var projection = new SafeMigrationPreflightProjection(livePrerequisiteSource: source);
 
-        ObserveAccepted(projection, new EnsureColumnIntent("live_child", NullableColumn("parent_id")),
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("live_child", NullableColumn("parent_id")),
             SafeMigrationObservedState.Missing);
 
         return projection;
     }
 
     /// <summary>Builds the exact FK endpoint order used by the sparse-provider certificate.</summary>
-    private static EnsureForeignKeyIntent SparseLiveForeignKey(bool composite = false) => new(
-        new ExpectedForeignKeyDefinition("fk_child", "live_child", composite ? ["id", "parent_id"] : ["parent_id"],
-            "live_parent", composite ? ["tenant", "id"] : ["id"]));
+    private static EnsureForeignKeyIntent SparseLiveForeignKey(
+        bool composite = false
+    ) => new(
+        new ExpectedForeignKeyDefinition(
+            "fk_child",
+            "live_child",
+            composite
+                ? ["id", "parent_id"]
+                : ["parent_id"],
+            "live_parent",
+            composite
+                ? ["tenant", "id"]
+                : ["id"]));
 
     /// <summary>Supplies observed old members; new members must come from accepted ordered projection.</summary>
     private sealed class LivePrerequisiteProbe : ISafeMigrationLivePrerequisiteSource
@@ -693,18 +904,26 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         public bool SawAcceptedAddition { get; private set; }
 
         /// <inheritdoc />
-        public bool HasLiveColumn(string table, string? schema, string column) => schema is null
-            && (table == "live_parent" ? HasPrincipalColumn && column is "id" or "tenant" or "other"
+        public bool HasLiveColumn(
+            string table,
+            string? schema,
+            string column
+        ) => schema is null
+            && (table == "live_parent"
+                ? HasPrincipalColumn && column is "id" or "tenant" or "other"
                 : table == "live_child" && column == "id");
 
         /// <inheritdoc />
-        public bool RequiresLiveForeignKeyQualification(EnsureForeignKeyIntent intent) => ForceNativeQualification;
+        public bool RequiresLiveForeignKeyQualification(
+            EnsureForeignKeyIntent intent
+        ) => ForceNativeQualification;
 
         /// <inheritdoc />
         public bool CanRequalifyLiveForeignKeyPrerequisites(
             EnsureForeignKeyIntent intent,
             SafeMigrationProviderAnalysis liveAnalysis,
-            ISafeMigrationProjectedColumnSource columns)
+            ISafeMigrationProjectedColumnSource columns
+        )
         {
             RequalificationQueries++;
 
@@ -715,7 +934,8 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         public bool CanRequalifyLiveDropIndexPrerequisites(
             DropIndexIntent intent,
             SafeMigrationProviderAnalysis liveAnalysis,
-            ISafeMigrationProjectedColumnSource columns)
+            ISafeMigrationProjectedColumnSource columns
+        )
         {
             RequalificationQueries++;
 
@@ -731,7 +951,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             ForeignKeyQueries++;
             SawAcceptedAddition = columns.TryGetProjectedColumn("live_child", null, "parent_id", out _);
 
-            return EndpointsCompatible ? CandidateKeys : null;
+            return EndpointsCompatible
+                ? CandidateKeys
+                : null;
         }
     }
 }

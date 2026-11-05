@@ -65,8 +65,8 @@ internal sealed class SourceBoundToolchain : Toolchain
     {
         var path = benchmarkType
             .Assembly
-            .GetCustomAttributes(typeof(System.Reflection.AssemblyMetadataAttribute), inherit: false)
-            .Cast<System.Reflection.AssemblyMetadataAttribute>()
+            .GetCustomAttributes(typeof(AssemblyMetadataAttribute), inherit: false)
+            .Cast<AssemblyMetadataAttribute>()
             .SingleOrDefault(static attribute => attribute.Key == "BenchmarkProjectPath")
             ?.Value;
 
@@ -100,6 +100,7 @@ internal sealed class SourceBoundToolchain : Toolchain
             BuildPartition buildPartition,
             string programName
         ) =>
+
             // WHY: BDN's native assembly/job/counter names repeat across parent processes. Separate
             // directories prevent one simultaneous invocation from compiling or deleting another's driver.
             base.GetBuildArtifactsDirectoryPath(buildPartition, programName) + "-" + _invocationId;

@@ -34,6 +34,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             projection,
             new EnsureTableIntent(table, SafeMigrationTableMode.ConvergenceContainer),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             new EnsureColumnIntent("items", Column("added")),
@@ -101,10 +102,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             projection,
             new EnsureTableIntent(table, SafeMigrationTableMode.ConvergenceContainer),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             new EnsureColumnIntent("users", id),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             new EnsureColumnIntent("users", email),
@@ -135,6 +138,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             projection,
             new EnsureTableIntent(table, SafeMigrationTableMode.ConvergenceContainer),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             new EnsureColumnIntent("items", id),
@@ -219,6 +223,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             projection,
             new EnsureTableIntent(table, SafeMigrationTableMode.ConvergenceContainer),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             new EnsureColumnIntent("items", externalId),
@@ -251,7 +256,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             typeof(int),
             nullable,
             "integer",
-            defaultValue: hasDefault ? SafeMigrationDefaultValue.Literal(0) : null);
+            defaultValue: hasDefault
+                ? SafeMigrationDefaultValue.Literal(0)
+                : null);
 
         var table = new ExpectedTableDefinition("items", [key]);
 
@@ -259,6 +266,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             projection,
             new EnsureTableIntent(table, SafeMigrationTableMode.ConvergenceContainer),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             new EnsureColumnIntent("items", key),
@@ -317,7 +325,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             typeof(int),
             isNullable: true,
             storeType: "integer",
-            computedExpression: computed ? SafeMigrationSql.Literal(0) : null);
+            computedExpression: computed
+                ? SafeMigrationSql.Literal(0)
+                : null);
 
         var table = new ExpectedTableDefinition("items", [externalId]);
 
@@ -325,6 +335,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             projection,
             new EnsureTableIntent(table, SafeMigrationTableMode.ConvergenceContainer),
             SafeMigrationObservedState.Matching);
+
         ObserveAccepted(
             projection,
             new EnsureColumnIntent("items", externalId),
@@ -336,7 +347,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 "items",
                 [new ExpectedIndexKeyDefinition(column: "external_id")],
                 unique: true,
-                nullsDistinct: nullsNotDistinct ? false : null));
+                nullsDistinct: nullsNotDistinct
+                    ? false
+                    : null));
 
         var operation = new SafeMigrationOperation(index, SafeMigrationPolicy.ThrowIfDifferent);
         var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
@@ -389,6 +402,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                     "legacy_parent",
                     [new ExpectedIndexKeyDefinition(column: "id")],
                     structuredFilter: Positive("id"))));
+
         Apply(projection, new RenameColumnIntent("id", "legacy_parent", "canonical_id"));
 
         AssertMatching(projection, new EnsureColumnIntent("legacy_parent", Column("canonical_id")));
@@ -399,6 +413,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                     "ck_parent_id",
                     "legacy_parent",
                     ParentPredicate("canonical_id"))));
+
         AssertMatching(
             projection,
             new EnsureForeignKeyIntent(
@@ -556,7 +571,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                     computedColumnSql: "id + 1",
                     isStored: true),
             ],
-            checkConstraints: [new ExpectedCheckConstraintDefinition("ck_items_id", "items", "id > 0"),]);
+            checkConstraints: [new ExpectedCheckConstraintDefinition("ck_items_id", "items", "id > 0")]);
 
         Apply(projection, new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition));
         Apply(projection, new RenameColumnIntent("id", "items", "canonical_id"));
@@ -566,6 +581,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             new EnsureCheckConstraintIntent(
                 new ExpectedCheckConstraintDefinition("ck_items_id", "items", "canonical_id > 0")),
             SafeMigrationObservedState.Different);
+
         AssertProjectedState(
             projection,
             new EnsureColumnIntent(
@@ -610,10 +626,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var projection = new SafeMigrationPreflightProjection();
         var table = new ExpectedTableDefinition(
             "items",
-            [Column("id"), Column("parent_id"),],
+            [Column("id"), Column("parent_id")],
             primaryKey: new ExpectedPrimaryKeyDefinition("pk_items", "items", ["id"]),
-            uniqueConstraints: [new ExpectedUniqueConstraintDefinition("uq_items_parent", "items", ["parent_id"]),],
-            checkConstraints: [new ExpectedCheckConstraintDefinition("ck_items_id", "items", "id > 0"),],
+            uniqueConstraints: [new ExpectedUniqueConstraintDefinition("uq_items_parent", "items", ["parent_id"])],
+            checkConstraints: [new ExpectedCheckConstraintDefinition("ck_items_id", "items", "id > 0")],
             foreignKeys:
             [
                 new ExpectedForeignKeyDefinition("fk_items_parent", "items", ["parent_id"], "parents", ["id"]),
@@ -643,14 +659,17 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             projection,
             new EnsurePrimaryKeyIntent(table.PrimaryKey!),
             SafeMigrationObservedState.Missing);
+
         AssertProjectedState(
             projection,
             new EnsureUniqueConstraintIntent(table.UniqueConstraints[0]),
             SafeMigrationObservedState.Missing);
+
         AssertProjectedState(
             projection,
             new EnsureCheckConstraintIntent(table.CheckConstraints[0]),
             SafeMigrationObservedState.Missing);
+
         AssertProjectedState(
             projection,
             new EnsureForeignKeyIntent(table.ForeignKeys[0]),

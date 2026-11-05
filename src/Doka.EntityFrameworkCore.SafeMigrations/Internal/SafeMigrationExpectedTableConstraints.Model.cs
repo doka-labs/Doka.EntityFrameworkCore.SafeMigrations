@@ -71,7 +71,9 @@ internal sealed partial class SafeMigrationExpectedTableConstraints
             uniqueConstraints,
             checkConstraints,
             foreignKeys,
-            primaryKey is null ? [] : [primaryKey],
+            primaryKey is null
+                ? []
+                : [primaryKey],
             primaryKey is null,
             uniqueConstraints,
             uniqueConstraints,

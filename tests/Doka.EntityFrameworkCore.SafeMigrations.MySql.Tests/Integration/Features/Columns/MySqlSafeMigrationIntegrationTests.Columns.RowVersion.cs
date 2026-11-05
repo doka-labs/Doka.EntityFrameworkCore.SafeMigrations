@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the ColumnsRowVersion migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlColumnsRowVersionIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlColumnsRowVersionIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlColumnsRowVersionIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlColumnsRowVersionIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     [Fact]
     public async Task ProviderGeneratedTemporalRowVersionAndJsonConstraint_AreOwnedAndIdempotent()
@@ -17,12 +19,15 @@ public sealed partial class MySqlColumnsRowVersionIntegrationTests : MySqlSafeMi
             name: "provider_artifacts",
             columns: table => new
             {
-                Id = table.Column<int>(type: "int", nullable: false)
+                Id = table
+                    .Column<int>(type: "int", nullable: false)
                     .Annotation("Doka:MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.AutoIncrement),
-                PublicId = table.Column<Guid>(type: "char(36)", fixedLength: true, maxLength: 36, nullable: false)
+                PublicId = table
+                    .Column<Guid>(type: "char(36)", fixedLength: true, maxLength: 36, nullable: false)
                     .Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Char36)
                     .Annotation("Doka:MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.None),
-                DefaultCorrelationId = table.Column<Guid>(
+                DefaultCorrelationId = table
+                    .Column<Guid>(
                         type: "char(36)",
                         fixedLength: true,
                         maxLength: 36,
@@ -97,7 +102,9 @@ public sealed partial class MySqlColumnsRowVersionIntegrationTests : MySqlSafeMi
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
-        Assert.True(Assert.Single(postflight.Assessments).PostconditionSatisfied);
+        Assert.True(Assert.Single(postflight.Assessments)
+            .PostconditionSatisfied);
+
         Assert.Empty(postflight.UnexpectedObjects);
         Assert.NotEmpty(invalidJson.Message);
         Assert.Equal(
@@ -110,6 +117,7 @@ public sealed partial class MySqlColumnsRowVersionIntegrationTests : MySqlSafeMi
                 + "AND LOWER(COLUMN_DEFAULT) IN ('current_timestamp(6)', 'now(6)') "
                 + "AND LOWER(EXTRA) LIKE '%on update current_timestamp(6)%';",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -127,7 +135,9 @@ public sealed partial class MySqlColumnsRowVersionIntegrationTests : MySqlSafeMi
             "CREATE TABLE `row_version_drift` ("
             + "`Id` int NOT NULL, "
             + "`Version` timestamp(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), "
-            + "PRIMARY KEY (`Id`));", cancellationToken: CancellationToken.None);
+            + "PRIMARY KEY (`Id`));",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         _ = builder.CreateTableIfNotExists(
@@ -147,12 +157,16 @@ public sealed partial class MySqlColumnsRowVersionIntegrationTests : MySqlSafeMi
                 new SafeMigrationRunOptions("row-version-without-update"),
                 CancellationToken.None);
 
-        var exception = await AssertOwnedGuardFailureAsync(operationToken =>
-            ExecuteOperationsAsync(context, builder.Operations, operationToken),
+        var exception = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Different,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
         Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(
             0,

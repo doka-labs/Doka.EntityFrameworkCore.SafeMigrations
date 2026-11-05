@@ -15,14 +15,20 @@ internal readonly struct MySqlSafeMigrationSetupFragment
 
     /// <summary>Retains an existing immutable fragment without copying its SQL.</summary>
     /// <param name="text">The complete existing SQL fragment.</param>
-    internal MySqlSafeMigrationSetupFragment(string text)
+    internal MySqlSafeMigrationSetupFragment(
+        string text
+    )
     {
         ArgumentNullException.ThrowIfNull(text);
 
         _text = text;
     }
 
-    private MySqlSafeMigrationSetupFragment(Part[] parts, int length, int utf8ByteCount)
+    private MySqlSafeMigrationSetupFragment(
+        Part[] parts,
+        int length,
+        int utf8ByteCount
+    )
     {
         _parts = parts;
         _length = length;
@@ -30,11 +36,13 @@ internal readonly struct MySqlSafeMigrationSetupFragment
     }
 
     /// <summary>Gets the stable UTF-16 length of the complete immutable fragment.</summary>
-    internal int Length => _text?.Length ?? (_parts is not null
-        ? _length
-        : throw new InvalidOperationException("The MySQL setup fragment is not initialized."));
+    internal int Length => _text?.Length
+        ?? (_parts is not null
+            ? _length
+            : throw new InvalidOperationException("The MySQL setup fragment is not initialized."));
 
     /// <summary>Gets the encoded payload length used by the unchanged grouping budget.</summary>
+
     // WHY: Materialized strings are counted only when grouping needs their exact size. Caching
     // would add eager work or mutable state to fragments already excluded by their UTF-16 length.
     internal int Utf8ByteCount => _text is { } text
@@ -50,7 +58,10 @@ internal readonly struct MySqlSafeMigrationSetupFragment
         {
             if (_text is { } text)
             {
-                return text.AsSpan().TrimEnd().EndsWith(";", StringComparison.Ordinal);
+                return text
+                    .AsSpan()
+                    .TrimEnd()
+                    .EndsWith(";", StringComparison.Ordinal);
             }
 
             if (_parts is null)
@@ -70,7 +81,11 @@ internal readonly struct MySqlSafeMigrationSetupFragment
                     return false;
                 }
 
-                var suffix = part.Text.AsSpan().TrimEnd();
+                var suffix = part
+                    .Text
+                    .AsSpan()
+                    .TrimEnd();
+
                 if (!suffix.IsEmpty)
                 {
                     return suffix[^1] == ';';
@@ -83,12 +98,19 @@ internal readonly struct MySqlSafeMigrationSetupFragment
 
     /// <summary>Retains already materialized provider or constant SQL without allocating a wrapper.</summary>
     /// <param name="text">The existing SQL string.</param>
-    public static implicit operator MySqlSafeMigrationSetupFragment(string text) => new(text);
+    public static implicit operator MySqlSafeMigrationSetupFragment(
+        string text
+    )
+    {
+        return new MySqlSafeMigrationSetupFragment(text);
+    }
 
     /// <summary>Defers groupable SQL pieces and materializes large independent fragments once.</summary>
     /// <param name="parts">Raw text or independently UTF-8-encoded hexadecimal pieces, in order.</param>
     /// <returns>An immutable fragment; pieces below the grouping ceiling are snapshotted until rendering.</returns>
-    internal static MySqlSafeMigrationSetupFragment Compose(params ReadOnlySpan<Part> parts)
+    internal static MySqlSafeMigrationSetupFragment Compose(
+        params ReadOnlySpan<Part> parts
+    )
     {
         var count = 0;
         var length = 0;
@@ -118,7 +140,8 @@ internal readonly struct MySqlSafeMigrationSetupFragment
             return new MySqlSafeMigrationSetupFragment(string.Empty);
         }
 
-        if (count == 1 && !single.IsHexadecimal)
+        if (count == 1
+            && !single.IsHexadecimal)
         {
             return new MySqlSafeMigrationSetupFragment(single.Text);
         }
@@ -127,10 +150,11 @@ internal readonly struct MySqlSafeMigrationSetupFragment
         {
             // WHY: The compactor passes large fragments through. Write directly from the caller's
             // span before it expires; a deferred descriptor array could not save a later SQL copy.
-            return new MySqlSafeMigrationSetupFragment(string.Create(
-                length,
-                parts,
-                static (destination, source) => WriteParts(source, destination)));
+            return new MySqlSafeMigrationSetupFragment(
+                string.Create(
+                    length,
+                    parts,
+                    static (destination, source) => WriteParts(source, destination)));
         }
 
         // WHY: Copy only the small descriptor sequence, not SQL text. No caller-owned span or
@@ -164,7 +188,9 @@ internal readonly struct MySqlSafeMigrationSetupFragment
                 }
             }
 
-            previous = part.IsHexadecimal ? '0' : text[^1];
+            previous = part.IsHexadecimal
+                ? '0'
+                : text[^1];
         }
 
         return new MySqlSafeMigrationSetupFragment(snapshot, length, bytes);
@@ -172,20 +198,27 @@ internal readonly struct MySqlSafeMigrationSetupFragment
 
     /// <summary>Materializes ungrouped SQL once, or returns the original string unchanged.</summary>
     /// <returns>The complete SQL fragment.</returns>
-    internal string ToSql() => _text ?? string.Create(Length, this,
-        static (destination, fragment) => fragment.WriteTo(destination));
+    internal string ToSql() => _text
+        ?? string.Create(
+            Length,
+            this,
+            static (destination, fragment) => fragment.WriteTo(destination));
 
     /// <summary>Writes this fragment directly into its final group without an intermediate string.</summary>
     /// <param name="destination">
     /// A destination with at least <see cref="Length" /> characters; any remaining suffix is untouched.
     /// </param>
-    internal void WriteTo(Span<char> destination)
+    internal void WriteTo(
+        Span<char> destination
+    )
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(destination.Length, Length);
         destination = destination[..Length];
         if (_text is { } text)
         {
-            text.AsSpan().CopyTo(destination);
+            text
+                .AsSpan()
+                .CopyTo(destination);
 
             return;
         }
@@ -196,7 +229,10 @@ internal readonly struct MySqlSafeMigrationSetupFragment
     /// <summary>Writes immutable parts from either a transient caller span or the deferred snapshot.</summary>
     /// <param name="parts">The validated immutable pieces in emission order.</param>
     /// <param name="destination">Exactly the region owned by the complete fragment.</param>
-    private static void WriteParts(ReadOnlySpan<Part> parts, Span<char> destination)
+    private static void WriteParts(
+        ReadOnlySpan<Part> parts,
+        Span<char> destination
+    )
     {
         var offset = 0;
         foreach (var part in parts)
@@ -213,7 +249,10 @@ internal readonly struct MySqlSafeMigrationSetupFragment
             }
             else
             {
-                part.Text.AsSpan().CopyTo(destination.Slice(offset, length));
+                part
+                    .Text
+                    .AsSpan()
+                    .CopyTo(destination.Slice(offset, length));
             }
 
             offset += length;
@@ -226,7 +265,10 @@ internal readonly struct MySqlSafeMigrationSetupFragment
     }
 
     /// <summary>Encodes one prepared SQL value with a buffer scoped strictly to the synchronous write.</summary>
-    private static void WriteHexadecimal(string text, Span<char> destination)
+    private static void WriteHexadecimal(
+        string text,
+        Span<char> destination
+    )
     {
         var buffer = ArrayPool<byte>.Shared.Rent(destination.Length / 2);
         try
@@ -250,7 +292,10 @@ internal readonly struct MySqlSafeMigrationSetupFragment
     {
         private readonly string? _text;
 
-        private Part(string text, bool isHexadecimal)
+        private Part(
+            string text,
+            bool isHexadecimal
+        )
         {
             ArgumentNullException.ThrowIfNull(text);
 
@@ -266,15 +311,24 @@ internal readonly struct MySqlSafeMigrationSetupFragment
         internal bool IsHexadecimal { get; }
 
         /// <summary>Gets the emitted UTF-16 character count.</summary>
-        internal int Length => IsHexadecimal ? checked(Encoding.UTF8.GetByteCount(Text) * 2) : Text.Length;
+        internal int Length => IsHexadecimal
+            ? checked(Encoding.UTF8.GetByteCount(Text) * 2)
+            : Text.Length;
 
         /// <summary>Describes an independent prepared SQL value without allocating its encoded string.</summary>
         /// <param name="text">The complete value to encode as hexadecimal UTF-8.</param>
         /// <returns>The immutable encoded-value descriptor.</returns>
-        internal static Part Hex(string text) => new(text, isHexadecimal: true);
+        internal static Part Hex(
+            string text
+        ) => new(text, isHexadecimal: true);
 
         /// <summary>Retains raw SQL text without allocating a wrapper.</summary>
         /// <param name="text">The immutable raw SQL piece.</param>
-        public static implicit operator Part(string text) => new(text, isHexadecimal: false);
+        public static implicit operator Part(
+            string text
+        )
+        {
+            return new Part(text, isHexadecimal: false);
+        }
     }
 }

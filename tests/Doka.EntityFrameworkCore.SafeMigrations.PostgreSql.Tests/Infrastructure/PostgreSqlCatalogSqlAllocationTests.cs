@@ -9,7 +9,6 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 /// one analysis while the dispatched SQL text accounted for 6 percent of it. The bound below is
 /// deliberately loose: it is a regression fence against reintroducing per-column composition, not
 /// a performance claim, and the absolute figure moves with the runtime and the type mappings.
-///
 /// The measured figure at the time of writing is about 2 500 bytes per column. The bound sits
 /// well above it so ordinary drift does not fail the suite, while a return to composing the
 /// table match twice per build, or to one string fragment per column, exceeds it.
@@ -55,13 +54,15 @@ public sealed class PostgreSqlCatalogSqlAllocationTests
     )
     {
         const int iterations = 200;
+
         // WHY: GetTotalAllocatedBytes counts the whole process, so a live test allocating on
         // another thread lands inside this window and fails the bound at random. The loop below
         // never awaits, so it stays on one thread and the thread-local counter measures it alone.
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var iteration = 0; iteration < iterations; iteration++)
         {
-            _ = new PostgreSqlSafeMigrationCatalogSqlBuilder(mappings, helper).Build(operation).StateExpression;
+            _ = new PostgreSqlSafeMigrationCatalogSqlBuilder(mappings, helper).Build(operation)
+                .StateExpression;
         }
 
         return (GC.GetAllocatedBytesForCurrentThread() - before) / iterations;
@@ -72,9 +73,13 @@ public sealed class PostgreSqlCatalogSqlAllocationTests
         int columnCount
     )
     {
-        var columns = Enumerable.Range(0, columnCount)
+        var columns = Enumerable
+            .Range(0, columnCount)
             .Select(static index => new ExpectedColumnDefinition(
-                "column_" + index.ToString(CultureInfo.InvariantCulture), typeof(int), false, "integer"))
+                "column_" + index.ToString(CultureInfo.InvariantCulture),
+                typeof(int),
+                false,
+                "integer"))
             .ToArray();
 
         var migration = new MigrationBuilder(context.Database.ProviderName!);

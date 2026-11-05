@@ -8,23 +8,39 @@ public sealed class PostgreSqlSchemaIdentityGenerationTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void MixedQualifierTableContract_IsConditionalOnRuntimeIdentity(bool qualifiedTable)
+    public void MixedQualifierTableContract_IsConditionalOnRuntimeIdentity(
+        bool qualifiedTable
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(
             "Host=localhost;Database=schema_generation;Username=unused;Password=unused");
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureTable(new ExpectedTableDefinition("identity_target",
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "identity_target",
                 [new ExpectedColumnDefinition("id", typeof(int), false, "integer")],
-                qualifiedTable ? "candidate_schema" : null),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
-        builder.EnsureUniqueConstraint(new ExpectedUniqueConstraintDefinition(
-                "uq_identity_target", "identity_target", ["id"], qualifiedTable ? null : "candidate_schema"),
+                qualifiedTable
+                    ? "candidate_schema"
+                    : null),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        builder.EnsureUniqueConstraint(
+            new ExpectedUniqueConstraintDefinition(
+                "uq_identity_target",
+                "identity_target",
+                ["id"],
+                qualifiedTable
+                    ? null
+                    : "candidate_schema"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
 
         // Assert
         var sql = commands[0].CommandText;
@@ -46,13 +62,20 @@ public sealed class PostgreSqlSchemaIdentityGenerationTests
         builder.DropTableIfExists("MixedCase");
 
         // Act
-        var command = Assert.Single(context.GetService<IMigrationsSqlGenerator>()
-            .Generate(builder.Operations, context.Model));
+        var command = Assert.Single(
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate(builder.Operations, context.Model));
 
         // Assert
-        Assert.Contains("pg_catalog.to_regclass('\"MixedCase\"')", command.CommandText,
+        Assert.Contains(
+            "pg_catalog.to_regclass('\"MixedCase\"')",
+            command.CommandText,
             StringComparison.Ordinal);
-        Assert.DoesNotContain("pg_catalog.to_regclass('MixedCase')", command.CommandText,
+
+        Assert.DoesNotContain(
+            "pg_catalog.to_regclass('MixedCase')",
+            command.CommandText,
             StringComparison.Ordinal);
     }
 
@@ -65,20 +88,33 @@ public sealed class PostgreSqlSchemaIdentityGenerationTests
             "Host=localhost;Database=schema_generation;Username=unused;Password=unused");
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureTable(new ExpectedTableDefinition("identity_target",
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "identity_target",
                 [new ExpectedColumnDefinition("id", typeof(int), false, "integer")]),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.Sql("SET search_path TO candidate_schema;");
-        builder.EnsureUniqueConstraint(new ExpectedUniqueConstraintDefinition(
-                "uq_identity_target", "identity_target", ["id"], "candidate_schema"),
+        builder.EnsureUniqueConstraint(
+            new ExpectedUniqueConstraintDefinition(
+                "uq_identity_target",
+                "identity_target",
+                ["id"],
+                "candidate_schema"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
 
         // Assert
-        Assert.DoesNotContain("current_schema() = 'candidate_schema'", commands[0].CommandText,
+        Assert.DoesNotContain(
+            "current_schema() = 'candidate_schema'",
+            commands[0].CommandText,
             StringComparison.Ordinal);
+
         Assert.DoesNotContain("uq_identity_target", commands[0].CommandText, StringComparison.Ordinal);
     }
 
@@ -95,12 +131,18 @@ public sealed class PostgreSqlSchemaIdentityGenerationTests
         builder.DropColumnIfExists("id", "identity_target");
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
 
         // Assert
         Assert.Equal(2, commands.Count);
-        Assert.All(commands, command => Assert.Contains(
-            "current_schema() IS DISTINCT FROM 'candidate_schema'", command.CommandText, StringComparison.Ordinal));
+        Assert.All(
+            commands,
+            command => Assert.Contains(
+                "current_schema() IS DISTINCT FROM 'candidate_schema'",
+                command.CommandText,
+                StringComparison.Ordinal));
     }
 
     /// <summary>A matching index drop discharges the dependency before the aliased column drop.</summary>
@@ -117,11 +159,17 @@ public sealed class PostgreSqlSchemaIdentityGenerationTests
         builder.DropColumnIfExists("id", "identity_target");
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
 
         // Assert
         Assert.Equal(3, commands.Count);
-        Assert.All(commands, command => Assert.DoesNotContain(
-            "current_schema() IS DISTINCT FROM 'candidate_schema'", command.CommandText, StringComparison.Ordinal));
+        Assert.All(
+            commands,
+            command => Assert.DoesNotContain(
+                "current_schema() IS DISTINCT FROM 'candidate_schema'",
+                command.CommandText,
+                StringComparison.Ordinal));
     }
 }

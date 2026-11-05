@@ -49,7 +49,10 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             .GetService<ISafeMigrationProviderAnalyzer>()
             .AnalyzeAsync(
                 context,
-                builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
+                builder
+                    .Operations
+                    .Cast<SafeMigrationOperation>()
+                    .ToArray(),
                 CancellationToken.None);
 
         var assessment = Assert.Single(preflight.Assessments);
@@ -78,14 +81,20 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
-        Assert.True(Assert.Single(postflight.Assessments).PostconditionSatisfied);
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(replay.Assessments).ObservedState);
+        Assert.True(Assert.Single(postflight.Assessments)
+            .PostconditionSatisfied);
+
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(replay.Assessments)
+                .ObservedState);
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM varchar_widening WHERE id = 1 AND value = 'preserved';",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             2,
             await ScalarIntAsync(
@@ -127,6 +136,7 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 storeType: $"character varying({targetLength})",
                 maxLength: targetLength),
             SafeMigrationPolicy.RepairIfSafe);
+
         builder.EnsureColumn(
             "varchar_fk_child",
             new ExpectedColumnDefinition(
@@ -145,11 +155,13 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-        Assert.All(preflight.Assessments, static assessment =>
-        {
-            Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-            Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
-        });
+        Assert.All(
+            preflight.Assessments,
+            static assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
+            });
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -169,7 +181,9 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 + "WHERE table_schema = current_schema() "
                 + "AND table_name IN ('varchar_fk_parent', 'varchar_fk_child') "
                 + "AND column_name IN ('code', 'parent_code') "
-                + $"AND character_maximum_length = {targetLength};", cancellationToken: CancellationToken.None));
+                + $"AND character_maximum_length = {targetLength};",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -177,13 +191,15 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 "SELECT COUNT(*) FROM pg_catalog.pg_constraint "
                 + "WHERE conname = 'fk_varchar_fk_child_parent' AND contype = 'f';",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM varchar_fk_child child "
                 + "JOIN varchar_fk_parent parent ON parent.code = child.parent_code "
-                + "WHERE child.id = 1 AND child.parent_code = 'core';", cancellationToken: CancellationToken.None));
+                + "WHERE child.id = 1 AND child.parent_code = 'core';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -227,11 +243,12 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
         Assert.True(
             preflight.Status == SafeMigrationReportStatus.Ready,
             $"Expected a repairable explicit-None column but observed "
-                + $"{assessment.ObservedState}/{assessment.Action}: "
-                + string.Join(
-                    ", ",
-                    assessment.Differences.Select(static difference =>
-                        $"{difference.Facet}={difference.Actual}->{difference.Expected}")));
+            + $"{assessment.ObservedState}/{assessment.Action}: "
+            + string.Join(
+                ", ",
+                assessment.Differences.Select(static difference =>
+                    $"{difference.Facet}={difference.Actual}->{difference.Expected}")));
+
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
         Assert.DoesNotContain(
@@ -246,7 +263,9 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             new SafeMigrationRunOptions("varchar-none-generation-replay"),
             CancellationToken.None);
 
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(replay.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(replay.Assessments)
+                .ObservedState);
     }
 
     [Fact]
@@ -306,11 +325,13 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
 
         var singleCommandCount = await CountProviderAnalysisCommandsAsync(
             connectionString,
-            singleBuilder.Operations, cancellationToken: CancellationToken.None);
+            singleBuilder.Operations,
+            cancellationToken: CancellationToken.None);
 
         var groupedCommandCount = await CountProviderAnalysisCommandsAsync(
             connectionString,
-            builder.Operations, cancellationToken: CancellationToken.None);
+            builder.Operations,
+            cancellationToken: CancellationToken.None);
 
         var runner = context.GetService<ISafeMigrationRunner>();
         var preflight = await runner.AnalyzeAsync(
@@ -323,7 +344,10 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             .GetService<ISafeMigrationProviderAnalyzer>()
             .AnalyzeAsync(
                 context,
-                builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
+                builder
+                    .Operations
+                    .Cast<SafeMigrationOperation>()
+                    .ToArray(),
                 CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -335,6 +359,7 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
                 Assert.Equal(SafeMigrationOperationalImpact.TableRewritePossible, assessment.OperationalImpact);
             });
+
         Assert.All(providerAnalysis, static analysis => Assert.True(analysis.RequiresLiveDataProof));
 
         // WHY: All catalog statements are batched identically, so equal
@@ -365,12 +390,14 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 connectionString,
                 "SELECT char_length(unicode_value) FROM varchar_narrowing WHERE id = 1;",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             4,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT char_length(trailing_value) FROM varchar_narrowing WHERE id = 1;",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             5,
             await ScalarIntAsync(
@@ -406,7 +433,10 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             .GetService<ISafeMigrationProviderAnalyzer>()
             .AnalyzeAsync(
                 context,
-                builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
+                builder
+                    .Operations
+                    .Cast<SafeMigrationOperation>()
+                    .ToArray(),
                 CancellationToken.None);
 
         var assessment = Assert.Single(preflight.Assessments);
@@ -419,7 +449,8 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
         Assert.Equal(SafeMigrationAction.Repair, assessment.Action);
         Assert.Equal("5", lengthDifference.Expected);
         Assert.Equal("unbounded", lengthDifference.Actual);
-        Assert.True(Assert.Single(providerAnalysis).RequiresLiveDataProof);
+        Assert.True(Assert.Single(providerAnalysis)
+            .RequiresLiveDataProof);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -436,20 +467,28 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
-        Assert.True(Assert.Single(postflight.Assessments).PostconditionSatisfied);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
+        Assert.True(Assert.Single(postflight.Assessments)
+            .PostconditionSatisfied);
+
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(replay.Assessments)
+                .Action);
+
         Assert.Equal(
             5,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT character_maximum_length FROM information_schema.columns "
                 + "WHERE table_schema = current_schema() AND table_name = 'varchar_unbounded_repair' "
-                + "AND column_name = 'value';", cancellationToken: CancellationToken.None));
+                + "AND column_name = 'value';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             "fits",
             await ScalarStringAsync(
                 connectionString,
-                "SELECT value FROM varchar_unbounded_repair WHERE id = 1;", cancellationToken: CancellationToken.None));
+                "SELECT value FROM varchar_unbounded_repair WHERE id = 1;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -463,7 +502,8 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             "CREATE TABLE varchar_unbounded_blocked ("
             + "id integer NOT NULL PRIMARY KEY, value character varying NULL); "
             + "INSERT INTO varchar_unbounded_blocked (id, value) "
-            + $"VALUES (1, 'fits'), (2, '{privateValue}');", cancellationToken: CancellationToken.None);
+            + $"VALUES (1, 'fits'), (2, '{privateValue}');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = BuildVarcharNarrowingOperation(
@@ -512,7 +552,8 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             "CREATE TABLE varchar_narrowing_blocked ("
             + "id integer NOT NULL PRIMARY KEY, value character varying(40) NULL); "
             + "INSERT INTO varchar_narrowing_blocked (id, value) "
-            + $"VALUES (1, 'fits'), (2, 'exact'), (3, '{privateValue}');", cancellationToken: CancellationToken.None);
+            + $"VALUES (1, 'fits'), (2, 'exact'), (3, '{privateValue}');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -547,13 +588,15 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             assessment.Differences,
             difference => difference.Expected.Contains(privateValue, StringComparison.Ordinal)
                 || difference.Actual.Contains(privateValue, StringComparison.Ordinal));
+
         Assert.Equal(
             40,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT character_maximum_length FROM information_schema.columns "
                 + "WHERE table_schema = current_schema() AND table_name = 'varchar_narrowing_blocked' "
-                + "AND column_name = 'value';", cancellationToken: CancellationToken.None));
+                + "AND column_name = 'value';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -607,7 +650,9 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 connectionString,
                 "SELECT character_maximum_length FROM information_schema.columns "
                 + "WHERE table_schema = current_schema() AND table_name = 'varchar_narrowing_race' "
-                + "AND column_name = 'value';", cancellationToken: CancellationToken.None));
+                + "AND column_name = 'value';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -653,6 +698,7 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             insert.Transaction = transaction;
             insert.CommandText = "INSERT INTO varchar_narrowing_locked_recheck (id, value) "
                 + "VALUES (2, @value);";
+
             insert.Parameters.AddWithValue("value", concurrentValue);
 
             _ = await insert.ExecuteNonQueryAsync(testCancellation.Token);
@@ -684,13 +730,16 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 connectionString,
                 "SELECT character_maximum_length FROM information_schema.columns "
                 + "WHERE table_schema = current_schema() AND table_name = 'varchar_narrowing_locked_recheck' "
-                + "AND column_name = 'value';", cancellationToken: testCancellation.Token));
+                + "AND column_name = 'value';",
+                cancellationToken: testCancellation.Token));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM varchar_narrowing_locked_recheck "
-                + $"WHERE value = '{concurrentValue}';", cancellationToken: testCancellation.Token));
+                + $"WHERE value = '{concurrentValue}';",
+                cancellationToken: testCancellation.Token));
     }
 
     [Fact]
@@ -735,7 +784,8 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 connectionString,
                 "SELECT character_maximum_length FROM information_schema.columns "
                 + "WHERE table_schema = current_schema() AND table_name = 'varchar_narrowing_timeout' "
-                + "AND column_name = 'value';", cancellationToken: CancellationToken.None));
+                + "AND column_name = 'value';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -778,6 +828,7 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
             connectionString,
             "varchar_narrowing_cancellation",
             CancellationToken.None);
+
         await cancellation.CancelAsync();
 
         _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => analysis);
@@ -788,7 +839,8 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
                 connectionString,
                 "SELECT character_maximum_length FROM information_schema.columns "
                 + "WHERE table_schema = current_schema() AND table_name = 'varchar_narrowing_cancellation' "
-                + "AND column_name = 'value';", cancellationToken: CancellationToken.None));
+                + "AND column_name = 'value';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -797,7 +849,8 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TABLE boolean_transition (value bit(1) NULL);", cancellationToken: CancellationToken.None);
+            "CREATE TABLE boolean_transition (value bit(1) NULL);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -882,5 +935,4 @@ public sealed class PostgreSqlColumnsLosslessRepairIntegrationTests : PostgreSql
 
         return builder;
     }
-
 }

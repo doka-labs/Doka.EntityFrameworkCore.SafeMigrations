@@ -23,7 +23,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
                 // ReSharper disable once LoopCanBeConvertedToQuery
                 for (var index = 0; index < table.Columns.Count; index++)
                 {
-                    ApplyPersistedDefault(table.Columns[index], ensure.Definition.Columns[index],
+                    ApplyPersistedDefault(
+                        table.Columns[index],
+                        ensure.Definition.Columns[index],
                         context.ServerVersion.IsMariaDb);
                 }
 
@@ -51,7 +53,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
     private void ApplyPersistedDefault(
         ColumnOperation operation,
         ExpectedColumnDefinition definition,
-        bool isMariaDb)
+        bool isMariaDb
+    )
     {
         if (definition.DefaultValue.StructuredExpression is { } expression)
         {
@@ -59,7 +62,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
             // engine can serialize them with backslash escapes and reparse them
             // in another mode. Only owned AST leaves can be encoded without
             // guessing at opaque SQL or changing computed/check expressions.
-            operation.DefaultValueSql = isMariaDb && definition.ClrType == typeof(byte[])
+            operation.DefaultValueSql = isMariaDb
+                && definition.ClrType == typeof(byte[])
                 && expression is SafeMigrationSqlLiteralExpression { Value: byte[] bytes, StoreType: null }
                     ? MySqlSafeMigrationSqlExpressionRenderer.RenderBinaryDefault(bytes)
                     : _expressionRenderer.RenderDefault(expression);
@@ -75,7 +79,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         // WHY: The factory already owns a defensive literal snapshot. Reuse
         // it instead of allocating another copy for unrelated binary defaults.
         var literal = operation.DefaultValue;
-        if (isMariaDb && definition.ClrType == typeof(byte[]) && literal is byte[] binary)
+        if (isMariaDb
+            && definition.ClrType == typeof(byte[])
+            && literal is byte[] binary)
         {
             // WHY: Older MariaDB catalogs expose binary literals as escaped
             // text and can replace non-UTF-8 bytes with '?'. The binary
@@ -92,11 +98,20 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         }
 
         var storeType = definition.StoreType
-            ?? _typeMappingSource.FindMapping(definition.ClrType, storeTypeName: null, keyOrIndex: false,
-                definition.IsUnicode, definition.MaxLength, definition.IsRowVersion, definition.IsFixedLength,
-                definition.Precision, definition.Scale)?.StoreType;
+            ?? _typeMappingSource.FindMapping(
+                    definition.ClrType,
+                    storeTypeName: null,
+                    keyOrIndex: false,
+                    definition.IsUnicode,
+                    definition.MaxLength,
+                    definition.IsRowVersion,
+                    definition.IsFixedLength,
+                    definition.Precision,
+                    definition.Scale)
+                ?.StoreType;
 
-        if (storeType is null || !MySqlSafeMigrationCatalogSqlBuilder.TryGetTextCapacity(storeType, out _))
+        if (storeType is null
+            || !MySqlSafeMigrationCatalogSqlBuilder.TryGetTextCapacity(storeType, out _))
         {
             // WHY: Ordinary character literal defaults do not require a
             // persisted expression. Keep their native literal semantics,

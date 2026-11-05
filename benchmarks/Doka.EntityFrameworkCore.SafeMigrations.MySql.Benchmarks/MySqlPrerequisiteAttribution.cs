@@ -61,5 +61,6 @@ public class MySqlPrerequisiteAttribution
     /// <summary>Extracts prerequisite columns once from the prebuilt immutable intent.</summary>
     /// <returns>The ordered local prerequisite count, consumed by BenchmarkDotNet.</returns>
     [Benchmark]
-    public int ExtractColumns() => SafeMigrationPrerequisiteColumns.Local(_intent).Count;
+    public int ExtractColumns() => SafeMigrationPrerequisiteColumns.Local(_intent)
+        .Count;
 }

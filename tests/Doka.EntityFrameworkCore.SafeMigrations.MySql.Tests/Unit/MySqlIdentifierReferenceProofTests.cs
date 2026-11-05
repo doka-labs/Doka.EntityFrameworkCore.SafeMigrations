@@ -23,8 +23,13 @@ public sealed class MySqlIdentifierReferenceProofTests
         Assert.Contains("DEALLOCATE PREPARE " + proof.InnerStatementName, block, StringComparison.Ordinal);
         Assert.DoesNotContain(";EXECUTE " + proof.InnerStatementName, block, StringComparison.Ordinal);
         Assert.DoesNotContain("SQLEXCEPTION", block, StringComparison.Ordinal);
-        Assert.Contains(Convert.ToHexString(Encoding.UTF8.GetBytes(
-            "SELECT value FROM (SELECT 0 AS value) doka_sm_source")), block, StringComparison.Ordinal);
+        Assert.Contains(
+            Convert.ToHexString(
+                Encoding.UTF8.GetBytes(
+                    "SELECT value FROM (SELECT 0 AS value) doka_sm_source")),
+            block,
+            StringComparison.Ordinal);
+
         Assert.DoesNotContain("BEGIN NOT ATOMIC", sql, StringComparison.Ordinal);
     }
 
@@ -44,7 +49,9 @@ public sealed class MySqlIdentifierReferenceProofTests
     [InlineData("a\0b")]
     [InlineData("caf\u00e9")]
     [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
-    public void InvalidIdentifierHeadsAreRejected(string head)
+    public void InvalidIdentifierHeadsAreRejected(
+        string head
+    )
     {
         // Arrange
         var marker = Marker;
@@ -54,7 +61,9 @@ public sealed class MySqlIdentifierReferenceProofTests
             new MySqlSafeMigrationIdentifierReferenceProof(marker, head, Scope));
 
         // Assert
-        Assert.Equal("rootIdentifier", Assert.IsType<ArgumentException>(exception).ParamName);
+        Assert.Equal("rootIdentifier",
+            Assert.IsType<ArgumentException>(exception)
+                .ParamName);
     }
 
     /// <summary>Malformed ordinal text cannot alias another operation's marker or prepared identity.</summary>
@@ -68,7 +77,9 @@ public sealed class MySqlIdentifierReferenceProofTests
     [InlineData("2147483648__")]
     [InlineData("0_")]
     [InlineData("0__payload")]
-    public void InvalidOwnedMarkersAreRejected(string suffix)
+    public void InvalidOwnedMarkersAreRejected(
+        string suffix
+    )
     {
         // Arrange
         var marker = MySqlSafeMigrationIdentifierReferenceProof.MarkerPrefix + suffix;
@@ -78,7 +89,9 @@ public sealed class MySqlIdentifierReferenceProofTests
             new MySqlSafeMigrationIdentifierReferenceProof(marker, "id", Scope));
 
         // Assert
-        Assert.Equal("marker", Assert.IsType<ArgumentException>(exception).ParamName);
+        Assert.Equal("marker",
+            Assert.IsType<ArgumentException>(exception)
+                .ParamName);
     }
 
     /// <summary>Only a complete GUID scope can contribute to provider-owned SQL identities.</summary>
@@ -90,7 +103,9 @@ public sealed class MySqlIdentifierReferenceProofTests
     [InlineData("1234567890abcdef1234567890abcdeg")]
     [InlineData("12345678-90ab-cdef-1234-567890abcdef")]
     [InlineData("1234567890abcdef1234567890abcde;")]
-    public void InvalidPreparedScopesAreRejected(string scope)
+    public void InvalidPreparedScopesAreRejected(
+        string scope
+    )
     {
         // Arrange
         var marker = Marker;
@@ -100,7 +115,9 @@ public sealed class MySqlIdentifierReferenceProofTests
             new MySqlSafeMigrationIdentifierReferenceProof(marker, "id", scope));
 
         // Assert
-        Assert.Equal("scopeId", Assert.IsType<ArgumentException>(exception).ParamName);
+        Assert.Equal("scopeId",
+            Assert.IsType<ArgumentException>(exception)
+                .ParamName);
     }
 
     /// <summary>Separate ordinals in one invocation do not share result or preparation identities.</summary>
@@ -110,7 +127,9 @@ public sealed class MySqlIdentifierReferenceProofTests
         // Arrange
         var first = new MySqlSafeMigrationIdentifierReferenceProof(Marker, "id", Scope);
         var last = new MySqlSafeMigrationIdentifierReferenceProof(
-            MySqlSafeMigrationIdentifierReferenceProof.MarkerPrefix + "2147483647__", "value", Scope);
+            MySqlSafeMigrationIdentifierReferenceProof.MarkerPrefix + "2147483647__",
+            "value",
+            Scope);
 
         // Act
         var names = new[]
@@ -119,7 +138,11 @@ public sealed class MySqlIdentifierReferenceProofTests
         };
 
         // Assert
-        Assert.Equal(names.Length, names.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(names.Length,
+            names
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count());
+
         Assert.NotEqual(first.ResultVariable, last.ResultVariable);
         Assert.All(names, static name => Assert.InRange(name.Length, 1, 64));
     }
@@ -146,7 +169,9 @@ public sealed class MySqlIdentifierReferenceProofTests
         Assert.Contains(proof.ResultVariable + " = NULL", block, StringComparison.Ordinal);
     }
 
-    private static string DecodeSelectedBlock(string sql)
+    private static string DecodeSelectedBlock(
+        string sql
+    )
     {
         var start = sql.IndexOf("THEN CONVERT(0x", StringComparison.Ordinal) + "THEN CONVERT(0x".Length;
         var end = sql.IndexOf(" USING utf8mb4)", start, StringComparison.Ordinal);

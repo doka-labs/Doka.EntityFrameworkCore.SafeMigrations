@@ -3,11 +3,16 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 {
     /// <summary>Reads duplicate-row evidence only after independent metadata and native input qualification.</summary>
-    internal async Task PopulateIndexDataProofsAsync(DbConnection connection,
-        IReadOnlyList<SafeMigrationOperation> operations, SafeMigrationProviderAnalysis[] results,
-        int? commandTimeout, CancellationToken cancellationToken)
+    internal async Task PopulateIndexDataProofsAsync(
+        DbConnection connection,
+        IReadOnlyList<SafeMigrationOperation> operations,
+        SafeMigrationProviderAnalysis[] results,
+        int? commandTimeout,
+        CancellationToken cancellationToken
+    )
     {
         List<int>? ordinals = null;
+
         // WHY: Retain original operation ordinals for the selected index data probes.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -29,8 +34,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         }
 
         var blocked = new bool[ordinals.Count];
-        await SafeMigrationCatalogProbeBatch.ReadAsync(connection, ordinals.Count,
-            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes, commandTimeout,
+        await SafeMigrationCatalogProbeBatch.ReadAsync(
+            connection,
+            ordinals.Count,
+            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes,
+            commandTimeout,
             (command, offset) => BuildIndexDataProbeStatement(command, operations, ordinals, offset),
             async (reader, offset, count, token) =>
             {
@@ -42,8 +50,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 var next = offset;
                 while (await reader.ReadAsync(token))
                 {
-                    if (next >= offset + count || reader.GetValue(0) is not int ordinal
-                        || ordinal != ordinals[next] || reader.GetValue(1) is not bool duplicate)
+                    if (next >= offset + count
+                        || reader.GetValue(0) is not int ordinal
+                        || ordinal != ordinals[next]
+                        || reader.GetValue(1) is not bool duplicate)
                     {
                         throw InvalidLivePrerequisiteEvidence();
                     }
@@ -55,7 +65,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 {
                     throw InvalidLivePrerequisiteEvidence();
                 }
-            }, cancellationToken);
+            },
+            cancellationToken);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -76,10 +87,16 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             var previous = results[ordinal];
             var different = previous.ObservedState == SafeMigrationObservedState.Different;
             results[ordinal] = new SafeMigrationProviderAnalysis(
-                different ? SafeMigrationObservedState.Different : SafeMigrationObservedState.DataBlocked,
-                previous.RepairCapability, previous.PostconditionSatisfied,
-                different ? "index_replacement_data_blocked" : "classified_data_blocked",
-                previous.OperationalImpact, previous.Differences)
+                different
+                    ? SafeMigrationObservedState.Different
+                    : SafeMigrationObservedState.DataBlocked,
+                previous.RepairCapability,
+                previous.PostconditionSatisfied,
+                different
+                    ? "index_replacement_data_blocked"
+                    : "classified_data_blocked",
+                previous.OperationalImpact,
+                previous.Differences)
             {
                 RequiresLiveDataProof = previous.RequiresLiveDataProof,
                 IsInvariantUnsupported = previous.IsInvariantUnsupported,
@@ -89,10 +106,15 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     }
 
     /// <summary>Uses only actual native input types, never authored future or rejected column alternatives.</summary>
-    private bool CanBindLiveIndexDataProbe(ExpectedIndexDefinition definition)
+    private bool CanBindLiveIndexDataProbe(
+        ExpectedIndexDefinition definition
+    )
     {
-        if (_indexInputProofs?.TryGetValue(IndexInputIdentity(0, definition, null, null),
-                out var method) != true || method != true)
+        if (_indexInputProofs?.TryGetValue(
+                IndexInputIdentity(0, definition, null, null),
+                out var method)
+            != true
+            || method != true)
         {
             return false;
         }
@@ -107,10 +129,21 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             }
 
             if (!IndexMemberTableMatches(definition, member)
-                || _livePrerequisiteColumns?.TryGetValue(LiveColumnKey(
-                    definition.Table, definition.Schema, member.Name), out var storage) != true
-                || _indexInputProofs.TryGetValue(IndexInputIdentity(storage.TypeOid,
-                    definition, key, member), out var proof) != true || proof != true)
+                || _livePrerequisiteColumns?.TryGetValue(
+                    LiveColumnKey(
+                        definition.Table,
+                        definition.Schema,
+                        member.Name),
+                    out var storage)
+                != true
+                || !_indexInputProofs.TryGetValue(
+                    IndexInputIdentity(
+                        storage.TypeOid,
+                        definition,
+                        key,
+                        member),
+                    out var proof)
+                || proof != true)
             {
                 return false;
             }
@@ -120,12 +153,19 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     }
 
     /// <summary>Preserves existing bounded statement, parameter, payload, timeout and transport contracts.</summary>
-    private SafeMigrationCatalogProbeStatement BuildIndexDataProbeStatement(SafeMigrationCatalogCommand command,
-        IReadOnlyList<SafeMigrationOperation> operations, List<int> ordinals, int offset)
+    private SafeMigrationCatalogProbeStatement BuildIndexDataProbeStatement(
+        SafeMigrationCatalogCommand command,
+        IReadOnlyList<SafeMigrationOperation> operations,
+        List<int> ordinals,
+        int offset
+    )
     {
         var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
-        var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(_typeMappingSource, _sqlGenerationHelper,
-            parameters.AddString, parameters.Add);
+        var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
+            _typeMappingSource,
+            _sqlGenerationHelper,
+            parameters.AddString,
+            parameters.Add);
 
         var selections = new List<string>();
         var sqlBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Trailer);
@@ -135,14 +175,22 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             var ordinal = ordinals[offset + selections.Count];
             var checkpoint = parameters.Capture();
             var definition = ((EnsureIndexIntent)operations[ordinal].Intent).Definition;
-            var selection = "SELECT " + ordinal.ToString(CultureInfo.InvariantCulture)
-                + ", (" + builder.UniqueIndexDataBlocked(definition) + ")";
+            var selection = "SELECT "
+                + ordinal.ToString(CultureInfo.InvariantCulture)
+                + ", ("
+                + builder.UniqueIndexDataBlocked(definition)
+                + ")";
 
-            var nextBytes = sqlBytes + Encoding.UTF8.GetByteCount(selection)
-                + (selections.Count == 0 ? 0 : Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator));
+            var nextBytes = sqlBytes
+                + Encoding.UTF8.GetByteCount(selection)
+                + (selections.Count == 0
+                    ? 0
+                    : Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator));
 
-            if (SafeMigrationCatalogQueryLimits.Exceeded(parameters.Count,
-                nextBytes + parameters.Utf8PayloadBytes, SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes))
+            if (SafeMigrationCatalogQueryLimits.Exceeded(
+                parameters.Count,
+                nextBytes + parameters.Utf8PayloadBytes,
+                SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes))
             {
                 var rejectedParameters = parameters.Count;
                 var rejectedBytes = nextBytes + parameters.Utf8PayloadBytes;
@@ -150,7 +198,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 if (selections.Count == 0)
                 {
                     throw SafeMigrationCatalogQueryLimits.OversizedOperation(
-                        ordinal, rejectedParameters, rejectedBytes);
+                        ordinal,
+                        rejectedParameters,
+                        rejectedBytes);
                 }
 
                 break;

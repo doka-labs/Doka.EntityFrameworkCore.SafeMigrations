@@ -31,21 +31,42 @@ public sealed class SafeMigrationReportSelectionTests
             SafeMigrationReportStatus.RuntimeValidationRequired,
             [assessment]);
 
-        using var nonMatching = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(
-            report,
-            SafeMigrationReportSelection.NonMatching));
+        using var nonMatching = JsonDocument.Parse(
+            SafeMigrationReportJson.SerializeToUtf8Bytes(
+                report,
+                SafeMigrationReportSelection.NonMatching));
 
-        using var blockingOnly = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(
-            report,
-            SafeMigrationReportSelection.BlockingOnly));
+        using var blockingOnly = JsonDocument.Parse(
+            SafeMigrationReportJson.SerializeToUtf8Bytes(
+                report,
+                SafeMigrationReportSelection.BlockingOnly));
 
-        var deferred = nonMatching.RootElement.GetProperty("assessments")[0];
+        var deferred = nonMatching
+            .RootElement
+            .GetProperty("assessments")[0];
+
         var deferredOrigin = deferred.GetProperty("deferredOrigin");
 
-        Assert.Equal("20260925000002_DataPreparation", deferredOrigin.GetProperty("migrationId").GetString());
-        Assert.Equal(1, deferredOrigin.GetProperty("operationOrdinal").GetInt32());
-        Assert.Equal(typeof(SqlOperation).FullName, deferredOrigin.GetProperty("operationType").GetString());
-        Assert.Empty(blockingOnly.RootElement.GetProperty("assessments").EnumerateArray());
+        Assert.Equal("20260925000002_DataPreparation",
+            deferredOrigin
+                .GetProperty("migrationId")
+                .GetString());
+
+        Assert.Equal(1,
+            deferredOrigin
+                .GetProperty("operationOrdinal")
+                .GetInt32());
+
+        Assert.Equal(typeof(SqlOperation).FullName,
+            deferredOrigin
+                .GetProperty("operationType")
+                .GetString());
+
+        Assert.Empty(blockingOnly
+            .RootElement
+            .GetProperty("assessments")
+            .EnumerateArray());
+
         report.ThrowIfBlocked();
     }
 
@@ -64,33 +85,92 @@ public sealed class SafeMigrationReportSelectionTests
         var bytes = SafeMigrationReportJson.SerializeToUtf8Bytes(
             report,
             SafeMigrationReportSelection.Complete);
+
         using var document = JsonDocument.Parse(bytes);
         var root = document.RootElement;
         var sourceReport = root.GetProperty("sourceReport");
 
-        Assert.Equal(3, root.GetProperty("schemaVersion").GetInt32());
-        Assert.Equal("safe_migration_report_view", root.GetProperty("documentKind").GetString());
-        Assert.Equal("complete", root.GetProperty("selection").GetString());
-        Assert.Equal(report.SchemaVersion, sourceReport.GetProperty("schemaVersion").GetInt32());
-        Assert.Equal(report.InstanceId, sourceReport.GetProperty("instanceId").GetString());
-        Assert.Equal(report.TargetMigrationId, sourceReport.GetProperty("targetMigrationId").GetString());
-        Assert.Equal(report.ModelFingerprint, sourceReport.GetProperty("modelFingerprint").GetString());
-        Assert.Equal(report.ContractFingerprint, sourceReport.GetProperty("contractFingerprint").GetString());
+        Assert.Equal(3,
+            root
+                .GetProperty("schemaVersion")
+                .GetInt32());
+
+        Assert.Equal("safe_migration_report_view",
+            root
+                .GetProperty("documentKind")
+                .GetString());
+
+        Assert.Equal("complete",
+            root
+                .GetProperty("selection")
+                .GetString());
+
+        Assert.Equal(report.SchemaVersion,
+            sourceReport
+                .GetProperty("schemaVersion")
+                .GetInt32());
+
+        Assert.Equal(report.InstanceId,
+            sourceReport
+                .GetProperty("instanceId")
+                .GetString());
+
+        Assert.Equal(report.TargetMigrationId,
+            sourceReport
+                .GetProperty("targetMigrationId")
+                .GetString());
+
+        Assert.Equal(report.ModelFingerprint,
+            sourceReport
+                .GetProperty("modelFingerprint")
+                .GetString());
+
+        Assert.Equal(report.ContractFingerprint,
+            sourceReport
+                .GetProperty("contractFingerprint")
+                .GetString());
+
         Assert.Equal(
             report.Environment.ServerVersion,
-            sourceReport.GetProperty("environment").GetProperty("serverVersion").GetString());
-        Assert.Equal(report.Assessments.Count, sourceReport.GetProperty("totalAssessmentCount").GetInt32());
+            sourceReport
+                .GetProperty("environment")
+                .GetProperty("serverVersion")
+                .GetString());
+
+        Assert.Equal(report.Assessments.Count,
+            sourceReport
+                .GetProperty("totalAssessmentCount")
+                .GetInt32());
+
         Assert.Equal(
             report.UnexpectedObjects.Count,
-            sourceReport.GetProperty("totalUnexpectedObjectCount").GetInt32());
-        Assert.Equal(3, root.GetProperty("includedAssessmentCount").GetInt32());
-        Assert.Equal(2, root.GetProperty("includedUnexpectedObjectCount").GetInt32());
+            sourceReport
+                .GetProperty("totalUnexpectedObjectCount")
+                .GetInt32());
+
+        Assert.Equal(3,
+            root
+                .GetProperty("includedAssessmentCount")
+                .GetInt32());
+
+        Assert.Equal(2,
+            root
+                .GetProperty("includedUnexpectedObjectCount")
+                .GetInt32());
+
         Assert.Equal(
             [9, 3, 14],
-            root.GetProperty("assessments")
+            root
+                .GetProperty("assessments")
                 .EnumerateArray()
-                .Select(static assessment => assessment.GetProperty("ordinal").GetInt32()));
-        Assert.Equal(2, root.GetProperty("unexpectedObjects").GetArrayLength());
+                .Select(static assessment => assessment
+                    .GetProperty("ordinal")
+                    .GetInt32()));
+
+        Assert.Equal(2,
+            root
+                .GetProperty("unexpectedObjects")
+                .GetArrayLength());
 
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
@@ -103,7 +183,11 @@ public sealed class SafeMigrationReportSelectionTests
         using var canonicalDocument = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
 
         Assert.False(canonicalDocument.RootElement.TryGetProperty("documentKind", out _));
-        Assert.Equal(report.SchemaVersion, canonicalDocument.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(report.SchemaVersion,
+            canonicalDocument
+                .RootElement
+                .GetProperty("schemaVersion")
+                .GetInt32());
     }
 
     [Fact]
@@ -120,19 +204,36 @@ public sealed class SafeMigrationReportSelectionTests
                 ProviderAssessment(4),
             ]);
 
-        using var document = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(
-            report,
-            SafeMigrationReportSelection.NonMatching));
+        using var document = JsonDocument.Parse(
+            SafeMigrationReportJson.SerializeToUtf8Bytes(
+                report,
+                SafeMigrationReportSelection.NonMatching));
+
         var root = document.RootElement;
 
-        Assert.Equal("non_matching", root.GetProperty("selection").GetString());
-        Assert.Equal(4, root.GetProperty("includedAssessmentCount").GetInt32());
-        Assert.Equal(2, root.GetProperty("includedUnexpectedObjectCount").GetInt32());
+        Assert.Equal("non_matching",
+            root
+                .GetProperty("selection")
+                .GetString());
+
+        Assert.Equal(4,
+            root
+                .GetProperty("includedAssessmentCount")
+                .GetInt32());
+
+        Assert.Equal(2,
+            root
+                .GetProperty("includedUnexpectedObjectCount")
+                .GetInt32());
+
         Assert.Equal(
             [1, 2, 3, 4],
-            root.GetProperty("assessments")
+            root
+                .GetProperty("assessments")
                 .EnumerateArray()
-                .Select(static assessment => assessment.GetProperty("ordinal").GetInt32()));
+                .Select(static assessment => assessment
+                    .GetProperty("ordinal")
+                    .GetInt32()));
     }
 
     [Fact]
@@ -156,20 +257,40 @@ public sealed class SafeMigrationReportSelectionTests
                 ProviderAssessment(7),
             ]);
 
-        using var document = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(
-            report,
-            SafeMigrationReportSelection.BlockingOnly));
+        using var document = JsonDocument.Parse(
+            SafeMigrationReportJson.SerializeToUtf8Bytes(
+                report,
+                SafeMigrationReportSelection.BlockingOnly));
+
         var root = document.RootElement;
 
-        Assert.Equal("blocking_only", root.GetProperty("selection").GetString());
-        Assert.Equal(4, root.GetProperty("includedAssessmentCount").GetInt32());
-        Assert.Equal(0, root.GetProperty("includedUnexpectedObjectCount").GetInt32());
+        Assert.Equal("blocking_only",
+            root
+                .GetProperty("selection")
+                .GetString());
+
+        Assert.Equal(4,
+            root
+                .GetProperty("includedAssessmentCount")
+                .GetInt32());
+
+        Assert.Equal(0,
+            root
+                .GetProperty("includedUnexpectedObjectCount")
+                .GetInt32());
+
         Assert.Equal(
             [3, 4, 5, 6],
-            root.GetProperty("assessments")
+            root
+                .GetProperty("assessments")
                 .EnumerateArray()
-                .Select(static assessment => assessment.GetProperty("ordinal").GetInt32()));
-        Assert.Empty(root.GetProperty("unexpectedObjects").EnumerateArray());
+                .Select(static assessment => assessment
+                    .GetProperty("ordinal")
+                    .GetInt32()));
+
+        Assert.Empty(root
+            .GetProperty("unexpectedObjects")
+            .EnumerateArray());
     }
 
     [Fact]
@@ -186,16 +307,21 @@ public sealed class SafeMigrationReportSelectionTests
                 ProviderAssessment(4, postconditionSatisfied: false),
             ]);
 
-        using var document = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(
-            report,
-            SafeMigrationReportSelection.BlockingOnly));
+        using var document = JsonDocument.Parse(
+            SafeMigrationReportJson.SerializeToUtf8Bytes(
+                report,
+                SafeMigrationReportSelection.BlockingOnly));
+
         var root = document.RootElement;
 
         Assert.Equal(
             [1, 2],
-            root.GetProperty("assessments")
+            root
+                .GetProperty("assessments")
                 .EnumerateArray()
-                .Select(static assessment => assessment.GetProperty("ordinal").GetInt32()));
+                .Select(static assessment => assessment
+                    .GetProperty("ordinal")
+                    .GetInt32()));
     }
 
     [Fact]
@@ -220,8 +346,15 @@ public sealed class SafeMigrationReportSelectionTests
         using var document = JsonDocument.Parse(stream.ToArray());
         var root = document.RootElement;
 
-        Assert.Equal(0, root.GetProperty("includedAssessmentCount").GetInt32());
-        Assert.Empty(root.GetProperty("assessments").EnumerateArray());
+        Assert.Equal(0,
+            root
+                .GetProperty("includedAssessmentCount")
+                .GetInt32());
+
+        Assert.Empty(root
+            .GetProperty("assessments")
+            .EnumerateArray());
+
         Assert.Contains((byte)'\n', stream.ToArray());
     }
 
@@ -244,16 +377,19 @@ public sealed class SafeMigrationReportSelectionTests
             SafeMigrationObservedState.Different,
             SafeMigrationAction.RejectDifferent,
             postconditionSatisfied: false);
+
         assessments[^3] = Assessment(
             assessmentCount - 3,
             SafeMigrationObservedState.Unsupported,
             SafeMigrationAction.RejectUnsupported,
             postconditionSatisfied: false);
+
         assessments[^2] = Assessment(
             assessmentCount - 2,
             SafeMigrationObservedState.DataBlocked,
             SafeMigrationAction.RejectDataBlocked,
             postconditionSatisfied: false);
+
         assessments[^1] = Assessment(
             assessmentCount - 1,
             SafeMigrationObservedState.PrerequisiteMissing,
@@ -265,18 +401,32 @@ public sealed class SafeMigrationReportSelectionTests
             SafeMigrationReportStatus.Blocked,
             assessments);
 
-        using var document = JsonDocument.Parse(SafeMigrationReportJson.SerializeToUtf8Bytes(
-            report,
-            SafeMigrationReportSelection.BlockingOnly));
+        using var document = JsonDocument.Parse(
+            SafeMigrationReportJson.SerializeToUtf8Bytes(
+                report,
+                SafeMigrationReportSelection.BlockingOnly));
+
         var root = document.RootElement;
 
-        Assert.Equal(assessmentCount, root.GetProperty("sourceReport").GetProperty("totalAssessmentCount").GetInt32());
-        Assert.Equal(4, root.GetProperty("includedAssessmentCount").GetInt32());
+        Assert.Equal(assessmentCount,
+            root
+                .GetProperty("sourceReport")
+                .GetProperty("totalAssessmentCount")
+                .GetInt32());
+
+        Assert.Equal(4,
+            root
+                .GetProperty("includedAssessmentCount")
+                .GetInt32());
+
         Assert.Equal(
             [assessmentCount - 4, assessmentCount - 3, assessmentCount - 2, assessmentCount - 1],
-            root.GetProperty("assessments")
+            root
+                .GetProperty("assessments")
                 .EnumerateArray()
-                .Select(static assessment => assessment.GetProperty("ordinal").GetInt32()));
+                .Select(static assessment => assessment
+                    .GetProperty("ordinal")
+                    .GetInt32()));
     }
 
     [Fact]
@@ -286,11 +436,13 @@ public sealed class SafeMigrationReportSelectionTests
             SafeMigrationReportMode.Preflight,
             SafeMigrationReportStatus.Blocked,
             [Assessment(0, SafeMigrationObservedState.Matching, SafeMigrationAction.NoOp, true)]);
+
         using var stream = new MemoryStream();
         using var writer = new Utf8JsonWriter(stream);
 
         var serializeException = Assert.Throws<InvalidOperationException>(() =>
             SafeMigrationReportJson.SerializeToUtf8Bytes(report, SafeMigrationReportSelection.BlockingOnly));
+
         var writeException = Assert.Throws<InvalidOperationException>(() =>
             SafeMigrationReportJson.Write(writer, report, SafeMigrationReportSelection.BlockingOnly));
 
@@ -312,12 +464,14 @@ public sealed class SafeMigrationReportSelectionTests
             SafeMigrationReportMode.Preflight,
             SafeMigrationReportStatus.Ready,
             [Assessment(0, SafeMigrationObservedState.Matching, SafeMigrationAction.NoOp, true)]);
+
         using var stream = new MemoryStream();
         using var writer = new Utf8JsonWriter(stream);
         var selection = (SafeMigrationReportSelection)value;
 
         var serializeException = Assert.Throws<ArgumentOutOfRangeException>(() =>
             SafeMigrationReportJson.SerializeToUtf8Bytes(report, selection));
+
         var writeException = Assert.Throws<ArgumentOutOfRangeException>(() =>
             SafeMigrationReportJson.Write(writer, report, selection));
 
@@ -334,13 +488,16 @@ public sealed class SafeMigrationReportSelectionTests
             SafeMigrationReportMode.Preflight,
             SafeMigrationReportStatus.Ready,
             [Assessment(0, SafeMigrationObservedState.Matching, SafeMigrationAction.NoOp, true)]);
+
         using var stream = new MemoryStream();
         using var writer = new Utf8JsonWriter(stream);
 
         var serializeException = Assert.Throws<ArgumentNullException>(() =>
             SafeMigrationReportJson.SerializeToUtf8Bytes(null!, SafeMigrationReportSelection.Complete));
+
         var writerException = Assert.Throws<ArgumentNullException>(() =>
             SafeMigrationReportJson.Write(null!, report, SafeMigrationReportSelection.Complete));
+
         var reportException = Assert.Throws<ArgumentNullException>(() =>
             SafeMigrationReportJson.Write(writer, null!, SafeMigrationReportSelection.Complete));
 

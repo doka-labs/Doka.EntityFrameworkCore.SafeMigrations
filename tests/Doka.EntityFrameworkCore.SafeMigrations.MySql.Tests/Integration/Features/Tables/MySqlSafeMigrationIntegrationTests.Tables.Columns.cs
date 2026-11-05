@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the TablesColumns migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlTablesColumnsIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlTablesColumnsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlTablesColumnsIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlTablesColumnsIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>Checks exact table matching cannot substitute column count for names or ordinal positions.</summary>
     /// <param name="liveColumns">The independently created live column declarations.</param>
@@ -23,8 +25,11 @@ public sealed partial class MySqlTablesColumnsIntegrationTests : MySqlSafeMigrat
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, $"CREATE TABLE `strict_column_shape` ({liveColumns});",
+        await ExecuteSqlAsync(
+            connectionString,
+            $"CREATE TABLE `strict_column_shape` ({liveColumns});",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(
@@ -39,7 +44,9 @@ public sealed partial class MySqlTablesColumnsIntegrationTests : MySqlSafeMigrat
 
         // WHY: Identical types and nullability isolate name/order drift from ordinary facet checks;
         // the independent live DDL also prevents the generator from preparing its own expected shape.
-        var definitionBefore = await ReadStrictColumnTableDefinitionAsync(connectionString, "strict_column_shape",
+        var definitionBefore = await ReadStrictColumnTableDefinitionAsync(
+            connectionString,
+            "strict_column_shape",
             cancellationToken: CancellationToken.None);
 
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -48,27 +55,49 @@ public sealed partial class MySqlTablesColumnsIntegrationTests : MySqlSafeMigrat
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("strict-column-shape-preflight"), CancellationToken.None);
+            new SafeMigrationRunOptions("strict-column-shape-preflight"),
+            CancellationToken.None);
 
-        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
         var postflight = await runner.VerifyAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("strict-column-shape-postflight"), CancellationToken.None);
+            new SafeMigrationRunOptions("strict-column-shape-postflight"),
+            CancellationToken.None);
 
-        var definitionAfter = await ReadStrictColumnTableDefinitionAsync(connectionString, "strict_column_shape",
+        var definitionAfter = await ReadStrictColumnTableDefinitionAsync(
+            connectionString,
+            "strict_column_shape",
             cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(preflight.Assessments);
-        Assert.Equal(matching ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(
-            matching ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
+            matching
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
+            preflight.Status);
+
+        Assert.Equal(
+            matching
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Different,
             assessment.ObservedState);
-        Assert.Equal(matching ? SafeMigrationAction.NoOp : SafeMigrationAction.RejectDifferent, assessment.Action);
-        Assert.Equal(matching, Assert.Single(postflight.Assessments).PostconditionSatisfied);
+
+        Assert.Equal(
+            matching
+                ? SafeMigrationAction.NoOp
+                : SafeMigrationAction.RejectDifferent,
+            assessment.Action);
+
+        Assert.Equal(matching,
+            Assert.Single(postflight.Assessments)
+                .PostconditionSatisfied);
+
         Assert.Equal(definitionBefore, definitionAfter);
         if (matching)
         {
@@ -92,11 +121,16 @@ public sealed partial class MySqlTablesColumnsIntegrationTests : MySqlSafeMigrat
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var defaultClause = hasExpectedDefault ? " DEFAULT 7" : string.Empty;
+        var defaultClause = hasExpectedDefault
+            ? " DEFAULT 7"
+            : string.Empty;
+
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `strict_column_default` (`id` int NOT NULL, `code` int NOT NULL"
-            + defaultClause + ");", cancellationToken: CancellationToken.None);
+            + defaultClause
+            + ");",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -105,7 +139,11 @@ public sealed partial class MySqlTablesColumnsIntegrationTests : MySqlSafeMigrat
                 "strict_column_default",
                 [
                     new ExpectedColumnDefinition("id", typeof(int), isNullable: false, storeType: "int"),
-                    new ExpectedColumnDefinition("code", typeof(int), isNullable: false, storeType: "int",
+                    new ExpectedColumnDefinition(
+                        "code",
+                        typeof(int),
+                        isNullable: false,
+                        storeType: "int",
                         defaultValue: SafeMigrationDefaultValue.Literal(7)),
                 ]),
             SafeMigrationTableMode.StrictDefinition,
@@ -117,9 +155,12 @@ public sealed partial class MySqlTablesColumnsIntegrationTests : MySqlSafeMigrat
             connectionString,
             "SELECT (c.COLUMN_DEFAULT IN ('7')) IS NULL FROM INFORMATION_SCHEMA.COLUMNS c "
             + "WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = 'strict_column_default' "
-            + "AND c.COLUMN_NAME = 'code';", cancellationToken: CancellationToken.None);
+            + "AND c.COLUMN_NAME = 'code';",
+            cancellationToken: CancellationToken.None);
 
-        var definitionBefore = await ReadStrictColumnTableDefinitionAsync(connectionString, "strict_column_default",
+        var definitionBefore = await ReadStrictColumnTableDefinitionAsync(
+            connectionString,
+            "strict_column_default",
             cancellationToken: CancellationToken.None);
 
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -128,32 +169,55 @@ public sealed partial class MySqlTablesColumnsIntegrationTests : MySqlSafeMigrat
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("strict-column-default-preflight"), CancellationToken.None);
+            new SafeMigrationRunOptions("strict-column-default-preflight"),
+            CancellationToken.None);
 
-        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var runtimeException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
         var postflight = await runner.VerifyAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("strict-column-default-postflight"), CancellationToken.None);
+            new SafeMigrationRunOptions("strict-column-default-postflight"),
+            CancellationToken.None);
 
-        var definitionAfter = await ReadStrictColumnTableDefinitionAsync(connectionString, "strict_column_default",
+        var definitionAfter = await ReadStrictColumnTableDefinitionAsync(
+            connectionString,
+            "strict_column_default",
             cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(preflight.Assessments);
-        Assert.Equal(hasExpectedDefault ? 0 : 1, nullComparison);
         Assert.Equal(
-            hasExpectedDefault ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+            hasExpectedDefault
+                ? 0
+                : 1,
+            nullComparison);
+
+        Assert.Equal(
+            hasExpectedDefault
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
             preflight.Status);
+
         Assert.Equal(
-            hasExpectedDefault ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
+            hasExpectedDefault
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Different,
             assessment.ObservedState);
+
         Assert.Equal(
-            hasExpectedDefault ? SafeMigrationAction.NoOp : SafeMigrationAction.RejectDifferent,
+            hasExpectedDefault
+                ? SafeMigrationAction.NoOp
+                : SafeMigrationAction.RejectDifferent,
             assessment.Action);
-        Assert.Equal(hasExpectedDefault, Assert.Single(postflight.Assessments).PostconditionSatisfied);
+
+        Assert.Equal(hasExpectedDefault,
+            Assert.Single(postflight.Assessments)
+                .PostconditionSatisfied);
+
         Assert.Equal(definitionBefore, definitionAfter);
         if (hasExpectedDefault)
         {
@@ -198,15 +262,24 @@ public sealed partial class MySqlTablesColumnsIntegrationTests : MySqlSafeMigrat
             new ExpectedTableDefinition(
                 "mixed_collation",
                 [
-                    new ExpectedColumnDefinition("pinned", typeof(string), isNullable: false,
-                        storeType: "varchar(32)", collation: new SafeMigrationCollationIdentifier("utf8mb4_bin")),
-                    new ExpectedColumnDefinition("inherited", typeof(string), isNullable: false,
+                    new ExpectedColumnDefinition(
+                        "pinned",
+                        typeof(string),
+                        isNullable: false,
+                        storeType: "varchar(32)",
+                        collation: new SafeMigrationCollationIdentifier("utf8mb4_bin")),
+                    new ExpectedColumnDefinition(
+                        "inherited",
+                        typeof(string),
+                        isNullable: false,
                         storeType: "varchar(32)"),
                 ]),
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var definitionBefore = await ReadStrictColumnTableDefinitionAsync(connectionString, "mixed_collation",
+        var definitionBefore = await ReadStrictColumnTableDefinitionAsync(
+            connectionString,
+            "mixed_collation",
             cancellationToken: CancellationToken.None);
 
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -215,16 +288,22 @@ public sealed partial class MySqlTablesColumnsIntegrationTests : MySqlSafeMigrat
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("mixed-collation-preflight"), CancellationToken.None);
+            new SafeMigrationRunOptions("mixed-collation-preflight"),
+            CancellationToken.None);
 
-        var definitionAfter = await ReadStrictColumnTableDefinitionAsync(connectionString, "mixed_collation",
+        var definitionAfter = await ReadStrictColumnTableDefinitionAsync(
+            connectionString,
+            "mixed_collation",
             cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(preflight.Assessments);
         Assert.Equal(
-            matching ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
+            matching
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Different,
             assessment.ObservedState);
+
         Assert.Equal(definitionBefore, definitionAfter);
     }
 

@@ -8,18 +8,26 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void RuntimeCollisionGuardPreservesMatchingPrecedence(bool mariaDb)
+    public void RuntimeCollisionGuardPreservesMatchingPrecedence(
+        bool mariaDb
+    )
     {
         // Arrange
         using var context = CreateContext(mariaDb);
-        var operation = new SafeMigrationOperation(new EnsureForeignKeyIntent(
-            new ExpectedForeignKeyDefinition("fk_owner", "child_items", ["owner"], "parent_items", ["id"])),
+        var operation = new SafeMigrationOperation(
+            new EnsureForeignKeyIntent(
+                new ExpectedForeignKeyDefinition("fk_owner", "child_items", ["owner"], "parent_items", ["id"])),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        using var lease = context.GetService<MySqlSafeMigrationPlanCapture>().Begin([operation]);
+        using var lease = context
+            .GetService<MySqlSafeMigrationPlanCapture>()
+            .Begin([operation]);
 
         // Act
-        _ = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        _ = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
+
         var plans = lease.Complete();
 
         // Assert
@@ -43,26 +51,45 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void RuntimeCollisionGuardUsesNativePrefixDirection(bool mariaDb)
+    public void RuntimeCollisionGuardUsesNativePrefixDirection(
+        bool mariaDb
+    )
     {
         // Arrange
         using var context = CreateContext(mariaDb);
-        var operation = new SafeMigrationOperation(new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition(
-            "fk_owner", "child_items", ["first_owner", "second_owner"], "parent_items", ["first_id", "second_id"])),
+        var operation = new SafeMigrationOperation(
+            new EnsureForeignKeyIntent(
+                new ExpectedForeignKeyDefinition(
+                    "fk_owner",
+                    "child_items",
+                    ["first_owner", "second_owner"],
+                    "parent_items",
+                    ["first_id", "second_id"])),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        using var lease = context.GetService<MySqlSafeMigrationPlanCapture>().Begin([operation]);
+        using var lease = context
+            .GetService<MySqlSafeMigrationPlanCapture>()
+            .Begin([operation]);
 
         // Act
-        _ = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        _ = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
+
         var plans = lease.Complete();
 
         // Assert
         var plan = Assert.Single(plans);
 
-        Assert.Equal(!mariaDb, plan.StateExpression.Contains("supporting_index.COLLATION = 'A'",
-            StringComparison.Ordinal));
-        Assert.DoesNotContain("SUM(CASE WHEN supporting_index.COLLATION = 'D'", plan.StateExpression,
+        Assert.Equal(
+            !mariaDb,
+            plan.StateExpression.Contains(
+                "supporting_index.COLLATION = 'A'",
+                StringComparison.Ordinal));
+
+        Assert.DoesNotContain(
+            "SUM(CASE WHEN supporting_index.COLLATION = 'D'",
+            plan.StateExpression,
             StringComparison.Ordinal);
     }
 
@@ -76,17 +103,31 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
 
         // Act
         var coverage = MySqlSafeMigrationCatalogSqlBuilder.BuildForeignKeyChildCoveringIndexQuery(
-            table, ["@column"], isMariaDb: false);
+            table,
+            ["@column"],
+            isMariaDb: false);
+
         var occupation = MySqlSafeMigrationCatalogSqlBuilder.IsSupportingIndexNameOccupied(table, name);
 
         // Assert
-        Assert.Contains("CAST(supporting_index.TABLE_NAME AS BINARY) = CAST(@bound_child AS BINARY)", coverage,
+        Assert.Contains(
+            "CAST(supporting_index.TABLE_NAME AS BINARY) = CAST(@bound_child AS BINARY)",
+            coverage,
             StringComparison.Ordinal);
-        Assert.Contains("CAST(supporting_index.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)", coverage,
+
+        Assert.Contains(
+            "CAST(supporting_index.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+            coverage,
             StringComparison.Ordinal);
-        Assert.Contains("CAST(automatic_index_name.TABLE_NAME AS BINARY) = CAST(@bound_child AS BINARY)", occupation,
+
+        Assert.Contains(
+            "CAST(automatic_index_name.TABLE_NAME AS BINARY) = CAST(@bound_child AS BINARY)",
+            occupation,
             StringComparison.Ordinal);
-        Assert.Contains("CAST(automatic_index_name.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)", occupation,
+
+        Assert.Contains(
+            "CAST(automatic_index_name.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+            occupation,
             StringComparison.Ordinal);
     }
 
@@ -95,7 +136,9 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void SupportingIndexIdentifiersPreserveNativeCaseWithoutAccentFolding(bool mariaDb)
+    public void SupportingIndexIdentifiersPreserveNativeCaseWithoutAccentFolding(
+        bool mariaDb
+    )
     {
         // Arrange
         const string table = "@child";
@@ -104,16 +147,28 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
 
         // Act
         var coverage = MySqlSafeMigrationCatalogSqlBuilder.BuildForeignKeyChildCoveringIndexQuery(
-            table, columns, mariaDb);
+            table,
+            columns,
+            mariaDb);
+
         var occupation = MySqlSafeMigrationCatalogSqlBuilder.IsSupportingIndexNameOccupied(table, name);
 
         // Assert
-        Assert.Contains("CAST(LOWER(supporting_index.COLUMN_NAME) AS BINARY) = CAST(LOWER(@column) AS BINARY)",
-            coverage, StringComparison.Ordinal);
-        Assert.Contains("GROUP BY supporting_index.INDEX_NAME, CAST(supporting_index.INDEX_NAME AS BINARY)",
-            coverage, StringComparison.Ordinal);
-        Assert.Contains("CAST(LOWER(automatic_index_name.INDEX_NAME) AS BINARY) = CAST(LOWER(@index) AS BINARY)",
-            occupation, StringComparison.Ordinal);
+        Assert.Contains(
+            "CAST(LOWER(supporting_index.COLUMN_NAME) AS BINARY) = CAST(LOWER(@column) AS BINARY)",
+            coverage,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "GROUP BY supporting_index.INDEX_NAME, CAST(supporting_index.INDEX_NAME AS BINARY)",
+            coverage,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "CAST(LOWER(automatic_index_name.INDEX_NAME) AS BINARY) = CAST(LOWER(@index) AS BINARY)",
+            occupation,
+            StringComparison.Ordinal);
+
         Assert.DoesNotContain(" COLLATE ", coverage, StringComparison.Ordinal);
         Assert.DoesNotContain(" COLLATE ", occupation, StringComparison.Ordinal);
     }
@@ -125,21 +180,19 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
     [InlineData("empty_catalog")]
     [InlineData("null_expected")]
     [InlineData("empty_expected")]
-    public void NativeIdentifierMatcherRejectsIncompleteOperands(string shape)
+    public void NativeIdentifierMatcherRejectsIncompleteOperands(
+        string shape
+    )
     {
         // Arrange
         var catalog = shape switch
         {
-            "null_catalog" => null,
-            "empty_catalog" => string.Empty,
-            _ => "s.COLUMN_NAME",
+            "null_catalog" => null, "empty_catalog" => string.Empty, _ => "s.COLUMN_NAME",
         };
 
         var expected = shape switch
         {
-            "null_expected" => null,
-            "empty_expected" => string.Empty,
-            _ => "@column",
+            "null_expected" => null, "empty_expected" => string.Empty, _ => "@column",
         };
 
         // Act
@@ -159,23 +212,43 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
 
         // Act
         var sql = MySqlSafeMigrationCatalogSqlBuilder.BuildForeignKeyMultiValuedIndexRisk(
-            "@child", columns, isMariaDb: false);
+            "@child",
+            columns,
+            isMariaDb: false);
 
         // Assert
-        Assert.StartsWith("EXISTS (SELECT supporting_index.INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS ", sql,
+        Assert.StartsWith(
+            "EXISTS (SELECT supporting_index.INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS ",
+            sql,
             StringComparison.Ordinal);
-        Assert.Contains("CAST(supporting_index.TABLE_NAME AS BINARY) = CAST(@child AS BINARY)", sql,
+
+        Assert.Contains(
+            "CAST(supporting_index.TABLE_NAME AS BINARY) = CAST(@child AS BINARY)",
+            sql,
             StringComparison.Ordinal);
-        Assert.Contains("supporting_index.SEQ_IN_INDEX = 1 AND supporting_index.COLUMN_NAME = @first ", sql,
+
+        Assert.Contains(
+            "supporting_index.SEQ_IN_INDEX = 1 AND supporting_index.COLUMN_NAME = @first ",
+            sql,
             StringComparison.Ordinal);
-        Assert.Contains("supporting_index.SEQ_IN_INDEX = 2 AND supporting_index.COLUMN_NAME = @second ", sql,
+
+        Assert.Contains(
+            "supporting_index.SEQ_IN_INDEX = 2 AND supporting_index.COLUMN_NAME = @second ",
+            sql,
             StringComparison.Ordinal);
+
         Assert.Contains("supporting_index.SUB_PART IS NULL", sql, StringComparison.Ordinal);
         Assert.Contains("supporting_index.EXPRESSION IS NOT NULL", sql, StringComparison.Ordinal);
-        Assert.Contains("CAST(LEFT(supporting_index.EXPRESSION, 5) AS BINARY) = CAST('cast(' AS BINARY)", sql,
+        Assert.Contains(
+            "CAST(LEFT(supporting_index.EXPRESSION, 5) AS BINARY) = CAST('cast(' AS BINARY)",
+            sql,
             StringComparison.Ordinal);
-        Assert.Contains("CAST(RIGHT(supporting_index.EXPRESSION, 7) AS BINARY) = CAST(' array)' AS BINARY)", sql,
+
+        Assert.Contains(
+            "CAST(RIGHT(supporting_index.EXPRESSION, 7) AS BINARY) = CAST(' array)' AS BINARY)",
+            sql,
             StringComparison.Ordinal);
+
         Assert.EndsWith("THEN 1 ELSE 0 END) > 0)", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("COLLATION =", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("automatic_index_name", sql, StringComparison.Ordinal);
@@ -193,7 +266,9 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
 
         // Act
         var sql = MySqlSafeMigrationCatalogSqlBuilder.BuildForeignKeyMultiValuedIndexRisk(
-            "@child", columns, isMariaDb: true);
+            "@child",
+            columns,
+            isMariaDb: true);
 
         // Assert
         Assert.Equal("FALSE", sql);
@@ -204,14 +279,18 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void MultiValuedInventoryRetainsExactUnsafeNames(bool mariaDb)
+    public void MultiValuedInventoryRetainsExactUnsafeNames(
+        bool mariaDb
+    )
     {
         // Arrange
         string[] columns = ["@column"];
 
         // Act
         var query = MySqlSafeMigrationCatalogSqlBuilder.BuildForeignKeyMultiValuedIndexQuery(
-            "@child", columns, mariaDb);
+            "@child",
+            columns,
+            mariaDb);
 
         // Assert
         if (mariaDb)
@@ -221,14 +300,16 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
         else
         {
             Assert.StartsWith("SELECT supporting_index.INDEX_NAME", query, StringComparison.Ordinal);
-            Assert.Contains("GROUP BY supporting_index.INDEX_NAME, "
-                + "CAST(supporting_index.INDEX_NAME AS BINARY) HAVING COUNT(*) >= 1", query,
+            Assert.Contains(
+                "GROUP BY supporting_index.INDEX_NAME, "
+                + "CAST(supporting_index.INDEX_NAME AS BINARY) HAVING COUNT(*) >= 1",
+                query,
                 StringComparison.Ordinal);
+
             Assert.Contains("supporting_index.EXPRESSION IS NOT NULL", query, StringComparison.Ordinal);
             Assert.DoesNotContain("COLLATION =", query, StringComparison.Ordinal);
             Assert.DoesNotContain("GROUP_CONCAT", query, StringComparison.Ordinal);
         }
-
     }
 
     /// <summary>Reuses native case rules without relying on broad metadata collation equality.</summary>
@@ -241,19 +322,26 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
 
         // Act
         var coverage = MySqlSafeMigrationCatalogSqlBuilder.BuildForeignKeyChildCoveringIndexQuery(
-            table, columns, isMariaDb: false);
+            table,
+            columns,
+            isMariaDb: false);
+
         var occupation = MySqlSafeMigrationCatalogSqlBuilder.IsSupportingIndexNameOccupied(table, "@fk");
         var unsafeQuery = MySqlSafeMigrationCatalogSqlBuilder.BuildForeignKeyMultiValuedIndexQuery(
-            table, columns, isMariaDb: false);
+            table,
+            columns,
+            isMariaDb: false);
 
         // Assert
-        Assert.All(new[] { coverage, occupation, unsafeQuery }, sql =>
-        {
-            Assert.Contains("CASE WHEN @@lower_case_table_names = 0 THEN", sql, StringComparison.Ordinal);
-            Assert.Contains("WHEN @@lower_case_table_names IN (1, 2) THEN", sql, StringComparison.Ordinal);
-            Assert.Contains("CAST(LOWER(@child) AS BINARY) ELSE FALSE END)", sql, StringComparison.Ordinal);
-            Assert.DoesNotContain(" COLLATE ", sql, StringComparison.Ordinal);
-        });
+        Assert.All(
+            new[] { coverage, occupation, unsafeQuery },
+            sql =>
+            {
+                Assert.Contains("CASE WHEN @@lower_case_table_names = 0 THEN", sql, StringComparison.Ordinal);
+                Assert.Contains("WHEN @@lower_case_table_names IN (1, 2) THEN", sql, StringComparison.Ordinal);
+                Assert.Contains("CAST(LOWER(@child) AS BINARY) ELSE FALSE END)", sql, StringComparison.Ordinal);
+                Assert.DoesNotContain(" COLLATE ", sql, StringComparison.Ordinal);
+            });
     }
 
     /// <summary>Native integrity qualification precedes matching and constrains the final FK postcondition.</summary>
@@ -261,17 +349,31 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void MultiValuedIntegrityGuardPrecedesMatchingAndSurvivesPostcondition(bool mariaDb)
+    public void MultiValuedIntegrityGuardPrecedesMatchingAndSurvivesPostcondition(
+        bool mariaDb
+    )
     {
         // Arrange
         using var context = CreateContext(mariaDb);
-        var operation = new SafeMigrationOperation(new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition(
-            "fk_owner", "child_items", ["owner"], "parent_items", ["id"])), SafeMigrationPolicy.ThrowIfDifferent);
+        var operation = new SafeMigrationOperation(
+            new EnsureForeignKeyIntent(
+                new ExpectedForeignKeyDefinition(
+                    "fk_owner",
+                    "child_items",
+                    ["owner"],
+                    "parent_items",
+                    ["id"])),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
-        using var lease = context.GetService<MySqlSafeMigrationPlanCapture>().Begin([operation]);
+        using var lease = context
+            .GetService<MySqlSafeMigrationPlanCapture>()
+            .Begin([operation]);
 
         // Act
-        _ = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        _ = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
+
         var plans = lease.Complete();
 
         // Assert
@@ -279,13 +381,24 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
         var state = plan.StateExpression;
 
         Assert.Equal("foreign_key_multi_valued_supporting_index", plan.UnsupportedCode);
-        Assert.True(state.IndexOf("THEN 'unsupported'", StringComparison.Ordinal)
+        Assert.True(
+            state.IndexOf("THEN 'unsupported'", StringComparison.Ordinal)
             < state.IndexOf("THEN 'matching'", StringComparison.Ordinal));
+
         Assert.Equal(!mariaDb, state.Contains("supporting_index.EXPRESSION IS NOT NULL", StringComparison.Ordinal));
-        Assert.Equal(!mariaDb, plan.Postcondition.Contains("supporting_index.EXPRESSION IS NOT NULL",
-            StringComparison.Ordinal));
-        Assert.Contains(mariaDb ? "NOT (FALSE)" : "NOT (EXISTS (SELECT supporting_index.INDEX_NAME",
-            plan.Postcondition, StringComparison.Ordinal);
+        Assert.Equal(
+            !mariaDb,
+            plan.Postcondition.Contains(
+                "supporting_index.EXPRESSION IS NOT NULL",
+                StringComparison.Ordinal));
+
+        Assert.Contains(
+            mariaDb
+                ? "NOT (FALSE)"
+                : "NOT (EXISTS (SELECT supporting_index.INDEX_NAME",
+            plan.Postcondition,
+            StringComparison.Ordinal);
+
         Assert.Contains(" AND ", plan.Postcondition, StringComparison.Ordinal);
         Assert.Contains(") OR (NOT (", plan.Postcondition, StringComparison.Ordinal);
     }
@@ -295,17 +408,25 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void MultiValuedDropDependencyGuardPrecedesMatching(bool mariaDb)
+    public void MultiValuedDropDependencyGuardPrecedesMatching(
+        bool mariaDb
+    )
     {
         // Arrange
         using var context = CreateContext(mariaDb);
-        var operation = new SafeMigrationOperation(new DropIndexIntent("unsafe_array_key", "child_items"),
+        var operation = new SafeMigrationOperation(
+            new DropIndexIntent("unsafe_array_key", "child_items"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        using var lease = context.GetService<MySqlSafeMigrationPlanCapture>().Begin([operation]);
+        using var lease = context
+            .GetService<MySqlSafeMigrationPlanCapture>()
+            .Begin([operation]);
 
         // Act
-        _ = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        _ = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
+
         var plans = lease.Complete();
 
         // Assert
@@ -314,10 +435,16 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
 
         Assert.Equal("foreign_key_multi_valued_supporting_index", plan.UnsupportedCode);
         Assert.Contains("THEN 'unsupported'", state, StringComparison.Ordinal);
-        Assert.True(state.IndexOf("THEN 'unsupported'", StringComparison.Ordinal)
+        Assert.True(
+            state.IndexOf("THEN 'unsupported'", StringComparison.Ordinal)
             < state.IndexOf("'matching'", StringComparison.Ordinal));
-        Assert.Equal(!mariaDb, state.Contains("dependent_fk.REFERENCED_TABLE_NAME IS NOT NULL",
-            StringComparison.Ordinal));
+
+        Assert.Equal(
+            !mariaDb,
+            state.Contains(
+                "dependent_fk.REFERENCED_TABLE_NAME IS NOT NULL",
+                StringComparison.Ordinal));
+
         Assert.Equal(!mariaDb, state.Contains("array_part.EXPRESSION IS NOT NULL", StringComparison.Ordinal));
         Assert.DoesNotContain("DROP FOREIGN KEY", state, StringComparison.Ordinal);
     }
@@ -332,12 +459,17 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
 
         // Act
         var query = MySqlSafeMigrationCatalogSqlBuilder.BuildMultiValuedIndexBoundForeignKeysQuery(
-            table, index, isMariaDb: false);
+            table,
+            index,
+            isMariaDb: false);
 
         // Assert
-        Assert.StartsWith("SELECT DISTINCT dependent_fk.CONSTRAINT_NAME "
-            + "FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE ", query,
+        Assert.StartsWith(
+            "SELECT DISTINCT dependent_fk.CONSTRAINT_NAME "
+            + "FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE ",
+            query,
             StringComparison.Ordinal);
+
         Assert.Contains("LEFT JOIN INFORMATION_SCHEMA.STATISTICS bound_index ON ", query, StringComparison.Ordinal);
         Assert.Contains("bound_index.SEQ_IN_INDEX = dependent_fk.ORDINAL_POSITION", query, StringComparison.Ordinal);
         Assert.Contains("bound_index.COLUMN_NAME = dependent_fk.COLUMN_NAME", query, StringComparison.Ordinal);
@@ -345,16 +477,28 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
         Assert.Contains("bound_index.INDEX_NAME = @unsafe_index", query, StringComparison.Ordinal);
         Assert.Contains("bound_index.INDEX_TYPE = 'BTREE'", query, StringComparison.Ordinal);
         Assert.Contains("dependent_fk.REFERENCED_TABLE_NAME IS NOT NULL", query, StringComparison.Ordinal);
-        Assert.Contains("GROUP BY dependent_fk.CONSTRAINT_NAME, CAST(dependent_fk.CONSTRAINT_NAME AS BINARY), "
+        Assert.Contains(
+            "GROUP BY dependent_fk.CONSTRAINT_NAME, CAST(dependent_fk.CONSTRAINT_NAME AS BINARY), "
             + "unsafe_index.INDEX_NAME, CAST(unsafe_index.INDEX_NAME AS BINARY) "
             + "HAVING COUNT(*) = COUNT(bound_index.SEQ_IN_INDEX)",
-            query, StringComparison.Ordinal);
-        Assert.Contains("CAST(LEFT(array_part.EXPRESSION, 5) AS BINARY) = CAST('cast(' AS BINARY)", query,
+            query,
             StringComparison.Ordinal);
-        Assert.Contains("CAST(RIGHT(array_part.EXPRESSION, 7) AS BINARY) = CAST(' array)' AS BINARY)", query,
+
+        Assert.Contains(
+            "CAST(LEFT(array_part.EXPRESSION, 5) AS BINARY) = CAST('cast(' AS BINARY)",
+            query,
             StringComparison.Ordinal);
-        Assert.Contains("array_part.TABLE_SCHEMA = DATABASE() AND array_part.TABLE_NAME = @child", query,
+
+        Assert.Contains(
+            "CAST(RIGHT(array_part.EXPRESSION, 7) AS BINARY) = CAST(' array)' AS BINARY)",
+            query,
             StringComparison.Ordinal);
+
+        Assert.Contains(
+            "array_part.TABLE_SCHEMA = DATABASE() AND array_part.TABLE_NAME = @child",
+            query,
+            StringComparison.Ordinal);
+
         Assert.DoesNotContain("array_part.TABLE_SCHEMA = dependent_fk.TABLE_SCHEMA", query, StringComparison.Ordinal);
         Assert.DoesNotContain("COLLATION =", query, StringComparison.Ordinal);
         Assert.DoesNotContain("NON_UNIQUE", query, StringComparison.Ordinal);
@@ -372,7 +516,9 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
 
         // Act
         var query = MySqlSafeMigrationCatalogSqlBuilder.BuildMultiValuedIndexBoundForeignKeysQuery(
-            table, target, isMariaDb: false);
+            table,
+            target,
+            isMariaDb: false);
 
         // Assert
         Assert.Contains("JOIN (SELECT array_part.INDEX_NAME", query, StringComparison.Ordinal);
@@ -393,15 +539,21 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
 
         // Act
         var query = MySqlSafeMigrationCatalogSqlBuilder.BuildMultiValuedIndexBoundForeignKeysQuery(
-            table, target, isMariaDb: false);
+            table,
+            target,
+            isMariaDb: false);
 
         // Assert
         Assert.Contains("unsafe_prefix.SEQ_IN_INDEX = dependent_fk.ORDINAL_POSITION", query, StringComparison.Ordinal);
         Assert.Contains("unsafe_prefix.COLUMN_NAME = dependent_fk.COLUMN_NAME", query, StringComparison.Ordinal);
         Assert.Contains("unsafe_prefix.SUB_PART IS NULL", query, StringComparison.Ordinal);
         Assert.Contains("unsafe_prefix.INDEX_TYPE = 'BTREE'", query, StringComparison.Ordinal);
-        Assert.Contains("HAVING COUNT(*) = COUNT(bound_index.SEQ_IN_INDEX) "
-            + "AND COUNT(*) = COUNT(unsafe_prefix.SEQ_IN_INDEX)", query, StringComparison.Ordinal);
+        Assert.Contains(
+            "HAVING COUNT(*) = COUNT(bound_index.SEQ_IN_INDEX) "
+            + "AND COUNT(*) = COUNT(unsafe_prefix.SEQ_IN_INDEX)",
+            query,
+            StringComparison.Ordinal);
+
         Assert.Contains("CAST(unsafe_prefix.TABLE_NAME AS BINARY)", query, StringComparison.Ordinal);
         Assert.Contains("CAST(unsafe_prefix.TABLE_SCHEMA AS BINARY)", query, StringComparison.Ordinal);
     }
@@ -416,13 +568,18 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
 
         // Act
         var query = MySqlSafeMigrationCatalogSqlBuilder.BuildMultiValuedIndexBoundForeignKeysQuery(
-            table, target, isMariaDb: false);
+            table,
+            target,
+            isMariaDb: false);
 
         // Assert
         Assert.StartsWith("SELECT DISTINCT dependent_fk.CONSTRAINT_NAME", query, StringComparison.Ordinal);
-        Assert.Contains("GROUP BY dependent_fk.CONSTRAINT_NAME, CAST(dependent_fk.CONSTRAINT_NAME AS BINARY), "
-            + "unsafe_index.INDEX_NAME, CAST(unsafe_index.INDEX_NAME AS BINARY)", query,
+        Assert.Contains(
+            "GROUP BY dependent_fk.CONSTRAINT_NAME, CAST(dependent_fk.CONSTRAINT_NAME AS BINARY), "
+            + "unsafe_index.INDEX_NAME, CAST(unsafe_index.INDEX_NAME AS BINARY)",
+            query,
             StringComparison.Ordinal);
+
         Assert.DoesNotContain("GROUP_CONCAT", query, StringComparison.Ordinal);
         Assert.DoesNotContain("FROM `", query, StringComparison.Ordinal);
     }
@@ -437,14 +594,18 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
 
         // Act
         var query = MySqlSafeMigrationCatalogSqlBuilder.BuildMultiValuedIndexBoundForeignKeysQuery(
-            table, "@index", isMariaDb: false);
+            table,
+            "@index",
+            isMariaDb: false);
 
         // Assert
-        Assert.All(aliases, alias =>
-        {
-            Assert.Contains("CAST(" + alias + ".TABLE_NAME AS BINARY)", query, StringComparison.Ordinal);
-            Assert.Contains("CAST(" + alias + ".TABLE_SCHEMA AS BINARY)", query, StringComparison.Ordinal);
-        });
+        Assert.All(
+            aliases,
+            alias =>
+            {
+                Assert.Contains("CAST(" + alias + ".TABLE_NAME AS BINARY)", query, StringComparison.Ordinal);
+                Assert.Contains("CAST(" + alias + ".TABLE_SCHEMA AS BINARY)", query, StringComparison.Ordinal);
+            });
 
         Assert.Contains("CASE WHEN @@lower_case_table_names = 0 THEN", query, StringComparison.Ordinal);
         Assert.Contains("WHEN @@lower_case_table_names IN (1, 2) THEN", query, StringComparison.Ordinal);
@@ -462,7 +623,9 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
 
         // Act
         var query = MySqlSafeMigrationCatalogSqlBuilder.BuildMultiValuedIndexBoundForeignKeysQuery(
-            table, index, isMariaDb: true);
+            table,
+            index,
+            isMariaDb: true);
 
         // Assert
         Assert.Equal("SELECT NULL AS CONSTRAINT_NAME WHERE FALSE", query);
@@ -480,21 +643,20 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
     [InlineData("null_table", true)]
     [InlineData("empty_index", true)]
     [InlineData("null_index", true)]
-    public void MultiValuedDropInventoryRejectsIncompleteOwnership(string shape, bool mariaDb)
+    public void MultiValuedDropInventoryRejectsIncompleteOwnership(
+        string shape,
+        bool mariaDb
+    )
     {
         // Arrange
         var table = shape switch
         {
-            "empty_table" => string.Empty,
-            "null_table" => null,
-            _ => "@child",
+            "empty_table" => string.Empty, "null_table" => null, _ => "@child",
         };
 
         var index = shape switch
         {
-            "empty_index" => string.Empty,
-            "null_index" => null,
-            _ => "@index",
+            "empty_index" => string.Empty, "null_index" => null, _ => "@index",
         };
 
         // Act
@@ -515,35 +677,64 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
     [InlineData(1, true)]
     [InlineData(2, true)]
     [InlineData(16, true)]
-    public void CoveringQueryKeepsCompleteOrderedLeftPrefix(int columnCount, bool mariaDb)
+    public void CoveringQueryKeepsCompleteOrderedLeftPrefix(
+        int columnCount,
+        bool mariaDb
+    )
     {
         // Arrange
-        var columns = Enumerable.Range(0, columnCount)
+        var columns = Enumerable
+            .Range(0, columnCount)
             .Select(static ordinal => "@column_" + ordinal.ToString(CultureInfo.InvariantCulture))
             .ToArray();
 
         // Act
         var sql = MySqlSafeMigrationCatalogSqlBuilder.BuildForeignKeyChildCoveringIndexQuery(
-            "@child", columns, mariaDb);
+            "@child",
+            columns,
+            mariaDb);
 
         // Assert
-        Assert.StartsWith("SELECT supporting_index.INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS ", sql,
+        Assert.StartsWith(
+            "SELECT supporting_index.INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS ",
+            sql,
             StringComparison.Ordinal);
-        Assert.Contains("CAST(supporting_index.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)", sql,
+
+        Assert.Contains(
+            "CAST(supporting_index.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+            sql,
             StringComparison.Ordinal);
-        Assert.Contains("CAST(supporting_index.TABLE_NAME AS BINARY) = CAST(@child AS BINARY)", sql,
+
+        Assert.Contains(
+            "CAST(supporting_index.TABLE_NAME AS BINARY) = CAST(@child AS BINARY)",
+            sql,
             StringComparison.Ordinal);
+
         Assert.Contains("supporting_index.INDEX_TYPE = 'BTREE'", sql, StringComparison.Ordinal);
-        Assert.Contains("GROUP BY supporting_index.INDEX_NAME, CAST(supporting_index.INDEX_NAME AS BINARY) "
+        Assert.Contains(
+            "GROUP BY supporting_index.INDEX_NAME, CAST(supporting_index.INDEX_NAME AS BINARY) "
             + "HAVING COUNT(*) >= "
-            + columnCount.ToString(CultureInfo.InvariantCulture), sql, StringComparison.Ordinal);
-        Assert.All(Enumerable.Range(0, columnCount), ordinal => Assert.Contains(
-            "supporting_index.SEQ_IN_INDEX = " + (ordinal + 1).ToString(CultureInfo.InvariantCulture)
-            + " AND supporting_index.COLUMN_NAME = " + columns[ordinal]
-            + " AND " + MySqlSafeMigrationCatalogSqlBuilder.BuildNativeCaseInsensitiveIdentifierMatches(
-                "supporting_index.COLUMN_NAME", columns[ordinal])
-            + (mariaDb ? string.Empty : " AND supporting_index.COLLATION = 'A'")
-            + " AND supporting_index.SUB_PART IS NULL THEN 1 ELSE 0 END) = 1", sql, StringComparison.Ordinal));
+            + columnCount.ToString(CultureInfo.InvariantCulture),
+            sql,
+            StringComparison.Ordinal);
+
+        Assert.All(
+            Enumerable.Range(0, columnCount),
+            ordinal => Assert.Contains(
+                "supporting_index.SEQ_IN_INDEX = "
+                + (ordinal + 1).ToString(CultureInfo.InvariantCulture)
+                + " AND supporting_index.COLUMN_NAME = "
+                + columns[ordinal]
+                + " AND "
+                + MySqlSafeMigrationCatalogSqlBuilder.BuildNativeCaseInsensitiveIdentifierMatches(
+                    "supporting_index.COLUMN_NAME",
+                    columns[ordinal])
+                + (mariaDb
+                    ? string.Empty
+                    : " AND supporting_index.COLLATION = 'A'")
+                + " AND supporting_index.SUB_PART IS NULL THEN 1 ELSE 0 END) = 1",
+                sql,
+                StringComparison.Ordinal));
 
         Assert.DoesNotContain("NON_UNIQUE", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("GROUP_CONCAT", sql, StringComparison.Ordinal);
@@ -567,16 +758,28 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
         var sql = MySqlSafeMigrationCatalogSqlBuilder.IsSupportingIndexNameOccupied(table, symbol);
 
         // Assert
-        Assert.Equal("EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS automatic_index_name "
+        Assert.Equal(
+            "EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS automatic_index_name "
             + "WHERE automatic_index_name.TABLE_SCHEMA = DATABASE() AND automatic_index_name.TABLE_NAME = "
-            + table + " AND "
+            + table
+            + " AND "
             + MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
-                "automatic_index_name.TABLE_SCHEMA", "DATABASE()") + " AND "
+                "automatic_index_name.TABLE_SCHEMA",
+                "DATABASE()")
+            + " AND "
             + MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(
-                "automatic_index_name.TABLE_NAME", table) + " "
-            + "AND automatic_index_name.INDEX_NAME = " + symbol + " AND "
+                "automatic_index_name.TABLE_NAME",
+                table)
+            + " "
+            + "AND automatic_index_name.INDEX_NAME = "
+            + symbol
+            + " AND "
             + MySqlSafeMigrationCatalogSqlBuilder.BuildNativeCaseInsensitiveIdentifierMatches(
-                "automatic_index_name.INDEX_NAME", symbol) + ")", sql);
+                "automatic_index_name.INDEX_NAME",
+                symbol)
+            + ")",
+            sql);
+
         Assert.DoesNotContain("INDEX_TYPE", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("NON_UNIQUE", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("REFERENTIAL_CONSTRAINTS", sql, StringComparison.Ordinal);
@@ -591,18 +794,34 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
     [InlineData(false, "foreign_database")]
     [InlineData(true, "application")]
     [InlineData(true, "foreign_database")]
-    public void QualifiedEndpointsRetainDatabaseIdentityGuard(bool mariaDb, string principalSchema)
+    public void QualifiedEndpointsRetainDatabaseIdentityGuard(
+        bool mariaDb,
+        string principalSchema
+    )
     {
         // Arrange
         using var context = CreateContext(mariaDb);
-        var operation = new SafeMigrationOperation(new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition(
-            "fk_owner", "child_items", ["owner"], "parent_items", ["id"],
-            schema: "application", principalSchema: principalSchema)), SafeMigrationPolicy.ThrowIfDifferent);
+        var operation = new SafeMigrationOperation(
+            new EnsureForeignKeyIntent(
+                new ExpectedForeignKeyDefinition(
+                    "fk_owner",
+                    "child_items",
+                    ["owner"],
+                    "parent_items",
+                    ["id"],
+                    schema: "application",
+                    principalSchema: principalSchema)),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
-        using var lease = context.GetService<MySqlSafeMigrationPlanCapture>().Begin([operation]);
+        using var lease = context
+            .GetService<MySqlSafeMigrationPlanCapture>()
+            .Begin([operation]);
 
         // Act
-        _ = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        _ = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
+
         var plans = lease.Complete();
 
         // Assert
@@ -611,11 +830,16 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
         Assert.NotNull(plan.CurrentDatabaseQualificationExpression);
         Assert.Equal("database_qualifier_mismatch", plan.CurrentDatabaseQualificationFailureCode);
         Assert.Contains("DATABASE()", plan.CurrentDatabaseQualificationExpression, StringComparison.Ordinal);
-        Assert.Contains("CAST(automatic_index_name.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+        Assert.Contains(
+            "CAST(automatic_index_name.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
             plan.StateExpression,
             StringComparison.Ordinal);
-        Assert.Contains("CAST(supporting_index.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
-            plan.StateExpression, StringComparison.Ordinal);
+
+        Assert.Contains(
+            "CAST(supporting_index.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+            plan.StateExpression,
+            StringComparison.Ordinal);
+
         Assert.Contains(plan.ParameterValues, value => Equals(value.Value, "application"));
         Assert.Contains(plan.ParameterValues, value => Equals(value.Value, principalSchema));
     }
@@ -629,14 +853,14 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
     [InlineData("null_columns")]
     [InlineData("empty_column")]
     [InlineData("null_column")]
-    public void CoveringQueryRejectsIncompleteInputs(string shape)
+    public void CoveringQueryRejectsIncompleteInputs(
+        string shape
+    )
     {
         // Arrange
         var table = shape switch
         {
-            "empty_table" => string.Empty,
-            "null_table" => null,
-            _ => "@child",
+            "empty_table" => string.Empty, "null_table" => null, _ => "@child",
         };
 
         IReadOnlyList<string>? columns = shape switch
@@ -651,7 +875,9 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
         // Act
         var exception = Record.Exception(() =>
             MySqlSafeMigrationCatalogSqlBuilder.BuildForeignKeyChildCoveringIndexQuery(
-                table!, columns!, isMariaDb: false));
+                table!,
+                columns!,
+                isMariaDb: false));
 
         // Assert
         Assert.IsAssignableFrom<ArgumentException>(exception);
@@ -664,21 +890,19 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
     [InlineData("null_table")]
     [InlineData("empty_symbol")]
     [InlineData("null_symbol")]
-    public void OccupationQueryRejectsIncompleteOwnership(string shape)
+    public void OccupationQueryRejectsIncompleteOwnership(
+        string shape
+    )
     {
         // Arrange
         var table = shape switch
         {
-            "empty_table" => string.Empty,
-            "null_table" => null,
-            _ => "@child",
+            "empty_table" => string.Empty, "null_table" => null, _ => "@child",
         };
 
         var symbol = shape switch
         {
-            "empty_symbol" => string.Empty,
-            "null_symbol" => null,
-            _ => "@symbol",
+            "empty_symbol" => string.Empty, "null_symbol" => null, _ => "@symbol",
         };
 
         // Act
@@ -692,14 +916,17 @@ public sealed class MySqlForeignKeySupportingIndexSqlTests
     /// <summary>Creates a provider context without opening a connection.</summary>
     /// <param name="mariaDb">Whether MariaDB feature metadata applies.</param>
     /// <returns>The disposable offline SQL-generation context.</returns>
-    private static DbContext CreateContext(bool mariaDb)
+    private static DbContext CreateContext(
+        bool mariaDb
+    )
     {
         var version = mariaDb
             ? MySqlServerVersion.MariaDb(new Version(11, 8, 8))
             : MySqlServerVersion.MySql(new Version(8, 4, 11));
 
         var options = new DbContextOptionsBuilder<DbContext>()
-            .UseMySql("Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
+            .UseMySql(
+                "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
                 version)
             .UseMySqlSafeMigrations()
             .Options;

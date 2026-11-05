@@ -47,8 +47,11 @@ public sealed class SqlServerSafeMigrationHistoryIntegrationTests : SqlServerSaf
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.safe_history_probe (Id bigint NOT NULL);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE dbo.safe_history_probe (Id bigint NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
 
         // Act
@@ -85,6 +88,7 @@ public sealed class SqlServerSafeMigrationHistoryIntegrationTests : SqlServerSaf
             "CREATE TRIGGER reject_contract_stamp ON DATABASE FOR CREATE_EXTENDED_PROPERTY AS "
             + "BEGIN THROW 51009, N'Injected extended-property failure', 1; END;",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
 
         // Act
@@ -93,7 +97,8 @@ public sealed class SqlServerSafeMigrationHistoryIntegrationTests : SqlServerSaf
         var createdTableCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.tables WHERE name IN "
-            + "(N'ordinary_pipeline_probe', N'safe_history_probe');", cancellationToken: CancellationToken.None);
+            + "(N'ordinary_pipeline_probe', N'safe_history_probe');",
+            cancellationToken: CancellationToken.None);
 
         var historyRowCount = await ScalarIntAsync(
             connectionString,

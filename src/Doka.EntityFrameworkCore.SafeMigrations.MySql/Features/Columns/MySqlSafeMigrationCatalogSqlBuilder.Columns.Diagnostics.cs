@@ -54,7 +54,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             DiagnosticRecord(
                 $"NOT ({BuildColumnNullabilityMatches(table, definition, isMariaDb)})",
                 "column_nullability",
-                definition.IsNullable ? "'nullable'" : "'not_nullable'",
+                definition.IsNullable
+                    ? "'nullable'"
+                    : "'not_nullable'",
                 "CASE c.IS_NULLABLE WHEN 'YES' THEN 'nullable' WHEN 'NO' THEN 'not_nullable' ELSE 'unknown' END"),
             DiagnosticRecord(
                 $"NOT ({collationContract.MatchExpression})",

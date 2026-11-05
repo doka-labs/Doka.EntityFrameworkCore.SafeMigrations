@@ -83,7 +83,9 @@ public sealed class SafeMigrationCatalogWorkOrderTests
 
         // Act
         var exception = Record.Exception(() => SafeMigrationCatalogWorkOrder.Create(
-            count, _ => ++calls > 0, CancellationToken.None));
+            count,
+            _ => ++calls > 0,
+            CancellationToken.None));
 
         // Assert
         Assert.IsType<ArgumentOutOfRangeException>(exception);
@@ -99,7 +101,9 @@ public sealed class SafeMigrationCatalogWorkOrderTests
 
         // Act
         var exception = Record.Exception(() => SafeMigrationCatalogWorkOrder.Create(
-            count, null!, CancellationToken.None));
+            count,
+            null!,
+            CancellationToken.None));
 
         // Assert
         Assert.IsType<ArgumentNullException>(exception);
@@ -113,7 +117,7 @@ public sealed class SafeMigrationCatalogWorkOrderTests
         int count
     )
     {
-        using var cancellation = new System.Threading.CancellationTokenSource();
+        using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         var calls = 0;
 
@@ -130,7 +134,7 @@ public sealed class SafeMigrationCatalogWorkOrderTests
     [Fact]
     public void Create_ObservesCancellationDuringSelection()
     {
-        using var cancellation = new System.Threading.CancellationTokenSource();
+        using var cancellation = new CancellationTokenSource();
         var calls = 0;
 
         var exception = Record.Exception(() => SafeMigrationCatalogWorkOrder.Create(
@@ -155,7 +159,7 @@ public sealed class SafeMigrationCatalogWorkOrderTests
     [Fact]
     public void Create_ObservesCancellationAfterTheFinalPredicate()
     {
-        using var cancellation = new System.Threading.CancellationTokenSource();
+        using var cancellation = new CancellationTokenSource();
         var calls = 0;
 
         var exception = Record.Exception(() => SafeMigrationCatalogWorkOrder.Create(
@@ -216,7 +220,9 @@ public sealed class SafeMigrationCatalogWorkOrderTests
         int count
     )
     {
-        var submitted = Enumerable.Range(0, count).ToArray();
+        var submitted = Enumerable
+            .Range(0, count)
+            .ToArray();
 
         var exception = Record.Exception(() => SafeMigrationCatalogWorkOrder.ValidateCompletion(count, submitted));
 

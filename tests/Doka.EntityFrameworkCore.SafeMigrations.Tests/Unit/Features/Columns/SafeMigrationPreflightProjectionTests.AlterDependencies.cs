@@ -9,18 +9,32 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Arrange
         var normalizer = new ColumnStateOwnershipNormalizer();
         var provider = new CapturingProjectedColumnAnalyzer();
-        var projection = new SafeMigrationPreflightProjection(objectIdentityNormalizer: normalizer,
+        var projection = new SafeMigrationPreflightProjection(
+            objectIdentityNormalizer: normalizer,
             projectedColumnAnalyzer: provider);
-        ObserveAccepted(projection, new EnsureColumnIntent("items", VarcharColumn(200)),
+
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("items", VarcharColumn(200)),
             SafeMigrationObservedState.Matching);
+
         for (var number = 0; number < 500; number++)
         {
-            Apply(projection, new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition($"fk_{number}",
-                $"child_{number}", ["value"], $"parent_{number}", ["value"])));
+            Apply(
+                projection,
+                new EnsureForeignKeyIntent(
+                    new ExpectedForeignKeyDefinition(
+                        $"fk_{number}",
+                        $"child_{number}",
+                        ["value"],
+                        $"parent_{number}",
+                        ["value"])));
         }
 
-        var alter = new SafeMigrationOperation(new AlterColumnIntent("items", VarcharColumn(500), VarcharColumn(200)),
+        var alter = new SafeMigrationOperation(
+            new AlterColumnIntent("items", VarcharColumn(500), VarcharColumn(200)),
             SafeMigrationPolicy.RepairIfSafe);
+
         projection.Project(alter, AlterProof());
         var comparisonsBefore = normalizer.CountingComparer.EqualityChecks;
 
@@ -45,8 +59,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Arrange
         var provider = new CapturingProjectedColumnAnalyzer();
         var warmup = NoForeignKeyProjection(1, provider);
-        var alter = new SafeMigrationOperation(new AlterColumnIntent("items", VarcharColumn(500), VarcharColumn(200)),
+        var alter = new SafeMigrationOperation(
+            new AlterColumnIntent("items", VarcharColumn(500), VarcharColumn(200)),
             SafeMigrationPolicy.RepairIfSafe);
+
         warmup.Project(alter, AlterProof());
         var projection = NoForeignKeyProjection(1_000, provider);
         var live = AlterProof();
@@ -71,22 +87,40 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var projection = new SafeMigrationPreflightProjection(
             objectIdentityNormalizer: new ColumnStateOwnershipNormalizer(normalizeAliases: true),
             projectedColumnAnalyzer: provider);
-        Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("items", [VarcharColumn(200)],
-            foreignKeys: [new ExpectedForeignKeyDefinition("fk_self", "items", ["value"], "items", ["value"])]),
-            SafeMigrationTableMode.StrictDefinition));
-        var initial = new SafeMigrationOperation(new AlterColumnIntent("items", VarcharColumn(500), VarcharColumn(200)),
+
+        Apply(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "items",
+                    [VarcharColumn(200)],
+                    foreignKeys: [new ExpectedForeignKeyDefinition("fk_self", "items", ["value"], "items", ["value"])]),
+                SafeMigrationTableMode.StrictDefinition));
+
+        var initial = new SafeMigrationOperation(
+            new AlterColumnIntent("items", VarcharColumn(500), VarcharColumn(200)),
             SafeMigrationPolicy.RepairIfSafe);
+
         projection.Project(initial, AlterProof());
         var initialDependency = provider.Context?.HasForeignKeyDependency;
 
         // Act
         ObserveAccepted(projection, new RenameTableIntent("items", "renamed"), SafeMigrationObservedState.Matching);
-        var renamed = new SafeMigrationOperation(new AlterColumnIntent("RENAMED", VarcharColumn(500),
-            VarcharColumn(200), "dbo"), SafeMigrationPolicy.RepairIfSafe);
+        var renamed = new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "RENAMED",
+                VarcharColumn(500),
+                VarcharColumn(200),
+                "dbo"),
+            SafeMigrationPolicy.RepairIfSafe);
+
         projection.Project(renamed, AlterProof());
         var renamedDependency = provider.Context?.HasForeignKeyDependency;
-        ObserveAccepted(projection, new DropForeignKeyIntent(name: "fk_self", table: "renamed"),
+        ObserveAccepted(
+            projection,
+            new DropForeignKeyIntent(name: "fk_self", table: "renamed"),
             SafeMigrationObservedState.Matching);
+
         projection.Project(renamed, AlterProof());
 
         // Assert
@@ -102,12 +136,19 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     )
     {
         var projection = new SafeMigrationPreflightProjection(projectedColumnAnalyzer: provider);
-        Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("items", [VarcharColumn(200)]),
-            SafeMigrationTableMode.StrictDefinition));
+        Apply(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition("items", [VarcharColumn(200)]),
+                SafeMigrationTableMode.StrictDefinition));
+
         for (var number = 0; number < unrelatedTables; number++)
         {
-            Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition($"unrelated_{number}", [Column("id")]),
-                SafeMigrationTableMode.StrictDefinition));
+            Apply(
+                projection,
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition($"unrelated_{number}", [Column("id")]),
+                    SafeMigrationTableMode.StrictDefinition));
         }
 
         return projection;

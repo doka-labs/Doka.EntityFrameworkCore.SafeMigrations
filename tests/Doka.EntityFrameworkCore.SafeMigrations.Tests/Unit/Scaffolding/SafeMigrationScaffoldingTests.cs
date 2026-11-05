@@ -33,14 +33,23 @@ public sealed partial class SafeMigrationScaffoldingTests
         // Arrange
         var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict, isEnabled: false);
         var builder = new IndentedStringBuilder();
-        var efMethod = operation.GetType().Name.Replace("Operation", string.Empty, StringComparison.Ordinal);
+        var efMethod = operation
+            .GetType()
+            .Name
+            .Replace("Operation", string.Empty, StringComparison.Ordinal);
+
         var normalized = SafeMigrationOperationCompatibility.Normalize(operation, providerAdapter: null);
 
         // Act
         generator.Generate("migrationBuilder", [operation], builder);
 
         // Assert
-        Assert.Equal(expectedIntentType, Assert.IsType<SafeMigrationOperation>(normalized.Operation).Intent.GetType());
+        Assert.Equal(expectedIntentType,
+            Assert
+                .IsType<SafeMigrationOperation>(normalized.Operation)
+                .Intent
+                .GetType());
+
         Assert.Contains($"migrationBuilder.{efMethod}", builder.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain("Doka.EntityFrameworkCore.SafeMigrations", builder.ToString(), StringComparison.Ordinal);
     }
@@ -56,7 +65,10 @@ public sealed partial class SafeMigrationScaffoldingTests
         // Arrange
         var generator = CreateOperationGenerator(SafeMigrationScaffoldingMode.Strict, isEnabled: false);
         var builder = new IndentedStringBuilder();
-        var efMethod = operation.GetType().Name.Replace("Operation", string.Empty, StringComparison.Ordinal);
+        var efMethod = operation
+            .GetType()
+            .Name
+            .Replace("Operation", string.Empty, StringComparison.Ordinal);
 
         // Act
         generator.Generate("migrationBuilder", [operation], builder);
@@ -151,9 +163,22 @@ public sealed partial class SafeMigrationScaffoldingTests
         var builder = new IndentedStringBuilder();
         MigrationOperation[] operations =
         [
-            new DropColumnOperation { Name = "legacy", Table = "items" },
-            new RenameColumnOperation { Name = "caption", Table = "items", NewName = "name" },
-            new RenameTableOperation { Name = "items", NewName = "products" },
+            new DropColumnOperation
+            {
+                Name = "legacy",
+                Table = "items",
+            },
+            new RenameColumnOperation
+            {
+                Name = "caption",
+                Table = "items",
+                NewName = "name",
+            },
+            new RenameTableOperation
+            {
+                Name = "items",
+                NewName = "products",
+            },
             new RenameIndexOperation
             {
                 Name = "ix_items_caption",
@@ -196,7 +221,11 @@ public sealed partial class SafeMigrationScaffoldingTests
         // Assert
         var unsupported = Assert.IsType<NotSupportedException>(exception);
 
-        Assert.Contains(operation.GetType().FullName!, unsupported.Message, StringComparison.Ordinal);
+        Assert.Contains(operation.GetType()
+                .FullName!,
+            unsupported.Message,
+            StringComparison.Ordinal);
+
         Assert.Empty(builder.ToString());
     }
 
@@ -209,7 +238,11 @@ public sealed partial class SafeMigrationScaffoldingTests
         var builder = new IndentedStringBuilder();
         MigrationOperation[] operations =
         [
-            new DropColumnOperation { Name = "legacy", Table = "items" },
+            new DropColumnOperation
+            {
+                Name = "legacy",
+                Table = "items",
+            },
             new SqlOperation { Sql = "DELETE FROM items;" },
         ];
 
@@ -238,7 +271,8 @@ public sealed partial class SafeMigrationScaffoldingTests
                 ]
                 && typeof(MigrationOperation).IsAssignableFrom(operationType)
                 && builderType == typeof(IndentedStringBuilder))
-            .Select(static method => method.GetParameters()[0].ParameterType)
+            .Select(static method => method
+                .GetParameters()[0].ParameterType)
             .OrderBy(static type => type.FullName, StringComparer.Ordinal)
             .ToArray();
 
@@ -253,7 +287,8 @@ public sealed partial class SafeMigrationScaffoldingTests
                 ]
                 && typeof(MigrationOperation).IsAssignableFrom(operationType)
                 && builderType == typeof(IndentedStringBuilder))
-            .Select(static method => method.GetParameters()[0].ParameterType)
+            .Select(static method => method
+                .GetParameters()[0].ParameterType)
             .OrderBy(static type => type.FullName, StringComparer.Ordinal)
             .ToArray();
 
@@ -293,10 +328,14 @@ public sealed partial class SafeMigrationScaffoldingTests
                 Assert.Equal(SafeMigrationTableMode.ConvergenceContainer, intent.Mode);
                 Assert.Equal(SafeMigrationPolicy.ExistenceOnly, safe.Policy);
             },
-            operation => Assert.IsType<EnsureColumnIntent>(Assert.IsType<SafeMigrationOperation>(operation).Intent),
-            operation => Assert.IsType<EnsureColumnIntent>(Assert.IsType<SafeMigrationOperation>(operation).Intent),
-            operation => Assert.IsType<EnsurePrimaryKeyIntent>(Assert.IsType<SafeMigrationOperation>(operation).Intent),
+            operation => Assert.IsType<EnsureColumnIntent>(Assert.IsType<SafeMigrationOperation>(operation)
+                .Intent),
+            operation => Assert.IsType<EnsureColumnIntent>(Assert.IsType<SafeMigrationOperation>(operation)
+                .Intent),
+            operation => Assert.IsType<EnsurePrimaryKeyIntent>(Assert.IsType<SafeMigrationOperation>(operation)
+                .Intent),
             operation => Assert.IsType<EnsureUniqueConstraintIntent>(
-                Assert.IsType<SafeMigrationOperation>(operation).Intent));
+                Assert.IsType<SafeMigrationOperation>(operation)
+                    .Intent));
     }
 }

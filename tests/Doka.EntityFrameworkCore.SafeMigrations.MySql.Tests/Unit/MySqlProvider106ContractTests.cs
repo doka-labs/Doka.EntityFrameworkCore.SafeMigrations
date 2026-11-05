@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore.Migrations.Design;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Preserves published Doka 10.6 physical facets through SafeMigrations' authoring contracts.</summary>
@@ -36,9 +38,15 @@ public sealed class MySqlProvider106ContractTests
         // Act
         var captured = SafeMigrationExpectedDefinitionFactory.From(create);
         var definition = Assert.Single(captured.Columns, value => value.Name == column);
-        var indexes = operations.OfType<CreateIndexOperation>().Where(operation => operation.Table == table)
-            .Select(operation => MySqlSafeMigrationProviderOperationAdapter.Instance.TryNormalize(operation,
-                out var normalized) ? normalized : null).ToArray();
+        var indexes = operations
+            .OfType<CreateIndexOperation>()
+            .Where(operation => operation.Table == table)
+            .Select(operation => MySqlSafeMigrationProviderOperationAdapter.Instance.TryNormalize(
+                operation,
+                out var normalized)
+                ? normalized
+                : null)
+            .ToArray();
 
         // Assert
         Assert.Equal(storeType, original.ColumnType);
@@ -46,10 +54,18 @@ public sealed class MySqlProvider106ContractTests
         Assert.Equal(maximumLength, original.MaxLength);
         Assert.Equal(maximumLength, definition.MaxLength);
         Assert.Equal(original.IsFixedLength, definition.IsFixedLength);
-        Assert.Equal(8, operations.OfType<CreateIndexOperation>().Count());
-        Assert.All(indexes, operation => Assert.All(
-            Assert.IsType<EnsureIndexIntent>(Assert.IsType<SafeMigrationOperation>(operation).Intent).Definition.Keys,
-            static key => Assert.Null(key.PrefixLength)));
+        Assert.Equal(8,
+            operations
+                .OfType<CreateIndexOperation>()
+                .Count());
+
+        Assert.All(
+            indexes,
+            operation => Assert.All(
+                Assert.IsType<EnsureIndexIntent>(Assert.IsType<SafeMigrationOperation>(operation)
+                        .Intent)
+                    .Definition.Keys,
+                static key => Assert.Null(key.PrefixLength)));
     }
 
     /// <summary>Principal-derived lengths remain convention-owned on both endpoints after safe capture.</summary>
@@ -58,13 +74,16 @@ public sealed class MySqlProvider106ContractTests
     {
         // Arrange
         using var context = CreateContext();
-        var model = context.GetService<IDesignTimeModel>().Model;
+        var model = context.GetService<IDesignTimeModel>()
+            .Model;
+
         var principal = model.FindEntityType("principal")!.FindProperty("code")!;
         var dependent = model.FindEntityType("dependent")!.FindProperty("code")!;
 
         // Act
         var operations = CreateOperations(context);
-        var owner = Assert.Single(operations.OfType<CreateTableOperation>(),
+        var owner = Assert.Single(
+            operations.OfType<CreateTableOperation>(),
             operation => operation.Name == "budget_dependents");
 
         var captured = SafeMigrationExpectedDefinitionFactory.From(owner);
@@ -73,14 +92,20 @@ public sealed class MySqlProvider106ContractTests
         // Assert
         Assert.Equal(168, principal.GetMaxLength());
         Assert.Equal(principal.GetMaxLength(), dependent.GetMaxLength());
-        Assert.Equal(ConfigurationSource.Convention,
+        Assert.Equal(
+            ConfigurationSource.Convention,
             ((IConventionProperty)principal).GetMaxLengthConfigurationSource());
-        Assert.NotEqual(ConfigurationSource.Explicit,
+
+        Assert.NotEqual(
+            ConfigurationSource.Explicit,
             ((IConventionProperty)dependent).GetMaxLengthConfigurationSource());
+
         Assert.Equal("budget_principals", foreignKey.PrincipalTable);
         Assert.Equal(["code", "scope"], foreignKey.Columns);
         Assert.Equal(["code", "scope"], foreignKey.PrincipalColumns);
-        Assert.Equal(168, Assert.Single(captured.Columns, column => column.Name == "code").MaxLength);
+        Assert.Equal(168,
+            Assert.Single(captured.Columns, column => column.Name == "code")
+                .MaxLength);
     }
 
     /// <summary>The budget convention must not narrow unrelated unindexed text or binary payloads.</summary>
@@ -89,7 +114,9 @@ public sealed class MySqlProvider106ContractTests
     {
         // Arrange
         using var context = CreateContext();
-        var original = Assert.Single(CreateOperations(context).OfType<CreateTableOperation>(),
+        var original = Assert.Single(
+            CreateOperations(context)
+                .OfType<CreateTableOperation>(),
             operation => operation.Name == "budget_unindexed");
 
         // Act
@@ -115,19 +142,24 @@ public sealed class MySqlProvider106ContractTests
         services.AddDbContextDesignTimeServices(context);
         new MySqlDesignTimeServices().ConfigureDesignTimeServices(services);
         new MySqlSafeMigrationDesignTimeServices().ConfigureDesignTimeServices(services);
+
         // WHY: EF's standalone design-time provider resolves the captured context's scoped registrations
         // through its root, matching the actual tooling builder rather than an application-host scope.
         using var provider = services.BuildServiceProvider();
         var selector = provider.GetRequiredService<
-            Microsoft.EntityFrameworkCore.Migrations.Design.IMigrationsCodeGeneratorSelector>();
+            IMigrationsCodeGeneratorSelector>();
 
         var generator = selector.Select("C#");
         var operations = CreateOperations(context);
 
         // Act
         var migration = generator.GenerateMigration("Contracts", "Provider106", operations, []);
-        var snapshot = generator.GenerateSnapshot("Contracts", typeof(BudgetContext), "Provider106Snapshot",
-            context.GetService<IDesignTimeModel>().Model);
+        var snapshot = generator.GenerateSnapshot(
+            "Contracts",
+            typeof(BudgetContext),
+            "Provider106Snapshot",
+            context.GetService<IDesignTimeModel>()
+                .Model);
 
         // Assert
         Assert.Contains("CreateTableIfNotExists(", migration, StringComparison.Ordinal);
@@ -153,9 +185,11 @@ public sealed class MySqlProvider106ContractTests
             .BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
 
         var options = new DbContextOptionsBuilder<ImpossibleBudgetContext>()
-            .UseMySql("Server=127.0.0.1;Port=1;User ID=test;Database=provider_106",
+            .UseMySql(
+                "Server=127.0.0.1;Port=1;User ID=test;Database=provider_106",
                 MySqlServerVersion.MySql(new Version(8, 4, 11)))
-            .UseInternalServiceProvider(services).Options;
+            .UseInternalServiceProvider(services)
+            .Options;
 
         using var context = new ImpossibleBudgetContext(options);
 
@@ -163,7 +197,10 @@ public sealed class MySqlProvider106ContractTests
         var failure = Record.Exception(() => CreateOperations(context));
 
         // Assert
-        Assert.Contains("3072", Assert.IsType<InvalidOperationException>(failure).Message,
+        Assert.Contains(
+            "3072",
+            Assert.IsType<InvalidOperationException>(failure)
+                .Message,
             StringComparison.Ordinal);
     }
 
@@ -188,21 +225,50 @@ public sealed class MySqlProvider106ContractTests
         // Arrange
         using var context = CreateContext();
         const int limit = 3072;
-        var binaryLength = limit - width + (overLimit ? 1 : 0);
-        var decimalColumn = new ExpectedColumnDefinition("amount", typeof(decimal), false,
-            $"decimal({precision},{scale})", precision: precision, scale: scale);
+        var binaryLength = limit
+            - width
+            + (overLimit
+                ? 1
+                : 0);
 
-        var binaryColumn = new ExpectedColumnDefinition("payload", typeof(byte[]), false,
-            $"varbinary({binaryLength})", maxLength: binaryLength);
+        var decimalColumn = new ExpectedColumnDefinition(
+            "amount",
+            typeof(decimal),
+            false,
+            $"decimal({precision},{scale})",
+            precision: precision,
+            scale: scale);
 
-        var columns = new ProjectedColumns(projected ? [decimalColumn, binaryColumn] : []);
-        var environment = new SafeMigrationIndexPhysicalEnvironment(limit,
+        var binaryColumn = new ExpectedColumnDefinition(
+            "payload",
+            typeof(byte[]),
+            false,
+            $"varbinary({binaryLength})",
+            maxLength: binaryLength);
+
+        var columns = new ProjectedColumns(
+            projected
+                ? [decimalColumn, binaryColumn]
+                : []);
+
+        var environment = new SafeMigrationIndexPhysicalEnvironment(
+            limit,
             Columns: new Dictionary<string, SafeMigrationIndexColumnPhysicalShape>(StringComparer.Ordinal)
             {
                 ["amount"] = MySqlProjectedIndexPhysicalShape.CreateCatalogColumnShape(
-                    "decimal", null, null, precision, scale, null),
+                    "decimal",
+                    null,
+                    null,
+                    precision,
+                    scale,
+                    null),
                 ["payload"] = MySqlProjectedIndexPhysicalShape.CreateCatalogColumnShape(
-                    "varbinary", binaryLength, binaryLength, null, null, null),
+                    "varbinary",
+                    binaryLength,
+                    binaryLength,
+                    null,
+                    null,
+                    null),
             });
 
         var mappings = context.GetService<IRelationalTypeMappingSource>();
@@ -210,24 +276,36 @@ public sealed class MySqlProvider106ContractTests
         // Act
         var result = kind switch
         {
-            0 => MySqlProjectedIndexPhysicalShape.Validate(new ExpectedIndexDefinition("ix_budget", "budget",
-                [new ExpectedIndexKeyDefinition("amount"), new ExpectedIndexKeyDefinition("payload")]),
-                columns, environment, mappings),
+            0 => MySqlProjectedIndexPhysicalShape.Validate(
+                new ExpectedIndexDefinition(
+                    "ix_budget",
+                    "budget",
+                    [new ExpectedIndexKeyDefinition("amount"), new ExpectedIndexKeyDefinition("payload")]),
+                columns,
+                environment,
+                mappings),
             1 => MySqlProjectedIndexPhysicalShape.Validate(
                 new ExpectedPrimaryKeyDefinition("pk_budget", "budget", ["amount", "payload"]),
-                columns, environment, mappings),
+                columns,
+                environment,
+                mappings),
             2 => MySqlProjectedIndexPhysicalShape.Validate(
                 new ExpectedUniqueConstraintDefinition("uq_budget", "budget", ["amount", "payload"]),
-                columns, environment, mappings),
+                columns,
+                environment,
+                mappings),
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
 
         // Assert
-        Assert.Equal((long)width, environment.Columns!["amount"].FullWidthBytes);
-        Assert.Equal(overLimit
-            ? kind == 0 ? MySqlProjectedIndexPhysicalShapeResult.MissingRequiredPrefix
-                : MySqlProjectedIndexPhysicalShapeResult.KeyExceedsPhysicalLimit
-            : MySqlProjectedIndexPhysicalShapeResult.Feasible, result);
+        Assert.Equal(width, environment.Columns!["amount"].FullWidthBytes);
+        Assert.Equal(
+            overLimit
+                ? kind == 0
+                    ? MySqlProjectedIndexPhysicalShapeResult.MissingRequiredPrefix
+                    : MySqlProjectedIndexPhysicalShapeResult.KeyExceedsPhysicalLimit
+                : MySqlProjectedIndexPhysicalShapeResult.Feasible,
+            result);
     }
 
     /// <summary>Enumerates both remainder positions, every key kind and both metadata origins.</summary>
@@ -254,7 +332,10 @@ public sealed class MySqlProvider106ContractTests
     /// <param name="connectionString">The native lease, or null for the offline profile.</param>
     /// <param name="version">The native version, or null for the fixed MySQL contract profile.</param>
     /// <returns>The context that the caller must dispose to release both its EF scope and its service root.</returns>
-    internal static DbContext CreateContext(string? connectionString = null, MySqlServerVersion? version = null)
+    internal static DbContext CreateContext(
+        string? connectionString = null,
+        MySqlServerVersion? version = null
+    )
     {
         // WHY: DbContext(options) consults EF's process-wide cache before OnConfiguring.
         // An explicit root must already be present in the constructor options, even for uncached profiles.
@@ -266,7 +347,8 @@ public sealed class MySqlProvider106ContractTests
         try
         {
             var options = new DbContextOptionsBuilder<BudgetContext>()
-                .UseMySql(connectionString ?? "Server=127.0.0.1;Port=1;User ID=test;Database=provider_106",
+                .UseMySql(
+                    connectionString ?? "Server=127.0.0.1;Port=1;User ID=test;Database=provider_106",
                     version ?? MySqlServerVersion.MySql(new Version(8, 4, 11)))
                 .UseInternalServiceProvider(services);
 
@@ -284,9 +366,35 @@ public sealed class MySqlProvider106ContractTests
     }
 
     /// <summary>Captures exactly the finalized model that SafeMigrations' design-time pipeline consumes.</summary>
-    internal static IReadOnlyList<MigrationOperation> CreateOperations(DbContext context) =>
-        context.GetService<IMigrationsModelDiffer>().GetDifferences(null,
-            context.GetService<IDesignTimeModel>().Model.GetRelationalModel());
+    internal static IReadOnlyList<MigrationOperation> CreateOperations(
+        DbContext context
+    ) =>
+        context
+            .GetService<IMigrationsModelDiffer>()
+            .GetDifferences(
+                null,
+                context
+                    .GetService<IDesignTimeModel>()
+                    .Model
+                    .GetRelationalModel());
+
+    /// <summary>Creates one physical owner with a deterministic non-generated integer identity.</summary>
+    private static EntityTypeBuilder Owner(
+        ModelBuilder modelBuilder,
+        string suffix,
+        string? name = null
+    )
+    {
+        var owner = modelBuilder.Entity(name ?? suffix);
+        owner.ToTable("budget_" + suffix);
+        owner
+            .Property<int>("id")
+            .ValueGeneratedNever();
+
+        owner.HasKey("id");
+
+        return owner;
+    }
 
     /// <summary>Combines implicit, explicit, fixed, overlapping and principal-derived facets.</summary>
     /// <param name="options">The complete profile, including its explicit root before EF construction.</param>
@@ -308,7 +416,9 @@ public sealed class MySqlProvider106ContractTests
             finally
             {
                 // WHY: Scoped EF services must release their resources before their root is torn down.
-                Interlocked.Exchange(ref _ownedServices, null)?.Dispose();
+                Interlocked
+                    .Exchange(ref _ownedServices, null)
+                    ?.Dispose();
             }
         }
 
@@ -329,58 +439,143 @@ public sealed class MySqlProvider106ContractTests
         }
 
         /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        )
         {
-            modelBuilder.HasCharSet("utf8mb4").UseCollation("utf8mb4_unicode_ci");
+            modelBuilder
+                .HasCharSet("utf8mb4")
+                .UseCollation("utf8mb4_unicode_ci");
+
             var strings = Owner(modelBuilder, "strings");
-            strings.Property<string>("left_value").IsRequired();
-            strings.Property<string>("right_value").IsRequired();
-            strings.Property<string>("third_value").IsRequired();
-            strings.Property<byte[]>("reserved").HasMaxLength(17).IsRequired();
+            strings
+                .Property<string>("left_value")
+                .IsRequired();
+
+            strings
+                .Property<string>("right_value")
+                .IsRequired();
+
+            strings
+                .Property<string>("third_value")
+                .IsRequired();
+
+            strings
+                .Property<byte[]>("reserved")
+                .HasMaxLength(17)
+                .IsRequired();
+
             strings.HasIndex("left_value", "right_value", "third_value", "reserved");
 
             var binary = Owner(modelBuilder, "binary");
-            binary.Property<byte[]>("payload").IsRequired();
-            binary.Property<byte[]>("reserved").HasMaxLength(2818).IsRequired();
+            binary
+                .Property<byte[]>("payload")
+                .IsRequired();
+
+            binary
+                .Property<byte[]>("reserved")
+                .HasMaxLength(2818)
+                .IsRequired();
+
             binary.HasIndex("payload", "reserved");
 
             var fixedOwner = Owner(modelBuilder, "fixed");
-            fixedOwner.Property<string>("code").HasMaxLength(64).IsFixedLength().IsRequired();
-            fixedOwner.Property<byte[]>("payload").IsRequired();
-            fixedOwner.Property<byte[]>("reserved").HasMaxLength(2600).IsRequired();
+            fixedOwner
+                .Property<string>("code")
+                .HasMaxLength(64)
+                .IsFixedLength()
+                .IsRequired();
+
+            fixedOwner
+                .Property<byte[]>("payload")
+                .IsRequired();
+
+            fixedOwner
+                .Property<byte[]>("reserved")
+                .HasMaxLength(2600)
+                .IsRequired();
+
             fixedOwner.HasIndex("code", "payload", "reserved");
 
             var explicitOwner = Owner(modelBuilder, "explicit");
-            explicitOwner.Property<string>("code").HasMaxLength(700).IsRequired();
-            explicitOwner.Property<string>("value").IsRequired();
+            explicitOwner
+                .Property<string>("code")
+                .HasMaxLength(700)
+                .IsRequired();
+
+            explicitOwner
+                .Property<string>("value")
+                .IsRequired();
+
             explicitOwner.HasIndex("code", "value");
 
             var guid = Owner(modelBuilder, "guid");
-            guid.Property<Guid>("guid").HasMySqlGuidFormat(DokaMySqlGuidFormat.Binary16);
-            guid.Property<string>("value").IsRequired();
-            guid.Property<string>("reserved").HasMaxLength(600).IsRequired();
+            guid
+                .Property<Guid>("guid")
+                .HasMySqlGuidFormat(DokaMySqlGuidFormat.Binary16);
+
+            guid
+                .Property<string>("value")
+                .IsRequired();
+
+            guid
+                .Property<string>("reserved")
+                .HasMaxLength(600)
+                .IsRequired();
+
             guid.HasIndex("guid", "value", "reserved");
 
             var overlap = Owner(modelBuilder, "overlap");
-            overlap.Property<string>("left_value").IsRequired();
-            overlap.Property<string>("shared").IsRequired();
-            overlap.Property<string>("explicit_value").HasMaxLength(700).IsRequired();
+            overlap
+                .Property<string>("left_value")
+                .IsRequired();
+
+            overlap
+                .Property<string>("shared")
+                .IsRequired();
+
+            overlap
+                .Property<string>("explicit_value")
+                .HasMaxLength(700)
+                .IsRequired();
+
             overlap.HasIndex("left_value", "shared");
             overlap.HasIndex("shared", "explicit_value");
 
             var principal = modelBuilder.Entity("principal");
             principal.ToTable("budget_principals");
-            principal.Property<string>("code").IsRequired();
-            principal.Property<string>("scope").HasMaxLength(600).IsRequired();
+            principal
+                .Property<string>("code")
+                .IsRequired();
+
+            principal
+                .Property<string>("scope")
+                .HasMaxLength(600)
+                .IsRequired();
+
             principal.HasKey("code", "scope");
             var dependent = Owner(modelBuilder, "dependents", "dependent");
-            dependent.Property<string>("code").IsRequired();
-            dependent.Property<string>("scope").IsRequired();
-            dependent.HasOne("principal", null).WithMany().HasForeignKey("code", "scope");
+            dependent
+                .Property<string>("code")
+                .IsRequired();
+
+            dependent
+                .Property<string>("scope")
+                .IsRequired();
+
+            dependent
+                .HasOne("principal", null)
+                .WithMany()
+                .HasForeignKey("code", "scope");
 
             var unindexed = Owner(modelBuilder, "unindexed");
-            unindexed.Property<string>("text").IsRequired();
-            unindexed.Property<byte[]>("payload").IsRequired();
+            unindexed
+                .Property<string>("text")
+                .IsRequired();
+
+            unindexed
+                .Property<byte[]>("payload")
+                .IsRequired();
         }
     }
 
@@ -388,32 +583,31 @@ public sealed class MySqlProvider106ContractTests
     private sealed class ImpossibleBudgetContext(DbContextOptions<ImpossibleBudgetContext> options) : DbContext(options)
     {
         /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        )
         {
             modelBuilder.HasCharSet("utf8mb4");
             var owner = Owner(modelBuilder, "impossible");
-            owner.Property<string>("value").HasMaxLength(769).IsRequired();
+            owner
+                .Property<string>("value")
+                .HasMaxLength(769)
+                .IsRequired();
+
             owner.HasIndex("value");
         }
-    }
-
-    /// <summary>Creates one physical owner with a deterministic non-generated integer identity.</summary>
-    private static EntityTypeBuilder Owner(ModelBuilder modelBuilder, string suffix, string? name = null)
-    {
-        var owner = modelBuilder.Entity(name ?? suffix);
-        owner.ToTable("budget_" + suffix);
-        owner.Property<int>("id").ValueGeneratedNever();
-        owner.HasKey("id");
-
-        return owner;
     }
 
     /// <summary>Separates accepted projected definitions from independently captured native metadata.</summary>
     private sealed class ProjectedColumns(ExpectedColumnDefinition[] definitions) : ISafeMigrationProjectedColumnSource
     {
         /// <inheritdoc />
-        public bool TryGetProjectedColumn(string table, string? schema, string column,
-            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ExpectedColumnDefinition? definition)
+        public bool TryGetProjectedColumn(
+            string table,
+            string? schema,
+            string column,
+            [NotNullWhen(true)] out ExpectedColumnDefinition? definition
+        )
         {
             definition = definitions.FirstOrDefault(value => value.Name == column);
 

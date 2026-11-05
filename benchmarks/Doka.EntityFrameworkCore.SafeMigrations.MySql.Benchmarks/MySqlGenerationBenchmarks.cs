@@ -12,6 +12,13 @@ public class MySqlGenerationBenchmarks : IDisposable
     [Params(1, 100, 1000)]
     public int OperationCount { get; set; }
 
+    /// <summary>Releases the owned benchmark context.</summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
     /// <summary>Creates the native provider services, model and operations outside the measurement.</summary>
     [GlobalSetup]
     public void Setup()
@@ -31,13 +38,6 @@ public class MySqlGenerationBenchmarks : IDisposable
     /// <summary>Disposes the native provider context after measurement.</summary>
     [GlobalCleanup]
     public void Cleanup() => Dispose();
-
-    /// <summary>Releases the owned benchmark context.</summary>
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
 
     /// <summary>Releases managed resources owned by this benchmark fixture.</summary>
     /// <param name="disposing">Whether managed resources should be released.</param>

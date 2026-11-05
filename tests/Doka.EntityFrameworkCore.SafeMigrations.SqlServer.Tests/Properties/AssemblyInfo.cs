@@ -1,4 +1,4 @@
-[assembly: Microsoft.EntityFrameworkCore.Design.DesignTimeServicesReference(
+[assembly: DesignTimeServicesReference(
     "Doka.EntityFrameworkCore.SafeMigrations.SqlServer.SqlServerSafeMigrationDesignTimeServices, "
-        + "Doka.EntityFrameworkCore.SafeMigrations.SqlServer",
+    + "Doka.EntityFrameworkCore.SafeMigrations.SqlServer",
     "Microsoft.EntityFrameworkCore.SqlServer")]

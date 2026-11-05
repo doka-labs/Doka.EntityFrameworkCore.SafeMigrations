@@ -66,7 +66,9 @@ public sealed class BenchmarkProgramInvocationTests
         var responsePath = Path.Combine(evidence.DirectoryPath, "benchmark.rsp");
         File.WriteAllText(responsePath, argument);
         var (parsed, _, options) = ConfigParser.Parse(
-            ["@" + responsePath], NullLogger.Instance, DefaultConfig.Instance);
+            ["@" + responsePath],
+            NullLogger.Instance,
+            DefaultConfig.Instance);
 
         // Act
         var safe = parsed && BenchmarkProgram.IsSafeInvocation(options);
@@ -97,7 +99,9 @@ public sealed class BenchmarkProgramInvocationTests
     {
         // Arrange
         var (parsed, _, options) = ConfigParser.Parse(
-            ["--envVars", variable], NullLogger.Instance, DefaultConfig.Instance);
+            ["--envVars", variable],
+            NullLogger.Instance,
+            DefaultConfig.Instance);
 
         // Act
         var safe = parsed && BenchmarkProgram.IsSafeInvocation(options);
@@ -132,7 +136,9 @@ public sealed class BenchmarkProgramInvocationTests
         var responsePath = Path.Combine(evidence.DirectoryPath, "benchmark.rsp");
         File.WriteAllText(responsePath, "--envVars " + variable);
         var (parsed, _, options) = ConfigParser.Parse(
-            ["@" + responsePath], NullLogger.Instance, DefaultConfig.Instance);
+            ["@" + responsePath],
+            NullLogger.Instance,
+            DefaultConfig.Instance);
 
         // Act
         var safe = parsed && BenchmarkProgram.IsSafeInvocation(options);

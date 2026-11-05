@@ -22,6 +22,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     {
         var results = new MySqlDataProbeResult?[plans.Length];
         var candidates = new Dictionary<MySqlDataProbeContract, MySqlDataProbeCandidate>();
+
         // WHY: Keep data-probe plans, short-circuit states and result slots aligned by ordinal.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -139,6 +140,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
                 var parameterizer = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
                 var selections = new List<string>(count);
+
                 // WHY: Bind each bounded candidate to the transition plan at the same window offset.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery
@@ -294,20 +296,19 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             cancellationToken);
     }
 
-    private readonly record struct MySqlDataProbeIdentity(
-        string Table,
-        string Column,
-        int TargetLength
-    );
-
     /// <summary>Retains exact immutable definition identities without allocating serialized contracts.</summary>
     private static MySqlDataProbeContract CreateDataProbeContract(
         MySqlDataProbeIdentity identity,
         SafeMigrationOperation operation
     ) => operation.Intent switch
     {
-        EnsureColumnIntent intent => new(identity, intent.Definition, null, intent.Schema, operation.Policy),
-        AlterColumnIntent intent => new(
+        EnsureColumnIntent intent => new MySqlDataProbeContract(
+            identity,
+            intent.Definition,
+            null,
+            intent.Schema,
+            operation.Policy),
+        AlterColumnIntent intent => new MySqlDataProbeContract(
             identity,
             intent.Definition,
             intent.OldDefinition,
@@ -315,6 +316,12 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             operation.Policy),
         _ => throw new InvalidOperationException("A MySQL column data probe requires a column intent."),
     };
+
+    private readonly record struct MySqlDataProbeIdentity(
+        string Table,
+        string Column,
+        int TargetLength
+    );
 
     private readonly record struct MySqlDataProbeContract(
         MySqlDataProbeIdentity Identity,

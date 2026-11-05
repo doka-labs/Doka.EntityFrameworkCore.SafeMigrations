@@ -10,7 +10,9 @@ public sealed class SqliteTableConstraintTransitionsTests
     [InlineData("drop_recreate")]
     [InlineData("rename")]
     [InlineData("repeated")]
-    public void FutureConstraintCannotCrossCreatorBoundary(string boundary)
+    public void FutureConstraintCannotCrossCreatorBoundary(
+        string boundary
+    )
     {
         var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.Sqlite");
         AddCreator(builder, "children");
@@ -34,7 +36,10 @@ public sealed class SqliteTableConstraintTransitionsTests
                 throw new ArgumentOutOfRangeException(nameof(boundary));
         }
 
-        var table = boundary == "rename" ? "renamed_children" : "children";
+        var table = boundary == "rename"
+            ? "renamed_children"
+            : "children";
+
         builder.AddForeignKeyIfNotExists("fk_children_parent", table, ["ParentId"], "parents", ["Id"]);
 
         var transitions = new SqliteTableConstraintTransitions(builder.Operations);
@@ -46,8 +51,10 @@ public sealed class SqliteTableConstraintTransitionsTests
         if (boundary is "repeated" or "drop_recreate")
         {
             var later = Assert.IsType<SafeMigrationOperation>(builder.Operations[^2]);
-            Assert.Single(Assert.IsType<SafeMigrationExpectedTableConstraints>(
-                transitions.Find(later)).AllowedForeignKeys);
+            Assert.Single(
+                Assert.IsType<SafeMigrationExpectedTableConstraints>(
+                        transitions.Find(later))
+                    .AllowedForeignKeys);
         }
     }
 
@@ -56,15 +63,19 @@ public sealed class SqliteTableConstraintTransitionsTests
     public void UntouchedInlineForeignKeyRemainsRequired()
     {
         var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.Sqlite");
-        builder.CreateTableIfNotExists("children", table => new
+        builder.CreateTableIfNotExists(
+            "children",
+            table => new
             {
                 Id = table.Column<int>(type: "INTEGER", nullable: false),
                 ParentId = table.Column<int>(type: "INTEGER", nullable: true),
-            }, constraints: table =>
+            },
+            constraints: table =>
             {
                 table.PrimaryKey("pk_children", item => item.Id);
                 table.ForeignKey("fk_children_parent", item => item.ParentId, "parents", "Id");
             });
+
         builder.AddForeignKeyIfNotExists("fk_children_other", "children", ["Id"], "other_parents", ["Id"]);
         var creator = Assert.IsType<SafeMigrationOperation>(builder.Operations[0]);
 
@@ -72,14 +83,22 @@ public sealed class SqliteTableConstraintTransitionsTests
 
         Assert.NotNull(contract);
         Assert.Equal(2, contract.AllowedForeignKeys.Count);
-        Assert.Equal("fk_children_parent", Assert.Single(contract.RequiredForeignKeys).Name);
+        Assert.Equal("fk_children_parent",
+            Assert.Single(contract.RequiredForeignKeys)
+                .Name);
     }
 
     /// <summary>Authors one valid strict baseline used by the boundary probes.</summary>
-    private static void AddCreator(MigrationBuilder builder, string tableName)
-        => builder.CreateTableIfNotExists(tableName, table => new
-        {
-            Id = table.Column<int>(type: "INTEGER", nullable: false),
-            ParentId = table.Column<int>(type: "INTEGER", nullable: true),
-        }, constraints: table => table.PrimaryKey("pk_children", item => item.Id));
+    private static void AddCreator(
+        MigrationBuilder builder,
+        string tableName
+    )
+        => builder.CreateTableIfNotExists(
+            tableName,
+            table => new
+            {
+                Id = table.Column<int>(type: "INTEGER", nullable: false),
+                ParentId = table.Column<int>(type: "INTEGER", nullable: true),
+            },
+            constraints: table => table.PrimaryKey("pk_children", item => item.Id));
 }

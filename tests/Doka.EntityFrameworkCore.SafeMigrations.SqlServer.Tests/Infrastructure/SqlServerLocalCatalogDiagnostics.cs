@@ -22,7 +22,11 @@ internal static partial class SqlServerLocalCatalogDiagnostics
         };
 
         var output = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_SQLSERVER_DIAGNOSTIC_OUTPUT")
-            ?? Path.Combine(Path.GetTempPath(), "sm-sqlserver-diagnostics-" + Guid.NewGuid().ToString("N"));
+            ?? Path.Combine(Path.GetTempPath(),
+                "sm-sqlserver-diagnostics-"
+                + Guid
+                    .NewGuid()
+                    .ToString("N"));
 
         Directory.CreateDirectory(output);
         var rootString = rootSettings.ConnectionString;
@@ -84,6 +88,7 @@ internal static partial class SqlServerLocalCatalogDiagnostics
                 connection,
                 "SET STATISTICS IO ON; SET STATISTICS TIME ON;",
                 cancellationToken: cancellationToken);
+
             var statistics = new List<string>();
             var timings = new List<string>();
             connection.InfoMessage += (_, arguments) => statistics.Add(arguments.Message);
@@ -106,12 +111,17 @@ internal static partial class SqlServerLocalCatalogDiagnostics
 
                     await using var reader = await command.ExecuteReaderAsync(cancellationToken: cancellationToken);
                     rows.AddRange(await ReadRowsAsync(reader, cancellationToken: cancellationToken));
-                    var elapsed = Stopwatch.GetElapsedTime(statementStarted).TotalMilliseconds;
-                    timings.Add(FormattableString.Invariant(
-                        $"attempt={attempt}; statement={index}; elapsed-ms={elapsed:F3}; chars={statements[index].Length}"));
+                    var elapsed = Stopwatch.GetElapsedTime(statementStarted)
+                        .TotalMilliseconds;
 
-                    await File.WriteAllLinesAsync(Path.Combine(output, $"{shape}-statistics-{attempt}-{index}.log"),
-                        statistics, cancellationToken: cancellationToken);
+                    timings.Add(
+                        FormattableString.Invariant(
+                            $"attempt={attempt}; statement={index}; elapsed-ms={elapsed:F3}; chars={statements[index].Length}"));
+
+                    await File.WriteAllLinesAsync(
+                        Path.Combine(output, $"{shape}-statistics-{attempt}-{index}.log"),
+                        statistics,
+                        cancellationToken: cancellationToken);
 
                     await File.WriteAllTextAsync(
                         Path.Combine(output, $"{shape}-statement-{index}.sql"),
@@ -119,8 +129,9 @@ internal static partial class SqlServerLocalCatalogDiagnostics
                         cancellationToken: cancellationToken);
                 }
 
-                timings.Add(FormattableString.Invariant(
-                    $"attempt={attempt}; elapsed-ms={Stopwatch.GetElapsedTime(started).TotalMilliseconds:F3}; rows={rows.Count}"));
+                timings.Add(
+                    FormattableString.Invariant(
+                        $"attempt={attempt}; elapsed-ms={Stopwatch.GetElapsedTime(started).TotalMilliseconds:F3}; rows={rows.Count}"));
 
                 rows.Sort(StringComparer.Ordinal);
                 expectedRows ??= rows.ToArray();
@@ -163,8 +174,9 @@ internal static partial class SqlServerLocalCatalogDiagnostics
                 throw new InvalidOperationException("Native local classifier dispatch changed its evidence.");
             }
 
-            timings.Add(FormattableString.Invariant(
-                $"native; elapsed-ms={Stopwatch.GetElapsedTime(nativeStarted).TotalMilliseconds:F3}; rows={nativeRows.Count}"));
+            timings.Add(
+                FormattableString.Invariant(
+                    $"native; elapsed-ms={Stopwatch.GetElapsedTime(nativeStarted).TotalMilliseconds:F3}; rows={nativeRows.Count}"));
 
             await File.WriteAllLinesAsync(
                 Path.Combine(output, shape + "-timing.log"),
@@ -184,7 +196,8 @@ internal static partial class SqlServerLocalCatalogDiagnostics
     private static async Task ExportCachedPlansAsync(
         SqlConnection connection,
         string path,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -204,7 +217,7 @@ internal static partial class SqlServerLocalCatalogDiagnostics
         {
             var values = new object[reader.FieldCount];
             reader.GetValues(values);
-            rows.Add(System.Text.Json.JsonSerializer.Serialize(values));
+            rows.Add(JsonSerializer.Serialize(values));
         }
 
         await File.WriteAllLinesAsync(path, rows, cancellationToken: cancellationToken);
@@ -212,7 +225,10 @@ internal static partial class SqlServerLocalCatalogDiagnostics
 
     /// <summary>Reads only ordinary nine-column classifier results; malformed shapes or duplicate ordinals fail.</summary>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
-    private static async Task<List<string>> ReadRowsAsync(SqlDataReader reader, CancellationToken cancellationToken)
+    private static async Task<List<string>> ReadRowsAsync(
+        SqlDataReader reader,
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -234,7 +250,7 @@ internal static partial class SqlServerLocalCatalogDiagnostics
 
                 var values = new object[9];
                 reader.GetValues(values);
-                rows.Add(System.Text.Json.JsonSerializer.Serialize(values));
+                rows.Add(JsonSerializer.Serialize(values));
             }
         } while (await reader.NextResultAsync(cancellationToken: cancellationToken));
 
@@ -247,7 +263,8 @@ internal static partial class SqlServerLocalCatalogDiagnostics
         SqlConnection root,
         string rootString,
         string output,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -272,14 +289,18 @@ internal static partial class SqlServerLocalCatalogDiagnostics
             changeCollation: true,
             cancellationToken: cancellationToken);
 
-        await File.WriteAllLinesAsync(Path.Combine(output, "connection-reset.log"),
-        [
-            "pooled_unchanged=" + control,
-            "pooled_collation_changed=" + regression,
-            "fixture_unpooled_collation_changed=" + corrected,
-        ], cancellationToken: cancellationToken);
+        await File.WriteAllLinesAsync(
+            Path.Combine(output, "connection-reset.log"),
+            [
+                "pooled_unchanged=" + control,
+                "pooled_collation_changed=" + regression,
+                "fixture_unpooled_collation_changed=" + corrected,
+            ],
+            cancellationToken: cancellationToken);
 
-        if (control != "reopened_3" || regression != "login_reset_rejected" || corrected != "reopened_3")
+        if (control != "reopened_3"
+            || regression != "login_reset_rejected"
+            || corrected != "reopened_3")
         {
             throw new InvalidOperationException("The isolated local connection-reset reproduction was not confirmed.");
         }
@@ -307,7 +328,9 @@ internal static partial class SqlServerLocalCatalogDiagnostics
             await connection.OpenAsync(cancellationToken: cancellationToken);
             if (changeCollation)
             {
-                await ExecuteAsync(connection, "DECLARE @collation sysname = "
+                await ExecuteAsync(
+                    connection,
+                    "DECLARE @collation sysname = "
                     + "CONVERT(sysname, DATABASEPROPERTYEX(DB_NAME(), 'Collation')); "
                     + "IF @collation = N'Latin1_General_100_CS_AS' "
                     + "ALTER DATABASE CURRENT COLLATE Latin1_General_100_CI_AS; "
@@ -325,8 +348,11 @@ internal static partial class SqlServerLocalCatalogDiagnostics
 
             return "reopened_3";
         }
-        catch (SqlException exception) when (pooling && changeCollation
-            && exception.Message.Contains("Resetting the connection results in a different state", StringComparison.Ordinal))
+        catch (SqlException exception) when (pooling
+            && changeCollation
+            && exception.Message.Contains(
+                "Resetting the connection results in a different state",
+                StringComparison.Ordinal))
         {
             return "login_reset_rejected";
         }
@@ -345,19 +371,31 @@ internal static partial class SqlServerLocalCatalogDiagnostics
             + "CREATE TABLE dbo.sqlserver_stress_alter(caption varchar(10) NOT NULL);"
             + "INSERT dbo.sqlserver_stress_alter VALUES('short');"
             + "CREATE TABLE dbo.sqlserver_stress_managed(id int NOT NULL PRIMARY KEY, managed_value nvarchar(32) NOT NULL);"
-            + string.Join("", LargeMigrationStressContract.ModelManagedUpdateOrdinals(LargeMigrationStressDialect.SqlServer)
-                .TakeWhile(ordinal => ordinal < SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture)
-                .Select(ordinal => "INSERT dbo.sqlserver_stress_managed VALUES("
-                    + LargeMigrationStressContract.ModelManagedUpdateKey(ordinal).ToString(CultureInfo.InvariantCulture)
-                    + ",N'source');"));
+            + string.Join(
+                "",
+                LargeMigrationStressContract
+                    .ModelManagedUpdateOrdinals(LargeMigrationStressDialect.SqlServer)
+                    .TakeWhile(ordinal => ordinal < SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture)
+                    .Select(ordinal => "INSERT dbo.sqlserver_stress_managed VALUES("
+                        + LargeMigrationStressContract
+                            .ModelManagedUpdateKey(ordinal)
+                            .ToString(CultureInfo.InvariantCulture)
+                        + ",N'source');"));
 
     /// <summary>Creates a fresh synthetic database and retains its exact name for recoverable cleanup.</summary>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
-    private static async Task<string> CreateDatabaseAsync(SqlConnection root, CancellationToken cancellationToken)
+    private static async Task<string> CreateDatabaseAsync(
+        SqlConnection root,
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var database = "sm_diagnostic_" + Guid.NewGuid().ToString("N");
+        var database = "sm_diagnostic_"
+            + Guid
+                .NewGuid()
+                .ToString("N");
+
         // WHY: Complete admitted CREATE before transferring the exact name to the caller's finally-owned cleanup.
         // Canceling only the command wait could lose ownership of a database already committed by the server.
         await ExecuteAsync(root, $"CREATE DATABASE [{database}];", cancellationToken: CancellationToken.None);
@@ -366,14 +404,22 @@ internal static partial class SqlServerLocalCatalogDiagnostics
     }
 
     /// <summary>Drops only the exact synthetic database created by this diagnostic helper.</summary>
-    private static Task DropDatabaseAsync(SqlConnection root, string database)
-        => ExecuteAsync(root,
+    private static Task DropDatabaseAsync(
+        SqlConnection root,
+        string database
+    )
+        => ExecuteAsync(
+            root,
             $"ALTER DATABASE [{database}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [{database}];",
             cancellationToken: CancellationToken.None);
 
     /// <summary>Executes fixture-only SQL without logging connection strings or source values.</summary>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
-    private static async Task ExecuteAsync(SqlConnection connection, string sql, CancellationToken cancellationToken)
+    private static async Task ExecuteAsync(
+        SqlConnection connection,
+        string sql,
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 

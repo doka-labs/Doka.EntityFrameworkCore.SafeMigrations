@@ -10,21 +10,92 @@ public partial class SqlServerColumnAttribution
     {
         const string poisonState = "(SELECT TOP (1) CONVERT(nvarchar(32), value) "
             + "FROM dbo.attribution_state_poison_absent)";
+
         const string poisonRepair = "CASE WHEN EXISTS "
             + "(SELECT 1 FROM dbo.attribution_repair_poison_absent) THEN 1 ELSE 0 END";
 
         MatchingProbe[] probes =
         [
-            new("matching_skips_state_and_repair", poisonState, "1", "1", "1", null, 0),
-            new("nonmatching_binds_state", poisonState, "0", "1", "1", null, 208),
-            new("null_matching_binds_state", poisonState, "CONVERT(int, NULL)", "1", "1", null, 208),
-            new("prerequisite_precedes_matching", poisonState, "1", "0", "1", null, 51004),
-            new("evaluation_precedes_matching", poisonState, "1", "1", "0", null, 51002),
-            new("physical_precedes_matching", poisonState, "1", "1", "1", "0", 51002),
-            new("different_binds_repair", "N'different'", "0", "1", "1", null, 208),
-            new("unsupported_skips_repair", "N'unsupported'", "0", "1", "1", null, 51002),
-            new("data_blocked_skips_repair", "N'data_blocked'", "0", "1", "1", null, 51003),
-            new("classified_matching_skips_repair", "N'matching'", "0", "1", "1", null, 0),
+            new(
+                "matching_skips_state_and_repair",
+                poisonState,
+                "1",
+                "1",
+                "1",
+                null,
+                0),
+            new(
+                "nonmatching_binds_state",
+                poisonState,
+                "0",
+                "1",
+                "1",
+                null,
+                208),
+            new(
+                "null_matching_binds_state",
+                poisonState,
+                "CONVERT(int, NULL)",
+                "1",
+                "1",
+                null,
+                208),
+            new(
+                "prerequisite_precedes_matching",
+                poisonState,
+                "1",
+                "0",
+                "1",
+                null,
+                51004),
+            new(
+                "evaluation_precedes_matching",
+                poisonState,
+                "1",
+                "1",
+                "0",
+                null,
+                51002),
+            new(
+                "physical_precedes_matching",
+                poisonState,
+                "1",
+                "1",
+                "1",
+                "0",
+                51002),
+            new(
+                "different_binds_repair",
+                "N'different'",
+                "0",
+                "1",
+                "1",
+                null,
+                208),
+            new(
+                "unsupported_skips_repair",
+                "N'unsupported'",
+                "0",
+                "1",
+                "1",
+                null,
+                51002),
+            new(
+                "data_blocked_skips_repair",
+                "N'data_blocked'",
+                "0",
+                "1",
+                "1",
+                null,
+                51003),
+            new(
+                "classified_matching_skips_repair",
+                "N'matching'",
+                "0",
+                "1",
+                "1",
+                null,
+                0),
         ];
 
         // WHY: The diagnostic also compares the abandoned shortcut candidate.
@@ -36,12 +107,18 @@ public partial class SqlServerColumnAttribution
         {
             foreach (var probe in probes)
             {
-                var operation = new SafeMigrationOperation(new EnsureColumnIntent("attribution_items",
-                    new ExpectedColumnDefinition("value_0", typeof(string), true, "nvarchar(128)"), "dbo"),
+                var operation = new SafeMigrationOperation(
+                    new EnsureColumnIntent(
+                        "attribution_items",
+                        new ExpectedColumnDefinition("value_0", typeof(string), true, "nvarchar(128)"),
+                        "dbo"),
                     SafeMigrationPolicy.RepairIfSafe);
 
-                var plan = new SqlServerSafeMigrationRuntimePlan(probe.State, "1",
-                    SafeMigrationRepairCapability.Safe, poisonRepair)
+                var plan = new SqlServerSafeMigrationRuntimePlan(
+                    probe.State,
+                    "1",
+                    SafeMigrationRepairCapability.Safe,
+                    poisonRepair)
                 {
                     RequiresDelayedBinding = delayed,
                     PrerequisiteExpression = probe.Prerequisite,
@@ -66,7 +143,11 @@ public partial class SqlServerColumnAttribution
                             ? 208
                             : probe.ErrorNumber;
 
-                var name = probe.Name + (delayed ? "_delayed" : "_direct");
+                var name = probe.Name
+                    + (delayed
+                        ? "_delayed"
+                        : "_direct");
+
                 File.WriteAllText(Path.Combine(output, "matching-binding-" + name + ".sql"), sql);
                 var errorNumber = 0;
                 try
@@ -78,15 +159,17 @@ public partial class SqlServerColumnAttribution
                     errorNumber = exception.Number;
                 }
 
-                results.Add(new
-                {
-                    Name = name,
-                    RuntimeMatchingSurfaceAvailable = matchingProperty is not null,
-                    ConditionalRepairEvaluationAvailable = conditionalRepair,
-                    ExpectedErrorNumber = expectedError,
-                    ActualErrorNumber = errorNumber,
-                    ContractSatisfied = errorNumber == expectedError,
-                });
+                results.Add(
+                    new
+                    {
+                        Name = name,
+                        RuntimeMatchingSurfaceAvailable = matchingProperty is not null,
+                        ConditionalRepairEvaluationAvailable = conditionalRepair,
+                        ExpectedErrorNumber = expectedError,
+                        ActualErrorNumber = errorNumber,
+                        ContractSatisfied = errorNumber == expectedError,
+                    });
+
                 contractsSatisfied &= errorNumber == expectedError;
             }
         }

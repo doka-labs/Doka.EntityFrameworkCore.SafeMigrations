@@ -10,11 +10,17 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
     [InlineData("lock")]
     [InlineData("catalog")]
     [InlineData("hierarchy")]
-    public async Task AcceptedSourceNoOpCannotEraseNativeDropCapabilityRefusal(string restriction)
+    public async Task AcceptedSourceNoOpCannotEraseNativeDropCapabilityRefusal(
+        string restriction
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var role = "drop_capability_" + Guid.NewGuid().ToString("N");
+        var role = "drop_capability_"
+            + Guid
+                .NewGuid()
+                .ToString("N");
+
         var restrictionSql = restriction switch
         {
             "lock" => "REVOKE ALL ON drop_capability FROM " + role + ";",
@@ -23,11 +29,20 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
             _ => throw new ArgumentOutOfRangeException(nameof(restriction)),
         };
 
-        await ExecuteSqlAsync(connectionString, "CREATE ROLE " + role + "; "
-            + "GRANT USAGE, CREATE ON SCHEMA public TO " + role + "; "
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE ROLE "
+            + role
+            + "; "
+            + "GRANT USAGE, CREATE ON SCHEMA public TO "
+            + role
+            + "; "
             + "CREATE TABLE drop_capability(source integer, unrelated integer); "
-            + "INSERT INTO drop_capability VALUES(2,9); ALTER TABLE drop_capability OWNER TO " + role + "; "
-            + restrictionSql, cancellationToken: CancellationToken.None);
+            + "INSERT INTO drop_capability VALUES(2,9); ALTER TABLE drop_capability OWNER TO "
+            + role
+            + "; "
+            + restrictionSql,
+            cancellationToken: CancellationToken.None);
 
         try
         {
@@ -39,25 +54,44 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
             builder.DropColumnIfExists("source", "drop_capability");
 
             // Act
-            var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-                new SafeMigrationRunOptions("generated-drop-native-capability-lifetime"), CancellationToken.None);
+            var report = await context
+                .GetService<ISafeMigrationRunner>()
+                .AnalyzeAsync(
+                    context,
+                    builder.Operations,
+                    new SafeMigrationRunOptions("generated-drop-native-capability-lifetime"),
+                    CancellationToken.None);
 
-            var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [builder.Operations[^1]],
+            var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+                context,
+                [builder.Operations[^1]],
                 CancellationToken.None));
 
             // Assert
             Assert.Equal(SafeMigrationAction.NoOp, report.Assessments[0].Action);
             Assert.Equal(SafeMigrationAction.RejectUnsupported, report.Assessments[1].Action);
             Assert.Equal("generated_column_drop_unproven", report.Assessments[1].AnalysisCode);
-            Assert.Equal("P1002", Assert.IsType<PostgresException>(failure).SqlState);
-            Assert.Equal("2:9", await ScalarStringAsync(connectionString,
-                "SELECT source::text || ':' || unrelated::text FROM drop_capability;",
-                cancellationToken: CancellationToken.None));
+            Assert.Equal("P1002",
+                Assert.IsType<PostgresException>(failure)
+                    .SqlState);
+
+            Assert.Equal(
+                "2:9",
+                await ScalarStringAsync(
+                    connectionString,
+                    "SELECT source::text || ':' || unrelated::text FROM drop_capability;",
+                    cancellationToken: CancellationToken.None));
         }
         finally
         {
-            await ExecuteSqlAsync(connectionString, "ALTER TABLE drop_capability OWNER TO postgres; "
-                + "REVOKE USAGE, CREATE ON SCHEMA public FROM " + role + "; DROP ROLE " + role + ";",
+            await ExecuteSqlAsync(
+                connectionString,
+                "ALTER TABLE drop_capability OWNER TO postgres; "
+                + "REVOKE USAGE, CREATE ON SCHEMA public FROM "
+                + role
+                + "; DROP ROLE "
+                + role
+                + ";",
                 cancellationToken: CancellationToken.None);
         }
     }

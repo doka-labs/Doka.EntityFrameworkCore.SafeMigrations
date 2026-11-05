@@ -24,7 +24,11 @@ public sealed class SqlServerCatalogBatchingTests
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
-        var plans = Enumerable.Range(0, count).Select(index => DistinctPlan(Plan(delayed), index)).ToArray();
+        var plans = Enumerable
+            .Range(0, count)
+            .Select(index => DistinctPlan(Plan(delayed), index))
+            .ToArray();
+
         var results = new SafeMigrationProviderAnalysis[count];
 
         // WHY: Native batching packs whole statements, so a round trip covers the statement
@@ -36,13 +40,33 @@ public sealed class SqlServerCatalogBatchingTests
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, 71, plans, 0, results, CancellationToken.None);
+            connection,
+            null,
+            71,
+            plans,
+            0,
+            results,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(statements, connection.RecordedStatements.Count);
-        Assert.Equal(nativeBatch ? batches : 0, connection.BatchExecutions);
-        Assert.Equal(nativeBatch ? 0 : statements, connection.CommandExecutions);
-        Assert.Equal(Enumerable.Range(0, count).Select(State), results.Select(analysis => analysis.ObservedState));
+        Assert.Equal(
+            nativeBatch
+                ? batches
+                : 0,
+            connection.BatchExecutions);
+
+        Assert.Equal(
+            nativeBatch
+                ? 0
+                : statements,
+            connection.CommandExecutions);
+
+        Assert.Equal(Enumerable
+                .Range(0, count)
+                .Select(State),
+            results.Select(analysis => analysis.ObservedState));
+
         Assert.All(connection.ObservedTimeouts, timeout => Assert.Equal(71, timeout));
     }
 
@@ -51,31 +75,58 @@ public sealed class SqlServerCatalogBatchingTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task MultipleUnorderedStatements_RetainEveryOriginalResult(bool nativeBatch)
+    public async Task MultipleUnorderedStatements_RetainEveryOriginalResult(
+        bool nativeBatch
+    )
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch)
         {
-            TransformOrdinals = ordinals => ordinals.Reverse().ToArray(),
+            TransformOrdinals = ordinals => ordinals
+                .Reverse()
+                .ToArray(),
         };
 
         const int count = 257;
         const int width = SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement;
         const int perBatch = SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch;
-        var plans = Enumerable.Range(0, count).Select(index => DistinctPlan(Plan(false), index)).ToArray();
+        var plans = Enumerable
+            .Range(0, count)
+            .Select(index => DistinctPlan(Plan(false), index))
+            .ToArray();
+
         var results = new SafeMigrationProviderAnalysis[count];
         var statements = (count + width - 1) / width;
         var batches = (statements + perBatch - 1) / perBatch;
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, null, plans, 0, results, CancellationToken.None);
+            connection,
+            null,
+            null,
+            plans,
+            0,
+            results,
+            CancellationToken.None);
 
         // Assert
-        Assert.Equal(Enumerable.Range(0, count).Select(State), results.Select(analysis => analysis.ObservedState));
+        Assert.Equal(Enumerable
+                .Range(0, count)
+                .Select(State),
+            results.Select(analysis => analysis.ObservedState));
+
         Assert.Equal(statements, connection.RecordedStatements.Count);
-        Assert.Equal(nativeBatch ? batches : 0, connection.BatchExecutions);
-        Assert.Equal(nativeBatch ? 0 : statements, connection.CommandExecutions);
+        Assert.Equal(
+            nativeBatch
+                ? batches
+                : 0,
+            connection.BatchExecutions);
+
+        Assert.Equal(
+            nativeBatch
+                ? 0
+                : statements,
+            connection.CommandExecutions);
     }
 
     /// <summary>
@@ -85,24 +136,39 @@ public sealed class SqlServerCatalogBatchingTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task MixedCapture_PacksBothModesAndRestoresOriginalOrdinals(bool nativeBatch)
+    public async Task MixedCapture_PacksBothModesAndRestoresOriginalOrdinals(
+        bool nativeBatch
+    )
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
-        var plans = Enumerable.Range(0, 512)
-            .Select(index => index % 9 == 3 ? null : Plan(index % 9 is not (1 or 8)) with
-            {
-                DifferentDifference = new SafeMigrationFacetDifference(
-                    "test_contract", "expected-" + index, "actual-" + index),
-            })
+        var plans = Enumerable
+            .Range(0, 512)
+            .Select(index => index % 9 == 3
+                ? null
+                : Plan(index % 9 is not (1 or 8)) with
+                {
+                    DifferentDifference = new SafeMigrationFacetDifference(
+                        "test_contract",
+                        "expected-" + index,
+                        "actual-" + index),
+                })
             .ToArray();
 
         const int captureStart = 517;
-        var results = Enumerable.Repeat(Unsupported(), captureStart + plans.Length).ToArray();
+        var results = Enumerable
+            .Repeat(Unsupported(), captureStart + plans.Length)
+            .ToArray();
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, 71, plans, captureStart, results, CancellationToken.None);
+            connection,
+            null,
+            71,
+            plans,
+            captureStart,
+            results,
+            CancellationToken.None);
 
         // Assert
         Assert.InRange(
@@ -111,25 +177,54 @@ public sealed class SqlServerCatalogBatchingTests
             plans.Length / SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
 
         var expectedBatches = (connection.RecordedStatements.Count
-            + SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch - 1)
+                + SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch
+                - 1)
             / SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch;
 
-        Assert.Equal(nativeBatch ? expectedBatches : 0, connection.BatchExecutions);
-        Assert.Equal(nativeBatch ? 0 : connection.RecordedStatements.Count, connection.CommandExecutions);
-        Assert.All(results.Take(captureStart), analysis => Assert.Equal(
-            SafeMigrationObservedState.Unsupported, analysis.ObservedState));
+        Assert.Equal(
+            nativeBatch
+                ? expectedBatches
+                : 0,
+            connection.BatchExecutions);
+
+        Assert.Equal(
+            nativeBatch
+                ? 0
+                : connection.RecordedStatements.Count,
+            connection.CommandExecutions);
+
+        Assert.All(
+            results.Take(captureStart),
+            analysis => Assert.Equal(
+                SafeMigrationObservedState.Unsupported,
+                analysis.ObservedState));
+
         for (var index = 0; index < plans.Length; index++)
         {
-            Assert.Equal(plans[index] is null ? SafeMigrationObservedState.Unsupported
-                : State(captureStart + index), results[captureStart + index].ObservedState);
-            if (plans[index] is { } plan && State(captureStart + index) == SafeMigrationObservedState.Different)
+            Assert.Equal(
+                plans[index] is null
+                    ? SafeMigrationObservedState.Unsupported
+                    : State(captureStart + index),
+                results[captureStart + index].ObservedState);
+
+            if (plans[index] is { } plan
+                && State(captureStart + index) == SafeMigrationObservedState.Different)
             {
                 Assert.Same(plan.DifferentDifference, Assert.Single(results[captureStart + index].Differences));
             }
         }
 
-        Assert.Equal(nativeBatch ? expectedBatches : 0, connection.BatchesDisposed);
-        Assert.Equal(nativeBatch ? 0 : connection.RecordedStatements.Count, connection.CommandsDisposed);
+        Assert.Equal(
+            nativeBatch
+                ? expectedBatches
+                : 0,
+            connection.BatchesDisposed);
+
+        Assert.Equal(
+            nativeBatch
+                ? 0
+                : connection.RecordedStatements.Count,
+            connection.CommandsDisposed);
     }
 
     /// <summary>The complete mixed stress pattern stays bounded instead of fragmenting at each mode change.</summary>
@@ -140,22 +235,29 @@ public sealed class SqlServerCatalogBatchingTests
         await using var connection = new SqlServerCatalogTestConnection();
         var metadata = Plan(false);
         var delayed = Plan(true);
-        var results = Enumerable.Repeat(Unsupported(), 100_000).ToArray();
+        var results = Enumerable
+            .Repeat(Unsupported(), 100_000)
+            .ToArray();
 
         // Act
         for (var start = 0; start < results.Length; start += 512)
         {
-            var plans = Enumerable.Range(start, Math.Min(512, results.Length - start))
+            var plans = Enumerable
+                .Range(start, Math.Min(512, results.Length - start))
                 .Select(index => (index % 9) switch
                 {
-                    3 => null,
-                    1 or 8 => DistinctPlan(metadata, index),
-                    _ => DistinctPlan(delayed, index),
+                    3 => null, 1 or 8 => DistinctPlan(metadata, index), _ => DistinctPlan(delayed, index),
                 })
                 .ToArray();
 
             await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-                connection, null, 180, plans, start, results, CancellationToken.None);
+                connection,
+                null,
+                180,
+                plans,
+                start,
+                results,
+                CancellationToken.None);
         }
 
         // Assert
@@ -169,27 +271,37 @@ public sealed class SqlServerCatalogBatchingTests
         const int perBatch = SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch;
         var captures = (results.Length + perCapture - 1) / perCapture;
 
-        Assert.InRange(connection.RecordedStatements.Count,
+        Assert.InRange(
+            connection.RecordedStatements.Count,
             results.Length / width / 2,
-            captures * ((perCapture / width) + 2));
+            captures * (perCapture / width + 2));
 
-        Assert.InRange(connection.BatchExecutions,
+        Assert.InRange(
+            connection.BatchExecutions,
             connection.RecordedStatements.Count / perBatch,
             captures * 3);
 
         Assert.All(connection.BatchStatementCounts, count => Assert.InRange(count, 1, perBatch));
 
         Assert.All(connection.BatchPayloadBytes, bytes => Assert.InRange(bytes, 1, 4 * 1024 * 1024));
-        Assert.All(connection.RecordedStatements.Zip(connection.RecordedParameters), recorded => Assert.InRange(
-            recorded.First.StartsWith("DECLARE @doka_template", StringComparison.Ordinal)
-                ? recorded.Second.Count(parameter => parameter.ParameterName.StartsWith(
-                    "@doka_ordinal", StringComparison.Ordinal))
-                : recorded.First.Split("\nUNION ALL\n", StringSplitOptions.None).Length,
-            1,
-            SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement));
+        Assert.All(
+            connection.RecordedStatements.Zip(connection.RecordedParameters),
+            recorded => Assert.InRange(
+                recorded.First.StartsWith("DECLARE @doka_template", StringComparison.Ordinal)
+                    ? recorded.Second.Count(parameter => parameter.ParameterName.StartsWith(
+                        "@doka_ordinal",
+                        StringComparison.Ordinal))
+                    : recorded.First.Split("\nUNION ALL\n")
+                        .Length,
+                1,
+                SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement));
+
         for (var ordinal = 0; ordinal < results.Length; ordinal++)
         {
-            Assert.Equal(ordinal % 9 == 3 ? SafeMigrationObservedState.Unsupported : State(ordinal),
+            Assert.Equal(
+                ordinal % 9 == 3
+                    ? SafeMigrationObservedState.Unsupported
+                    : State(ordinal),
                 results[ordinal].ObservedState);
         }
 
@@ -201,16 +313,25 @@ public sealed class SqlServerCatalogBatchingTests
     [Theory]
     [InlineData(0)]
     [InlineData(32)]
-    public async Task EmptyOrSkippedCapture_PerformsNoDatabaseWork(int planCount)
+    public async Task EmptyOrSkippedCapture_PerformsNoDatabaseWork(
+        int planCount
+    )
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection();
-        var results = Enumerable.Repeat(Unsupported(), 32).ToArray();
+        var results = Enumerable
+            .Repeat(Unsupported(), 32)
+            .ToArray();
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, null, new SqlServerSafeMigrationRuntimePlan?[planCount],
-            0, results, CancellationToken.None);
+            connection,
+            null,
+            null,
+            new SqlServerSafeMigrationRuntimePlan?[planCount],
+            0,
+            results,
+            CancellationToken.None);
 
         // Assert
         Assert.Empty(connection.RecordedStatements);
@@ -229,7 +350,13 @@ public sealed class SqlServerCatalogBatchingTests
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, null, [plan], 0, results, CancellationToken.None);
+            connection,
+            null,
+            null,
+            [plan],
+            0,
+            results,
+            CancellationToken.None);
 
         // Assert
         var statement = Assert.Single(connection.RecordedStatements);
@@ -256,29 +383,65 @@ public sealed class SqlServerCatalogBatchingTests
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
         var plan = Plan(delayed) with
         {
-            StateExpression = "N'missing' /*" + new string('\'', delayed ? 550_000 : 1_100_000) + "*/",
+            StateExpression = "N'missing' /*"
+            + new string(
+                '\'',
+                delayed
+                    ? 550_000
+                    : 1_100_000)
+            + "*/",
         };
 
-        var plans = Enumerable.Range(0, 4).Select(index => DistinctPlan(plan, index) with
-        {
-            StateExpression = plan.StateExpression + " /* classifier "
-                + index.ToString(CultureInfo.InvariantCulture) + " */",
-        }).ToArray();
+        var plans = Enumerable
+            .Range(0, 4)
+            .Select(index => DistinctPlan(plan, index) with
+            {
+                StateExpression = plan.StateExpression
+                + " /* classifier "
+                + index.ToString(CultureInfo.InvariantCulture)
+                + " */",
+            })
+            .ToArray();
 
         var results = new SafeMigrationProviderAnalysis[4];
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, null, plans,
-            0, results, CancellationToken.None);
+            connection,
+            null,
+            null,
+            plans,
+            0,
+            results,
+            CancellationToken.None);
 
         // Assert
-        Assert.Equal(nativeBatch ? delayed ? 4 : 2 : 0, connection.BatchExecutions);
-        Assert.Equal(nativeBatch ? 0 : 4, connection.CommandExecutions);
+        Assert.Equal(
+            nativeBatch
+                ? delayed
+                    ? 4
+                    : 2
+                : 0,
+            connection.BatchExecutions);
+
+        Assert.Equal(
+            nativeBatch
+                ? 0
+                : 4,
+            connection.CommandExecutions);
+
         Assert.All(connection.BatchPayloadBytes, bytes => Assert.InRange(bytes, 1, 4 * 1024 * 1024));
-        Assert.All(connection.RecordedStatements, statement => Assert.InRange(
-            Encoding.UTF8.GetByteCount(statement), 1, 4 * 1024 * 1024));
-        Assert.Equal(Enumerable.Range(0, 4).Select(State), results.Select(analysis => analysis.ObservedState));
+        Assert.All(
+            connection.RecordedStatements,
+            statement => Assert.InRange(
+                Encoding.UTF8.GetByteCount(statement),
+                1,
+                4 * 1024 * 1024));
+
+        Assert.Equal(Enumerable
+                .Range(0, 4)
+                .Select(State),
+            results.Select(analysis => analysis.ObservedState));
     }
 
     /// <summary>A single oversized classifier is rejected before any catalog execution.</summary>
@@ -286,7 +449,9 @@ public sealed class SqlServerCatalogBatchingTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task OversizedClassifier_RejectsBeforeExecution(bool delayed)
+    public async Task OversizedClassifier_RejectsBeforeExecution(
+        bool delayed
+    )
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection();
@@ -296,7 +461,13 @@ public sealed class SqlServerCatalogBatchingTests
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-                connection, null, null, [plan], 0, results, CancellationToken.None));
+                connection,
+                null,
+                null,
+                [plan],
+                0,
+                results,
+                CancellationToken.None));
 
         // Assert
         Assert.Contains("operation 0 exceeds a bounded query limit", failure.Message, StringComparison.Ordinal);
@@ -340,14 +511,33 @@ public sealed class SqlServerCatalogBatchingTests
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-                connection, null, null, [DistinctPlan(Plan(false), 0), DistinctPlan(Plan(false), 1)],
-                0, results, CancellationToken.None));
+                connection,
+                null,
+                null,
+                [DistinctPlan(Plan(false), 0), DistinctPlan(Plan(false), 1)],
+                0,
+                results,
+                CancellationToken.None));
 
         // Assert
-        Assert.Contains(corruption is "missing" or "extra" ? "inconsistent row count" : "invalid ordinal",
-            failure.Message, StringComparison.Ordinal);
-        Assert.Equal(nativeBatch ? 1 : 0, connection.BatchesDisposed);
-        Assert.Equal(nativeBatch ? 0 : 1, connection.CommandsDisposed);
+        Assert.Contains(
+            corruption is "missing" or "extra"
+                ? "inconsistent row count"
+                : "invalid ordinal",
+            failure.Message,
+            StringComparison.Ordinal);
+
+        Assert.Equal(
+            nativeBatch
+                ? 1
+                : 0,
+            connection.BatchesDisposed);
+
+        Assert.Equal(
+            nativeBatch
+                ? 0
+                : 1,
+            connection.CommandsDisposed);
     }
 
     /// <summary>
@@ -357,7 +547,9 @@ public sealed class SqlServerCatalogBatchingTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task UnorderedResultRows_MatchTheirOwnClassifier(bool nativeBatch)
+    public async Task UnorderedResultRows_MatchTheirOwnClassifier(
+        bool nativeBatch
+    )
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch)
@@ -374,7 +566,13 @@ public sealed class SqlServerCatalogBatchingTests
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, null, plans, 0, results, CancellationToken.None);
+            connection,
+            null,
+            null,
+            plans,
+            0,
+            results,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(State(0), results[0].ObservedState);
@@ -395,7 +593,13 @@ public sealed class SqlServerCatalogBatchingTests
         // Act
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-                connection, null, null, [Plan(true)], 0, results, cancellation.Token));
+                connection,
+                null,
+                null,
+                [Plan(true)],
+                0,
+                results,
+                cancellation.Token));
 
         // Assert
         Assert.Empty(connection.RecordedStatements);
@@ -407,7 +611,9 @@ public sealed class SqlServerCatalogBatchingTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task FailedExecution_DisposesTransport(bool nativeBatch)
+    public async Task FailedExecution_DisposesTransport(
+        bool nativeBatch
+    )
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch) { ThrowOnExecute = true };
@@ -416,12 +622,28 @@ public sealed class SqlServerCatalogBatchingTests
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-                connection, null, null, [Plan(true)], 0, results, CancellationToken.None));
+                connection,
+                null,
+                null,
+                [Plan(true)],
+                0,
+                results,
+                CancellationToken.None));
 
         // Assert
         Assert.Equal("Injected catalog execution failure.", failure.Message);
-        Assert.Equal(nativeBatch ? 1 : 0, connection.BatchesDisposed);
-        Assert.Equal(nativeBatch ? 0 : 1, connection.CommandsDisposed);
+        Assert.Equal(
+            nativeBatch
+                ? 1
+                : 0,
+            connection.BatchesDisposed);
+
+        Assert.Equal(
+            nativeBatch
+                ? 0
+                : 1,
+            connection.CommandsDisposed);
+
         Assert.Null(results[0]);
     }
 
@@ -439,7 +661,13 @@ public sealed class SqlServerCatalogBatchingTests
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-                connection, null, null, [plan], 0, results, CancellationToken.None));
+                connection,
+                null,
+                null,
+                [plan],
+                0,
+                results,
+                CancellationToken.None));
 
         // Assert
         Assert.True(plan.StateExpression.Length < 4 * 1024 * 1024);
@@ -470,7 +698,13 @@ public sealed class SqlServerCatalogBatchingTests
         // Act
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
             SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-                connection, null, null, plans, captureStart, results, CancellationToken.None));
+                connection,
+                null,
+                null,
+                plans,
+                captureStart,
+                results,
+                CancellationToken.None));
 
         // Assert
         Assert.Empty(connection.RecordedStatements);
@@ -482,7 +716,9 @@ public sealed class SqlServerCatalogBatchingTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task CancelledRead_DisposesTransport(bool nativeBatch)
+    public async Task CancelledRead_DisposesTransport(
+        bool nativeBatch
+    )
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
@@ -501,12 +737,27 @@ public sealed class SqlServerCatalogBatchingTests
         // Act
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-                connection, null, null, [Plan(false)], 0, results, cancellation.Token));
+                connection,
+                null,
+                null,
+                [Plan(false)],
+                0,
+                results,
+                cancellation.Token));
 
         // Assert
         Assert.Equal(cancellation.Token, connection.CancellationTokenSeen);
-        Assert.Equal(nativeBatch ? 1 : 0, connection.BatchesDisposed);
-        Assert.Equal(nativeBatch ? 0 : 1, connection.CommandsDisposed);
+        Assert.Equal(
+            nativeBatch
+                ? 1
+                : 0,
+            connection.BatchesDisposed);
+
+        Assert.Equal(
+            nativeBatch
+                ? 0
+                : 1,
+            connection.CommandsDisposed);
     }
 
     /// <summary>Every transport receives the caller's transaction and configured timeout unchanged.</summary>
@@ -514,17 +765,29 @@ public sealed class SqlServerCatalogBatchingTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task Capture_ForwardsTimeoutAndCallerOwnedTransaction(bool nativeBatch)
+    public async Task Capture_ForwardsTimeoutAndCallerOwnedTransaction(
+        bool nativeBatch
+    )
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
         await using var transaction = await connection.BeginTransactionAsync();
-        var plans = Enumerable.Range(0, 300).Select(index => Plan(index % 2 == 0)).ToArray();
+        var plans = Enumerable
+            .Range(0, 300)
+            .Select(index => Plan(index % 2 == 0))
+            .ToArray();
+
         var results = new SafeMigrationProviderAnalysis[plans.Length];
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, transaction, 71, plans, 0, results, CancellationToken.None);
+            connection,
+            transaction,
+            71,
+            plans,
+            0,
+            results,
+            CancellationToken.None);
 
         // Assert
         Assert.NotEmpty(connection.ObservedTimeouts);
@@ -555,7 +818,9 @@ public sealed class SqlServerCatalogBatchingTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task CancellationAfterFirstRow_DoesNotReadOrExecuteFurther(bool nativeBatch)
+    public async Task CancellationAfterFirstRow_DoesNotReadOrExecuteFurther(
+        bool nativeBatch
+    )
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
@@ -564,13 +829,23 @@ public sealed class SqlServerCatalogBatchingTests
             AfterRowRead = _ => cancellation.Cancel(),
         };
 
-        var plans = Enumerable.Range(0, 257).Select(index => DistinctPlan(Plan(false), index)).ToArray();
+        var plans = Enumerable
+            .Range(0, 257)
+            .Select(index => DistinctPlan(Plan(false), index))
+            .ToArray();
+
         var results = new SafeMigrationProviderAnalysis[plans.Length];
 
         // Act
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-                connection, null, null, plans, 0, results, cancellation.Token));
+                connection,
+                null,
+                null,
+                plans,
+                0,
+                results,
+                cancellation.Token));
 
         // Assert
         Assert.Equal(1, connection.RowsRead);
@@ -578,9 +853,16 @@ public sealed class SqlServerCatalogBatchingTests
         Assert.All(results.Skip(1), Assert.Null);
         Assert.Equal(1, connection.BatchExecutions + connection.CommandExecutions);
         Assert.Equal(cancellation.Token, connection.CancellationTokenSeen);
-        Assert.Equal(nativeBatch ? 1 : 0, connection.BatchesDisposed);
         Assert.Equal(
-            nativeBatch ? 0 : SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch,
+            nativeBatch
+                ? 1
+                : 0,
+            connection.BatchesDisposed);
+
+        Assert.Equal(
+            nativeBatch
+                ? 0
+                : SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch,
             connection.CommandsDisposed);
     }
 
@@ -596,13 +878,23 @@ public sealed class SqlServerCatalogBatchingTests
         };
 
         const int width = SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement;
-        var plans = Enumerable.Range(0, 257).Select(index => DistinctPlan(Plan(false), index)).ToArray();
+        var plans = Enumerable
+            .Range(0, 257)
+            .Select(index => DistinctPlan(Plan(false), index))
+            .ToArray();
+
         var results = new SafeMigrationProviderAnalysis[plans.Length];
 
         // Act
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-                connection, null, null, plans, 0, results, cancellation.Token));
+                connection,
+                null,
+                null,
+                plans,
+                0,
+                results,
+                cancellation.Token));
 
         // Assert
         Assert.Equal(width, connection.RowsRead);
@@ -633,13 +925,23 @@ public sealed class SqlServerCatalogBatchingTests
             },
         };
 
-        var plans = Enumerable.Range(0, 257).Select(index => DistinctPlan(Plan(false), index)).ToArray();
+        var plans = Enumerable
+            .Range(0, 257)
+            .Select(index => DistinctPlan(Plan(false), index))
+            .ToArray();
+
         var results = new SafeMigrationProviderAnalysis[plans.Length];
 
         // Act
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-                connection, null, null, plans, 0, results, cancellation.Token));
+                connection,
+                null,
+                null,
+                plans,
+                0,
+                results,
+                cancellation.Token));
 
         // Assert
         Assert.Equal(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement, connection.RowsRead);
@@ -665,7 +967,8 @@ public sealed class SqlServerCatalogBatchingTests
         Assert.Contains("N''SELECT @doka_ordinal,", first, StringComparison.Ordinal);
         Assert.Contains("N'@doka_ordinal int', @doka_ordinal = 0;", first, StringComparison.Ordinal);
         const string parameterBoundary = "', N'@doka_ordinal int'";
-        Assert.Equal(first[..first.LastIndexOf(parameterBoundary, StringComparison.Ordinal)],
+        Assert.Equal(
+            first[..first.LastIndexOf(parameterBoundary, StringComparison.Ordinal)],
             second[..second.LastIndexOf(parameterBoundary, StringComparison.Ordinal)]);
     }
 
@@ -677,28 +980,59 @@ public sealed class SqlServerCatalogBatchingTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public async Task EqualPlans_UseOneClassifierAndRestoreSkippedOriginalSlots(bool delayed, bool nativeBatch)
+    public async Task EqualPlans_UseOneClassifierAndRestoreSkippedOriginalSlots(
+        bool delayed,
+        bool nativeBatch
+    )
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch);
         var plan = DistinctPlan(Plan(delayed), 42);
-        var plans = Enumerable.Range(0, 512).Select(index => index == 7 ? null : plan with { }).ToArray();
+        var plans = Enumerable
+            .Range(0, 512)
+            .Select(index => index == 7
+                ? null
+                : plan with { })
+            .ToArray();
+
         const int captureStart = 17;
-        var results = Enumerable.Repeat(Unsupported(), captureStart + plans.Length).ToArray();
+        var results = Enumerable
+            .Repeat(Unsupported(), captureStart + plans.Length)
+            .ToArray();
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, null, plans, captureStart, results, CancellationToken.None);
+            connection,
+            null,
+            null,
+            plans,
+            captureStart,
+            results,
+            CancellationToken.None);
 
         // Assert
         Assert.Single(connection.RecordedStatements);
         Assert.Equal(1, connection.RowsRead);
-        Assert.Equal(nativeBatch ? 1 : 0, connection.BatchExecutions);
-        Assert.Equal(nativeBatch ? 0 : 1, connection.CommandExecutions);
+        Assert.Equal(
+            nativeBatch
+                ? 1
+                : 0,
+            connection.BatchExecutions);
+
+        Assert.Equal(
+            nativeBatch
+                ? 0
+                : 1,
+            connection.CommandExecutions);
+
         Assert.Equal(SafeMigrationObservedState.Different, results[captureStart].ObservedState);
         Assert.Same(plan.DifferentDifference, Assert.Single(results[captureStart].Differences));
-        Assert.All(results.Take(captureStart), result => Assert.Equal(
-            SafeMigrationObservedState.Unsupported, result.ObservedState));
+        Assert.All(
+            results.Take(captureStart),
+            result => Assert.Equal(
+                SafeMigrationObservedState.Unsupported,
+                result.ObservedState));
+
         for (var index = 0; index < plans.Length; index++)
         {
             if (index == 7)
@@ -741,11 +1075,20 @@ public sealed class SqlServerCatalogBatchingTests
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, null, plans, 0, results, CancellationToken.None);
+            connection,
+            null,
+            null,
+            plans,
+            0,
+            results,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(plans.Length, connection.RowsRead);
-        Assert.Equal(Enumerable.Range(0, plans.Length).Select(State), results.Select(result => result.ObservedState));
+        Assert.Equal(Enumerable
+                .Range(0, plans.Length)
+                .Select(State),
+            results.Select(result => result.ObservedState));
     }
 
     /// <summary>Reuse never crosses captures or analyzer invocations, where live state may have changed.</summary>
@@ -756,13 +1099,28 @@ public sealed class SqlServerCatalogBatchingTests
         await using var connection = new SqlServerCatalogTestConnection();
         var first = new SafeMigrationProviderAnalysis[512];
         var second = new SafeMigrationProviderAnalysis[512];
-        var plans = Enumerable.Repeat(Plan(false), 512).ToArray();
+        var plans = Enumerable
+            .Repeat(Plan(false), 512)
+            .ToArray();
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, null, plans, 0, first, CancellationToken.None);
+            connection,
+            null,
+            null,
+            plans,
+            0,
+            first,
+            CancellationToken.None);
+
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, null, plans, 0, second, CancellationToken.None);
+            connection,
+            null,
+            null,
+            plans,
+            0,
+            second,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(2, connection.RecordedStatements.Count);
@@ -779,24 +1137,44 @@ public sealed class SqlServerCatalogBatchingTests
         // Arrange
         using var context = new SafeMigrationDbContext(
             "Server=localhost;Database=packing;Integrated Security=true;");
+
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         await using var connection = new SqlServerCatalogTestConnection();
-        var ensure = new SafeMigrationOperation(new EnsureColumnIntent("items",
-            new ExpectedColumnDefinition("id", typeof(int), false, "int")), SafeMigrationPolicy.ThrowIfDifferent);
+        var ensure = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "items",
+                new ExpectedColumnDefinition("id", typeof(int), false, "int")),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
-        var alter = new SafeMigrationOperation(new AlterColumnIntent("items",
-            new ExpectedColumnDefinition("caption", typeof(string), false, "varchar(20)", maxLength: 20),
-            new ExpectedColumnDefinition("caption", typeof(string), false, "varchar(10)", maxLength: 10)),
+        var alter = new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "items",
+                new ExpectedColumnDefinition("caption", typeof(string), false, "varchar(20)", maxLength: 20),
+                new ExpectedColumnDefinition("caption", typeof(string), false, "varchar(10)", maxLength: 10)),
             SafeMigrationPolicy.RepairIfSafe);
 
-        var plans = Enumerable.Range(0, 512).Select(index => catalog.Build(index % 2 == 0 ? ensure : alter)).ToArray();
+        var plans = Enumerable
+            .Range(0, 512)
+            .Select(index => catalog.Build(
+                index % 2 == 0
+                    ? ensure
+                    : alter))
+            .ToArray();
+
         var results = new SafeMigrationProviderAnalysis[plans.Length];
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, null, plans, 0, results, CancellationToken.None);
+            connection,
+            null,
+            null,
+            plans,
+            0,
+            results,
+            CancellationToken.None);
 
         // Assert
         Assert.NotSame(plans[0], plans[2]);
@@ -808,18 +1186,31 @@ public sealed class SqlServerCatalogBatchingTests
         }
     }
 
-    private static SqlServerSafeMigrationRuntimePlan Plan(bool delayed)
+    private static SqlServerSafeMigrationRuntimePlan Plan(
+        bool delayed
+    )
         => new("N'missing'", "0", SafeMigrationRepairCapability.None, "0") { RequiresDelayedBinding = delayed };
 
     /// <summary>Gives a classifier a distinct immutable diagnostic contract without changing its SQL shape.</summary>
-    private static SqlServerSafeMigrationRuntimePlan DistinctPlan(SqlServerSafeMigrationRuntimePlan plan, int ordinal)
-        => plan with { DifferentDifference = new SafeMigrationFacetDifference("test_contract", ordinal.ToString(
-            CultureInfo.InvariantCulture), "actual") };
+    private static SqlServerSafeMigrationRuntimePlan DistinctPlan(
+        SqlServerSafeMigrationRuntimePlan plan,
+        int ordinal
+    )
+        => plan with
+        {
+            DifferentDifference = new SafeMigrationFacetDifference(
+                "test_contract",
+                ordinal.ToString(
+                    CultureInfo.InvariantCulture),
+                "actual"),
+        };
 
     private static SafeMigrationProviderAnalysis Unsupported()
         => new(SafeMigrationObservedState.Unsupported, SafeMigrationRepairCapability.None, false, "test_unsupported");
 
-    private static SafeMigrationObservedState State(int ordinal) => (ordinal % 3) switch
+    private static SafeMigrationObservedState State(
+        int ordinal
+    ) => (ordinal % 3) switch
     {
         0 => SafeMigrationObservedState.Missing,
         1 => SafeMigrationObservedState.Matching,

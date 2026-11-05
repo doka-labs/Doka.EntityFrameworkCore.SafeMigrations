@@ -13,15 +13,21 @@ public sealed class SafeMigrationIndexDropColumnProofTests
     [InlineData(false, 1)]
     [InlineData(true, 3)]
     [InlineData(false, 3)]
-    public void AcceptedIndexDropsPreserveThreeIndependentColumnTransitions(bool physicalDrop, int indexCount)
+    public void AcceptedIndexDropsPreserveThreeIndependentColumnTransitions(
+        bool physicalDrop,
+        int indexCount
+    )
     {
         // Arrange
         var provider = new IndexDropColumnProbe();
         var projection = new SafeMigrationPreflightProjection(projectedColumnAnalyzer: provider);
         var operations = new[] { Widen("Left"), Widen("Right"), Widen("Position") };
-        var drops = s_indexNames.Take(indexCount)
-            .Select(name => new SafeMigrationOperation(new DropIndexIntent(name, "items"),
-                SafeMigrationPolicy.ThrowIfDifferent)).ToArray();
+        var drops = s_indexNames
+            .Take(indexCount)
+            .Select(name => new SafeMigrationOperation(
+                new DropIndexIntent(name, "items"),
+                SafeMigrationPolicy.ThrowIfDifferent))
+            .ToArray();
 
         var live = CapturedRepair();
         var results = new List<SafeMigrationProviderAnalysis>();
@@ -29,7 +35,12 @@ public sealed class SafeMigrationIndexDropColumnProofTests
         // Act
         foreach (var drop in drops)
         {
-            Observe(projection, drop, physicalDrop ? Matching() : Missing());
+            Observe(
+                projection,
+                drop,
+                physicalDrop
+                    ? Matching()
+                    : Missing());
         }
 
         foreach (var operation in operations)
@@ -39,7 +50,12 @@ public sealed class SafeMigrationIndexDropColumnProofTests
             Observe(projection, operation, live, result);
         }
 
-        var droppedIndexes = drops.Select(drop => projection.Project(drop, physicalDrop ? Matching() : Missing()))
+        var droppedIndexes = drops
+            .Select(drop => projection.Project(
+                drop,
+                physicalDrop
+                    ? Matching()
+                    : Missing()))
             .ToArray();
 
         // Assert
@@ -61,13 +77,19 @@ public sealed class SafeMigrationIndexDropColumnProofTests
     [InlineData("managed-data")]
     [InlineData("unknown-index-history")]
     [InlineData("changed-source")]
-    public void IndexDropCertificateCannotReviveUnprovenColumnHistory(string boundary)
+    public void IndexDropCertificateCannotReviveUnprovenColumnHistory(
+        string boundary
+    )
     {
         // Arrange
         var provider = new IndexDropColumnProbe(boundary != "provider-opt-out");
         var projection = new SafeMigrationPreflightProjection(projectedColumnAnalyzer: provider);
-        var drop = new SafeMigrationOperation(new DropIndexIntent(
-            boundary == "uncertified-index" ? "IX_unknown" : "IX_values", "items"),
+        var drop = new SafeMigrationOperation(
+            new DropIndexIntent(
+                boundary == "uncertified-index"
+                    ? "IX_unknown"
+                    : "IX_values",
+                "items"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         if (boundary == "annotated-drop")
@@ -77,8 +99,13 @@ public sealed class SafeMigrationIndexDropColumnProofTests
 
         if (boundary == "unknown-index-history")
         {
-            Observe(projection, new SafeMigrationOperation(new RenameIndexIntent("IX_unknown", "items", "IX_other"),
-                SafeMigrationPolicy.ThrowIfDifferent), Matching(), Matching());
+            Observe(
+                projection,
+                new SafeMigrationOperation(
+                    new RenameIndexIntent("IX_unknown", "items", "IX_other"),
+                    SafeMigrationPolicy.ThrowIfDifferent),
+                Matching(),
+                Matching());
         }
 
         Observe(projection, drop, Matching());
@@ -91,10 +118,14 @@ public sealed class SafeMigrationIndexDropColumnProofTests
                 projection.ObserveProviderPostcondition(new AlterTableOperation { Name = "items" });
                 break;
             case "managed-data":
-                projection.ObserveProviderPostcondition(new InsertDataOperation
-                {
-                    Table = "items", Columns = ["Left"], Values = new object[,] { { 1 } },
-                });
+                projection.ObserveProviderPostcondition(
+                    new InsertDataOperation
+                    {
+                        Table = "items",
+                        Columns = ["Left"],
+                        Values = new object[,] { { 1 } },
+                    });
+
                 break;
             case "changed-source":
                 Observe(projection, Widen("Left"), CapturedRepair());
@@ -102,9 +133,12 @@ public sealed class SafeMigrationIndexDropColumnProofTests
         }
 
         var operation = boundary == "changed-source"
-            ? new SafeMigrationOperation(new AlterColumnIntent("items",
-                new ExpectedColumnDefinition("Left", typeof(long), true, "bigint"),
-                new ExpectedColumnDefinition("Left", typeof(int), false, "int")), SafeMigrationPolicy.RepairIfSafe)
+            ? new SafeMigrationOperation(
+                new AlterColumnIntent(
+                    "items",
+                    new ExpectedColumnDefinition("Left", typeof(long), true, "bigint"),
+                    new ExpectedColumnDefinition("Left", typeof(int), false, "int")),
+                SafeMigrationPolicy.RepairIfSafe)
             : Widen("Left");
 
         // Act
@@ -120,14 +154,23 @@ public sealed class SafeMigrationIndexDropColumnProofTests
     [Theory]
     [InlineData(SafeMigrationObservedState.DataBlocked)]
     [InlineData(SafeMigrationObservedState.Unsupported)]
-    public void IndexRemovalDoesNotReplaceIndependentNativeRejection(SafeMigrationObservedState state)
+    public void IndexRemovalDoesNotReplaceIndependentNativeRejection(
+        SafeMigrationObservedState state
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection(projectedColumnAnalyzer: new IndexDropColumnProbe());
-        Observe(projection, new SafeMigrationOperation(new DropIndexIntent("IX_values", "items"),
-            SafeMigrationPolicy.ThrowIfDifferent), Matching());
+        Observe(
+            projection,
+            new SafeMigrationOperation(
+                new DropIndexIntent("IX_values", "items"),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            Matching());
 
-        var live = new SafeMigrationProviderAnalysis(state, SafeMigrationRepairCapability.None, false,
+        var live = new SafeMigrationProviderAnalysis(
+            state,
+            SafeMigrationRepairCapability.None,
+            false,
             "independent_native_rejection");
 
         // Act
@@ -138,21 +181,35 @@ public sealed class SafeMigrationIndexDropColumnProofTests
     }
 
     /// <summary>Creates a widening with an immutable, explicitly authored source.</summary>
-    private static SafeMigrationOperation Widen(string column) => new(
-        new AlterColumnIntent("items", new ExpectedColumnDefinition(column, typeof(long), false, "bigint"),
-            new ExpectedColumnDefinition(column, typeof(int), false, "int")), SafeMigrationPolicy.RepairIfSafe);
+    private static SafeMigrationOperation Widen(
+        string column
+    ) => new(
+        new AlterColumnIntent(
+            "items",
+            new ExpectedColumnDefinition(column, typeof(long), false, "bigint"),
+            new ExpectedColumnDefinition(column, typeof(int), false, "int")),
+        SafeMigrationPolicy.RepairIfSafe);
 
     /// <summary>Creates independently captured exact source eligibility without inventing key evidence.</summary>
     private static SafeMigrationProviderAnalysis CapturedRepair() => new(
-        SafeMigrationObservedState.Different, SafeMigrationRepairCapability.Safe, false, "captured_integer_source");
+        SafeMigrationObservedState.Different,
+        SafeMigrationRepairCapability.Safe,
+        false,
+        "captured_integer_source");
 
     /// <summary>Creates a satisfied native presence observation.</summary>
     private static SafeMigrationProviderAnalysis Matching() => new(
-        SafeMigrationObservedState.Matching, SafeMigrationRepairCapability.None, true, "classified_matching");
+        SafeMigrationObservedState.Matching,
+        SafeMigrationRepairCapability.None,
+        true,
+        "classified_matching");
 
     /// <summary>Creates independently captured index absence without a physical mutation certificate.</summary>
     private static SafeMigrationProviderAnalysis Missing() => new(
-        SafeMigrationObservedState.Missing, SafeMigrationRepairCapability.None, true, "classified_missing");
+        SafeMigrationObservedState.Missing,
+        SafeMigrationRepairCapability.None,
+        true,
+        "classified_missing");
 
     /// <summary>Observes one planner decision without asserting a future operation's result.</summary>
     private static void Observe(
@@ -163,8 +220,11 @@ public sealed class SafeMigrationIndexDropColumnProofTests
     )
     {
         analysis ??= projection.Project(operation, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, analysis.ObservedState,
-            operation.Policy, analysis.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            analysis.ObservedState,
+            operation.Policy,
+            analysis.RepairCapability);
 
         projection.Observe(operation, live, analysis, decision);
     }
@@ -186,7 +246,8 @@ public sealed class SafeMigrationIndexDropColumnProofTests
         {
             PreservationQueries++;
 
-            return optIn && intent.Name is "IX_values" or "IX_values1" or "IX_values2"
+            return optIn
+                && intent.Name is "IX_values" or "IX_values1" or "IX_values2"
                 && liveAnalysis.ObservedState == SafeMigrationObservedState.Matching;
         }
 
@@ -201,7 +262,8 @@ public sealed class SafeMigrationIndexDropColumnProofTests
         {
             ReuseQueries++;
 
-            return optIn && intent.OldDefinition is not null
+            return optIn
+                && intent.OldDefinition is not null
                 && liveAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe;
         }
 

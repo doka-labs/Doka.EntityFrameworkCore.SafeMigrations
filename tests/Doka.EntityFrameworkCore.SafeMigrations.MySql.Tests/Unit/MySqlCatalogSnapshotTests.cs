@@ -21,7 +21,8 @@ public sealed partial class MySqlCatalogSnapshotTests
     [Fact]
     public async Task NonPooledSessionDoesNotRequireConnectionReset()
     {
-        await using var connection = new SnapshotConnection { ConnectionString = "Pooling=false;ConnectionReset=false" };
+        await using var connection =
+            new SnapshotConnection { ConnectionString = "Pooling=false;ConnectionReset=false" };
 
         await using var snapshot = await MySqlCatalogSnapshot.TryCreateAsync(connection, null, CancellationToken.None);
 
@@ -46,13 +47,19 @@ public sealed partial class MySqlCatalogSnapshotTests
         Assert.Equal(19, connection.Tables.Count);
         Assert.NotEqual(first.Resolve("INFORMATION_SCHEMA.COLUMNS"), second.Resolve("INFORMATION_SCHEMA.COLUMNS"));
         Assert.All(connection.Tables, table => Assert.InRange(table.Length, 1, 64));
-        Assert.All(connection.Commands, command =>
-        {
-            Assert.StartsWith("CREATE TEMPORARY TABLE ", command.Sql, StringComparison.Ordinal);
-            Assert.Contains(") ENGINE=InnoDB AS SELECT * FROM INFORMATION_SCHEMA.", command.Sql, StringComparison.Ordinal);
-            Assert.DoesNotContain("ALTER TABLE", command.Sql, StringComparison.Ordinal);
-            Assert.Equal(43, command.Timeout);
-        });
+        Assert.All(
+            connection.Commands,
+            command =>
+            {
+                Assert.StartsWith("CREATE TEMPORARY TABLE ", command.Sql, StringComparison.Ordinal);
+                Assert.Contains(
+                    ") ENGINE=InnoDB AS SELECT * FROM INFORMATION_SCHEMA.",
+                    command.Sql,
+                    StringComparison.Ordinal);
+
+                Assert.DoesNotContain("ALTER TABLE", command.Sql, StringComparison.Ordinal);
+                Assert.Equal(43, command.Timeout);
+            });
     }
 
     /// <summary>Incoming foreign keys remain visible when their dependent table belongs to another database.</summary>
@@ -63,8 +70,10 @@ public sealed partial class MySqlCatalogSnapshotTests
 
         await using var snapshot = await MySqlCatalogSnapshot.TryCreateAsync(connection, null, CancellationToken.None);
 
-        var command = Assert.Single(connection.Commands, command =>
-            command.Sql.Contains("FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE", StringComparison.Ordinal));
+        var command = Assert.Single(
+            connection.Commands,
+            command =>
+                command.Sql.Contains("FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE", StringComparison.Ordinal));
 
         Assert.Contains("CONSTRAINT_SCHEMA = DATABASE() OR REFERENCED_TABLE_SCHEMA = DATABASE()", command.Sql);
         Assert.Contains("KEY `by_principal` (`REFERENCED_TABLE_SCHEMA`, `REFERENCED_TABLE_NAME`", command.Sql);
@@ -83,8 +92,10 @@ public sealed partial class MySqlCatalogSnapshotTests
         await snapshot.DisposeAsync();
 
         Assert.Equal(["caller_table"], connection.Tables);
-        var cleanup = Assert.Single(connection.Commands, command =>
-            command.Sql.StartsWith("DROP TEMPORARY TABLE", StringComparison.Ordinal));
+        var cleanup = Assert.Single(
+            connection.Commands,
+            command =>
+                command.Sql.StartsWith("DROP TEMPORARY TABLE", StringComparison.Ordinal));
 
         Assert.Equal(31, cleanup.Timeout);
         Assert.False(cleanup.Token.CanBeCanceled);
@@ -98,7 +109,9 @@ public sealed partial class MySqlCatalogSnapshotTests
     {
         await using var connection = new SnapshotConnection();
         var failure = new InvalidOperationException("Catalog projection failed.");
-        connection.Failure = (ordinal, _) => ordinal == 4 ? failure : null;
+        connection.Failure = (ordinal, _) => ordinal == 4
+            ? failure
+            : null;
 
         var actual = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             MySqlCatalogSnapshot.TryCreateAsync(connection, null, CancellationToken.None));
@@ -106,7 +119,13 @@ public sealed partial class MySqlCatalogSnapshotTests
         Assert.Same(failure, actual);
         Assert.Empty(connection.Tables);
         Assert.Equal(5, connection.Commands.Count);
-        Assert.Equal(3, connection.Commands[^1].Sql.Count(character => character == ',') + 1);
+        Assert.Equal(3,
+            connection
+                .Commands[^1]
+                .Sql
+                .Count(character => character == ',')
+            + 1);
+
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 
@@ -200,13 +219,21 @@ public sealed partial class MySqlCatalogSnapshotTests
     )
     {
         await using var connection = new SnapshotConnection();
-        connection.Failure = (ordinal, _) => ordinal == failedCommand ? CreateServerException(code) : null;
+        connection.Failure = (ordinal, _) => ordinal == failedCommand
+            ? CreateServerException(code)
+            : null;
 
         var snapshot = await MySqlCatalogSnapshot.TryCreateAsync(connection, null, CancellationToken.None);
 
         Assert.Null(snapshot);
         Assert.Empty(connection.Tables);
-        Assert.Equal(failedCommand + (failedCommand > 1 ? 1 : 0), connection.Commands.Count);
+        Assert.Equal(
+            failedCommand
+            + (failedCommand > 1
+                ? 1
+                : 0),
+            connection.Commands.Count);
+
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 
@@ -223,7 +250,9 @@ public sealed partial class MySqlCatalogSnapshotTests
     {
         await using var connection = new SnapshotConnection();
         var failure = CreateServerException(code);
-        connection.Failure = (ordinal, _) => ordinal == 2 ? failure : null;
+        connection.Failure = (ordinal, _) => ordinal == 2
+            ? failure
+            : null;
 
         var actual = await Assert.ThrowsAsync<MySqlException>(() =>
             MySqlCatalogSnapshot.TryCreateAsync(connection, null, CancellationToken.None));
@@ -265,9 +294,7 @@ public sealed partial class MySqlCatalogSnapshotTests
         var cleanupFailure = new InvalidOperationException("Drop failed.");
         connection.Failure = (ordinal, _) => ordinal switch
         {
-            3 => failure,
-            4 => cleanupFailure,
-            _ => null,
+            3 => failure, 4 => cleanupFailure, _ => null,
         };
 
         var actual = await Assert.ThrowsAsync<MySqlException>(() =>
@@ -312,7 +339,9 @@ public sealed partial class MySqlCatalogSnapshotTests
         var failure = new InvalidOperationException("Drop failed.");
         connection.Failure = (_, _) => failure;
 
-        var actual = await Assert.ThrowsAsync<InvalidOperationException>(() => snapshot.DisposeAsync().AsTask());
+        var actual = await Assert.ThrowsAsync<InvalidOperationException>(() => snapshot
+            .DisposeAsync()
+            .AsTask());
 
         Assert.Same(failure, actual);
         Assert.Equal(ConnectionState.Closed, connection.State);
@@ -369,7 +398,8 @@ public sealed partial class MySqlCatalogSnapshotTests
             [typeof(MySqlErrorCode), typeof(string)],
             modifiers: null);
 
-        return (MySqlException)Assert.IsAssignableFrom<ConstructorInfo>(constructor)
+        return (MySqlException)Assert
+            .IsAssignableFrom<ConstructorInfo>(constructor)
             .Invoke([code, "Injected server error."]);
     }
 }

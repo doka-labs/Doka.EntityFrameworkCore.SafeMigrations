@@ -14,7 +14,8 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
     {
         ArgumentNullException.ThrowIfNull(sql);
 
-        if ((options & MigrationsSqlGenerationOptions.Idempotent) == 0 && !ContainsLineSensitiveText(sql.AsSpan()))
+        if ((options & MigrationsSqlGenerationOptions.Idempotent) == 0
+            && !ContainsLineSensitiveText(sql.AsSpan()))
         {
             return sql;
         }
@@ -32,7 +33,11 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
         while ((newlineOffset = remaining.IndexOfAny('\r', '\n')) >= 0)
         {
             AppendEscapedSqlLiteral(builder, remaining.Slice(0, newlineOffset));
-            builder.Append(remaining[newlineOffset] == '\r' ? "' + NCHAR(13) + N'" : "' + NCHAR(10) + N'");
+            builder.Append(
+                remaining[newlineOffset] == '\r'
+                    ? "' + NCHAR(13) + N'"
+                    : "' + NCHAR(10) + N'");
+
             remaining = remaining.Slice(newlineOffset + 1);
         }
 
@@ -45,13 +50,16 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
     /// <summary>Finds line shapes EF or a script client can transform without interpreting authored SQL.</summary>
     /// <param name="sql">The completed command whose unchanged reference is preferred when safe.</param>
     /// <returns>Whether a conservative lossless transport is necessary before provider command generation.</returns>
-    private static bool ContainsLineSensitiveText(ReadOnlySpan<char> sql)
+    private static bool ContainsLineSensitiveText(
+        ReadOnlySpan<char> sql
+    )
     {
         // WHY: EF splits CRLF/LF and joins with the platform newline. Preserve
         // every CR conservatively, and any LF on a CRLF platform. The bounded
         // span scan allocates nothing and deliberately does not grow a second
         // SQL lexer merely to identify safe transport, not SQL admissibility.
-        if (sql.Contains('\r') || (Environment.NewLine != "\n" && sql.Contains('\n')))
+        if (sql.Contains('\r')
+            || (Environment.NewLine != "\n" && sql.Contains('\n')))
         {
             return true;
         }
@@ -59,7 +67,10 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
         while (!sql.IsEmpty)
         {
             var newline = sql.IndexOf('\n');
-            var line = (newline < 0 ? sql : sql.Slice(0, newline)).TrimStart();
+            var line = (newline < 0
+                ? sql
+                : sql.Slice(0, newline)).TrimStart();
+
             if ((newline > 0 && sql[newline - 1] == '\\')
                 || (line.StartsWith("GO", StringComparison.OrdinalIgnoreCase)
                     && (line.Length == 2 || (line.Length > 2 && char.IsWhiteSpace(line[2])))))
@@ -126,11 +137,13 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
                 .Append("IF COALESCE((")
                 .Append(physicalTableSupport)
                 .Append("), 0) <> 1\nBEGIN\n    ");
+
             diagnostic.AppendThrow(
                 builder,
                 51002,
                 "doka_sm_unsupported",
                 SqlServerSafeMigrationRuntimePlan.PhysicalTableUnsupportedCode);
+
             builder.Append("\nEND;\n");
         }
 
@@ -149,6 +162,7 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
                 .Append(");\nIF @doka_layout_failure IS NOT NULL\nBEGIN\n")
                 .Append("    DECLARE @doka_layout_message nvarchar(2048) = CASE @doka_layout_failure\n")
                 .Append("        WHEN N'column_limit' THEN ");
+
             diagnostic.AppendLiteral(builder, "doka_sm_unsupported", "column_limit");
             builder.Append("\n        WHEN N'column_fixed_row_limit' THEN ");
             diagnostic.AppendLiteral(builder, "doka_sm_unsupported", "column_fixed_row_limit");
@@ -166,11 +180,13 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
                 .Append("IF COALESCE((")
                 .Append(columnCollationSupport)
                 .Append("), 0) <> 1\nBEGIN\n    ");
+
             diagnostic.AppendThrow(
                 builder,
                 51002,
                 "doka_sm_unsupported",
                 SqlServerSafeMigrationRuntimePlan.ColumnCollationUnsupportedCode);
+
             builder.Append("\nEND;\n");
         }
 
@@ -190,11 +206,13 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
                 .Append("IF COALESCE((")
                 .Append(defaultValueSupport)
                 .Append("), 0) <> 1\nBEGIN\n    ");
+
             diagnostic.AppendThrow(
                 builder,
                 51002,
                 "doka_sm_unsupported",
                 SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode);
+
             builder.Append("\nEND;\n");
         }
 
@@ -207,11 +225,13 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
                 .Append("IF COALESCE((")
                 .Append(indexFilterSupport)
                 .Append("), 0) <> 1\nBEGIN\n    ");
+
             diagnostic.AppendThrow(
                 builder,
                 51002,
                 "doka_sm_unsupported",
                 SqlServerSafeMigrationRuntimePlan.IndexFilterUnsupportedCode);
+
             builder.Append("\nEND;\n");
         }
 
@@ -417,6 +437,7 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
                 GuardScopePrefix
                     .AsSpan()
                     .CopyTo(destination);
+
                 GuardScopeSuffix
                     .AsSpan()
                     .CopyTo(destination.Slice(destination.Length - GuardScopeSuffix.Length));
@@ -441,7 +462,9 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < statements.Count; index++)
         {
-            var statement = statements[index].AsSpan();
+            var statement = statements[index]
+                .AsSpan();
+
             length = checked(length + statement.Length + statement.Count('\''));
         }
 
@@ -458,6 +481,7 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
                     .CopyTo(destination);
 
                 var offset = GuardScopePrefix.Length;
+
                 // WHY: Place newlines only between statements in the exact-sized SQL destination.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery
@@ -472,6 +496,7 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
                     // Preserve that boundary as well as every other UTF-16 code unit.
                     var statement = source[index]
                         .AsSpan();
+
                     int apostropheOffset;
                     while ((apostropheOffset = statement.IndexOf('\'')) >= 0)
                     {
@@ -525,15 +550,32 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
         if (SqlServerSqlStringLiteral.RequiresExpression(expression.AsSpan())
             || SqlServerSqlStringLiteral.RequiresExpression(preambleSql.AsSpan()))
         {
-            var statement = (preambleSql ?? string.Empty) + "\nSET @doka_value = ("
-                + (coalesce ? "COALESCE((" : string.Empty) + expression
-                + (coalesce ? "), 0)" : string.Empty) + ");";
+            var statement = (preambleSql ?? string.Empty)
+                + "\nSET @doka_value = ("
+                + (coalesce
+                    ? "COALESCE(("
+                    : string.Empty)
+                + expression
+                + (coalesce
+                    ? "), 0)"
+                    : string.Empty)
+                + ");";
+
             var argument = SqlServerSqlStringLiteral.StatementArgument(
-                statement, targetVariable + "_sql", out var declaration);
-            builder.Append(indentation).Append(declaration)
-                .Append("EXEC sys.sp_executesql ").Append(argument)
-                .Append(", N'@doka_value ").Append(type)
-                .Append(" OUTPUT', @doka_value = ").Append(targetVariable).Append(" OUTPUT;\n");
+                statement,
+                targetVariable + "_sql",
+                out var declaration);
+
+            builder
+                .Append(indentation)
+                .Append(declaration)
+                .Append("EXEC sys.sp_executesql ")
+                .Append(argument)
+                .Append(", N'@doka_value ")
+                .Append(type)
+                .Append(" OUTPUT', @doka_value = ")
+                .Append(targetVariable)
+                .Append(" OUTPUT;\n");
 
             return;
         }
@@ -541,6 +583,7 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
         builder
             .Append(indentation)
             .Append(GuardScopePrefix);
+
         AppendEscapedSqlLiteral(builder, preambleSql.AsSpan());
         builder.Append("\nSET @doka_value = (");
         if (coalesce)
@@ -615,6 +658,7 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
         builder
             .Append(indentation)
             .Append(GuardScopePrefix);
+
         AppendEscapedSqlLiteral(builder, sql.AsSpan());
         builder.Append(GuardScopeSuffix);
     }
@@ -626,10 +670,7 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
     internal static void AppendEscapedSqlLiteral(
         StringBuilder builder,
         ReadOnlySpan<char> sql
-    )
-    {
-        SqlServerSqlStringLiteral.AppendEscaped(builder, sql);
-    }
+    ) => SqlServerSqlStringLiteral.AppendEscaped(builder, sql);
 
     /// <summary>Appends policy decisions without an intermediate action-case buffer or string.</summary>
     /// <param name="builder">The operation-owned guard buffer.</param>
@@ -656,6 +697,7 @@ public sealed partial class SqlServerSafeMigrationsSqlGenerator
                 .Append("WHEN N'")
                 .Append(StateCode(state))
                 .Append("' THEN ");
+
             if (action == SafeMigrationAction.Repair)
             {
                 builder

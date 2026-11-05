@@ -14,8 +14,11 @@ public sealed class PostgreSqlCatalogPackingIntegrationTests : PostgreSqlSafeMig
     public async Task Analyzer_PacksAcrossShortCircuitGapsAndCaptureBoundariesWithoutMixingResults()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE catalog_packing (id integer NOT NULL);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE catalog_packing (id integer NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(
             new NpgsqlConnection(connectionString));
@@ -42,12 +45,17 @@ public sealed class PostgreSqlCatalogPackingIntegrationTests : PostgreSqlSafeMig
             }
         }
 
-        var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+        var operations = builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
 
-        var results = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
-            context,
-            operations,
-            CancellationToken.None);
+        var results = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                operations,
+                CancellationToken.None);
 
         Assert.False(connection.CanCreateBatch);
         Assert.Equal(10, connection.ClassificationStatementCount);
@@ -59,6 +67,7 @@ public sealed class PostgreSqlCatalogPackingIntegrationTests : PostgreSqlSafeMig
                     ? SafeMigrationObservedState.Matching
                     : SafeMigrationObservedState.PrerequisiteMissing,
                 results[ordinal].ObservedState);
+
             Assert.Equal(ordinal % 2 == 0, results[ordinal].PostconditionSatisfied);
         }
     }
@@ -72,8 +81,11 @@ public sealed class PostgreSqlCatalogPackingIntegrationTests : PostgreSqlSafeMig
     )
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE catalog_ownership (id integer NOT NULL);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE catalog_ownership (id integer NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         await using var connection = new CatalogClassificationCountingConnection(
             new NpgsqlConnection(connectionString),
@@ -90,16 +102,22 @@ public sealed class PostgreSqlCatalogPackingIntegrationTests : PostgreSqlSafeMig
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+        var operations = builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations,
-                CancellationToken.None));
+            context
+                .GetService<ISafeMigrationProviderAnalyzer>()
+                .AnalyzeAsync(
+                    context,
+                    operations,
+                    CancellationToken.None));
 
         Assert.True(connection.FaultWasInjected);
         Assert.Equal(1, connection.ClassificationStatementCount);
         Assert.Equal(ConnectionState.Closed, connection.State);
         Assert.Contains("catalog classifier", exception.Message, StringComparison.Ordinal);
     }
-
 }

@@ -81,7 +81,10 @@ internal static class MySqlGeneratedExpressionDisplay
         {
             while (true)
             {
-                while (expression is SafeMigrationSqlUnaryExpression { Operator: SafeMigrationSqlUnaryOperator.Not } negation)
+                while (expression is SafeMigrationSqlUnaryExpression
+                    {
+                        Operator: SafeMigrationSqlUnaryOperator.Not,
+                    } negation)
                 {
                     expression = NormalizeNegation(negation.Operand, isMariaDb);
                 }
@@ -137,6 +140,7 @@ internal static class MySqlGeneratedExpressionDisplay
                             frame.Precedence,
                             out parentPrecedence,
                             out rightOperand);
+
                         pending.Push(frame);
                         expression = child;
 
@@ -175,6 +179,7 @@ internal static class MySqlGeneratedExpressionDisplay
                     .Append('\'')
                     .Append(text.Replace("'", "''", StringComparison.Ordinal))
                     .Append('\'');
+
                 break;
             case SafeMigrationSqlLiteralExpression { StoreType: null, NumericSourceToken.IsEmpty: false } value:
                 // WHY: A captured exponent or large integer token keeps its
@@ -186,7 +191,11 @@ internal static class MySqlGeneratedExpressionDisplay
                 // WHY: MariaDB deparses Boolean literal leaves as integer 0/1;
                 // MySQL retains true/false. This changes a typed literal only,
                 // never a quoted string or a caller-authored identifier.
-                builder.Append(boolean ? '1' : '0');
+                builder.Append(
+                    boolean
+                        ? '1'
+                        : '0');
+
                 break;
             case SafeMigrationSqlBinaryExpression
                 or SafeMigrationSqlNullTestExpression
@@ -195,7 +204,11 @@ internal static class MySqlGeneratedExpressionDisplay
                 or SafeMigrationSqlCollateExpression:
                 break;
             case SafeMigrationSqlUnaryExpression value:
-                builder.Append(value.Operator == SafeMigrationSqlUnaryOperator.Not ? "not " : "-");
+                builder.Append(
+                    value.Operator == SafeMigrationSqlUnaryOperator.Not
+                        ? "not "
+                        : "-");
+
                 break;
             case SafeMigrationSqlFunctionExpression value:
                 // WHY: MariaDB persists LOWER's built-in synonym LCASE. This
@@ -207,6 +220,7 @@ internal static class MySqlGeneratedExpressionDisplay
                             ? "lcase"
                             : value.Name.ToLowerInvariant())
                     .Append('(');
+
                 break;
             case SafeMigrationSqlCaseExpression:
                 builder.Append("case");
@@ -234,15 +248,24 @@ internal static class MySqlGeneratedExpressionDisplay
                     .Append(' ')
                     .Append(Operator(value.Operator))
                     .Append(' ');
+
                 break;
             case SafeMigrationSqlBetweenExpression value when index == 1:
-                builder.Append(value.Negated ? " not between " : " between ");
+                builder.Append(
+                    value.Negated
+                        ? " not between "
+                        : " between ");
+
                 break;
             case SafeMigrationSqlBetweenExpression when index == 2:
                 builder.Append(" and ");
                 break;
             case SafeMigrationSqlInExpression value when index == 1:
-                builder.Append(value.Negated ? " not in (" : " in (");
+                builder.Append(
+                    value.Negated
+                        ? " not in ("
+                        : " in (");
+
                 break;
             case SafeMigrationSqlInExpression when index > 1:
             case SafeMigrationSqlFunctionExpression when index > 0:
@@ -255,6 +278,7 @@ internal static class MySqlGeneratedExpressionDisplay
                         : index % 2 == 0
                             ? " when "
                             : " then ");
+
                 break;
         }
     }
@@ -279,6 +303,7 @@ internal static class MySqlGeneratedExpressionDisplay
             SafeMigrationSqlInExpression when index == 0 => precedence,
             _ => 0,
         };
+
         rightOperand = index > 0 && expression is SafeMigrationSqlBinaryExpression or SafeMigrationSqlBetweenExpression;
     }
 
@@ -292,7 +317,11 @@ internal static class MySqlGeneratedExpressionDisplay
         switch (expression)
         {
             case SafeMigrationSqlNullTestExpression value:
-                builder.Append(value.Negated ? " is not null" : " is null");
+                builder.Append(
+                    value.Negated
+                        ? " is not null"
+                        : " is null");
+
                 break;
             case SafeMigrationSqlInExpression or SafeMigrationSqlFunctionExpression:
                 builder.Append(')');
@@ -308,6 +337,7 @@ internal static class MySqlGeneratedExpressionDisplay
                             .Render(value.StoreType)
                             .ToLowerInvariant())
                     .Append(')');
+
                 break;
             case SafeMigrationSqlCollateExpression value:
                 // WHY: Native metadata exposes the resolved symbol without
@@ -315,6 +345,7 @@ internal static class MySqlGeneratedExpressionDisplay
                 builder
                     .Append(" collate ")
                     .Append(value.Name.ToLowerInvariant());
+
                 break;
         }
 
@@ -412,7 +443,7 @@ internal static class MySqlGeneratedExpressionDisplay
         SafeMigrationSqlBinaryExpression
         {
             Operator: >= SafeMigrationSqlBinaryOperator.Equal
-            and <= SafeMigrationSqlBinaryOperator.GreaterThanOrEqual
+            and <= SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
         } value => SafeMigrationSql.Binary(value.Left, NegatedComparison(value.Operator), value.Right),
         SafeMigrationSqlNullTestExpression value =>
             new SafeMigrationSqlNullTestExpression(value.Operand, !value.Negated),
@@ -423,23 +454,6 @@ internal static class MySqlGeneratedExpressionDisplay
             ? SafeMigrationSql.Binary(expression, SafeMigrationSqlBinaryOperator.Equal, SafeMigrationSql.Literal(0))
             : SafeMigrationSql.Binary(SafeMigrationSql.Literal(0), SafeMigrationSqlBinaryOperator.Equal, expression),
     };
-
-    /// <summary>Keeps one active output continuation independently of CASE or function argument width.</summary>
-    private struct DisplayFrame(
-        SafeMigrationSqlExpression expression,
-        int precedence,
-        bool parentheses
-    )
-    {
-        /// <summary>The parent and next child whose output resumes after the active operand.</summary>
-        internal MySqlExpressionChildCursor Children = new(expression);
-
-        /// <summary>The parent's binding strength for restoring each child context.</summary>
-        internal readonly int Precedence = precedence;
-
-        /// <summary>Whether this continuation must close a native grouping delimiter.</summary>
-        internal readonly bool Parentheses = parentheses;
-    }
 
     /// <summary>Preserves three-valued comparison semantics when native parsing removes a NOT node.</summary>
     private static SafeMigrationSqlBinaryOperator NegatedComparison(
@@ -469,7 +483,7 @@ internal static class MySqlGeneratedExpressionDisplay
             or SafeMigrationSqlInExpression => 40,
         SafeMigrationSqlBinaryExpression
         {
-            Operator: SafeMigrationSqlBinaryOperator.Add or SafeMigrationSqlBinaryOperator.Subtract
+            Operator: SafeMigrationSqlBinaryOperator.Add or SafeMigrationSqlBinaryOperator.Subtract,
         } => 50,
         SafeMigrationSqlBinaryExpression => 60,
         SafeMigrationSqlUnaryExpression => 70,
@@ -497,4 +511,21 @@ internal static class MySqlGeneratedExpressionDisplay
         SafeMigrationSqlBinaryOperator.Modulo => "%",
         _ => throw new UnreachableException(),
     };
+
+    /// <summary>Keeps one active output continuation independently of CASE or function argument width.</summary>
+    private struct DisplayFrame(
+        SafeMigrationSqlExpression expression,
+        int precedence,
+        bool parentheses
+    )
+    {
+        /// <summary>The parent and next child whose output resumes after the active operand.</summary>
+        internal MySqlExpressionChildCursor Children = new(expression);
+
+        /// <summary>The parent's binding strength for restoring each child context.</summary>
+        internal readonly int Precedence = precedence;
+
+        /// <summary>Whether this continuation must close a native grouping delimiter.</summary>
+        internal readonly bool Parentheses = parentheses;
+    }
 }

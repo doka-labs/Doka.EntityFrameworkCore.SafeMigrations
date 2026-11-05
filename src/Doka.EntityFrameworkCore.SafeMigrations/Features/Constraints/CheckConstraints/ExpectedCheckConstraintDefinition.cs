@@ -3,10 +3,6 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// <summary>Describes a complete expected check-constraint definition.</summary>
 public sealed class ExpectedCheckConstraintDefinition
 {
-    /// <summary>Gets the original provider SQL accompanying a successfully parsed EF check expression.</summary>
-    /// <remarks>The source is not an opaque-SQL approval and never replaces the structured proof boundary.</remarks>
-    internal string? CapturedSql { get; init; }
-
     /// <summary>Initializes an expected check constraint.</summary>
     /// <param name="name">The database object name.</param>
     /// <param name="table">The table name.</param>
@@ -39,6 +35,25 @@ public sealed class ExpectedCheckConstraintDefinition
         Expression = expression;
     }
 
+    /// <summary>Gets the original provider SQL accompanying a successfully parsed EF check expression.</summary>
+    /// <remarks>The source is not an opaque-SQL approval and never replaces the structured proof boundary.</remarks>
+    internal string? CapturedSql { get; init; }
+
+    /// <summary>Gets the constraint name.</summary>
+    public string Name { get; }
+
+    /// <summary>Gets the table name.</summary>
+    public string Table { get; }
+
+    /// <summary>Gets the schema name when specified.</summary>
+    public string? Schema { get; }
+
+    /// <summary>Gets the expected SQL expression.</summary>
+    public string? Sql { get; }
+
+    /// <summary>Gets the structured SQL expression when specified.</summary>
+    public SafeMigrationSqlExpression? Expression { get; }
+
     /// <summary>Creates an expected check constraint with a structured expression.</summary>
     /// <param name="name">The database object name.</param>
     /// <param name="table">The table name.</param>
@@ -59,20 +74,5 @@ public sealed class ExpectedCheckConstraintDefinition
         SafeMigrationSqlExpression expression,
         string sql,
         string? schema
-    ) => new(name, table, expression, schema) { CapturedSql = sql, };
-
-    /// <summary>Gets the constraint name.</summary>
-    public string Name { get; }
-
-    /// <summary>Gets the table name.</summary>
-    public string Table { get; }
-
-    /// <summary>Gets the schema name when specified.</summary>
-    public string? Schema { get; }
-
-    /// <summary>Gets the expected SQL expression.</summary>
-    public string? Sql { get; }
-
-    /// <summary>Gets the structured SQL expression when specified.</summary>
-    public SafeMigrationSqlExpression? Expression { get; }
+    ) => new(name, table, expression, schema) { CapturedSql = sql };
 }

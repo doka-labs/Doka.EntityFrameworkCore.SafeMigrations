@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>
@@ -15,13 +17,17 @@ public sealed class SafeMigrationSqlCapturedTokenTests
     [InlineData("CASE WHEN value > 0 THEN +value ELSE 0 END")]
     [InlineData("value + +other")]
     [InlineData("CAST(+value AS bigint)")]
-    public void CapturedUnaryPlusRetainsOpaqueBoundary(string sql)
+    public void CapturedUnaryPlusRetainsOpaqueBoundary(
+        string sql
+    )
     {
         // Arrange
         Assert.True(SafeMigrationSqlExpressionParser.TryParse(sql, out _));
 
         // Act
-        var parsed = SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var expression,
+        var parsed = SafeMigrationSqlExpressionParser.TryParseCapturedSource(
+            sql,
+            out var expression,
             out var failureCode);
 
         // Assert
@@ -42,7 +48,9 @@ public sealed class SafeMigrationSqlCapturedTokenTests
     [InlineData("`+value` + 1")]
     [InlineData("'+' = '+'")]
     [InlineData("'value + +other' <> ''")]
-    public void CapturedNonUnaryPlusRolesRemainSupported(string sql)
+    public void CapturedNonUnaryPlusRolesRemainSupported(
+        string sql
+    )
     {
         // Arrange
         Assert.True(SafeMigrationSqlExpressionParser.TryParse(sql, out _));
@@ -62,14 +70,21 @@ public sealed class SafeMigrationSqlCapturedTokenTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void SuppliedNativeColumnIdentityQualifiesDoubleQuoteCaseVariation(bool caseInsensitive)
+    public void SuppliedNativeColumnIdentityQualifiesDoubleQuoteCaseVariation(
+        bool caseInsensitive
+    )
     {
         // Arrange
-        var comparer = caseInsensitive ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var comparer = caseInsensitive
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
 
         // Act
         var equal = SafeMigrationSqlExpressionParser.SourcesDifferOnlyByNativeColumnQuotes(
-            "SCORE + 'KeepCase'", "\"score\" + 'KeepCase'", '"', columnComparer: comparer);
+            "SCORE + 'KeepCase'",
+            "\"score\" + 'KeepCase'",
+            '"',
+            columnComparer: comparer);
 
         // Assert
         Assert.Equal(caseInsensitive, equal);
@@ -102,7 +117,10 @@ public sealed class SafeMigrationSqlCapturedTokenTests
 
         // Act
         var actual = SafeMigrationSqlExpressionParser.SourcesDifferOnlyByNativeColumnQuotes(
-            left, right, '"', foldUnquotedIdentifiers: true);
+            left,
+            right,
+            '"',
+            foldUnquotedIdentifiers: true);
 
         // Assert
         Assert.Equal(equivalent, actual);
@@ -117,18 +135,27 @@ public sealed class SafeMigrationSqlCapturedTokenTests
     [InlineData("select.owner + 1", "select")]
     [InlineData("\"select\".owner + 1", null)]
     [InlineData("LOWER(owner.select) + CAST(owner.other AS bigint) + 'select'", "owner")]
-    public void RootColumnCollectionRetainsNativeKeywordPositions(string sql, string? expected)
+    public void RootColumnCollectionRetainsNativeKeywordPositions(
+        string sql,
+        string? expected
+    )
     {
         // Arrange
         Assert.True(SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out _));
 
         // Act
-        var parsed = SafeMigrationSqlExpressionParser.TryCollectUnquotedColumnRootIdentifiers(sql,
-            out var identifiers, foldUnquotedIdentifiers: true);
+        var parsed = SafeMigrationSqlExpressionParser.TryCollectUnquotedColumnRootIdentifiers(
+            sql,
+            out var identifiers,
+            foldUnquotedIdentifiers: true);
 
         // Assert
         Assert.True(parsed);
-        Assert.Equal(expected is null ? [] : new[] { expected }, identifiers);
+        Assert.Equal(
+            expected is null
+                ? []
+                : new[] { expected },
+            identifiers);
     }
 
     /// <summary>Native keyword proofs receive distinct unquoted column roots, never function or type roles.</summary>
@@ -137,18 +164,24 @@ public sealed class SafeMigrationSqlCapturedTokenTests
     [Theory]
     [InlineData(false, "VALUE")]
     [InlineData(true, "value")]
-    public void RootColumnCollectionExcludesOtherTokenRoles(bool fold, string expected)
+    public void RootColumnCollectionExcludesOtherTokenRoles(
+        bool fold,
+        string expected
+    )
     {
         // Arrange
         const string sql = "LOWER(VALUE) + qualifier.VALUE + [Quoted] + CAST(other AS bigint) + 'VALUE'";
 
         // Act
-        var parsed = SafeMigrationSqlExpressionParser.TryCollectUnquotedColumnRootIdentifiers(sql,
-            out var identifiers, fold);
+        var parsed = SafeMigrationSqlExpressionParser.TryCollectUnquotedColumnRootIdentifiers(
+            sql,
+            out var identifiers,
+            fold);
 
         // Assert
         Assert.True(parsed);
-        Assert.Equal(new[] { expected, "qualifier", "other" }.Order(StringComparer.Ordinal),
+        Assert.Equal(
+            new[] { expected, "qualifier", "other" }.Order(StringComparer.Ordinal),
             identifiers.Order(StringComparer.Ordinal));
     }
 
@@ -162,7 +195,9 @@ public sealed class SafeMigrationSqlCapturedTokenTests
         const string sql = "VALUE + \"Value\" + \"\u00c6\" + '\u00c6ABC'";
 
         // Act
-        var parsed = SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var expression,
+        var parsed = SafeMigrationSqlExpressionParser.TryParseCapturedSource(
+            sql,
+            out var expression,
             foldUnquotedIdentifiers: true);
 
         // Assert
@@ -171,7 +206,9 @@ public sealed class SafeMigrationSqlCapturedTokenTests
         SafeMigrationSqlExpressionInspector.CollectIdentifiers(expression!, names);
         Assert.Equal(["Value", "value", "\u00c6"], names.Order(StringComparer.Ordinal));
         var outer = Assert.IsType<SafeMigrationSqlBinaryExpression>(expression);
-        Assert.Equal("\u00c6ABC", Assert.IsType<SafeMigrationSqlLiteralExpression>(outer.Right).Value);
+        Assert.Equal("\u00c6ABC",
+            Assert.IsType<SafeMigrationSqlLiteralExpression>(outer.Right)
+                .Value);
     }
 
     /// <summary>
@@ -181,13 +218,17 @@ public sealed class SafeMigrationSqlCapturedTokenTests
     [Theory]
     [InlineData("\u00c6 + 1")]
     [InlineData("A\u00c6 + 1")]
-    public void NativeIdentifierFoldingDoesNotInventNonAsciiBindings(string sql)
+    public void NativeIdentifierFoldingDoesNotInventNonAsciiBindings(
+        string sql
+    )
     {
         // Arrange
         Assert.NotEmpty(sql);
 
         // Act
-        var parsed = SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var expression,
+        var parsed = SafeMigrationSqlExpressionParser.TryParseCapturedSource(
+            sql,
+            out var expression,
             foldUnquotedIdentifiers: true);
 
         // Assert
@@ -241,7 +282,9 @@ public sealed class SafeMigrationSqlCapturedTokenTests
 
         // Act
         var equivalent = SafeMigrationSqlExpressionParser.SourcesDifferOnlyByNativeColumnQuotes(
-            national, ordinary, '"');
+            national,
+            ordinary,
+            '"');
 
         // Assert
         Assert.False(equivalent);
@@ -254,7 +297,9 @@ public sealed class SafeMigrationSqlCapturedTokenTests
     [InlineData("[COALESCE]([value], 0)")]
     [InlineData("`ABS`(`value`)")]
     [InlineData("CAST(value AS \"integer\")")]
-    public void CapturedQuotedFunctionAndTypeRolesRemainOpaque(string sql)
+    public void CapturedQuotedFunctionAndTypeRolesRemainOpaque(
+        string sql
+    )
     {
         // Arrange
         Assert.True(SafeMigrationSqlExpressionParser.TryParse(sql, out _));
@@ -280,7 +325,11 @@ public sealed class SafeMigrationSqlCapturedTokenTests
     [InlineData("value > 0 AND '[literal] `literal`' <> ''", '"', true)]
     [InlineData("value COLLATE [name] = 'x'", '"', false)]
     [InlineData("value COLLATE \"name\" = 'x'", '"', true)]
-    public void SourceDialectChecksRetainTokenRoles(string sql, char delimiter, bool compatible)
+    public void SourceDialectChecksRetainTokenRoles(
+        string sql,
+        char delimiter,
+        bool compatible
+    )
     {
         // Arrange
         Assert.True(SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out _));
@@ -315,7 +364,9 @@ public sealed class SafeMigrationSqlCapturedTokenTests
     [InlineData("1.234567890123456789e30")]
     [InlineData("00001")]
     [InlineData("0.000e0")]
-    public void NumericSourceCaptureDoesNotChangeOrdinaryParserContracts(string sql)
+    public void NumericSourceCaptureDoesNotChangeOrdinaryParserContracts(
+        string sql
+    )
     {
         // Arrange
         Assert.True(SafeMigrationSqlExpressionParser.TryParse(sql, out var ordinary));
@@ -325,11 +376,17 @@ public sealed class SafeMigrationSqlCapturedTokenTests
 
         // Assert
         Assert.True(parsed);
-        Assert.True(Assert.IsType<SafeMigrationSqlLiteralExpression>(ordinary).NumericSourceToken.IsEmpty);
+        Assert.True(Assert.IsType<SafeMigrationSqlLiteralExpression>(ordinary)
+            .NumericSourceToken.IsEmpty);
+
         var literal = Assert.IsType<SafeMigrationSqlLiteralExpression>(captured);
         Assert.Equal(sql, literal.NumericSourceToken.Span.ToString());
-        Assert.True(System.Runtime.InteropServices.MemoryMarshal.TryGetString(
-            literal.NumericSourceToken, out var source, out var start, out var length));
+        Assert.True(
+            MemoryMarshal.TryGetString(
+                literal.NumericSourceToken,
+                out var source,
+                out var start,
+                out var length));
 
         Assert.Same(sql, source);
         Assert.Equal(0, start);
@@ -348,21 +405,34 @@ public sealed class SafeMigrationSqlCapturedTokenTests
     [InlineData("\"source\" + 1.0", "source", "new\"name", "\"new\"\"name\" + 1.0")]
     [InlineData("[old]]name] + 1", "old]name", "replacement", "[replacement] + 1")]
     [InlineData("qualifier.[source] + [qualifier]", "source", "target", "qualifier.[target] + [qualifier]")]
-    public void RenamePreservesQuotedTokenBoundaries(string sql, string source, string target, string expected)
+    public void RenamePreservesQuotedTokenBoundaries(
+        string sql,
+        string source,
+        string target,
+        string expected
+    )
     {
         // Arrange
         Assert.True(SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out _));
 
         // Act
         var rewritten = SafeMigrationSqlExpressionParser.TryRenameColumnIdentifier(
-            sql, source, target, StringComparer.Ordinal, out var renamedSql, out var renamed);
+            sql,
+            source,
+            target,
+            StringComparer.Ordinal,
+            out var renamedSql,
+            out var renamed);
 
         // Assert
         Assert.True(rewritten);
         Assert.Equal(expected, renamedSql);
         Assert.NotNull(renamed);
-        Assert.True(SafeMigrationSqlExpressionInspector.ReferencesColumnIdentifier(
-            renamed, target, StringComparer.Ordinal));
+        Assert.True(
+            SafeMigrationSqlExpressionInspector.ReferencesColumnIdentifier(
+                renamed,
+                target,
+                StringComparer.Ordinal));
     }
 
     /// <summary>Function names, type roles, literals, and qualifiers never become rename targets.</summary>
@@ -374,14 +444,22 @@ public sealed class SafeMigrationSqlCapturedTokenTests
 
         // Act
         var rewritten = SafeMigrationSqlExpressionParser.TryRenameColumnIdentifier(
-            sql, "source", "target", StringComparer.Ordinal, out var renamedSql, out var renamed);
+            sql,
+            "source",
+            "target",
+            StringComparer.Ordinal,
+            out var renamedSql,
+            out var renamed);
 
         // Assert
         Assert.True(rewritten);
         Assert.Equal("source([target]) + CAST(other AS source) + qualifier.[target]", renamedSql);
         Assert.NotNull(renamed);
-        Assert.False(SafeMigrationSqlExpressionInspector.ReferencesColumnIdentifier(
-            renamed, "source", StringComparer.Ordinal));
+        Assert.False(
+            SafeMigrationSqlExpressionInspector.ReferencesColumnIdentifier(
+                renamed,
+                "source",
+                StringComparer.Ordinal));
     }
 
     /// <summary>
@@ -393,15 +471,23 @@ public sealed class SafeMigrationSqlCapturedTokenTests
     [InlineData('"', "\"select value\" + 1")]
     [InlineData('`', "`select value` + 1")]
     [InlineData('[', "[select value] + 1")]
-    public void UnquotedRenameUsesVerifiedNativeDelimiter(char delimiter, string expected)
+    public void UnquotedRenameUsesVerifiedNativeDelimiter(
+        char delimiter,
+        string expected
+    )
     {
         // Arrange
         const string sql = "source + 1";
 
         // Act
         var rewritten = SafeMigrationSqlExpressionParser.TryRenameColumnIdentifier(
-            sql, "source", "select value", StringComparer.Ordinal,
-            out var renamedSql, out var renamed, delimiter);
+            sql,
+            "source",
+            "select value",
+            StringComparer.Ordinal,
+            out var renamedSql,
+            out var renamed,
+            delimiter);
 
         // Assert
         Assert.True(rewritten);
@@ -418,7 +504,12 @@ public sealed class SafeMigrationSqlCapturedTokenTests
 
         // Act
         var rewritten = SafeMigrationSqlExpressionParser.TryRenameColumnIdentifier(
-            sql, "source", "target", StringComparer.Ordinal, out var renamedSql, out var renamed);
+            sql,
+            "source",
+            "target",
+            StringComparer.Ordinal,
+            out var renamedSql,
+            out var renamed);
 
         // Assert
         Assert.False(rewritten);

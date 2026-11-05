@@ -24,22 +24,44 @@ public sealed class SqlServerSafeMigrationGraphPhysicalBoundaryIntegrationTests 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, GraphPhysicalBoundarySetupSql(cascade),
+        await ExecuteSqlAsync(
+            connectionString,
+            GraphPhysicalBoundarySetupSql(cascade),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
-        var table = deleteEdge ? "graph_links" : "graph_sources";
-        var id = deleteEdge ? 3 : 1;
-        var value = deleteEdge ? 33 : 11;
+        var table = deleteEdge
+            ? "graph_links"
+            : "graph_sources";
+
+        var id = deleteEdge
+            ? 3
+            : 1;
+
+        var value = deleteEdge
+            ? 33
+            : 11;
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
 
         // WHY: Graph edge constraints are deliberately absent from the
         // ordinary FK snapshot; the independent storage boundary must reject.
         builder.DeleteModelManagedDataFromModel(
-            table, ["Id"], ["int"], new object?[,] { { id } },
-            ["Id", "Value"], ["int", "int"], new object?[,] { { id, value } },
-            schema: "dbo", foreignKeys: []);
+            table,
+            ["Id"],
+            ["int"],
+            new object?[,] { { id } },
+            ["Id", "Value"],
+            ["int", "int"],
+            new object?[,] { { id, value } },
+            schema: "dbo",
+            foreignKeys: []);
 
-        var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+        var operations = builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
+
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
 
         // Act
@@ -49,38 +71,48 @@ public sealed class SqlServerSafeMigrationGraphPhysicalBoundaryIntegrationTests 
             analyses = await analyzer.AnalyzeAsync(context, operations, cancellationToken: CancellationToken.None);
         }
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
-        var nodeTables = await ScalarIntAsync(connectionString,
+        var nodeTables = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.tables WHERE name IN (N'graph_sources', N'graph_targets') AND is_node = 1;",
             cancellationToken: CancellationToken.None);
 
-        var edgeTables = await ScalarIntAsync(connectionString,
+        var edgeTables = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.tables WHERE name = N'graph_links' AND is_edge = 1;",
             cancellationToken: CancellationToken.None);
 
-        var edgeConstraints = await ScalarIntAsync(connectionString,
+        var edgeConstraints = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.edge_constraints WHERE parent_object_id = OBJECT_ID(N'dbo.graph_links');",
             cancellationToken: CancellationToken.None);
 
-        var ordinaryForeignKeys = await ScalarIntAsync(connectionString,
+        var ordinaryForeignKeys = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.foreign_keys WHERE referenced_object_id = OBJECT_ID(N'dbo.graph_sources');",
             cancellationToken: CancellationToken.None);
 
-        var sourceRows = await ScalarIntAsync(connectionString,
+        var sourceRows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM dbo.graph_sources WHERE Id = 1 AND Value = 11;",
             cancellationToken: CancellationToken.None);
 
-        var targetRows = await ScalarIntAsync(connectionString,
+        var targetRows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM dbo.graph_targets WHERE Id = 2 AND Value = 22;",
             cancellationToken: CancellationToken.None);
 
-        var edgeRows = await ScalarIntAsync(connectionString,
+        var edgeRows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM dbo.graph_links WHERE Id = 3 AND Value = 33;",
             cancellationToken: CancellationToken.None);
 
-        var connections = await ScalarIntAsync(connectionString,
+        var connections = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM dbo.graph_sources source_node, dbo.graph_links graph_edge, "
             + "dbo.graph_targets target_node WHERE MATCH(source_node-(graph_edge)->target_node) "
             + "AND source_node.Id = 1 AND graph_edge.Id = 3 AND target_node.Id = 2;",
@@ -116,7 +148,10 @@ public sealed class SqlServerSafeMigrationGraphPhysicalBoundaryIntegrationTests 
             + "CREATE TABLE dbo.graph_targets (Id int NOT NULL PRIMARY KEY, Value int NOT NULL) AS NODE; "
             + "CREATE TABLE dbo.graph_links (Id int NOT NULL PRIMARY KEY, Value int NOT NULL, "
             + "CONSTRAINT EC_graph_links CONNECTION (dbo.graph_sources TO dbo.graph_targets) ON DELETE "
-            + (cascade ? "CASCADE" : "NO ACTION") + ") AS EDGE; "
+            + (cascade
+                ? "CASCADE"
+                : "NO ACTION")
+            + ") AS EDGE; "
             + "INSERT dbo.graph_sources (Id, Value) VALUES (1, 11); "
             + "INSERT dbo.graph_targets (Id, Value) VALUES (2, 22); "
             + "INSERT dbo.graph_links ($from_id, $to_id, Id, Value) "

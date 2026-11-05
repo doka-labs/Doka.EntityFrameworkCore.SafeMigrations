@@ -15,7 +15,7 @@ internal static class LivePerformanceEvidence
 {
     private const int SampleCount = 20;
 
-    private static readonly System.Text.Json.JsonSerializerOptions s_serializerOptions = new()
+    private static readonly JsonSerializerOptions s_serializerOptions = new()
     {
         WriteIndented = true,
     };
@@ -131,18 +131,23 @@ internal static class LivePerformanceEvidence
             },
         };
 
-        return System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(payload, s_serializerOptions);
+        return JsonSerializer.SerializeToUtf8Bytes(payload, s_serializerOptions);
     }
 
     /// <summary>Rejects invalid observations rather than treating corrupt evidence as a slow measurement.</summary>
     /// <param name="measurement">The sampled duration and final report.</param>
     /// <param name="parameterName">The evidence role to identify in a validation exception.</param>
-    private static void ValidateMeasurement(LivePerformanceMeasurement measurement, string parameterName)
+    private static void ValidateMeasurement(
+        LivePerformanceMeasurement measurement,
+        string parameterName
+    )
     {
         ArgumentNullException.ThrowIfNull(measurement, parameterName);
         ArgumentNullException.ThrowIfNull(measurement.LastReport, parameterName);
-        if (!double.IsFinite(measurement.P50Milliseconds) || !double.IsFinite(measurement.P95Milliseconds)
-            || measurement.P50Milliseconds < 0d || measurement.P95Milliseconds < measurement.P50Milliseconds)
+        if (!double.IsFinite(measurement.P50Milliseconds)
+            || !double.IsFinite(measurement.P95Milliseconds)
+            || measurement.P50Milliseconds < 0d
+            || measurement.P95Milliseconds < measurement.P50Milliseconds)
         {
             throw new ArgumentOutOfRangeException(parameterName, "Timing samples must be finite and ordered.");
         }
@@ -151,9 +156,11 @@ internal static class LivePerformanceEvidence
     /// <summary>Retains the original budget formula and rejects an unrepresentable derived measurement.</summary>
     /// <param name="clean">The valid baseline measurement.</param>
     /// <returns>The informational noisy-p95 budget.</returns>
-    private static double MaximumNoisyP95(LivePerformanceMeasurement clean)
+    private static double MaximumNoisyP95(
+        LivePerformanceMeasurement clean
+    )
     {
-        var maximum = (clean.P95Milliseconds * 2d) + 250d;
+        var maximum = clean.P95Milliseconds * 2d + 250d;
         if (!double.IsFinite(maximum))
         {
             throw new ArgumentOutOfRangeException(nameof(clean), "The derived timing budget must be finite.");

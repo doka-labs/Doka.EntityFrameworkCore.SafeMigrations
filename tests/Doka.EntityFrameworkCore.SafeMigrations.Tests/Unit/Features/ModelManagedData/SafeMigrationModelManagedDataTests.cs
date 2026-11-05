@@ -18,6 +18,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
             ["id", "name"],
             ["int", "varchar(64)"],
             values);
+
         values[0, 1] = "mutated";
 
         // Assert
@@ -65,7 +66,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
     public void CandidateKeysRejectDuplicateNonNullTargets()
     {
         // Arrange
-        var uniqueKeys = new[] { new ExpectedModelManagedDataUniqueKeyDefinition(["code"]), };
+        var uniqueKeys = new[] { new ExpectedModelManagedDataUniqueKeyDefinition(["code"]) };
         var builder = new MigrationBuilder("test");
 
         // Act
@@ -88,7 +89,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
     public void CandidateKeysPermitMultipleNulls()
     {
         // Arrange
-        var uniqueKeys = new[] { new ExpectedModelManagedDataUniqueKeyDefinition(["code"]), };
+        var uniqueKeys = new[] { new ExpectedModelManagedDataUniqueKeyDefinition(["code"]) };
         var builder = new MigrationBuilder("test");
 
         // Act
@@ -317,7 +318,9 @@ public sealed partial class SafeMigrationModelManagedDataTests
                     ? "bigint"
                     : "int",
                 IsNullable = false,
-                DefaultValueSql = initialValue == AddedColumnInitialValue.OpaqueSql ? "RAND()" : null,
+                DefaultValueSql = initialValue == AddedColumnInitialValue.OpaqueSql
+                    ? "RAND()"
+                    : null,
                 ComputedColumnSql = initialValue == AddedColumnInitialValue.OpaqueComputedSql
                     ? "id + 1"
                     : null,
@@ -439,7 +442,13 @@ public sealed partial class SafeMigrationModelManagedDataTests
 
         var result = SafeMigrationModelManagedDataPairer.Pair(
             [insert],
-            [new DropTableOperation { Name = "roles", Schema = "identity", }]);
+            [
+                new DropTableOperation
+                {
+                    Name = "roles",
+                    Schema = "identity",
+                },
+            ]);
 
         var ensure = Assert.IsType<EnsureModelManagedDataScaffoldingOperation>(Assert.Single(result));
 
@@ -449,7 +458,13 @@ public sealed partial class SafeMigrationModelManagedDataTests
 
         Assert.Throws<InvalidOperationException>(() => SafeMigrationModelManagedDataPairer.Pair(
             [insert],
-            [new DropTableOperation { Name = "roles", Schema = "other", }]));
+            [
+                new DropTableOperation
+                {
+                    Name = "roles",
+                    Schema = "other",
+                },
+            ]));
     }
 
     [Fact]
@@ -465,12 +480,24 @@ public sealed partial class SafeMigrationModelManagedDataTests
         };
 
         var result = SafeMigrationModelManagedDataPairer.Pair(
-            [new DropTableOperation { Name = "roles", Schema = "identity", }],
+            [
+                new DropTableOperation
+                {
+                    Name = "roles",
+                    Schema = "identity",
+                },
+            ],
             [inverseInsert]);
 
         Assert.IsType<DropTableOperation>(Assert.Single(result));
         Assert.Throws<InvalidOperationException>(() => SafeMigrationModelManagedDataPairer.Pair(
-            [new DropTableOperation { Name = "roles", Schema = "other", }],
+            [
+                new DropTableOperation
+                {
+                    Name = "roles",
+                    Schema = "other",
+                },
+            ],
             [inverseInsert]));
     }
 
@@ -592,7 +619,9 @@ public sealed partial class SafeMigrationModelManagedDataTests
     [Theory]
     [InlineData(1)]
     [InlineData(2)]
-    public void PreflightDefersParentDependenciesAfterChildWrites(long dependencyCount)
+    public void PreflightDefersParentDependenciesAfterChildWrites(
+        long dependencyCount
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
@@ -674,6 +703,7 @@ public sealed partial class SafeMigrationModelManagedDataTests
                 SafeMigrationModelManagedRowState.Different,
             ],
             evidence.RowStates);
+
         Assert.Equal([0, 17], evidence.DependencyCounts);
     }
 
@@ -698,7 +728,11 @@ public sealed partial class SafeMigrationModelManagedDataTests
 
         // Act
         var exception = Record.Exception(() => SafeMigrationModelManagedDataEvidence.Parse(
-            states, rowCount, dependencies, dependencyCount, provider));
+            states,
+            rowCount,
+            dependencies,
+            dependencyCount,
+            provider));
 
         // Assert
         Assert.IsType<InvalidOperationException>(exception);
@@ -758,19 +792,19 @@ public sealed partial class SafeMigrationModelManagedDataTests
 
         // Act
         var exception = Record.Exception(() => SafeMigrationModelManagedDataContractValidator.Validate(
-            [
-                first,
-                Operation(
-                    new EnsureModelManagedDataIntent(
-                        "roles",
-                        ["tenant_id", "id"],
-                        ["int", "int"],
-                        ["tenant_id", "id", "name"],
-                        ["int", "int", "varchar(64)"],
-                        new object?[,] { { 7, 2, "member" } },
-                        schema: "identity",
-                        uniqueKeys: null)),
-            ]));
+        [
+            first,
+            Operation(
+                new EnsureModelManagedDataIntent(
+                    "roles",
+                    ["tenant_id", "id"],
+                    ["int", "int"],
+                    ["tenant_id", "id", "name"],
+                    ["int", "int", "varchar(64)"],
+                    new object?[,] { { 7, 2, "member" } },
+                    schema: "identity",
+                    uniqueKeys: null)),
+        ]));
 
         // Assert
         Assert.Null(exception);

@@ -13,12 +13,13 @@ public class PostgreSqlColumnAttributionWorkload : IDisposable
         "pg_constraint",
     ];
 
-    private PostgreSqlGenerationContext _context = null!;
-    private IMigrationsSqlGenerator _generator = null!;
     private PostgreSqlSafeMigrationCatalogSqlBuilder _catalog = null!;
+
+    private PostgreSqlGenerationContext _context = null!;
+    private bool _disposed;
+    private IMigrationsSqlGenerator _generator = null!;
     private IReadOnlyList<MigrationOperation> _operations = null!;
     private SafeMigrationOperation[] _safeOperations = null!;
-    private bool _disposed;
 
     /// <summary>Gets or sets the ordered target table width.</summary>
     [Params(1, 8, 16, 64)]
@@ -31,6 +32,13 @@ public class PostgreSqlColumnAttributionWorkload : IDisposable
     /// <summary>Gets or sets complete table generation versus individual required-column repairs.</summary>
     [Params("table", "required_repairs")]
     public string Kind { get; set; } = "table";
+
+    /// <summary>Releases the context owning the PostgreSQL generation services.</summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
 
     /// <summary>Runs paired plain and mixed-collation column generation benchmarks.</summary>
     /// <param name="args">The BenchmarkDotNet command-line arguments.</param>
@@ -59,7 +67,7 @@ public class PostgreSqlColumnAttributionWorkload : IDisposable
                     new EnsureTableIntent(
                         new ExpectedTableDefinition("attribution_rows", columns),
                         SafeMigrationTableMode.StrictDefinition),
-                    SafeMigrationPolicy.ThrowIfDifferent)
+                    SafeMigrationPolicy.ThrowIfDifferent),
             ],
             "required_repairs" => columns
                 .Select(column => (MigrationOperation)new SafeMigrationOperation(
@@ -152,13 +160,6 @@ public class PostgreSqlColumnAttributionWorkload : IDisposable
     [GlobalCleanup]
     public void Cleanup() => Dispose();
 
-    /// <summary>Releases the context owning the PostgreSQL generation services.</summary>
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
-
     /// <summary>Releases owned managed resources once while supporting generated benchmark subclasses.</summary>
     /// <param name="disposing">Whether managed resources should be released.</param>
     protected virtual void Dispose(
@@ -210,7 +211,7 @@ public class PostgreSqlColumnAttributionWorkload : IDisposable
     ) => new
     {
         Characters = sql.Length,
-        Utf8Bytes = System.Text.Encoding.UTF8.GetByteCount(sql),
+        Utf8Bytes = Encoding.UTF8.GetByteCount(sql),
         Relations = s_catalogRelations.ToDictionary(name => name, name => Occurrences(sql, "pg_catalog." + name + " ")),
         InformationSchemaColumns = Occurrences(sql, "information_schema.columns"),
     };

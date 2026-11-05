@@ -45,8 +45,12 @@ public sealed class MySqlSafeMigrationColumnAnnotationTests
             DokaMySqlGuidFormat.Char36);
 
         Assert.True(MySqlSafeMigrationCatalogSqlBuilder.HasUnsupportedProviderColumnAnnotation(undefinedValue));
-        Assert.True(MySqlSafeMigrationCatalogSqlBuilder.HasUnsupportedProviderColumnAnnotation(binaryWithCharacterStoreType));
-        Assert.True(MySqlSafeMigrationCatalogSqlBuilder.HasUnsupportedProviderColumnAnnotation(characterWithBinaryStoreType));
+        Assert.True(
+            MySqlSafeMigrationCatalogSqlBuilder.HasUnsupportedProviderColumnAnnotation(binaryWithCharacterStoreType));
+
+        Assert.True(
+            MySqlSafeMigrationCatalogSqlBuilder.HasUnsupportedProviderColumnAnnotation(characterWithBinaryStoreType));
+
         Assert.True(MySqlSafeMigrationCatalogSqlBuilder.HasUnsupportedProviderColumnAnnotation(nonGuidClrType));
         Assert.False(MySqlSafeMigrationColumnMetadata.CanSafelyConverge(undefinedValue));
         Assert.False(MySqlSafeMigrationColumnMetadata.CanSafelyConverge(binaryWithCharacterStoreType));

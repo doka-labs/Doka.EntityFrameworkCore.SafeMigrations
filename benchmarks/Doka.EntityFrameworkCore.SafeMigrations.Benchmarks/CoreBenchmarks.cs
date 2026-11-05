@@ -16,7 +16,8 @@ public class CoreColumnBenchmarks
     /// <summary>Constructs the configured number of safe column intents.</summary>
     /// <returns>The constructed operation count.</returns>
     [Benchmark]
-    public int ConstructIntents() => ColumnBenchmarkWorkload.CreateOperations(OperationCount).Count;
+    public int ConstructIntents() => ColumnBenchmarkWorkload.CreateOperations(OperationCount)
+        .Count;
 
     /// <summary>Plans the configured number of column decisions.</summary>
     /// <returns>The decision action checksum.</returns>
@@ -26,7 +27,8 @@ public class CoreColumnBenchmarks
     /// <summary>Serializes the configured report to UTF-8 JSON.</summary>
     /// <returns>The serialized byte count.</returns>
     [Benchmark]
-    public int SerializeReport() => SafeMigrationReportJson.SerializeToUtf8Bytes(_report).Length;
+    public int SerializeReport() => SafeMigrationReportJson.SerializeToUtf8Bytes(_report)
+        .Length;
 }
 
 /// <summary>Measures the blocking-only view of the retained 50000-assessment report.</summary>
@@ -74,5 +76,6 @@ public class CoreModelManagedDataBenchmarks
     /// <summary>Creates the contract fingerprint for the retained model-managed-data transitions.</summary>
     /// <returns>The fingerprint length.</returns>
     [Benchmark]
-    public int CreateModelManagedDataFingerprint() => SafeMigrationContractFingerprint.Create(_operations).Length;
+    public int CreateModelManagedDataFingerprint() => SafeMigrationContractFingerprint.Create(_operations)
+        .Length;
 }

@@ -399,11 +399,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         }
 
         var columns = string.Join(", ", intent.Columns.Select(Literal));
+
         // WHY: Explicit identity values are permitted for INSERT with
         // IDENTITY_INSERT, but SQL Server never permits updating that column.
         // sys.columns already exposes is_identity, so UPDATE needs no second
         // lookup of the same columns through sys.identity_columns.
-        var identity = intent is UpdateModelManagedDataIntent ? " OR c.is_identity = 1" : string.Empty;
+        var identity = intent is UpdateModelManagedDataIntent
+            ? " OR c.is_identity = 1"
+            : string.Empty;
 
         return "NOT EXISTS (SELECT 1 FROM sys.columns c "
             + $"WHERE c.object_id = {TableId(intent.Table, intent.Schema)} "
@@ -421,6 +424,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         }
 
         var columns = new HashSet<string>(StringComparer.Ordinal);
+
         // WHY: Inspect each key name together with its corresponding declared type.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -523,7 +527,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 for (var column = 0; column < matrix.ColumnCount; column++)
                 {
                     var value = matrix.GetUnsafeValue(row, column);
-                    var types = ReferenceEquals(matrix, intent.KeyValues) ? intent.KeyColumnTypes : intent.ColumnTypes;
+                    var types = ReferenceEquals(matrix, intent.KeyValues)
+                        ? intent.KeyColumnTypes
+                        : intent.ColumnTypes;
 
                     if (!FitsManagedValueSize(value, types[column]))
                     {
@@ -593,6 +599,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 for (var row = 0; row < matrix.RowCount; row++)
                 {
                     var value = matrix.GetUnsafeValue(row, column);
+
                     // WHY: Repeated CLR values in the same typed column emit
                     // the identical constant proof. This only avoids rendering;
                     // SQL Server still decides row equality and uniqueness.
@@ -666,7 +673,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         maximum = 0;
 
-        return (type is "char" or "varchar" or "nchar" or "nvarchar" or "binary" or "varbinary")
+        return type is "char" or "varchar" or "nchar" or "nvarchar" or "binary" or "varbinary"
             && opening >= 0
             && value.EndsWith(')')
             && int.TryParse(
@@ -719,7 +726,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         var opening = value.IndexOf('(');
         var type = opening < 0
             ? value
-            : value[..opening].TrimEnd();
+            : value[..opening]
+                .TrimEnd();
 
         var args = opening < 0 || !value.EndsWith(')')
             ? null
@@ -744,7 +752,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 return type is "varchar" or "nvarchar" or "varbinary";
             }
 
-            var maximum = type is "nchar" or "nvarchar" ? 4_000 : 8_000;
+            var maximum = type is "nchar" or "nvarchar"
+                ? 4_000
+                : 8_000;
 
             return int.TryParse(args, NumberStyles.None, CultureInfo.InvariantCulture, out var length)
                 && length is > 0
@@ -827,6 +837,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         }
 
         var rows = new string[intent.RowCount];
+
         // WHY: Keep authored matrix row ordinals aligned with emitted VALUES rows.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -891,10 +902,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         string expected
     ) => string.Join(
         " AND ",
-        intent.KeyColumns.Select((
-            column,
-            index
-        ) => NullSafeSqlEqual($"{actual}.{Delimited(column)}", $"{expected}.{Delimited($"k{index}")}")));
+        intent.KeyColumns.Select((column,
+            index) => NullSafeSqlEqual($"{actual}.{Delimited(column)}", $"{expected}.{Delimited($"k{index}")}")));
 
     private string ColumnMatch(
         IReadOnlyList<string> columns,
@@ -903,10 +912,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         string prefix
     ) => string.Join(
         " AND ",
-        columns.Select((
-            column,
-            index
-        ) => ExactValueMatch($"{actual}.{Delimited(column)}", $"{expected}.{Delimited($"{prefix}{index}")}")));
+        columns.Select((column,
+            index) => ExactValueMatch($"{actual}.{Delimited(column)}", $"{expected}.{Delimited($"{prefix}{index}")}")));
 
     private static string NullSafeSqlEqual(
         string left,
@@ -986,10 +993,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         {
             string.Join(
                 " AND ",
-                intent.KeyColumns.Select((
-                    _,
-                    index
-                ) => NullSafeSqlEqual(
+                intent.KeyColumns.Select((_,
+                    index) => NullSafeSqlEqual(
                     $"doka_expected.{Delimited($"k{index}")}",
                     $"doka_other.{Delimited($"k{index}")}"))),
         };
@@ -1031,10 +1036,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         {
             var match = string.Join(
                 " AND ",
-                foreignKey.Columns.Select((
-                    column,
-                    index
-                ) =>
+                foreignKey.Columns.Select((column,
+                    index) =>
                 {
                     var ordinal = ColumnOrdinal(intent.Columns, foreignKey.PrincipalColumns[index]);
 
@@ -1078,10 +1081,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         return "("
             + string.Join(
                 " + ',' + ",
-                counts.Select(static (
-                    count,
-                    index
-                ) => index == 0 ? $"CONVERT(varchar(max), {count})" : count))
+                counts.Select(static (count,
+                    index) => index == 0
+                    ? $"CONVERT(varchar(max), {count})"
+                    : count))
             + ")";
     }
 
@@ -1093,10 +1096,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         {
             var expected = string.Join(
                 ", ",
-                foreignKey.Columns.Select((
-                        column,
-                        index
-                    ) => $"({index + 1}, {Literal(column)}, {Literal(foreignKey.PrincipalColumns[index])})"));
+                foreignKey.Columns.Select((column,
+                        index) => $"({index + 1}, {Literal(column)}, {Literal(foreignKey.PrincipalColumns[index])})"));
 
             return $"(fk.parent_object_id = {TableId(foreignKey.Table, foreignKey.Schema)} "
                 + $"AND (SELECT COUNT(*) FROM sys.foreign_key_columns fkc "
@@ -1112,7 +1113,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 + "AND dc.name = expected.dependent AND pc.name = expected.principal)))";
         });
 
-        var known = intent.ForeignKeys.Count == 0 ? "1 = 0" : $"({string.Join(" OR ", modeled)})";
+        var known = intent.ForeignKeys.Count == 0
+            ? "1 = 0"
+            : $"({string.Join(" OR ", modeled)})";
 
         // WHY: An unmodeled incoming FK can cascade or rewrite dependent rows.
         // Source-frozen FK metadata is the only evidence that the delete is safe.

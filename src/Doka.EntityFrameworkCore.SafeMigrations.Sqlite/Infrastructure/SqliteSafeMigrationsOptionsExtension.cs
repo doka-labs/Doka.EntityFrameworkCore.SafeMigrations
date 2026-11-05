@@ -7,13 +7,36 @@ internal sealed class SqliteSafeMigrationsOptionsExtension : IDbContextOptionsEx
     private DbContextOptionsExtensionInfo? _info;
 
     /// <inheritdoc />
-    public DbContextOptionsExtensionInfo Info => _info ??= new ExtensionInfo(this);
-
-    /// <inheritdoc />
     public Type BaselineGeneratorType { get; private init; } = typeof(SqliteMigrationsSqlGenerator);
 
     /// <inheritdoc />
     public Type? CanonicalContextType { get; private init; }
+
+    /// <inheritdoc />
+    public DbContextOptionsExtensionInfo Info => _info ??= new ExtensionInfo(this);
+
+    /// <inheritdoc />
+    public void ApplyServices(
+        IServiceCollection services
+    ) => services.AddSqliteSafeMigrations(BaselineGeneratorType, CanonicalContextType);
+
+    /// <inheritdoc />
+    public void Validate(
+        IDbContextOptions options
+    )
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        var sqliteAssembly = typeof(SqliteDbContextOptionsBuilderExtensions).Assembly;
+        if (!options.Extensions.Any(extension => extension.Info.IsDatabaseProvider
+            && extension.GetType()
+                .Assembly
+            == sqliteAssembly))
+        {
+            throw new InvalidOperationException(
+                "SQLite safe migrations require the Microsoft EF Core SQLite provider.");
+        }
+    }
 
     /// <inheritdoc />
     public SafeMigrationScaffoldingMode ScaffoldingMode { get; private init; }
@@ -23,11 +46,6 @@ internal sealed class SqliteSafeMigrationsOptionsExtension : IDbContextOptionsEx
 
     /// <inheritdoc />
     public bool ExcludeModelManagedDataForExcludedTablesEnabled { get; private init; }
-
-    /// <inheritdoc />
-    public void ApplyServices(
-        IServiceCollection services
-    ) => services.AddSqliteSafeMigrations(BaselineGeneratorType, CanonicalContextType);
 
     /// <summary>Creates an immutable configured options extension.</summary>
     public static SqliteSafeMigrationsOptionsExtension WithConfiguration(
@@ -44,24 +62,6 @@ internal sealed class SqliteSafeMigrationsOptionsExtension : IDbContextOptionsEx
         LegacyConvergencePolicy = legacyConvergencePolicy,
         ExcludeModelManagedDataForExcludedTablesEnabled = excludeModelManagedDataForExcludedTables,
     };
-
-    /// <inheritdoc />
-    public void Validate(
-        IDbContextOptions options
-    )
-    {
-        ArgumentNullException.ThrowIfNull(options);
-
-        var sqliteAssembly = typeof(SqliteDbContextOptionsBuilderExtensions).Assembly;
-        if (!options.Extensions.Any(extension => extension.Info.IsDatabaseProvider
-                && extension.GetType()
-                    .Assembly
-                == sqliteAssembly))
-        {
-            throw new InvalidOperationException(
-                "SQLite safe migrations require the Microsoft EF Core SQLite provider.");
-        }
-    }
 
     private sealed class ExtensionInfo : DbContextOptionsExtensionInfo
     {

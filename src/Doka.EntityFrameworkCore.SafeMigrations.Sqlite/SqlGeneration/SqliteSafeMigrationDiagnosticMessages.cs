@@ -8,11 +8,15 @@ internal static class SqliteSafeMigrationDiagnosticMessages
         SafeMigrationOperation operation,
         SafeMigrationProviderAnalysis analysis,
         SafeMigrationDecision decision,
-        int operationOrdinal)
+        int operationOrdinal
+    )
     {
         // WHY: Format only a rejection, never an accepted command's row/default
         // values or SQL text. The shared formatter bounds and escapes identity.
-        return SafeMigrationDiagnosticMessages.FormatRuntimeFromAnalysis(operation, analysis, decision, operationOrdinal);
+        return SafeMigrationDiagnosticMessages.FormatRuntimeFromAnalysis(operation,
+            analysis,
+            decision,
+            operationOrdinal);
     }
 
     /// <summary>Describes relationship failure using metadata only, never PRAGMA row identities.</summary>
@@ -20,7 +24,8 @@ internal static class SqliteSafeMigrationDiagnosticMessages
         string table,
         string? principalTable,
         long? foreignKeyOrdinal,
-        SqliteForeignKeySnapshot? foreignKey = null)
+        SqliteForeignKeySnapshot? foreignKey = null
+    )
     {
         var owner = SafeMigrationDiagnosticMessages.BoundForDisplay(table);
         var principal = principalTable is null
@@ -44,7 +49,9 @@ internal static class SqliteSafeMigrationDiagnosticMessages
     }
 
     /// <summary>Limits relationship endpoints to four escaped identifiers without copying whole lists.</summary>
-    private static string FormatColumns(IReadOnlyList<string>? columns)
+    private static string FormatColumns(
+        IReadOnlyList<string>? columns
+    )
     {
         if (columns is null)
         {
@@ -53,9 +60,14 @@ internal static class SqliteSafeMigrationDiagnosticMessages
 
         // WHY: Fixed per-member and member-count bounds keep the entire integrity
         // message below 2048 characters even for hostile metadata.
-        var names = string.Join(", ", columns.Take(4).Select(
-            static column => SafeMigrationDiagnosticMessages.BoundForDisplay(column)));
+        var names = string.Join(
+            ", ",
+            columns
+                .Take(4)
+                .Select(static column => SafeMigrationDiagnosticMessages.BoundForDisplay(column)));
 
-        return columns.Count > 4 ? names + ", ..." : names;
+        return columns.Count > 4
+            ? names + ", ..."
+            : names;
     }
 }

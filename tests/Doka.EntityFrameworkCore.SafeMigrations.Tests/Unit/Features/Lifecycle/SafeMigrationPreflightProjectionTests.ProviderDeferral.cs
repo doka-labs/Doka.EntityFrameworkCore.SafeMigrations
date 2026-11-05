@@ -8,12 +8,21 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        var foreignKey = new SafeMigrationOperation(new EnsureForeignKeyIntent(
-            new ExpectedForeignKeyDefinition("FK_children_parent", "children", ["ParentId"],
-                "parents", ["Id"])), SafeMigrationPolicy.ThrowIfDifferent);
+        var foreignKey = new SafeMigrationOperation(
+            new EnsureForeignKeyIntent(
+                new ExpectedForeignKeyDefinition(
+                    "FK_children_parent",
+                    "children",
+                    ["ParentId"],
+                    "parents",
+                    ["Id"])),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
-        var missing = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
-            SafeMigrationRepairCapability.None, false, "foreign_key_prerequisite");
+        var missing = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.PrerequisiteMissing,
+            SafeMigrationRepairCapability.None,
+            false,
+            "foreign_key_prerequisite");
 
         // Act
         projection.ObserveDeferredProviderOperation(1);
@@ -32,11 +41,17 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        var column = new SafeMigrationOperation(new EnsureColumnIntent("children",
-            new ExpectedColumnDefinition("Id", typeof(int), false, "int")), SafeMigrationPolicy.ThrowIfDifferent);
+        var column = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "children",
+                new ExpectedColumnDefinition("Id", typeof(int), false, "int")),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
-        var matching = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Matching,
-            SafeMigrationRepairCapability.None, true, "matching");
+        var matching = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Matching,
+            SafeMigrationRepairCapability.None,
+            true,
+            "matching");
 
         // Act
         projection.ObserveDeferredProviderOperation(1);
@@ -56,15 +71,23 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData(SafeMigrationObservedState.Different)]
     [InlineData(SafeMigrationObservedState.DataBlocked)]
     [InlineData(SafeMigrationObservedState.PrerequisiteMissing)]
-    public void DeferredProviderBoundary_DoesNotReuseSupportedSnapshotStates(SafeMigrationObservedState state)
+    public void DeferredProviderBoundary_DoesNotReuseSupportedSnapshotStates(
+        SafeMigrationObservedState state
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        var column = new SafeMigrationOperation(new EnsureColumnIntent("values",
-            new ExpectedColumnDefinition("Id", typeof(int), false, "int")), SafeMigrationPolicy.ThrowIfDifferent);
+        var column = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "values",
+                new ExpectedColumnDefinition("Id", typeof(int), false, "int")),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
-        var snapshot = new SafeMigrationProviderAnalysis(state,
-            SafeMigrationRepairCapability.None, state == SafeMigrationObservedState.Matching, "snapshot_state");
+        var snapshot = new SafeMigrationProviderAnalysis(
+            state,
+            SafeMigrationRepairCapability.None,
+            state == SafeMigrationObservedState.Matching,
+            "snapshot_state");
 
         // Act
         projection.ObserveDeferredProviderOperation(1);
@@ -83,16 +106,22 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void DeferredProviderBoundary_PreservesUnsupportedContracts(bool invariant)
+    public void DeferredProviderBoundary_PreservesUnsupportedContracts(
+        bool invariant
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        var check = new SafeMigrationOperation(new EnsureCheckConstraintIntent(
-            new ExpectedCheckConstraintDefinition("CK_values", "values", "Value>=0")),
+        var check = new SafeMigrationOperation(
+            new EnsureCheckConstraintIntent(
+                new ExpectedCheckConstraintDefinition("CK_values", "values", "Value>=0")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var unsupported = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
-            SafeMigrationRepairCapability.None, false, "check_row_data_unproven")
+        var unsupported = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Unsupported,
+            SafeMigrationRepairCapability.None,
+            false,
+            "check_row_data_unproven")
         {
             IsInvariantUnsupported = invariant,
         };
@@ -112,11 +141,17 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        var column = new SafeMigrationOperation(new EnsureColumnIntent("values",
-            new ExpectedColumnDefinition("Id", typeof(int), false, "int")), SafeMigrationPolicy.ThrowIfDifferent);
+        var column = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "values",
+                new ExpectedColumnDefinition("Id", typeof(int), false, "int")),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
-        var matching = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Matching,
-            SafeMigrationRepairCapability.None, true, "matching");
+        var matching = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Matching,
+            SafeMigrationRepairCapability.None,
+            true,
+            "matching");
 
         // Act
         projection.ObserveDeferredProviderOperation(1);

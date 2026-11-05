@@ -13,7 +13,10 @@ public sealed class SqlServerProviderDdlOriginRunnerTests
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(true, true)]
-    public async Task DdlOrigin_ProducesTraceableRuntimeValidationReport(bool typed, bool trigger)
+    public async Task DdlOrigin_ProducesTraceableRuntimeValidationReport(
+        bool typed,
+        bool trigger
+    )
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection();
@@ -23,7 +26,10 @@ public sealed class SqlServerProviderDdlOriginRunnerTests
         var runner = new SafeMigrationRunner(analyzer);
 
         // Act
-        var report = await runner.AnalyzeAsync(context, operations, new SafeMigrationRunOptions("ddl-origin-contract"),
+        var report = await runner.AnalyzeAsync(
+            context,
+            operations,
+            new SafeMigrationRunOptions("ddl-origin-contract"),
             cancellationToken: CancellationToken.None);
 
         var json = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
@@ -36,13 +42,21 @@ public sealed class SqlServerProviderDdlOriginRunnerTests
         var assessment = report.Assessments[2];
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, assessment.Action);
         Assert.Equal("runtime_validation_required", assessment.Code);
-        Assert.Equal(trigger ? "projected_ddl_trigger_data_unknown" : "projected_ddl_visibility_data_unknown",
+        Assert.Equal(
+            trigger
+                ? "projected_ddl_trigger_data_unknown"
+                : "projected_ddl_visibility_data_unknown",
             assessment.AnalysisCode);
+
         Assert.Null(assessment.ObservedState);
         Assert.Null(assessment.PostconditionSatisfied);
         Assert.Equal(1, assessment.DeferredOrigin?.OperationOrdinal);
-        Assert.Equal(typed ? typeof(DropIndexOperation).FullName : typeof(SafeMigrationOperation).FullName,
+        Assert.Equal(
+            typed
+                ? typeof(DropIndexOperation).FullName
+                : typeof(SafeMigrationOperation).FullName,
             assessment.DeferredOrigin?.OperationType);
+
         Assert.Null(assessment.DeferredOrigin?.MigrationId);
         Assert.Contains("\"operationOrdinal\":1", json, StringComparison.Ordinal);
         Assert.Contains("\"action\":\"validate_at_runtime\"", json, StringComparison.Ordinal);
@@ -55,7 +69,9 @@ public sealed class SqlServerProviderDdlOriginRunnerTests
     [InlineData(-1)]
     [InlineData(2)]
     [InlineData(3)]
-    public async Task InvalidProviderOrigin_FailsClosed(int invalidOrdinal)
+    public async Task InvalidProviderOrigin_FailsClosed(
+        int invalidOrdinal
+    )
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection();
@@ -64,28 +80,46 @@ public sealed class SqlServerProviderDdlOriginRunnerTests
         var runner = new SafeMigrationRunner(analyzer);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => runner.AnalyzeAsync(context, Operations(typed: false),
-            new SafeMigrationRunOptions("ddl-invalid-origin-contract"), cancellationToken: CancellationToken.None));
+        var failure = await Record.ExceptionAsync(() => runner.AnalyzeAsync(
+            context,
+            Operations(typed: false),
+            new SafeMigrationRunOptions("ddl-invalid-origin-contract"),
+            cancellationToken: CancellationToken.None));
 
         // Assert
-        Assert.Contains("invalid deferred-validation origin", Assert.IsType<InvalidOperationException>(failure).Message,
+        Assert.Contains(
+            "invalid deferred-validation origin",
+            Assert.IsType<InvalidOperationException>(failure)
+                .Message,
             StringComparison.Ordinal);
+
         Assert.Equal(ConnectionState.Closed, connection.State);
     }
 
-    private static SafeMigrationDbContext Context(SqlServerCatalogTestConnection connection)
-        => new(new DbContextOptionsBuilder<SafeMigrationDbContext>().UseSqlServer(connection).Options);
+    private static SafeMigrationDbContext Context(
+        SqlServerCatalogTestConnection connection
+    )
+        => new(new DbContextOptionsBuilder<SafeMigrationDbContext>().UseSqlServer(connection)
+            .Options);
 
-    private static MigrationOperation[] Operations(bool typed)
+    private static MigrationOperation[] Operations(
+        bool typed
+    )
         =>
         [
             new SafeMigrationOperation(new EnsureSchemaIntent("dbo"), SafeMigrationPolicy.ThrowIfDifferent),
             typed
-                ? new DropIndexOperation { Name = "IX_source", Table = "source" }
-                : new SafeMigrationOperation(new DropIndexIntent("IX_source", "source"),
+                ? new DropIndexOperation
+                {
+                    Name = "IX_source",
+                    Table = "source",
+                }
+                : new SafeMigrationOperation(
+                    new DropIndexIntent("IX_source", "source"),
                     SafeMigrationPolicy.ThrowIfDifferent),
-            new SafeMigrationOperation(new EnsureCheckConstraintIntent(
-                new ExpectedCheckConstraintDefinition("CK_checked", "checked", "[Value]>=0")),
+            new SafeMigrationOperation(
+                new EnsureCheckConstraintIntent(
+                    new ExpectedCheckConstraintDefinition("CK_checked", "checked", "[Value]>=0")),
                 SafeMigrationPolicy.ThrowIfDifferent),
         ];
 
@@ -93,22 +127,25 @@ public sealed class SqlServerProviderDdlOriginRunnerTests
     private sealed class OrderedAnalyzer : ISafeMigrationProviderAnalyzer, ISafeMigrationProjectedDependencyAnalyzer,
         IDisposable
     {
-        private readonly SqlServerSafeMigrationProviderAnalyzer _projection;
         private readonly SqlServerSafeMigrationCatalogSqlBuilder _catalog;
+        private readonly SqlServerSafeMigrationProviderAnalyzer _projection;
         private readonly bool _trigger;
 
         /// <summary>Connects immutable test classifications to the provider's real ordered projection.</summary>
-        public OrderedAnalyzer(DbContext context, bool trigger)
+        public OrderedAnalyzer(
+            DbContext context,
+            bool trigger
+        )
         {
             _trigger = trigger;
-            _projection = new SqlServerSafeMigrationProviderAnalyzer(context.GetService<IRelationalTypeMappingSource>(),
+            _projection = new SqlServerSafeMigrationProviderAnalyzer(
+                context.GetService<IRelationalTypeMappingSource>(),
                 context.GetService<ISqlGenerationHelper>());
-            _catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+
+            _catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+                context.GetService<IRelationalTypeMappingSource>(),
                 context.GetService<ISqlGenerationHelper>());
         }
-
-        /// <inheritdoc />
-        public string ProviderId => "sqlserver";
 
         /// <summary>Gets complete-stream positions delivered by neutral projection.</summary>
         public List<int> ObservedOrdinals { get; } = [];
@@ -117,45 +154,12 @@ public sealed class SqlServerProviderDdlOriginRunnerTests
         public int? OverrideOrigin { get; init; }
 
         /// <inheritdoc />
-        public void ValidateContext(DbContext context) => _projection.ValidateContext(context);
+        public void Dispose() => _projection.Dispose();
 
         /// <inheritdoc />
-        public Task<SafeMigrationProviderEnvironment> GetEnvironmentAsync(
-            DbContext context, CancellationToken cancellationToken)
-            => Task.FromResult(new SafeMigrationProviderEnvironment(ProviderId, "sqlserver", "16.0.0"));
-
-        /// <inheritdoc />
-        public Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
-            DbContext context, CancellationToken cancellationToken)
-            => Task.FromResult<IAsyncDisposable>(new EmptyScope());
-
-        /// <inheritdoc />
-        public Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
-            DbContext context, IReadOnlyList<SafeMigrationOperation> operations,
-            CancellationToken cancellationToken)
-        {
-            _projection.CaptureProjectedDdlRowEffects(_trigger
-                ? SqlServerDdlRowEffectRisk.EnabledTrigger : SqlServerDdlRowEffectRisk.VisibilityUnproven);
-            foreach (var operation in operations)
-            {
-                _projection.CaptureProjectedDdlRowDependency(operation, _catalog.Build(operation));
-            }
-
-            return Task.FromResult<IReadOnlyList<SafeMigrationProviderAnalysis>>(operations.Select(operation =>
-                new SafeMigrationProviderAnalysis(operation.Intent is EnsureCheckConstraintIntent
-                        ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.Matching,
-                    SafeMigrationRepairCapability.None, operation.Intent is not EnsureCheckConstraintIntent,
-                    "captured_live_state")).ToArray());
-        }
-
-        /// <inheritdoc />
-        public Task<IReadOnlyList<SafeMigrationUnexpectedObject>> FindUnexpectedObjectsAsync(
-            DbContext context, IReadOnlyList<MigrationOperation> operations,
-            CancellationToken cancellationToken)
-            => Task.FromResult<IReadOnlyList<SafeMigrationUnexpectedObject>>([]);
-
-        /// <inheritdoc />
-        public void SetCurrentOperationOrdinal(int operationOrdinal)
+        public void SetCurrentOperationOrdinal(
+            int operationOrdinal
+        )
         {
             ObservedOrdinals.Add(operationOrdinal);
             _projection.SetCurrentOperationOrdinal(operationOrdinal);
@@ -163,27 +167,95 @@ public sealed class SqlServerProviderDdlOriginRunnerTests
 
         /// <inheritdoc />
         public SafeMigrationProviderAnalysis ValidateProjectedOperation(
-            SafeMigrationOperation operation, SafeMigrationProviderAnalysis projectedAnalysis,
-            ISafeMigrationProjectedColumnSource columns)
+            SafeMigrationOperation operation,
+            SafeMigrationProviderAnalysis projectedAnalysis,
+            ISafeMigrationProjectedColumnSource columns
+        )
         {
             var analysis = _projection.ValidateProjectedOperation(operation, projectedAnalysis, columns);
 
             return analysis.ProviderDeferredOriginOrdinal is not null && OverrideOrigin is { } invalid
-                ? new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
-                    SafeMigrationRepairCapability.None, false, analysis.Code) { ProviderDeferredOriginOrdinal = invalid }
+                ? new SafeMigrationProviderAnalysis(
+                    SafeMigrationObservedState.PrerequisiteMissing,
+                    SafeMigrationRepairCapability.None,
+                    false,
+                    analysis.Code) { ProviderDeferredOriginOrdinal = invalid }
                 : analysis;
         }
 
         /// <inheritdoc />
-        public void ObserveAcceptedOperation(SafeMigrationOperation operation, SafeMigrationProviderAnalysis liveAnalysis,
-            SafeMigrationProviderAnalysis analysis, SafeMigrationDecision decision)
+        public void ObserveAcceptedOperation(
+            SafeMigrationOperation operation,
+            SafeMigrationProviderAnalysis liveAnalysis,
+            SafeMigrationProviderAnalysis analysis,
+            SafeMigrationDecision decision
+        )
             => _projection.ObserveAcceptedOperation(operation, liveAnalysis, analysis, decision);
 
         /// <inheritdoc />
-        public void ObserveProviderOperation(MigrationOperation operation) => _projection.ObserveProviderOperation(operation);
+        public void ObserveProviderOperation(
+            MigrationOperation operation
+        ) => _projection.ObserveProviderOperation(operation);
 
         /// <inheritdoc />
-        public void Dispose() => _projection.Dispose();
+        public string ProviderId => "sqlserver";
+
+        /// <inheritdoc />
+        public void ValidateContext(
+            DbContext context
+        ) => _projection.ValidateContext(context);
+
+        /// <inheritdoc />
+        public Task<SafeMigrationProviderEnvironment> GetEnvironmentAsync(
+            DbContext context,
+            CancellationToken cancellationToken
+        )
+            => Task.FromResult(new SafeMigrationProviderEnvironment(ProviderId, "sqlserver", "16.0.0"));
+
+        /// <inheritdoc />
+        public Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
+            DbContext context,
+            CancellationToken cancellationToken
+        )
+            => Task.FromResult<IAsyncDisposable>(new EmptyScope());
+
+        /// <inheritdoc />
+        public Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
+            DbContext context,
+            IReadOnlyList<SafeMigrationOperation> operations,
+            CancellationToken cancellationToken
+        )
+        {
+            _projection.CaptureProjectedDdlRowEffects(
+                _trigger
+                    ? SqlServerDdlRowEffectRisk.EnabledTrigger
+                    : SqlServerDdlRowEffectRisk.VisibilityUnproven);
+
+            foreach (var operation in operations)
+            {
+                _projection.CaptureProjectedDdlRowDependency(operation, _catalog.Build(operation));
+            }
+
+            return Task.FromResult<IReadOnlyList<SafeMigrationProviderAnalysis>>(
+                operations
+                    .Select(operation =>
+                        new SafeMigrationProviderAnalysis(
+                            operation.Intent is EnsureCheckConstraintIntent
+                                ? SafeMigrationObservedState.Missing
+                                : SafeMigrationObservedState.Matching,
+                            SafeMigrationRepairCapability.None,
+                            operation.Intent is not EnsureCheckConstraintIntent,
+                            "captured_live_state"))
+                    .ToArray());
+        }
+
+        /// <inheritdoc />
+        public Task<IReadOnlyList<SafeMigrationUnexpectedObject>> FindUnexpectedObjectsAsync(
+            DbContext context,
+            IReadOnlyList<MigrationOperation> operations,
+            CancellationToken cancellationToken
+        )
+            => Task.FromResult<IReadOnlyList<SafeMigrationUnexpectedObject>>([]);
     }
 
     private sealed class EmptyScope : IAsyncDisposable

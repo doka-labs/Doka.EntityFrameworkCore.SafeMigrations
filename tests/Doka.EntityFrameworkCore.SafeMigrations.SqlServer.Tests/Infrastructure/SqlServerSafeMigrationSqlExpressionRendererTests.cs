@@ -12,7 +12,9 @@ public sealed class SqlServerSafeMigrationSqlExpressionRendererTests
     [InlineData("2147483648")]
     [InlineData("1.234567890123456789e30")]
     [InlineData("0.000e0")]
-    public void CapturedNumericRenderingPreservesNativeLexeme(string sql)
+    public void CapturedNumericRenderingPreservesNativeLexeme(
+        string sql
+    )
     {
         using var context = new SafeMigrationDbContext(ConnectionString);
         var renderer = CreateRenderer(context);
@@ -23,15 +25,16 @@ public sealed class SqlServerSafeMigrationSqlExpressionRendererTests
         Assert.Equal(sql, rendered);
     }
 
-
     /// <summary>Typed CONVERT metadata renders as a cast and never turns its type token into a column.</summary>
     [Fact]
     public void CaseRendersTypedConversionWithPredicateAndScalarRoles()
     {
         using var context = new SafeMigrationDbContext(ConnectionString);
         var renderer = CreateRenderer(context);
-        Assert.True(SafeMigrationSqlExpressionParser.TryParse(
-            "CONVERT(bit, CASE WHEN [right_bound] > [left_bound] THEN 1 ELSE 0 END)", out var expression));
+        Assert.True(
+            SafeMigrationSqlExpressionParser.TryParse(
+                "CONVERT(bit, CASE WHEN [right_bound] > [left_bound] THEN 1 ELSE 0 END)",
+                out var expression));
 
         var sql = renderer.Render(expression!);
 
@@ -47,14 +50,21 @@ public sealed class SqlServerSafeMigrationSqlExpressionRendererTests
         using var context = new SafeMigrationDbContext(ConnectionString);
         var renderer = CreateRenderer(context);
         var expression = SafeMigrationSql.Case(
-            [new(SafeMigrationSql.Identifier("enabled"), SafeMigrationSql.Binary(
-                SafeMigrationSql.Identifier("value"), SafeMigrationSqlBinaryOperator.GreaterThan,
-                SafeMigrationSql.Literal(0)))]);
+        [
+            new SafeMigrationSqlCaseWhenClause(
+                SafeMigrationSql.Identifier("enabled"),
+                SafeMigrationSql.Binary(
+                    SafeMigrationSql.Identifier("value"),
+                    SafeMigrationSqlBinaryOperator.GreaterThan,
+                    SafeMigrationSql.Literal(0))),
+        ]);
 
         var sql = renderer.Render(expression);
 
-        Assert.Equal("CASE WHEN ([enabled] = CAST(1 AS bit)) THEN CASE WHEN ([value] > 0) "
-            + "THEN CAST(1 AS bit) WHEN NOT ([value] > 0) THEN CAST(0 AS bit) ELSE NULL END END", sql);
+        Assert.Equal(
+            "CASE WHEN ([enabled] = CAST(1 AS bit)) THEN CASE WHEN ([value] > 0) "
+            + "THEN CAST(1 AS bit) WHEN NOT ([value] > 0) THEN CAST(0 AS bit) ELSE NULL END END",
+            sql);
     }
 
     /// <summary>CASE depth validation includes casts between conditional nodes.</summary>
@@ -74,12 +84,19 @@ public sealed class SqlServerSafeMigrationSqlExpressionRendererTests
         for (var index = 0; index < depth; index++)
         {
             expression = SafeMigrationSql.Case(
-                [new(SafeMigrationSql.Literal(true), SafeMigrationSql.Cast(expression, "int"))]);
+            [
+                new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.Literal(true),
+                    SafeMigrationSql.Cast(expression, "int")),
+            ]);
         }
 
         var feature = renderer.GetUnsupportedFeature(expression);
 
-        Assert.Equal(unsupported ? "structured_case_nesting" : null, feature);
+        Assert.Equal(
+            unsupported
+                ? "structured_case_nesting"
+                : null,
+            feature);
     }
 
     /// <summary>Unsupported fragments in any CASE role fail before SQL generation.</summary>
@@ -96,9 +113,18 @@ public sealed class SqlServerSafeMigrationSqlExpressionRendererTests
         var renderer = CreateRenderer(context);
         var unsupported = SafeMigrationSql.Opaque("unknown_sql");
         var expression = SafeMigrationSql.Case(
-            [new(role == 0 ? unsupported : SafeMigrationSql.Literal(true),
-                role == 1 ? unsupported : SafeMigrationSql.Literal(1))],
-            role == 2 ? unsupported : SafeMigrationSql.Literal(0));
+            [
+                new SafeMigrationSqlCaseWhenClause(
+                    role == 0
+                        ? unsupported
+                        : SafeMigrationSql.Literal(true),
+                    role == 1
+                        ? unsupported
+                        : SafeMigrationSql.Literal(1)),
+            ],
+            role == 2
+                ? unsupported
+                : SafeMigrationSql.Literal(0));
 
         var feature = renderer.GetUnsupportedFeature(expression);
 

@@ -1,3 +1,5 @@
+using System;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.EfOwnership;
 
 /// <summary>
@@ -10,16 +12,14 @@ public sealed class CustomOwnershipDbContext : CoreOwnershipDbContext
     /// <param name="options">The provider and custom migration-lineage options.</param>
     public CustomOwnershipDbContext(
         DbContextOptions<CustomOwnershipDbContext> options
-    ) : base(options)
-    {
-    }
+    ) : base(options) { }
 
     /// <inheritdoc />
     protected override void OnModelCreating(
         ModelBuilder modelBuilder
     )
     {
-        global::System.ArgumentNullException.ThrowIfNull(modelBuilder);
+        ArgumentNullException.ThrowIfNull(modelBuilder);
 
         base.OnModelCreating(modelBuilder);
         ExcludeCurrentModelFromMigrations(modelBuilder);
@@ -53,27 +53,53 @@ internal sealed class CustomProfileConfiguration(
     {
         builder.ToTable("ownership_custom_profiles");
         builder.HasKey(profile => profile.Id);
-        builder.Property(profile => profile.Name).HasMaxLength(64).IsRequired();
-        builder.HasOne(profile => profile.CoreRole)
+        builder
+            .Property(profile => profile.Name)
+            .HasMaxLength(64)
+            .IsRequired();
+
+        builder
+            .HasOne(profile => profile.CoreRole)
             .WithMany()
             .HasForeignKey(profile => profile.CoreRoleId)
             .OnDelete(DeleteBehavior.Restrict)
             .IsRequired();
 
-        builder.HasData(targetState
-            ? TargetRows()
-            : SourceRows());
+        builder.HasData(
+            targetState
+                ? TargetRows()
+                : SourceRows());
     }
 
     private static CustomOwnershipProfile[] SourceRows() =>
     [
-        new() { Id = 10, CoreRoleId = 1, Name = "default" },
-        new() { Id = 11, CoreRoleId = 1, Name = "legacy" },
+        new()
+        {
+            Id = 10,
+            CoreRoleId = 1,
+            Name = "default",
+        },
+        new()
+        {
+            Id = 11,
+            CoreRoleId = 1,
+            Name = "legacy",
+        },
     ];
 
     private static CustomOwnershipProfile[] TargetRows() =>
     [
-        new() { Id = 10, CoreRoleId = 1, Name = "premium" },
-        new() { Id = 12, CoreRoleId = 3, Name = "audit" },
+        new()
+        {
+            Id = 10,
+            CoreRoleId = 1,
+            Name = "premium",
+        },
+        new()
+        {
+            Id = 12,
+            CoreRoleId = 3,
+            Name = "audit",
+        },
     ];
 }

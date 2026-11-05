@@ -70,7 +70,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return "index_key_collation";
         }
 
-        return index.Definition.Keys.Any(static key => key.OperatorClass is not null) ? "operator_class" : null;
+        return index.Definition.Keys.Any(static key => key.OperatorClass is not null)
+            ? "operator_class"
+            : null;
     }
 
     private MySqlSafeMigrationRuntimePlan BuildEnsureIndex(
@@ -83,17 +85,19 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var indexExists = IndexExists(definition.Table, definition.Name);
         var matching = BuildIndexMatches(definition, isMariaDb, requireExpectedName: true);
         var semanticAlias = BuildIndexMatches(definition, isMariaDb, requireExpectedName: false);
-        var dataBlocked = definition.Unique ? UniqueIndexDataBlocked(definition) : "FALSE";
+        var dataBlocked = definition.Unique
+            ? UniqueIndexDataBlocked(definition)
+            : "FALSE";
+
         var physicallyAchievable = BuildIndexPhysicalShapeSupported(definition);
 
         var physicalFailureCode = definition.Keys.Count > MySqlProjectedIndexPhysicalShape.MaximumKeyParts
             ? "index_too_many_key_parts"
-            : definition.Keys.Any(
-                    static key => key.Expression is not null || key.StructuredExpression is not null)
-                || (definition.Method is not null
+            : definition.Keys.Any(static key => key.Expression is not null || key.StructuredExpression is not null)
+            || (definition.Method is not null
                 && !StringComparer.OrdinalIgnoreCase.Equals(definition.Method, "BTREE"))
-                    ? "index_key_length_unverifiable"
-                    : "index_prefix_required_for_key_limit";
+                ? "index_key_length_unverifiable"
+                : "index_prefix_required_for_key_limit";
 
         var satisfied = $"({matching}) OR (NOT ({indexExists}) AND ({semanticAlias}))";
         var semanticCandidates = BuildIndexMatchQuery(
@@ -102,31 +106,32 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             requireExpectedName: false);
 
         return Plan(
-            $"CASE WHEN NOT {tableExists} THEN 'prerequisite_missing' "
-            + $"WHEN {indexExists} AND {matching} THEN 'matching' "
-            + $"WHEN {indexExists} THEN 'different' "
-            + $"WHEN {semanticAlias} THEN 'matching' "
-            + $"WHEN {dataBlocked} THEN 'data_blocked' "
-            + $"WHEN NOT ({physicallyAchievable}) THEN 'unsupported' "
-            + "ELSE 'missing' END",
-            satisfied) with
-        {
-            IndexNameExistsExpression = indexExists,
-            DiagnosticEvidenceExpression = BuildIndexDiagnosticEvidence(definition),
-            MatchedObjectNameExpression = ResolveMatchingObjectName(
-                matching,
-                Literal(definition.Name),
-                semanticCandidates),
-            UnsupportedCode = physicalFailureCode,
-            // Ordered DropIndex -> EnsureIndex projection still needs the
-            // live duplicate-row proof hidden by an exact-name shape clash.
-            // The operation remains Different until the preceding drop is
-            // accepted; this code carries evidence, not mutation authority.
-            ClassificationCodeExpression = definition.Unique
-                ? $"CASE WHEN {indexExists} AND NOT ({matching}) AND {dataBlocked} "
+                $"CASE WHEN NOT {tableExists} THEN 'prerequisite_missing' "
+                + $"WHEN {indexExists} AND {matching} THEN 'matching' "
+                + $"WHEN {indexExists} THEN 'different' "
+                + $"WHEN {semanticAlias} THEN 'matching' "
+                + $"WHEN {dataBlocked} THEN 'data_blocked' "
+                + $"WHEN NOT ({physicallyAchievable}) THEN 'unsupported' "
+                + "ELSE 'missing' END",
+                satisfied) with
+            {
+                IndexNameExistsExpression = indexExists,
+                DiagnosticEvidenceExpression = BuildIndexDiagnosticEvidence(definition),
+                MatchedObjectNameExpression = ResolveMatchingObjectName(
+                    matching,
+                    Literal(definition.Name),
+                    semanticCandidates),
+                UnsupportedCode = physicalFailureCode,
+
+                // Ordered DropIndex -> EnsureIndex projection still needs the
+                // live duplicate-row proof hidden by an exact-name shape clash.
+                // The operation remains Different until the preceding drop is
+                // accepted; this code carries evidence, not mutation authority.
+                ClassificationCodeExpression = definition.Unique
+                    ? $"CASE WHEN {indexExists} AND NOT ({matching}) AND {dataBlocked} "
                     + "THEN 'index_replacement_data_blocked' ELSE NULL END"
-                : null,
-        };
+                    : null,
+            };
     }
 
     private string BuildIndexDiagnosticEvidence(
@@ -167,7 +172,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + DiagnosticRecord(
                 $"MIN(s.NON_UNIQUE) <> {(definition.Unique ? "0" : "1")}",
                 "index_uniqueness",
-                definition.Unique ? "'unique'" : "'non_unique'",
+                definition.Unique
+                    ? "'unique'"
+                    : "'non_unique'",
                 "CASE MIN(s.NON_UNIQUE) WHEN 0 THEN 'unique' WHEN 1 THEN 'non_unique' ELSE 'unknown' END")
             + ", "
             + DiagnosticRecord(
@@ -242,12 +249,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var exists = IndexExists(intent.Table, intent.Name);
 
         return Plan(
-            $"CASE WHEN NOT {BaseTableExists(intent.Table)} OR NOT {exists} THEN 'missing' "
-            + $"WHEN {MultiValuedIndexDropRisk(intent, isMariaDb)} THEN 'unsupported' ELSE 'matching' END",
-            $"NOT {exists}") with
-        {
-            UnsupportedCode = "foreign_key_multi_valued_supporting_index",
-        };
+                $"CASE WHEN NOT {BaseTableExists(intent.Table)} OR NOT {exists} THEN 'missing' "
+                + $"WHEN {MultiValuedIndexDropRisk(intent, isMariaDb)} THEN 'unsupported' ELSE 'matching' END",
+                $"NOT {exists}") with
+            {
+                UnsupportedCode = "foreign_key_multi_valued_supporting_index",
+            };
     }
 
     private MySqlSafeMigrationRuntimePlan BuildRenameIndex(
@@ -256,13 +263,16 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     {
         var source = IndexExists(intent.Table, intent.Name);
         var target = IndexExists(intent.Table, intent.NewName);
+
         // WHY: PRIMARY is an engine-reserved index identity, not an ordinary
         // renameable member. Preserve missing-source replay, but reject either
         // reserved endpoint before a native RENAME can fail after earlier DDL.
         var reservedEndpoint = StringComparer.OrdinalIgnoreCase.Equals(intent.Name, "PRIMARY")
             || StringComparer.OrdinalIgnoreCase.Equals(intent.NewName, "PRIMARY");
 
-        var reservedGuard = reservedEndpoint ? "WHEN TRUE THEN 'different' " : string.Empty;
+        var reservedGuard = reservedEndpoint
+            ? "WHEN TRUE THEN 'different' "
+            : string.Empty;
 
         return Plan(
             $"CASE WHEN NOT {source} THEN 'missing' "
@@ -286,7 +296,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     {
         const string candidate = "s";
         var matching = BuildGroupedIndexCandidateMatches(definition, isMariaDb);
-        var nameOperator = requireExpectedName ? "=" : "<>";
+        var nameOperator = requireExpectedName
+            ? "="
+            : "<>";
 
         // WHY: Correlated scans for every key part make one index classification
         // repeatedly materialize INFORMATION_SCHEMA.STATISTICS on MySQL.
@@ -304,7 +316,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     )
     {
         var keyCount = definition.Keys.Count.ToString(CultureInfo.InvariantCulture);
-        var visibility = isMariaDb ? "s.IGNORED = 'NO'" : "s.IS_VISIBLE = 'YES'";
+        var visibility = isMariaDb
+            ? "s.IGNORED = 'NO'"
+            : "s.IS_VISIBLE = 'YES'";
+
         var conditions = new List<string>
         {
             $"COUNT(*) = {keyCount}",
@@ -409,7 +424,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         string expected
     )
     {
-        var candidates = new[] { expected, $"({expected})", }
+        var candidates = new[] { expected, $"({expected})" }
             .Distinct(StringComparer.Ordinal)
             .Select(Literal);
 
@@ -438,7 +453,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return "FALSE";
         }
 
-        var keyWidths = definition.Keys
+        var keyWidths = definition
+            .Keys
             .Select(key => BuildIndexKeyWidth(definition.Table, key.Column!, key.PrefixLength))
             .ToArray();
 
@@ -492,16 +508,16 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var prefixLength = prefixLengthValue?.ToString(CultureInfo.InvariantCulture);
         var characterWidth = prefixLength is null
             ? "CASE WHEN c.DATA_TYPE IN ('tinytext', 'text', 'mediumtext', 'longtext') "
-                + "THEN NULL ELSE c.CHARACTER_OCTET_LENGTH END"
+            + "THEN NULL ELSE c.CHARACTER_OCTET_LENGTH END"
             : $"CASE WHEN {prefixLength} <= c.CHARACTER_MAXIMUM_LENGTH "
-                + $"THEN {prefixLength} * CEIL(c.CHARACTER_OCTET_LENGTH "
-                + "/ NULLIF(c.CHARACTER_MAXIMUM_LENGTH, 0)) ELSE NULL END";
+            + $"THEN {prefixLength} * CEIL(c.CHARACTER_OCTET_LENGTH "
+            + "/ NULLIF(c.CHARACTER_MAXIMUM_LENGTH, 0)) ELSE NULL END";
 
         var binaryWidth = prefixLength is null
             ? "CASE WHEN c.DATA_TYPE IN ('tinyblob', 'blob', 'mediumblob', 'longblob') "
-                + "THEN NULL ELSE c.CHARACTER_OCTET_LENGTH END"
+            + "THEN NULL ELSE c.CHARACTER_OCTET_LENGTH END"
             : $"CASE WHEN {prefixLength} <= c.CHARACTER_OCTET_LENGTH "
-                + $"THEN {prefixLength} ELSE NULL END";
+            + $"THEN {prefixLength} ELSE NULL END";
 
         var decimalWidth = "(4 * FLOOR((c.NUMERIC_PRECISION - c.NUMERIC_SCALE) / 9) "
             + "+ CASE MOD(c.NUMERIC_PRECISION - c.NUMERIC_SCALE, 9) "
@@ -537,17 +553,17 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // a provider DDL command can discover that error after mutation begins.
         var width = prefixLength is null
             ? "CASE "
-                + "WHEN c.DATA_TYPE IN ('char', 'varchar', 'tinytext', 'text', 'mediumtext', 'longtext') "
-                + $"THEN {characterWidth} "
-                + "WHEN c.DATA_TYPE IN ('binary', 'varbinary', 'tinyblob', 'blob', 'mediumblob', 'longblob') "
-                + $"THEN {binaryWidth} "
-                + $"ELSE {scalarWidth} END"
+            + "WHEN c.DATA_TYPE IN ('char', 'varchar', 'tinytext', 'text', 'mediumtext', 'longtext') "
+            + $"THEN {characterWidth} "
+            + "WHEN c.DATA_TYPE IN ('binary', 'varbinary', 'tinyblob', 'blob', 'mediumblob', 'longblob') "
+            + $"THEN {binaryWidth} "
+            + $"ELSE {scalarWidth} END"
             : "CASE "
-                + "WHEN c.DATA_TYPE IN ('char', 'varchar', 'tinytext', 'text', 'mediumtext', 'longtext') "
-                + $"THEN {characterWidth} "
-                + "WHEN c.DATA_TYPE IN ('binary', 'varbinary', 'tinyblob', 'blob', 'mediumblob', 'longblob') "
-                + $"THEN {binaryWidth} "
-                + "ELSE NULL END";
+            + "WHEN c.DATA_TYPE IN ('char', 'varchar', 'tinytext', 'text', 'mediumtext', 'longtext') "
+            + $"THEN {characterWidth} "
+            + "WHEN c.DATA_TYPE IN ('binary', 'varbinary', 'tinyblob', 'blob', 'mediumblob', 'longblob') "
+            + $"THEN {binaryWidth} "
+            + "ELSE NULL END";
 
         return $"SELECT {width} FROM INFORMATION_SCHEMA.COLUMNS c "
             + $"WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = {Literal(table)} "

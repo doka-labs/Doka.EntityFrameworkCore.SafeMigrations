@@ -20,9 +20,12 @@ public sealed class SqlServerSafeMigrationAllocationIntegrationTests : SqlServer
         // Arrange
         SqlServerLiveQualificationEvidence.WriteStage("managed-50k", "fixture-setup");
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.large_model_managed_rows (id int NOT NULL PRIMARY KEY, "
-            + "managed_value nvarchar(32) NOT NULL);", cancellationToken: CancellationToken.None);
+            + "managed_value nvarchar(32) NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         SqlServerLiveQualificationEvidence.WriteStage("managed-50k", "populate-source-rows");
         await PopulateLargeModelManagedRowsAsync(connectionString, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
@@ -30,45 +33,73 @@ public sealed class SqlServerSafeMigrationAllocationIntegrationTests : SqlServer
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var expectation = ModelManagedDataLargeExecutionContract.Populate(builder, "int", "nvarchar(32)");
         var runner = context.GetService<ISafeMigrationRunner>();
-        var environment = await context.GetService<ISafeMigrationProviderAnalyzer>().GetEnvironmentAsync(context,
-            cancellationToken: CancellationToken.None);
+        var environment = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .GetEnvironmentAsync(
+                context,
+                cancellationToken: CancellationToken.None);
 
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
+
         using var stageCapture = SqlServerLiveQualificationEvidence.CaptureAnalysisStages("managed-50k");
 
         // Act
         SqlServerLiveQualificationEvidence.WriteStage("managed-50k", "initial-analysis");
-        var initial = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(token => runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-large-model-managed-data"),
-            cancellationToken: token), CancellationToken.None);
+        var initial = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(
+            token => runner.AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-large-model-managed-data"),
+                cancellationToken: token),
+            CancellationToken.None);
 
         SqlServerLiveQualificationEvidence.WriteStage("managed-50k", "initial-execution");
-        var initialExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(token =>
-            ExecuteOperationsAsync(context, builder.Operations, cancellationToken: token), CancellationToken.None);
+        var initialExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(
+            token =>
+                ExecuteOperationsAsync(context, builder.Operations, cancellationToken: token),
+            CancellationToken.None);
 
         SqlServerLiveQualificationEvidence.WriteStage("managed-50k", "replay-execution");
-        var replayExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(token =>
-            ExecuteOperationsAsync(context, builder.Operations, cancellationToken: token), CancellationToken.None);
+        var replayExecution = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(
+            token =>
+                ExecuteOperationsAsync(context, builder.Operations, cancellationToken: token),
+            CancellationToken.None);
 
         SqlServerLiveQualificationEvidence.WriteStage("managed-50k", "replay-analysis");
-        var replay = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(token => runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-large-model-managed-data-replay"),
-            cancellationToken: token), CancellationToken.None);
+        var replay = await ModelManagedDataLargeExecutionEvidence.MeasureAsync(
+            token => runner.AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-large-model-managed-data-replay"),
+                cancellationToken: token),
+            CancellationToken.None);
 
         SqlServerLiveQualificationEvidence.WriteStage("managed-50k", "verify-rows");
-        var rowCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.large_model_managed_rows;",
+        var rowCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.large_model_managed_rows;",
             cancellationToken: CancellationToken.None);
 
-        var targetRowCount = await ScalarIntAsync(connectionString,
+        var targetRowCount = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM dbo.large_model_managed_rows WHERE managed_value = N'target';",
             cancellationToken: CancellationToken.None);
 
-        var deletedRangeCount = await ScalarIntAsync(connectionString,
+        var deletedRangeCount = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM dbo.large_model_managed_rows WHERE id >= 3000000;",
             cancellationToken: CancellationToken.None);
 
-        ModelManagedDataLargeExecutionEvidence.Write("sqlserver", environment.ServerVersion, commands,
-            initial.Measurement, initialExecution, replayExecution, replay.Measurement);
+        ModelManagedDataLargeExecutionEvidence.Write(
+            "sqlserver",
+            environment.ServerVersion,
+            commands,
+            initial.Measurement,
+            initialExecution,
+            replayExecution,
+            replay.Measurement);
 
         // Assert
         expectation.AssertInitialReport(initial.Result);
@@ -82,7 +113,8 @@ public sealed class SqlServerSafeMigrationAllocationIntegrationTests : SqlServer
 
     private static async Task PopulateLargeModelManagedRowsAsync(
         string connectionString,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 

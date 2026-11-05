@@ -21,14 +21,16 @@ public sealed class SqliteSafeMigrationIntegrationTests : SqliteIntegrationTestB
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-opaque-sql"), cancellationToken: CancellationToken.None);
+            new SafeMigrationRunOptions("sqlite-opaque-sql"),
+            cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var indexCount = await ScalarIntAsync(
             connection,
             "SELECT COUNT(*) FROM pragma_index_list('mixed_records') "
-            + "WHERE name = 'ux_mixed_records_code';", cancellationToken: CancellationToken.None);
+            + "WHERE name = 'ux_mixed_records_code';",
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
@@ -54,15 +56,19 @@ public sealed class SqliteSafeMigrationIntegrationTests : SqliteIntegrationTestB
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-opaque-sql-reject"), cancellationToken: CancellationToken.None);
+            new SafeMigrationRunOptions("sqlite-opaque-sql-reject"),
+            cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(
-            () => ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            cancellationToken: CancellationToken.None));
 
         var indexCount = await ScalarIntAsync(
             connection,
             "SELECT COUNT(*) FROM pragma_index_list('mixed_records') "
-            + "WHERE name = 'ux_mixed_records_code';", cancellationToken: CancellationToken.None);
+            + "WHERE name = 'ux_mixed_records_code';",
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[1].Action);
@@ -86,21 +92,25 @@ public sealed class SqliteSafeMigrationIntegrationTests : SqliteIntegrationTestB
             constraints: table => table.PrimaryKey("pk_module_state", value => value.Id),
             mode: SafeMigrationTableMode.ConvergenceContainer,
             policy: SafeMigrationPolicy.ExistenceOnly);
+
         builder.AddColumnIfNotExists<string>(
             "display_name",
             "module_state",
             type: "TEXT",
             nullable: true);
+
         builder.CreateIndexIfNotExists(
             "ix_module_state_display_name",
             "module_state",
             ["display_name"]);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-lifecycle"), cancellationToken: CancellationToken.None);
+            new SafeMigrationRunOptions("sqlite-lifecycle"),
+            cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
@@ -108,7 +118,8 @@ public sealed class SqliteSafeMigrationIntegrationTests : SqliteIntegrationTestB
         var postflight = await runner.VerifyAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-lifecycle"), cancellationToken: CancellationToken.None);
+            new SafeMigrationRunOptions("sqlite-lifecycle"),
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.All(preflight.Assessments, assessment => Assert.Equal(SafeMigrationAction.Apply, assessment.Action));
@@ -120,12 +131,14 @@ public sealed class SqliteSafeMigrationIntegrationTests : SqliteIntegrationTestB
                 connection,
                 "SELECT COUNT(*) FROM pragma_table_xinfo('module_state') WHERE name = 'display_name';",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connection,
                 "SELECT COUNT(*) FROM pragma_index_list('module_state') "
-                + "WHERE name = 'ix_module_state_display_name';", cancellationToken: CancellationToken.None));
+                + "WHERE name = 'ix_module_state_display_name';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -136,6 +149,7 @@ public sealed class SqliteSafeMigrationIntegrationTests : SqliteIntegrationTestB
             connection,
             "CREATE TABLE drift_state (id INTEGER NOT NULL, payload TEXT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>(
@@ -143,19 +157,23 @@ public sealed class SqliteSafeMigrationIntegrationTests : SqliteIntegrationTestB
             "drift_state",
             type: "INTEGER",
             nullable: false);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var report = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-drift"), cancellationToken: CancellationToken.None);
+            new SafeMigrationRunOptions("sqlite-drift"),
+            cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => ExecuteOperationsAsync(context, builder.Operations,
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -175,6 +193,7 @@ public sealed class SqliteSafeMigrationIntegrationTests : SqliteIntegrationTestB
             connection,
             "CREATE TABLE populated_state (id INTEGER NOT NULL); INSERT INTO populated_state VALUES (1);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<string>(
@@ -185,15 +204,20 @@ public sealed class SqliteSafeMigrationIntegrationTests : SqliteIntegrationTestB
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("sqlite-data-blocked"),
-                          cancellationToken: CancellationToken.None);
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-data-blocked"),
+                cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.DataBlocked, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDataBlocked, assessment.Action);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => ExecuteOperationsAsync(context, builder.Operations,
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -220,14 +244,19 @@ public sealed class SqliteSafeMigrationIntegrationTests : SqliteIntegrationTestB
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("sqlite-qualifier"),
-                          cancellationToken: CancellationToken.None);
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-qualifier"),
+                cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
         Assert.Equal("database_qualifier_mismatch", assessment.AnalysisCode);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => ExecuteOperationsAsync(context, builder.Operations,
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         Assert.Equal(
@@ -250,6 +279,7 @@ public sealed class SqliteSafeMigrationIntegrationTests : SqliteIntegrationTestB
             {
                 Id = table.Column<int>(type: "INTEGER", nullable: false),
             });
+
         var generator = context.GetService<IMigrationsSqlGenerator>();
 
         var exception = Assert.Throws<NotSupportedException>(() => generator.Generate(

@@ -5,8 +5,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 /// </summary>
 internal sealed class SqlServerProjectedSeedProofCache(EnsureModelManagedDataIntent[] seeds)
 {
-    private int _seedCount;
     private readonly Dictionary<string, SqlServerProjectedSeedKeyProof> _proofs = new(StringComparer.Ordinal);
+    private int _seedCount;
 
     /// <summary>Gets the immutable complete lineage buffer shared by all evaluated prefixes.</summary>
     internal EnsureModelManagedDataIntent[] Seeds { get; } = seeds;
@@ -55,16 +55,26 @@ internal sealed class SqlServerProjectedSeedProofCache(EnsureModelManagedDataInt
         var tuple = new StringBuilder();
         foreach (var column in columns)
         {
-            tuple.Append(column.Length.ToString(CultureInfo.InvariantCulture)).Append(':').Append(column);
+            tuple
+                .Append(column.Length.ToString(CultureInfo.InvariantCulture))
+                .Append(':')
+                .Append(column);
         }
 
-        var predicate = filter is null ? string.Empty : builder.ProjectedSeedFilterIdentity(filter);
+        var predicate = filter is null
+            ? string.Empty
+            : builder.ProjectedSeedFilterIdentity(filter);
+
         if (predicate is null)
         {
             return new SqlServerProjectedSeedKeyProof(lineage.Table, Seeds, -1, count);
         }
 
-        tuple.Append('/').Append(predicate.Length.ToString(CultureInfo.InvariantCulture)).Append(':').Append(predicate);
+        tuple
+            .Append('/')
+            .Append(predicate.Length.ToString(CultureInfo.InvariantCulture))
+            .Append(':')
+            .Append(predicate);
 
         var identity = tuple.ToString();
         if (_proofs.TryGetValue(identity, out var previous))
@@ -73,10 +83,17 @@ internal sealed class SqlServerProjectedSeedProofCache(EnsureModelManagedDataInt
         }
 
         var prefix = new ArraySegment<EnsureModelManagedDataIntent>(Seeds, 0, count);
-        var sql = builder.BuildProjectedSeedKeyProofSql(prefix, lineage.Table.Columns, columns,
-            requireCapturedUniqueKey: false, filter);
+        var sql = builder.BuildProjectedSeedKeyProofSql(
+            prefix,
+            lineage.Table.Columns,
+            columns,
+            requireCapturedUniqueKey: false,
+            filter);
 
-        var result = sql is null ? -1 : await execute(sql, cancellationToken);
+        var result = sql is null
+            ? -1
+            : await execute(sql, cancellationToken);
+
         cancellationToken.ThrowIfCancellationRequested();
         if (result is < -1 or > 1)
         {

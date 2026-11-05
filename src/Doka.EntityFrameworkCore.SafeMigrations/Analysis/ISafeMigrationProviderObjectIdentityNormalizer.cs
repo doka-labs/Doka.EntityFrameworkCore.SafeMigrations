@@ -42,7 +42,10 @@ internal interface ISafeMigrationProviderObjectIdentityNormalizer
     /// <param name="intent">The operation's owner and reference contract.</param>
     /// <param name="ordinal">Its complete-stream position, including ordinary provider operations.</param>
     /// <returns>False when a later opaque or qualifier-changing boundary prevents identity proof.</returns>
-    bool IsPostflightIdentityProven(SafeMigrationIntent intent, int ordinal) => true;
+    bool IsPostflightIdentityProven(
+        SafeMigrationIntent intent,
+        int ordinal
+    ) => true;
 
     /// <summary>Normalizes an object identifier for provider-specific identity comparison.</summary>
     /// <param name="identifier">The captured database identifier.</param>
@@ -54,7 +57,9 @@ internal interface ISafeMigrationProviderObjectIdentityNormalizer
     /// <summary>Canonicalizes typed column identity separately from physical owner identity.</summary>
     /// <param name="identifier">The typed column member, never SQL text or a key value.</param>
     /// <returns>Identical text exactly when the provider certifies identical column members.</returns>
-    string NormalizeColumnIdentifier(string identifier) => NormalizeIdentifier(identifier);
+    string NormalizeColumnIdentifier(
+        string identifier
+    ) => NormalizeIdentifier(identifier);
 
     /// <summary>Normalizes an optional schema or database qualifier for ordered projection.</summary>
     /// <param name="schema">The captured provider qualifier.</param>

@@ -51,10 +51,14 @@ public sealed class SqlServerComputedColumnBindingTests
     [InlineData("x:1:L", 1)]
     [InlineData("0:x:L", 1)]
     [InlineData("9999999999999999:1:L", 1)]
-    public void InvalidNativeBindingsAreRejected(string encoded, int references)
+    public void InvalidNativeBindingsAreRejected(
+        string encoded,
+        int references
+    )
     {
         // Arrange
-        var table = new ExpectedTableDefinition("nodes",
+        var table = new ExpectedTableDefinition(
+            "nodes",
             [new ExpectedColumnDefinition("L", typeof(long), false, "bigint")]);
 
         // Act

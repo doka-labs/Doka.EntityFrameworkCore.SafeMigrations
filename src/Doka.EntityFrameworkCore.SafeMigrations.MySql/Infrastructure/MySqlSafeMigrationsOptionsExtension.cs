@@ -4,35 +4,13 @@ internal sealed class MySqlSafeMigrationsOptionsExtension : IDbContextOptionsExt
 {
     private DbContextOptionsExtensionInfo? _info;
 
-    public DbContextOptionsExtensionInfo Info => _info ??= new ExtensionInfo(this);
-
     public Type? CanonicalContextType { get; private init; }
 
-    /// <summary>Gets the mode consumed by the SafeMigrations design-time scaffolder.</summary>
-    public SafeMigrationScaffoldingMode ScaffoldingMode { get; private init; }
-
-    /// <summary>Gets the policy consumed by legacy-convergence scaffolding.</summary>
-    public SafeMigrationPolicy LegacyConvergencePolicy { get; private init; } = SafeMigrationPolicy.ThrowIfDifferent;
-
-    /// <summary>Gets whether excluded tables also exclude model-managed-data differences.</summary>
-    public bool ExcludeModelManagedDataForExcludedTablesEnabled { get; private init; }
+    public DbContextOptionsExtensionInfo Info => _info ??= new ExtensionInfo(this);
 
     public void ApplyServices(
         IServiceCollection services
     ) => services.AddEntityFrameworkDokaMySqlSafeMigrations(CanonicalContextType);
-
-    public static MySqlSafeMigrationsOptionsExtension WithCanonicalContext(
-        Type? canonicalContextType,
-        SafeMigrationScaffoldingMode scaffoldingMode,
-        SafeMigrationPolicy legacyConvergencePolicy = SafeMigrationPolicy.ThrowIfDifferent,
-        bool excludeModelManagedDataForExcludedTables = false
-    ) => new()
-    {
-        CanonicalContextType = canonicalContextType,
-        ScaffoldingMode = scaffoldingMode,
-        LegacyConvergencePolicy = legacyConvergencePolicy,
-        ExcludeModelManagedDataForExcludedTablesEnabled = excludeModelManagedDataForExcludedTables,
-    };
 
     public void Validate(
         IDbContextOptions options
@@ -46,6 +24,28 @@ internal sealed class MySqlSafeMigrationsOptionsExtension : IDbContextOptionsExt
             throw new InvalidOperationException("MySQL safe migrations require Doka.EntityFrameworkCore.MySql.");
         }
     }
+
+    /// <summary>Gets the mode consumed by the SafeMigrations design-time scaffolder.</summary>
+    public SafeMigrationScaffoldingMode ScaffoldingMode { get; private init; }
+
+    /// <summary>Gets the policy consumed by legacy-convergence scaffolding.</summary>
+    public SafeMigrationPolicy LegacyConvergencePolicy { get; private init; } = SafeMigrationPolicy.ThrowIfDifferent;
+
+    /// <summary>Gets whether excluded tables also exclude model-managed-data differences.</summary>
+    public bool ExcludeModelManagedDataForExcludedTablesEnabled { get; private init; }
+
+    public static MySqlSafeMigrationsOptionsExtension WithCanonicalContext(
+        Type? canonicalContextType,
+        SafeMigrationScaffoldingMode scaffoldingMode,
+        SafeMigrationPolicy legacyConvergencePolicy = SafeMigrationPolicy.ThrowIfDifferent,
+        bool excludeModelManagedDataForExcludedTables = false
+    ) => new()
+    {
+        CanonicalContextType = canonicalContextType,
+        ScaffoldingMode = scaffoldingMode,
+        LegacyConvergencePolicy = legacyConvergencePolicy,
+        ExcludeModelManagedDataForExcludedTablesEnabled = excludeModelManagedDataForExcludedTables,
+    };
 
     private sealed class ExtensionInfo : DbContextOptionsExtensionInfo
     {

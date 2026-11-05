@@ -11,12 +11,20 @@ public sealed class MySqlGeneratedIdentityQualificationTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void GeneratedColumnGuardsRemainEngineAndOwnerSpecific(bool mariaDb, bool alter)
+    public void GeneratedColumnGuardsRemainEngineAndOwnerSpecific(
+        bool mariaDb,
+        bool alter
+    )
     {
         // Arrange
         using var context = Context(mariaDb);
-        var definition = new ExpectedColumnDefinition("derived", typeof(int), true, "int",
-            computedExpression: SafeMigrationSql.Identifier("source"), isStored: false);
+        var definition = new ExpectedColumnDefinition(
+            "derived",
+            typeof(int),
+            true,
+            "int",
+            computedExpression: SafeMigrationSql.Identifier("source"),
+            isStored: false);
 
         SafeMigrationIntent intent = alter
             ? new AlterColumnIntent("identity_owner", definition)
@@ -33,17 +41,28 @@ public sealed class MySqlGeneratedIdentityQualificationTests
 
         // Assert
         Assert.False(plan.IsStaticallyUnsupported);
-        Assert.Equal(!mariaDb, plan.StateEvaluationGuardExpression.Contains(
-            "identity_source.TABLE_NAME", StringComparison.Ordinal));
-        Assert.Equal(!mariaDb, plan.ClassificationCodeExpression?.Contains(
-            "generated_column_identity_dependency", StringComparison.Ordinal) == true);
+        Assert.Equal(
+            !mariaDb,
+            plan.StateEvaluationGuardExpression.Contains(
+                "identity_source.TABLE_NAME",
+                StringComparison.Ordinal));
+
+        Assert.Equal(
+            !mariaDb,
+            plan.ClassificationCodeExpression?.Contains(
+                "generated_column_identity_dependency",
+                StringComparison.Ordinal)
+            == true);
+
         if (!mariaDb)
         {
             Assert.Contains("identity_source.TABLE_NAME = 'identity_owner'", guard, StringComparison.Ordinal);
             Assert.Contains("identity_source.COLUMN_NAME IN ('source')", guard, StringComparison.Ordinal);
         }
 
-        Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+        Assert.Equal(ConnectionState.Closed,
+            context.Database.GetDbConnection()
+                .State);
     }
 
     /// <summary>Missing tuple targets and ordinary columns do not acquire generated identity guards.</summary>
@@ -54,13 +73,17 @@ public sealed class MySqlGeneratedIdentityQualificationTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void NonGeneratedTargetsDoNotAcquireIdentityQualification(bool mariaDb, bool drop)
+    public void NonGeneratedTargetsDoNotAcquireIdentityQualification(
+        bool mariaDb,
+        bool drop
+    )
     {
         // Arrange
         using var context = Context(mariaDb);
         SafeMigrationIntent intent = drop
             ? new DropColumnIntent("ordinary", "identity_owner")
-            : new EnsureColumnIntent("identity_owner",
+            : new EnsureColumnIntent(
+                "identity_owner",
                 new ExpectedColumnDefinition("ordinary", typeof(int), true, "int"));
 
         // Act
@@ -68,30 +91,47 @@ public sealed class MySqlGeneratedIdentityQualificationTests
 
         // Assert
         Assert.DoesNotContain("identity_source", plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
-        Assert.DoesNotContain("generated_column_identity_dependency",
-            plan.ClassificationCodeExpression ?? string.Empty, StringComparison.Ordinal);
-        Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+        Assert.DoesNotContain(
+            "generated_column_identity_dependency",
+            plan.ClassificationCodeExpression ?? string.Empty,
+            StringComparison.Ordinal);
+
+        Assert.Equal(ConnectionState.Closed,
+            context.Database.GetDbConnection()
+                .State);
     }
 
     /// <summary>Captures the actual SQL generator's catalog plan without opening a database connection.</summary>
-    private static MySqlSafeMigrationRuntimePlan Capture(DbContext context, SafeMigrationIntent intent)
+    private static MySqlSafeMigrationRuntimePlan Capture(
+        DbContext context,
+        SafeMigrationIntent intent
+    )
     {
         var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
-        using var lease = context.GetService<MySqlSafeMigrationPlanCapture>().Begin([operation]);
-        _ = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        using var lease = context
+            .GetService<MySqlSafeMigrationPlanCapture>()
+            .Begin([operation]);
+
+        _ = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
 
         return Assert.Single(lease.Complete());
     }
 
     /// <summary>Uses the active provider mappings with a deliberately unreachable database endpoint.</summary>
-    private static DbContext Context(bool mariaDb)
+    private static DbContext Context(
+        bool mariaDb
+    )
     {
         var version = mariaDb
             ? MySqlServerVersion.MariaDb(new Version(11, 8, 8))
             : MySqlServerVersion.MySql(new Version(8, 4, 11));
 
-        return new DbContext(new DbContextOptionsBuilder()
-            .UseMySql("Server=127.0.0.1;Port=1;Database=identity_qualification;User ID=test;Password=test", version)
-            .UseMySqlSafeMigrations().Options);
+        return new DbContext(
+            new DbContextOptionsBuilder()
+                .UseMySql("Server=127.0.0.1;Port=1;Database=identity_qualification;User ID=test;Password=test", version)
+                .UseMySqlSafeMigrations()
+                .Options);
     }
 }

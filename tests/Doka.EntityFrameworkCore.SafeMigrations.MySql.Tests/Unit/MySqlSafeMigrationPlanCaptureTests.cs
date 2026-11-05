@@ -94,6 +94,7 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
                 capture
                     .GetExpectedUniqueIndexes("users")
                     .Select(static index => index.Name));
+
             Assert.Empty(capture.GetExpectedUniqueIndexes("other"));
         }
 
@@ -145,28 +146,38 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
                 [new ExpectedColumnDefinition("id", typeof(int), isNullable: false, storeType: "int")]),
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.AddForeignKeyIfNotExists(
             "fk_users_parent",
             "users",
             ["id"],
             "users",
             ["id"]);
+
         builder.CreateIndexIfNotExists("ux_users_id", "users", ["id"], unique: true);
         var tableIntent = Assert.IsType<EnsureTableIntent>(
-            Assert.IsType<SafeMigrationOperation>(builder.Operations[0]).Intent);
+            Assert.IsType<SafeMigrationOperation>(builder.Operations[0])
+                .Intent);
 
         using (capture.BeginGeneration(builder.Operations))
         {
             Assert.True(capture.HasGenerationContract);
             Assert.Equal(
                 "fk_users_parent",
-                Assert.Single(capture.GetGenerationTableConstraints(tableIntent)!.AllowedForeignKeys).Name);
+                Assert.Single(capture.GetGenerationTableConstraints(tableIntent)!.AllowedForeignKeys)
+                    .Name);
+
             Assert.Equal(
                 "ux_users_id",
-                Assert.Single(capture.GetGenerationUniqueIndexes("users")).Name);
+                Assert.Single(capture.GetGenerationUniqueIndexes("users"))
+                    .Name);
+
             Assert.Throws<InvalidOperationException>(() => capture.BeginGeneration(builder.Operations));
             Assert.Throws<InvalidOperationException>(() => capture.Begin(
-                builder.Operations.Cast<SafeMigrationOperation>().ToArray()));
+                builder
+                    .Operations
+                    .Cast<SafeMigrationOperation>()
+                    .ToArray()));
         }
 
         Assert.False(capture.HasGenerationContract);
@@ -245,11 +256,13 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
             capture
                 .GetExpectedUniqueIndexes("users")
                 .Select(static index => index.Name));
+
         Assert.Equal(
             ["ux_users_email"],
             capture
                 .GetExpectedUniqueIndexes("users", "application")
                 .Select(static index => index.Name));
+
         Assert.Empty(capture.GetExpectedUniqueIndexes("users", "foreign"));
 
         capture.Record(0, table, Plan("table"));
@@ -271,24 +284,34 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
             new ExpectedTableDefinition(
                 "users",
                 [new ExpectedColumnDefinition("id", typeof(int), isNullable: false, storeType: "int")],
-                schema: tableIsQualified ? database : null),
+                schema: tableIsQualified
+                    ? database
+                    : null),
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.AddForeignKeyIfNotExists(
             "fk_users_parent",
             "users",
             ["id"],
             "users",
             ["id"],
-            schema: tableIsQualified ? null : database);
+            schema: tableIsQualified
+                ? null
+                : database);
+
         builder.CreateIndexIfNotExists(
             "ux_users_id",
             "users",
             ["id"],
-            schema: tableIsQualified ? null : database,
+            schema: tableIsQualified
+                ? null
+                : database,
             unique: true);
+
         var tableIntent = Assert.IsType<EnsureTableIntent>(
-            Assert.IsType<SafeMigrationOperation>(builder.Operations[0]).Intent);
+            Assert.IsType<SafeMigrationOperation>(builder.Operations[0])
+                .Intent);
 
         // Act
         using var generation = capture.BeginGeneration(builder.Operations);
@@ -297,10 +320,13 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
         Assert.Equal([database], capture.GenerationDatabaseQualifiers);
         Assert.Equal(
             "fk_users_parent",
-            Assert.Single(capture.GetGenerationTableConstraints(tableIntent)!.AllowedForeignKeys).Name);
+            Assert.Single(capture.GetGenerationTableConstraints(tableIntent)!.AllowedForeignKeys)
+                .Name);
+
         Assert.Equal(
             "ux_users_id",
-            Assert.Single(capture.GetGenerationUniqueIndexes("users", tableIntent.Definition.Schema)).Name);
+            Assert.Single(capture.GetGenerationUniqueIndexes("users", tableIntent.Definition.Schema))
+                .Name);
     }
 
     [Fact]
@@ -316,6 +342,7 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
                 schema: "application"),
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.CreateIndexIfNotExists(
             "ux_users_id",
             "users",
@@ -330,6 +357,7 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
         Assert.Equal(
             ["application", "foreign"],
             capture.GenerationDatabaseQualifiers);
+
         Assert.Empty(capture.GetGenerationUniqueIndexes("users", "application"));
         Assert.Empty(capture.GetGenerationUniqueIndexes("users", "foreign"));
     }
@@ -347,6 +375,7 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
                     schema: "foreign"),
                 SafeMigrationTableMode.StrictDefinition),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var unique = new SafeMigrationOperation(
             new EnsureIndexIntent(
                 new ExpectedIndexDefinition(
@@ -369,16 +398,28 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void GenerationNativeAlternativesAreDemandDriven(bool mixedOwner)
+    public void GenerationNativeAlternativesAreDemandDriven(
+        bool mixedOwner
+    )
     {
         // Arrange
         var capture = new MySqlSafeMigrationPlanCapture();
         var builder = new MigrationBuilder("Provider");
-        builder.EnsureTable(new ExpectedTableDefinition("rows",
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "rows",
                 [new ExpectedColumnDefinition("id", typeof(int), false, "int")]),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
-        builder.CreateIndexIfNotExists("ux_id", mixedOwner ? "ROWS" : "rows", ["id"], unique: true);
+        builder.CreateIndexIfNotExists(
+            "ux_id",
+            mixedOwner
+                ? "ROWS"
+                : "rows",
+            ["id"],
+            unique: true);
+
         var intent = (EnsureTableIntent)((SafeMigrationOperation)builder.Operations[0]).Intent;
 
         // Act
@@ -392,14 +433,17 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
             Assert.Empty(ordinal);
             var folded = Assert.IsType<MySqlTableContractAlternative>(alternative);
             Assert.True(folded.IsValid);
-            Assert.Equal("ux_id", Assert.Single(folded.UniqueIndexes).Name);
+            Assert.Equal("ux_id",
+                Assert.Single(folded.UniqueIndexes)
+                    .Name);
         }
         else
         {
             Assert.Null(alternative);
-            Assert.Equal("ux_id", Assert.Single(ordinal).Name);
+            Assert.Equal("ux_id",
+                Assert.Single(ordinal)
+                    .Name);
         }
-
     }
 
     /// <summary>A live capture uses the explicitly qualified owner comparer consistently for both catalogs.</summary>
@@ -409,16 +453,25 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
         // Arrange
         var capture = new MySqlSafeMigrationPlanCapture();
         var builder = new MigrationBuilder("Provider");
-        builder.EnsureTable(new ExpectedTableDefinition("rows",
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "rows",
                 [new ExpectedColumnDefinition("id", typeof(int), false, "int")]),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         builder.CreateIndexIfNotExists("ux_id", "ROWS", ["id"], schema: "selected", unique: true);
         builder.AddUniqueConstraintIfNotExists("uq_id", "RoWs", ["id"], schema: "selected");
-        var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+        var operations = builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
+
         var intent = (EnsureTableIntent)operations[0].Intent;
-        var catalog = MySqlSafeMigrationPlanCapture.CreateExpectedUniqueIndexes(operations,
-            "selected", StringComparer.OrdinalIgnoreCase);
+        var catalog = MySqlSafeMigrationPlanCapture.CreateExpectedUniqueIndexes(
+            operations,
+            "selected",
+            StringComparer.OrdinalIgnoreCase);
 
         // Act
         using var lease = capture.Begin(operations, catalog);
@@ -427,9 +480,17 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
         var foreignIndexes = capture.GetExpectedUniqueIndexes("rows", "foreign");
 
         // Assert
-        Assert.Equal("ux_id", Assert.Single(indexes).Name);
-        Assert.Equal("uq_id", Assert.Single(Assert.IsType<SafeMigrationExpectedTableConstraints>(constraints)
-            .AllowedUniqueConstraints).Name);
+        Assert.Equal("ux_id",
+            Assert.Single(indexes)
+                .Name);
+
+        Assert.Equal(
+            "uq_id",
+            Assert.Single(
+                    Assert.IsType<SafeMigrationExpectedTableConstraints>(constraints)
+                        .AllowedUniqueConstraints)
+                .Name);
+
         Assert.Empty(foreignIndexes);
     }
 
@@ -442,10 +503,15 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
         var builder = new MigrationBuilder("Provider");
         foreach (var name in new[] { "rows", "ROWS" })
         {
-            builder.EnsureTable(new ExpectedTableDefinition(name,
-                    [new ExpectedColumnDefinition("id", typeof(int), false, "int"),
-                        new ExpectedColumnDefinition("value", typeof(int), true, "int")]),
-                SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+            builder.EnsureTable(
+                new ExpectedTableDefinition(
+                    name,
+                    [
+                        new ExpectedColumnDefinition("id", typeof(int), false, "int"),
+                        new ExpectedColumnDefinition("value", typeof(int), true, "int"),
+                    ]),
+                SafeMigrationTableMode.StrictDefinition,
+                SafeMigrationPolicy.ThrowIfDifferent);
         }
 
         builder.CreateIndexIfNotExists("ix_value", "ROWS", ["value"]);
@@ -457,7 +523,9 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
         var alternative = capture.GetGenerationTableAlternative(intent);
 
         // Assert
-        Assert.False(Assert.IsType<MySqlTableContractAlternative>(alternative).IsValid);
+        Assert.False(Assert.IsType<MySqlTableContractAlternative>(alternative)
+            .IsValid);
+
         Assert.True(capture.HasGenerationContract);
     }
 
@@ -472,19 +540,30 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
         var previous = new MigrationBuilder("Provider");
         foreach (var table in new[] { "rows", "ROWS" })
         {
-            previous.EnsureTable(new ExpectedTableDefinition(table,
-                    [new ExpectedColumnDefinition("id", typeof(int), false, "int"),
-                        new ExpectedColumnDefinition("value", typeof(int), true, "int")]),
-                SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+            previous.EnsureTable(
+                new ExpectedTableDefinition(
+                    table,
+                    [
+                        new ExpectedColumnDefinition("id", typeof(int), false, "int"),
+                        new ExpectedColumnDefinition("value", typeof(int), true, "int"),
+                    ]),
+                SafeMigrationTableMode.StrictDefinition,
+                SafeMigrationPolicy.ThrowIfDifferent);
         }
 
         previous.CreateIndexIfNotExists("ix_value", "ROWS", ["value"]);
         previous.DropColumnIfExists("value", "rows");
-        capture.BeginGeneration(previous.Operations).Dispose();
+        capture
+            .BeginGeneration(previous.Operations)
+            .Dispose();
+
         var next = new MigrationBuilder("Provider");
-        next.EnsureTable(new ExpectedTableDefinition("next_rows",
+        next.EnsureTable(
+            new ExpectedTableDefinition(
+                "next_rows",
                 [new ExpectedColumnDefinition("id", typeof(int), false, "int")]),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         var intent = (EnsureTableIntent)((SafeMigrationOperation)next.Operations[0]).Intent;
 
@@ -502,19 +581,33 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void GenerationBackfillHazardRequiresNativeModeWhenOwnerSpellingDiffers(bool mixedOwner)
+    public void GenerationBackfillHazardRequiresNativeModeWhenOwnerSpellingDiffers(
+        bool mixedOwner
+    )
     {
         // Arrange
         var capture = new MySqlSafeMigrationPlanCapture();
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("rows",
-                new ExpectedColumnDefinition("value", typeof(string), false, "varchar(20)",
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "rows",
+                new ExpectedColumnDefinition(
+                    "value",
+                    typeof(string),
+                    false,
+                    "varchar(20)",
                     defaultValue: SafeMigrationDefaultValue.Literal("x")),
                 new ExpectedColumnDefinition("value", typeof(string), true, "varchar(10)")),
             SafeMigrationPolicy.RepairIfSafe);
 
         var builder = new MigrationBuilder("Provider");
         builder.Operations.Add(operation);
-        builder.CreateIndexIfNotExists("ux_value", mixedOwner ? "ROWS" : "rows", ["value"], unique: true);
+        builder.CreateIndexIfNotExists(
+            "ux_value",
+            mixedOwner
+                ? "ROWS"
+                : "rows",
+            ["value"],
+            unique: true);
 
         // Act
         using var lease = capture.BeginGeneration(builder.Operations);
@@ -523,7 +616,11 @@ public sealed class MySqlSafeMigrationPlanCaptureTests
 
         // Assert
         Assert.Equal(!mixedOwner, ordinal);
-        Assert.Equal(mixedOwner ? "@@lower_case_table_names IN (1, 2)" : null, condition);
+        Assert.Equal(
+            mixedOwner
+                ? "@@lower_case_table_names IN (1, 2)"
+                : null,
+            condition);
     }
 
     private static SafeMigrationOperation Operation(

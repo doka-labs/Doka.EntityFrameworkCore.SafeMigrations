@@ -24,15 +24,35 @@ public sealed class SqlServerTableAdmissionTests
         using var context = new SafeMigrationDbContext(
             "Server=127.0.0.1,1433;Database=table_layout;User ID=sa;Password=unused;TrustServerCertificate=True");
 
-        var store = length == 0 ? type : type + "(" + length.ToString(CultureInfo.InvariantCulture) + ")";
-        var clr = type == "int" ? typeof(int) : type == "bit" ? typeof(bool) : typeof(string);
-        var columns = Enumerable.Range(0, count).Select(index => new ExpectedColumnDefinition(
-            "C" + index.ToString(CultureInfo.InvariantCulture), clr, false, store)).ToArray();
+        var store = length == 0
+            ? type
+            : type + "(" + length.ToString(CultureInfo.InvariantCulture) + ")";
 
-        var operation = new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition(
-            "layout_items", columns), SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent);
+        var clr = type == "int"
+            ? typeof(int)
+            : type == "bit"
+                ? typeof(bool)
+                : typeof(string);
 
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var columns = Enumerable
+            .Range(0, count)
+            .Select(index => new ExpectedColumnDefinition(
+                "C" + index.ToString(CultureInfo.InvariantCulture),
+                clr,
+                false,
+                store))
+            .ToArray();
+
+        var operation = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "layout_items",
+                    columns),
+                SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
         // Act
@@ -56,13 +76,23 @@ public sealed class SqlServerTableAdmissionTests
         using var context = new SafeMigrationDbContext(
             "Server=127.0.0.1,1433;Database=table_layout;User ID=sa;Password=unused;TrustServerCertificate=True");
 
-        var operation = new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition("layout_items",
-            [new ExpectedColumnDefinition("First", typeof(string), false, "char(8000)"),
-                new ExpectedColumnDefinition("Second", typeof(string), false,
-                    "char(" + secondLength.ToString(CultureInfo.InvariantCulture) + ")")]),
-            SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent);
+        var operation = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "layout_items",
+                    [
+                        new ExpectedColumnDefinition("First", typeof(string), false, "char(8000)"),
+                        new ExpectedColumnDefinition(
+                            "Second",
+                            typeof(string),
+                            false,
+                            "char(" + secondLength.ToString(CultureInfo.InvariantCulture) + ")"),
+                    ]),
+                SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
         // Act
@@ -70,7 +100,11 @@ public sealed class SqlServerTableAdmissionTests
 
         // Assert
         Assert.Equal(!supported, plan.IsStaticallyUnsupported);
-        Assert.Equal(supported ? null : "table_fixed_row_limit", plan.UnsupportedCode);
+        Assert.Equal(
+            supported
+                ? null
+                : "table_fixed_row_limit",
+            plan.UnsupportedCode);
     }
 
     /// <summary>Does not confuse a variable maximum-row warning with a CREATE TABLE admission failure.</summary>
@@ -81,15 +115,22 @@ public sealed class SqlServerTableAdmissionTests
         using var context = new SafeMigrationDbContext(
             "Server=127.0.0.1,1433;Database=table_layout;User ID=sa;Password=unused;TrustServerCertificate=True");
 
-        var definition = new ExpectedTableDefinition("layout_items",
-            [new ExpectedColumnDefinition("First", typeof(string), false, "char(8000)"),
+        var definition = new ExpectedTableDefinition(
+            "layout_items",
+            [
+                new ExpectedColumnDefinition("First", typeof(string), false, "char(8000)"),
                 new ExpectedColumnDefinition("Second", typeof(string), false, "char(53)"),
-                new ExpectedColumnDefinition("Variable", typeof(string), true, "varchar(1)")]);
+                new ExpectedColumnDefinition("Variable", typeof(string), true, "varchar(1)"),
+            ]);
 
-        var operation = new SafeMigrationOperation(new EnsureTableIntent(definition,
-            SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent);
+        var operation = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                definition,
+                SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
         // Act

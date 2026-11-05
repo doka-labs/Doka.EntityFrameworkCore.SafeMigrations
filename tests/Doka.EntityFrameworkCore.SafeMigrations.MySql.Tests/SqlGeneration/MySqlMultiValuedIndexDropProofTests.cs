@@ -18,12 +18,17 @@ public sealed class MySqlMultiValuedIndexDropProofTests
 
         // Act
         var proof = await MySqlSafeMigrationProviderAnalyzer.ReadMultiValuedIndexDropProofAsync(
-            reader, CancellationToken.None);
+            reader,
+            CancellationToken.None);
 
         // Assert
         Assert.True(proof.IndexExists);
         Assert.Equal(40, proof.ForeignKeyNames.Length);
-        Assert.Equal(40, proof.ForeignKeyNames.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(40,
+            proof
+                .ForeignKeyNames
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count());
     }
 
     /// <summary>A complete empty inventory distinguishes native absence from an unbound existing index.</summary>
@@ -31,16 +36,24 @@ public sealed class MySqlMultiValuedIndexDropProofTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task DropInventoryAcceptsOnlyAnOwnedEmptySentinel(bool exists)
+    public async Task DropInventoryAcceptsOnlyAnOwnedEmptySentinel(
+        bool exists
+    )
     {
         // Arrange
         using var facts = Facts();
-        facts.Rows.Add(exists ? 1 : 0, DBNull.Value);
+        facts.Rows.Add(
+            exists
+                ? 1
+                : 0,
+            DBNull.Value);
+
         await using var reader = facts.CreateDataReader();
 
         // Act
         var proof = await MySqlSafeMigrationProviderAnalyzer.ReadMultiValuedIndexDropProofAsync(
-            reader, CancellationToken.None);
+            reader,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(exists, proof.IndexExists);
@@ -61,7 +74,9 @@ public sealed class MySqlMultiValuedIndexDropProofTests
     [InlineData("empty_alias")]
     [InlineData("text_boolean")]
     [InlineData("fractional_boolean")]
-    public async Task DropInventoryRejectsMalformedFacts(string shape)
+    public async Task DropInventoryRejectsMalformedFacts(
+        string shape
+    )
     {
         // Arrange
         using var facts = Facts();

@@ -4,8 +4,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 internal sealed class SqliteSafeMigrationExecutionState
 {
     private DbConnection? _connection;
-    private DbTransaction? _transaction;
     private SqliteCatalogSnapshot? _snapshot;
+    private DbTransaction? _transaction;
 
     /// <summary>Gets the current catalog snapshot, refreshing it when execution scope changes.</summary>
     public SqliteCatalogSnapshot GetSnapshot(

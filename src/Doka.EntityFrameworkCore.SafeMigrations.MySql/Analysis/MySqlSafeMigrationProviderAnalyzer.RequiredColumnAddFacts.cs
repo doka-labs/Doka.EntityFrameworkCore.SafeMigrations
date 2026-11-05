@@ -24,6 +24,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         cancellationToken.ThrowIfCancellationRequested();
 
         List<int>? ordinals = null;
+
         // WHY: Select required-add plans using their matching short-circuit state ordinals.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -51,12 +52,17 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         // Render through the existing window snapshot when one is available;
         // this phase must not reintroduce MariaDB's live-view materializations.
         await SafeMigrationCatalogProbeBatch.ReadAsync(
-            connection, ordinals.Count, maximumPayloadBytes, commandTimeout,
+            connection,
+            ordinals.Count,
+            maximumPayloadBytes,
+            commandTimeout,
             (command, offset) =>
             {
                 var parameterizer = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
-                var selections = new List<string>(Math.Min(
-                    SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement, ordinals.Count - offset));
+                var selections = new List<string>(
+                    Math.Min(
+                        SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
+                        ordinals.Count - offset));
 
                 var sqlBytes = trailerBytes;
                 while (offset + selections.Count < ordinals.Count
@@ -64,22 +70,30 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 {
                     var ordinal = ordinals[offset + selections.Count];
                     var checkpoint = parameterizer.Capture();
-                    var status = plans[ordinal].RenderRequiredColumnAddStatusExpression(parameterizer.Add);
+                    var status = plans[ordinal]
+                        .RenderRequiredColumnAddStatusExpression(parameterizer.Add);
+
                     var selection = $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, ({status})";
 
                     var selectionBytes = Encoding.UTF8.GetByteCount(selection)
-                        + (selections.Count == 0 ? 0 : separatorBytes);
+                        + (selections.Count == 0
+                            ? 0
+                            : separatorBytes);
 
                     var payloadBytes = checked(sqlBytes + selectionBytes + parameterizer.Utf8PayloadBytes);
                     if (SafeMigrationCatalogQueryLimits.Exceeded(
-                            parameterizer.Count, payloadBytes, maximumPayloadBytes))
+                        parameterizer.Count,
+                        payloadBytes,
+                        maximumPayloadBytes))
                     {
                         var parameterCount = parameterizer.Count;
                         parameterizer.Rollback(checkpoint);
                         if (selections.Count == 0)
                         {
                             throw SafeMigrationCatalogQueryLimits.OversizedOperation(
-                                operationOffset + ordinal, parameterCount, payloadBytes);
+                                operationOffset + ordinal,
+                                parameterCount,
+                                payloadBytes);
                         }
 
                         break;
@@ -93,14 +107,18 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     + SafeMigrationCatalogQueryLimits.Trailer;
 
                 return new SafeMigrationCatalogProbeStatement(
-                    selections.Count, parameterizer.Utf8PayloadBytes, operationOffset + ordinals[offset]);
+                    selections.Count,
+                    parameterizer.Utf8PayloadBytes,
+                    operationOffset + ordinals[offset]);
             },
             async (reader, offset, count, token) =>
             {
                 var row = 0;
                 while (await reader.ReadAsync(token))
                 {
-                    if (row >= count || reader.GetInt32(0) != ordinals[offset + row] || reader.IsDBNull(1))
+                    if (row >= count
+                        || reader.GetInt32(0) != ordinals[offset + row]
+                        || reader.IsDBNull(1))
                     {
                         throw new InvalidOperationException(
                             "The MySQL required-add facts query returned an invalid result.");
@@ -131,7 +149,9 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     /// <exception cref="InvalidOperationException">
     /// The result is outside the provider's closed status contract.
     /// </exception>
-    internal static string RequiredColumnAddStatusBinding(string? status) => status switch
+    internal static string RequiredColumnAddStatusBinding(
+        string? status
+    ) => status switch
     {
         "complete" => "'complete'",
         "fresh" => "'fresh'",

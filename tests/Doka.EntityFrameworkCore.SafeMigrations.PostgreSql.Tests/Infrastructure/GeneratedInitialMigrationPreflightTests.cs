@@ -7,7 +7,9 @@ public sealed class GeneratedInitialMigrationPreflightTests : IClassFixture<Gene
 
     /// <summary>Uses the once-only schema owner shared by the independent tooling contracts.</summary>
     /// <param name="fixture">Captures each profile's lifecycle without depending on test-method order.</param>
-    public GeneratedInitialMigrationPreflightTests(GeneratedInitialMigrationFixture fixture)
+    public GeneratedInitialMigrationPreflightTests(
+        GeneratedInitialMigrationFixture fixture
+    )
     {
         _fixture = fixture;
     }
@@ -60,7 +62,10 @@ public sealed class GeneratedInitialMigrationPreflightTests : IClassFixture<Gene
     /// <param name="legacy">Whether the independently provisioned legacy profile is selected.</param>
     /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
     /// <returns>The asynchronous fixture operation or observation.</returns>
-    private async Task VerifyLifecycleAsync(bool legacy, CancellationToken cancellationToken)
+    private async Task VerifyLifecycleAsync(
+        bool legacy,
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -104,13 +109,17 @@ public sealed class GeneratedInitialMigrationPreflightTests : IClassFixture<Gene
     /// <param name="legacy">Whether the independently provisioned legacy profile is selected.</param>
     /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
     /// <returns>The asynchronous fixture operation or observation.</returns>
-    private async Task VerifyNumericFilteringAsync(bool legacy, CancellationToken cancellationToken)
+    private async Task VerifyNumericFilteringAsync(
+        bool legacy,
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         // Arrange
         var observation = await _fixture.GetInitializedAsync(legacy, cancellationToken: cancellationToken);
         await using var context = observation.CreateContext();
+
         // WHY: Discriminator probes share an expensive generated schema, never committed mutable rows.
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
 
@@ -120,11 +129,16 @@ public sealed class GeneratedInitialMigrationPreflightTests : IClassFixture<Gene
             + "VALUES (1, 'Known', 0), (2, 'External', 1), (3, 'Future', 2);",
             cancellationToken);
 
-        var baseCount = await context.Set<SafeMigrationScaffoldingWorkItem>()
+        var baseCount = await context
+            .Set<SafeMigrationScaffoldingWorkItem>()
             .CountAsync(cancellationToken);
 
-        var taskCount = await context.Set<SafeMigrationScaffoldingTask>().CountAsync(cancellationToken);
-        var externalCount = await context.Set<SafeMigrationScaffoldingExternalWorkItem>()
+        var taskCount = await context
+            .Set<SafeMigrationScaffoldingTask>()
+            .CountAsync(cancellationToken);
+
+        var externalCount = await context
+            .Set<SafeMigrationScaffoldingExternalWorkItem>()
             .CountAsync(cancellationToken);
 
         // Assert
@@ -137,7 +151,10 @@ public sealed class GeneratedInitialMigrationPreflightTests : IClassFixture<Gene
     /// <param name="legacy">Whether the independently provisioned legacy profile is selected.</param>
     /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
     /// <returns>The asynchronous fixture operation or observation.</returns>
-    private async Task VerifyAttributedFilteringAsync(bool legacy, CancellationToken cancellationToken)
+    private async Task VerifyAttributedFilteringAsync(
+        bool legacy,
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -156,10 +173,21 @@ public sealed class GeneratedInitialMigrationPreflightTests : IClassFixture<Gene
             + "(14, 'Future', 'future-value');",
             cancellationToken);
 
-        var baseCount = await context.Set<SafeMigrationAttributedWorkItem>().CountAsync(cancellationToken);
-        var jsonCount = await context.Set<SafeMigrationJsonNamedWorkItem>().CountAsync(cancellationToken);
-        var contractCount = await context.Set<SafeMigrationContractNamedWorkItem>().CountAsync(cancellationToken);
-        var fallbackCount = await context.Set<SafeMigrationFallbackNamedWorkItem>().CountAsync(cancellationToken);
+        var baseCount = await context
+            .Set<SafeMigrationAttributedWorkItem>()
+            .CountAsync(cancellationToken);
+
+        var jsonCount = await context
+            .Set<SafeMigrationJsonNamedWorkItem>()
+            .CountAsync(cancellationToken);
+
+        var contractCount = await context
+            .Set<SafeMigrationContractNamedWorkItem>()
+            .CountAsync(cancellationToken);
+
+        var fallbackCount = await context
+            .Set<SafeMigrationFallbackNamedWorkItem>()
+            .CountAsync(cancellationToken);
 
         // Assert
         Assert.Equal(3, baseCount);
@@ -174,7 +202,10 @@ public sealed class GeneratedInitialMigrationPreflightTests : IClassFixture<Gene
     /// <param name="legacy">Whether the independently provisioned legacy profile is selected.</param>
     /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
     /// <returns>The asynchronous fixture operation or observation.</returns>
-    private async Task VerifyAttributedWritesAsync(bool legacy, CancellationToken cancellationToken)
+    private async Task VerifyAttributedWritesAsync(
+        bool legacy,
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -200,17 +231,31 @@ public sealed class GeneratedInitialMigrationPreflightTests : IClassFixture<Gene
                 Id = 17,
                 Caption = "Converted fallback name",
             });
+
         _ = await context.SaveChangesAsync(cancellationToken);
-        var baseCount = await context.Set<SafeMigrationAttributedWorkItem>().CountAsync(cancellationToken);
-        var jsonCount = await context.Set<SafeMigrationJsonNamedWorkItem>().CountAsync(cancellationToken);
-        var contractCount = await context.Set<SafeMigrationContractNamedWorkItem>().CountAsync(cancellationToken);
-        var fallbackCount = await context.Set<SafeMigrationFallbackNamedWorkItem>().CountAsync(cancellationToken);
+        var baseCount = await context
+            .Set<SafeMigrationAttributedWorkItem>()
+            .CountAsync(cancellationToken);
+
+        var jsonCount = await context
+            .Set<SafeMigrationJsonNamedWorkItem>()
+            .CountAsync(cancellationToken);
+
+        var contractCount = await context
+            .Set<SafeMigrationContractNamedWorkItem>()
+            .CountAsync(cancellationToken);
+
+        var fallbackCount = await context
+            .Set<SafeMigrationFallbackNamedWorkItem>()
+            .CountAsync(cancellationToken);
+
         var convertedCount = await ScalarIntAsync(
             context,
             "SELECT COUNT(*) FROM \"scaffolding_attributed_work_items\" "
             + "WHERE (\"Id\" = 15 AND \"AttributedDiscriminator\" = 'json-named') "
             + "OR (\"Id\" = 16 AND \"AttributedDiscriminator\" = 'contract-named') "
-            + "OR (\"Id\" = 17 AND \"AttributedDiscriminator\" = 'Fallback');", cancellationToken: cancellationToken);
+            + "OR (\"Id\" = 17 AND \"AttributedDiscriminator\" = 'Fallback');",
+            cancellationToken: cancellationToken);
 
         // Assert
         Assert.Equal(3, baseCount);
@@ -225,7 +270,11 @@ public sealed class GeneratedInitialMigrationPreflightTests : IClassFixture<Gene
     /// <param name="sql">The source-controlled fixture SQL.</param>
     /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
     /// <returns>The asynchronous fixture operation or observation.</returns>
-    private static async Task<int> ScalarIntAsync(DbContext context, string sql, CancellationToken cancellationToken)
+    private static async Task<int> ScalarIntAsync(
+        DbContext context,
+        string sql,
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 

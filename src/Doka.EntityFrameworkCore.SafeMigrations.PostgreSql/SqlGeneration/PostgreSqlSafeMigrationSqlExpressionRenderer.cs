@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
 internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
@@ -60,12 +62,18 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                         when !StringComparer.Ordinal.Equals(value.ProviderId, ProviderId)
                         => "provider_fragment_mismatch",
                     SafeMigrationSqlIdentifierExpression
-                        or SafeMigrationSqlUnaryExpression or SafeMigrationSqlBinaryExpression
-                        or SafeMigrationSqlNullTestExpression or SafeMigrationSqlBetweenExpression
-                        or SafeMigrationSqlInExpression or SafeMigrationSqlFunctionExpression
-                        or SafeMigrationSqlCaseExpression or SafeMigrationSqlCastExpression
-                        or SafeMigrationSqlCollateExpression or SafeMigrationSqlCurrentValueExpression
-                        or SafeMigrationSqlProviderFragmentExpression or SafeMigrationSqlOpaqueExpression => null,
+                        or SafeMigrationSqlUnaryExpression
+                        or SafeMigrationSqlBinaryExpression
+                        or SafeMigrationSqlNullTestExpression
+                        or SafeMigrationSqlBetweenExpression
+                        or SafeMigrationSqlInExpression
+                        or SafeMigrationSqlFunctionExpression
+                        or SafeMigrationSqlCaseExpression
+                        or SafeMigrationSqlCastExpression
+                        or SafeMigrationSqlCollateExpression
+                        or SafeMigrationSqlCurrentValueExpression
+                        or SafeMigrationSqlProviderFragmentExpression
+                        or SafeMigrationSqlOpaqueExpression => null,
                     _ => throw new UnreachableException(),
                 };
 
@@ -125,12 +133,15 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
     /// <returns>The exact pretty index candidate, or null outside this independently proven shape.</returns>
     internal string? RenderCatalogIndexCastCandidateSql(
         SafeMigrationSqlExpression expression,
-        Func<string, string> literal)
+        Func<string, string> literal
+    )
     {
         ArgumentNullException.ThrowIfNull(expression);
         ArgumentNullException.ThrowIfNull(literal);
         if (expression is not SafeMigrationSqlCastExpression
-            { Operand: SafeMigrationSqlIdentifierExpression { Parts.Count: 1 } member } cast)
+            {
+                Operand: SafeMigrationSqlIdentifierExpression { Parts.Count: 1 } member,
+            } cast)
         {
             return null;
         }
@@ -138,8 +149,11 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
         // WHY: pg_get_indexdef(position, pretty=true) stores (member::type),
         // whereas pg_get_expr retains (member)::type. Only this native index
         // shape gets another candidate; CHECK rendering and SQL are unchanged.
-        return literal("(") + " || " + RenderCatalogCandidateSql(member, literal)
-            + " || " + literal("::" + FindCanonicalStoreType(cast.StoreType) + ")");
+        return literal("(")
+            + " || "
+            + RenderCatalogCandidateSql(member, literal)
+            + " || "
+            + literal("::" + FindCanonicalStoreType(cast.StoreType) + ")");
     }
 
     /// <summary>Builds a native literal candidate without rewriting identifiers or SQL fragments.</summary>
@@ -160,8 +174,11 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             return null;
         }
 
-        var writer = new CatalogExpressionTextWriter(literal,
-            parenthesizeCollations: false, nativeLiteralForms: true, relationOid: relationOid);
+        var writer = new CatalogExpressionTextWriter(
+            literal,
+            parenthesizeCollations: false,
+            nativeLiteralForms: true,
+            relationOid: relationOid);
 
         // WHY: The normal deparser keeps parentheses around Boolean comparison
         // operands. The pretty arithmetic candidate deliberately flattens those;
@@ -186,8 +203,11 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
     {
         ArgumentNullException.ThrowIfNull(expression);
         ArgumentNullException.ThrowIfNull(literal);
-        var writer = new CatalogExpressionTextWriter(literal,
-            parenthesizeCollations: false, nativeLiteralForms: true, relationOid: relationOid,
+        var writer = new CatalogExpressionTextWriter(
+            literal,
+            parenthesizeCollations: false,
+            nativeLiteralForms: true,
+            relationOid: relationOid,
             capturedSourceRoles: true);
 
         // WHY: A validated source literal can be NUMERIC even when its CLR
@@ -208,12 +228,16 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
     internal static string? RenderNativeResultTypeSql(
         SafeMigrationSqlExpression expression,
         Func<string, string> literal,
-        string? relationOid = null)
+        string? relationOid = null
+    )
     {
         ArgumentNullException.ThrowIfNull(expression);
         ArgumentNullException.ThrowIfNull(literal);
-        var writer = new CatalogExpressionTextWriter(literal,
-            parenthesizeCollations: false, nativeLiteralForms: true, relationOid: relationOid,
+        var writer = new CatalogExpressionTextWriter(
+            literal,
+            parenthesizeCollations: false,
+            nativeLiteralForms: true,
+            relationOid: relationOid,
             capturedSourceRoles: true);
 
         return writer.GetNativeResultType(expression);
@@ -222,10 +246,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
     private void AppendDeparsed(
         IExpressionTextWriter writer,
         SafeMigrationSqlExpression expression
-    )
-    {
-        AppendIterative(writer, expression, catalogShape: true, deparsed: true);
-    }
+    ) => AppendIterative(writer, expression, catalogShape: true, deparsed: true);
 
     /// <summary>Renders every accepted tree without placing its depth on the process call stack.</summary>
     private void Append(
@@ -236,7 +257,11 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
     ) => AppendIterative(writer, expression, catalogShape, functionArgument);
 
     /// <summary>Writes only scalar leaves; structured continuations are owned by the iterative renderer.</summary>
-    private void AppendLeaf(IExpressionTextWriter writer, SafeMigrationSqlExpression expression, bool catalogShape)
+    private void AppendLeaf(
+        IExpressionTextWriter writer,
+        SafeMigrationSqlExpression expression,
+        bool catalogShape
+    )
     {
         switch (expression)
         {
@@ -261,39 +286,54 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
 
                 break;
             case SafeMigrationSqlLiteralExpression value:
-                if (!writer.NativeLiteralForms && !value.NumericSourceToken.IsEmpty)
+                if (!writer.NativeLiteralForms
+                    && !value.NumericSourceToken.IsEmpty)
                 {
                     writer.Append(value.NumericSourceToken.Span);
                     break;
                 }
 
-                if (writer.NativeLiteralForms && writer.TryAppendCapturedNumeric(value))
+                if (writer.NativeLiteralForms
+                    && writer.TryAppendCapturedNumeric(value))
                 {
                     break;
                 }
 
-                if (writer.NativeLiteralForms && value.Value is bool boolean
+                if (writer.NativeLiteralForms
+                    && value.Value is bool boolean
                     && (value.StoreType is null || FindCanonicalStoreType(value.StoreType) == "boolean"))
                 {
-                    writer.Append(boolean ? "true" : "false");
+                    writer.Append(
+                        boolean
+                            ? "true"
+                            : "false");
+
                     break;
                 }
 
-                if (writer.NativeLiteralForms && value.StoreType is null
-                    && value.Value is long number && number is < int.MinValue or > int.MaxValue
-                    && TryAppendNativeIntegerConstant(writer,
-                        new SafeMigrationSqlCastExpression(value, "bigint"), "bigint"))
+                if (writer.NativeLiteralForms
+                    && value.StoreType is null
+                    && value.Value is long number
+                    && number is < int.MinValue or > int.MaxValue
+                    && TryAppendNativeIntegerConstant(
+                        writer,
+                        new SafeMigrationSqlCastExpression(value, "bigint"),
+                        "bigint"))
                 {
                     break;
                 }
 
-                if (writer.NativeLiteralForms && value.Value is not null && value.StoreType is not null
+                if (writer.NativeLiteralForms
+                    && value.Value is not null
+                    && value.StoreType is not null
                     && FindCanonicalStoreType(value.StoreType) is "smallint" or "integer" or "bigint")
                 {
                     var target = FindCanonicalStoreType(value.StoreType);
                     var uncast = new SafeMigrationSqlLiteralExpression(value.Value);
-                    if (!TryAppendNativeIntegerConstant(writer,
-                        new SafeMigrationSqlCastExpression(uncast, target), target))
+                    if (!TryAppendNativeIntegerConstant(
+                        writer,
+                        new SafeMigrationSqlCastExpression(uncast, target),
+                        target))
                     {
                         writer.Append('(');
                         Append(writer, uncast, catalogShape);
@@ -304,8 +344,14 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                     break;
                 }
 
-                AppendLiteral(writer, value.Value, value.StoreType
-                    ?? (writer.NativeLiteralForms && value.Value is string ? "text" : null));
+                AppendLiteral(
+                    writer,
+                    value.Value,
+                    value.StoreType
+                    ?? (writer.NativeLiteralForms && value.Value is string
+                        ? "text"
+                        : null));
+
                 break;
             case SafeMigrationSqlCurrentValueExpression value:
                 writer.Append(CurrentValue(value.Value));
@@ -352,7 +398,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
     /// <summary>Shares signed constant token roles with native CASE result-type selection.</summary>
     private static bool TryGetCapturedNumericUnary(
         SafeMigrationSqlUnaryExpression expression,
-        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out SafeMigrationSqlLiteralExpression? literal,
+        [NotNullWhen(true)] out SafeMigrationSqlLiteralExpression? literal,
         out bool negate
     )
     {
@@ -370,9 +416,13 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
     }
 
     /// <summary>Writes native CASE indentation without allocating whitespace strings per branch.</summary>
-    private static void AppendCaseLine(IExpressionTextWriter writer, int indentation)
+    private static void AppendCaseLine(
+        IExpressionTextWriter writer,
+        int indentation
+    )
     {
         writer.Append('\n');
+
         // WHY: Emit exactly the requested indentation width without a temporary string.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -383,7 +433,9 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
     }
 
     /// <summary>Recognizes structured forms which differ from the ordinary catalog candidate.</summary>
-    private static bool RequiresNativeDeparsedVariant(SafeMigrationSqlExpression expression)
+    private static bool RequiresNativeDeparsedVariant(
+        SafeMigrationSqlExpression expression
+    )
     {
         var traversal = new PostgreSqlSafeMigrationExpressionWalker(expression);
         try
@@ -398,6 +450,7 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                     SafeMigrationSqlUnaryExpression { Operator: SafeMigrationSqlUnaryOperator.Negate } => true,
                     SafeMigrationSqlBinaryExpression value => HasFlattenedBooleanOperands(value),
                     SafeMigrationSqlFunctionExpression value => IsNativeSpecialForm(value.Name),
+
                     // WHY: CASE result coercion can alter native literal spelling.
                     SafeMigrationSqlCaseExpression => true,
                     SafeMigrationSqlCastExpression value => value.UsesSqlServerConvert
@@ -420,20 +473,28 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
     }
 
     /// <summary>Preserves uppercase native SQL special forms without touching ordinary function names.</summary>
-    private static bool IsNativeSpecialForm(string name)
+    private static bool IsNativeSpecialForm(
+        string name
+    )
         => name.Equals("COALESCE", StringComparison.OrdinalIgnoreCase)
             || name.Equals("NULLIF", StringComparison.OrdinalIgnoreCase)
             || name.Equals("GREATEST", StringComparison.OrdinalIgnoreCase)
             || name.Equals("LEAST", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Requests the native variant only when a binary Boolean tree has an n-ary stored form.</summary>
-    private static bool HasFlattenedBooleanOperands(SafeMigrationSqlBinaryExpression value)
+    private static bool HasFlattenedBooleanOperands(
+        SafeMigrationSqlBinaryExpression value
+    )
         => value.Operator is SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or
-            && (value.Left is SafeMigrationSqlBinaryExpression left && left.Operator == value.Operator
-                || value.Right is SafeMigrationSqlBinaryExpression right && right.Operator == value.Operator);
+            && ((value.Left is SafeMigrationSqlBinaryExpression left && left.Operator == value.Operator)
+                || (value.Right is SafeMigrationSqlBinaryExpression right && right.Operator == value.Operator));
 
     /// <summary>Represents only validated builtin integer literal casts as the native constant deparser does.</summary>
-    private void AppendNativeIntegerConstant(IExpressionTextWriter writer, long value, string target)
+    private void AppendNativeIntegerConstant(
+        IExpressionTextWriter writer,
+        long value,
+        string target
+    )
     {
         var text = value.ToString(CultureInfo.InvariantCulture);
         if (target == "integer")
@@ -477,7 +538,10 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
 
         if (expression.Operand is SafeMigrationSqlLiteralExpression { Value: not string })
         {
-            var source = integer is >= int.MinValue and <= int.MaxValue ? "integer" : "bigint";
+            var source = integer is >= int.MinValue and <= int.MaxValue
+                ? "integer"
+                : "bigint";
+
             if (source != target)
             {
                 // WHY: Integer-to-integer casts are retained native cast
@@ -521,17 +585,18 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             _ => null,
         };
 
-        if (text is null || text.Any(static character => character is not (>= '0' and <= '9')
+        if (text is null
+            || text.Any(static character => character is not (>= '0' and <= '9')
                 and not ('+' or '-' or ' ' or '\t' or '\n' or '\r' or '\v' or '\f'))
             || !long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out integer)
-            || target == "smallint" && integer is < short.MinValue or > short.MaxValue
-            || target == "integer" && integer is < int.MinValue or > int.MaxValue)
+            || (target == "smallint" && integer is < short.MinValue or > short.MaxValue)
+            || (target == "integer" && integer is < int.MinValue or > int.MaxValue))
         {
             return false;
         }
 
-        if (source == "smallint" && integer is < short.MinValue or > short.MaxValue
-            || source == "integer" && integer is < int.MinValue or > int.MaxValue)
+        if ((source == "smallint" && integer is < short.MinValue or > short.MaxValue)
+            || (source == "integer" && integer is < int.MinValue or > int.MaxValue))
         {
             return false;
         }
@@ -540,16 +605,21 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
     }
 
     /// <summary>Limits literal folding to uncast, unbounded TEXT or exact native integer inputs.</summary>
-    private static bool TryGetIntegerLiteralSource(string? storeType, out string source)
+    private static bool TryGetIntegerLiteralSource(
+        string? storeType,
+        out string source
+    )
     {
-        source = storeType?.Trim().ToLowerInvariant() switch
-        {
-            null or "text" => string.Empty,
-            "smallint" or "int2" => "smallint",
-            "int" or "integer" or "int4" => "integer",
-            "bigint" or "int8" => "bigint",
-            _ => "unsupported",
-        };
+        source = storeType
+                ?.Trim()
+                .ToLowerInvariant() switch
+            {
+                null or "text" => string.Empty,
+                "smallint" or "int2" => "smallint",
+                "int" or "integer" or "int4" => "integer",
+                "bigint" or "int8" => "bigint",
+                _ => "unsupported",
+            };
 
         // WHY: A VARCHAR typmod can truncate before CAST. Its source input
         // is not interchangeable with an unbounded TEXT/integer literal.
@@ -562,7 +632,9 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
         string? storeType
     )
     {
-        var castType = storeType is null ? null : FindCanonicalStoreType(storeType);
+        var castType = storeType is null
+            ? null
+            : FindCanonicalStoreType(storeType);
 
         if (value is null)
         {

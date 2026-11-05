@@ -1,7 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
 /// <summary>Runs the ConstraintsProjectedLivePrerequisites PostgreSQL feature cases independently.</summary>
-public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
+public sealed class
+    PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned container for this feature.</summary>
     /// <param name="fixture">The shared PostgreSQL container fixture.</param>
@@ -21,36 +22,59 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); "
-            + "INSERT INTO live_child VALUES (1), (2);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO live_child VALUES (1), (2);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExistsFromModel(static operation => operation.AddColumn<Guid>(
-            "parent_id", "live_child", type: "uuid", nullable: true));
+            "parent_id",
+            "live_child",
+            type: "uuid",
+            nullable: true));
+
         builder.CreateIndexIfNotExistsFromModel("ix_live_child_parent_id", "live_child", "parent_id");
-        builder.AddForeignKeyIfNotExists("fk_live_child_parent", "live_child", ["parent_id"],
-            "live_parent", ["id"], onDelete: onDelete);
+        builder.AddForeignKeyIfNotExists(
+            "fk_live_child_parent",
+            "live_child",
+            ["parent_id"],
+            "live_parent",
+            ["id"],
+            onDelete: onDelete);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // WHY: No parent operation seeds projection; its owner, endpoint and key
         // must be independently certified from the requested live catalog only.
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-live-fk"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sparse-live-fk"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-live-fk-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sparse-live-fk-final"),
+            CancellationToken.None);
 
-        var replay = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-live-fk-replay"), CancellationToken.None);
+        var replay = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sparse-live-fk-replay"),
+            CancellationToken.None);
 
-        var nullRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM live_child WHERE parent_id IS NULL;", cancellationToken: CancellationToken.None);
+        var nullRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM live_child WHERE parent_id IS NULL;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -70,11 +94,14 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
     [InlineData("CREATE TABLE live_parent (id uuid NOT NULL);")]
     [InlineData("CREATE TABLE live_parent (id text NOT NULL PRIMARY KEY);")]
     [InlineData("CREATE VIEW live_parent AS SELECT NULL::uuid AS id;")]
-    [InlineData("CREATE TABLE live_parent (id uuid NOT NULL); CREATE UNIQUE INDEX ux_partial "
+    [InlineData(
+        "CREATE TABLE live_parent (id uuid NOT NULL); CREATE UNIQUE INDEX ux_partial "
         + "ON live_parent (id) WHERE id IS NOT NULL;")]
-    [InlineData("CREATE TABLE live_parent (id uuid NOT NULL); CREATE UNIQUE INDEX ux_expression "
+    [InlineData(
+        "CREATE TABLE live_parent (id uuid NOT NULL); CREATE UNIQUE INDEX ux_expression "
         + "ON live_parent ((id::text));")]
-    [InlineData("CREATE TABLE live_parent (id uuid NOT NULL, CONSTRAINT uq_deferred "
+    [InlineData(
+        "CREATE TABLE live_parent (id uuid NOT NULL, CONSTRAINT uq_deferred "
         + "UNIQUE (id) DEFERRABLE INITIALLY DEFERRED);")]
     public async Task ForeignKeyNewNullableColumnDoesNotInventLivePrincipalPrerequisites(
         string parentSql
@@ -82,24 +109,42 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, parentSql
+        await ExecuteSqlAsync(
+            connectionString,
+            parentSql
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); "
-            + "INSERT INTO live_child VALUES (1), (2);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO live_child VALUES (1), (2);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExistsFromModel(static operation => operation.AddColumn<Guid>(
-            "parent_id", "live_child", type: "uuid", nullable: true));
-        builder.AddForeignKeyIfNotExists("fk_live_child_parent", "live_child", ["parent_id"],
-            "live_parent", ["id"]);
+            "parent_id",
+            "live_child",
+            type: "uuid",
+            nullable: true));
+
+        builder.AddForeignKeyIfNotExists(
+            "fk_live_child_parent",
+            "live_child",
+            ["parent_id"],
+            "live_parent",
+            ["id"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-live-fk-negative"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-live-fk-negative"),
+                CancellationToken.None);
 
-        var createdColumns = await ScalarIntAsync(connectionString,
+        var createdColumns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'live_child'::regclass "
-            + "AND attname = 'parent_id' AND NOT attisdropped;", cancellationToken: CancellationToken.None);
+            + "AND attname = 'parent_id' AND NOT attisdropped;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -114,21 +159,37 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); "
-            + "INSERT INTO live_child VALUES (1), (2);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO live_child VALUES (1), (2);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExistsFromModel(static operation => operation.AddColumn<Guid>(
-            "parent_id", "live_child", type: "uuid", nullable: true, defaultValue: Guid.Empty));
-        builder.AddForeignKeyIfNotExists("fk_live_child_parent", "live_child", ["parent_id"],
-            "live_parent", ["id"]);
+            "parent_id",
+            "live_child",
+            type: "uuid",
+            nullable: true,
+            defaultValue: Guid.Empty));
+
+        builder.AddForeignKeyIfNotExists(
+            "fk_live_child_parent",
+            "live_child",
+            ["parent_id"],
+            "live_parent",
+            ["id"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-live-fk-nonnull-default"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-live-fk-nonnull-default"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -141,27 +202,41 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task MixedIndexNewNullableColumnUsesUnchangedLiveMember(bool unique)
+    public async Task MixedIndexNewNullableColumnUsesUnchangedLiveMember(
+        bool unique
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE mixed_columns (id integer NOT NULL PRIMARY KEY); "
-            + "INSERT INTO mixed_columns VALUES (1), (2);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO mixed_columns VALUES (1), (2);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExistsFromModel(static operation => operation.AddColumn<int>(
-            "added", "mixed_columns", type: "integer", nullable: true));
+            "added",
+            "mixed_columns",
+            type: "integer",
+            nullable: true));
+
         builder.CreateIndexIfNotExists("ix_mixed_columns", "mixed_columns", ["id", "added"], unique: unique);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-live-index"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-live-index"),
+                CancellationToken.None);
 
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var indexCount = await ScalarIntAsync(connectionString,
+        var indexCount = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_index WHERE indrelid = 'mixed_columns'::regclass "
             + "AND indexrelid = 'ix_mixed_columns'::regclass AND indisvalid;",
             cancellationToken: CancellationToken.None);
@@ -178,36 +253,56 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); "
-            + "INSERT INTO live_child VALUES (1), (2);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO live_child VALUES (1), (2);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExistsFromModel(static operation => operation.AddColumn<Guid>(
-            "parent_id", "live_child", type: "uuid", nullable: true));
-        builder.AddForeignKeyIfNotExists("fk_live_child_parent", "live_child", ["parent_id"],
-            "live_parent", ["id"]);
+            "parent_id",
+            "live_child",
+            type: "uuid",
+            nullable: true));
+
+        builder.AddForeignKeyIfNotExists(
+            "fk_live_child_parent",
+            "live_child",
+            ["parent_id"],
+            "live_parent",
+            ["id"]);
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-live-fk-runtime-write"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-live-fk-runtime-write"),
+                CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, [builder.Operations[0]], CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "UPDATE live_child SET parent_id = '00000000-0000-0000-0000-000000000000' WHERE id = 1;",
             cancellationToken: CancellationToken.None);
 
-        var exception = await Assert.ThrowsAsync<PostgresException>(
-            () => ExecuteOperationsAsync(context, [builder.Operations[1]], CancellationToken.None));
+        var exception = await Assert.ThrowsAsync<PostgresException>(() =>
+            ExecuteOperationsAsync(context, [builder.Operations[1]], CancellationToken.None));
 
-        var foreignKeys = await ScalarIntAsync(connectionString,
+        var foreignKeys = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE conrelid = 'live_child'::regclass "
-            + "AND conname = 'fk_live_child_parent';", cancellationToken: CancellationToken.None);
+            + "AND conname = 'fk_live_child_parent';",
+            cancellationToken: CancellationToken.None);
 
-        var retainedRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM live_child;",
+        var retainedRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM live_child;",
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -222,28 +317,55 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ForeignKeyNewNullableColumnResolvesCurrentSchemaAliases(bool qualifyChild)
+    public async Task ForeignKeyNewNullableColumnResolvesCurrentSchemaAliases(
+        bool qualifyChild
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);",
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
-        var childSchema = qualifyChild ? "public" : null;
-        var parentSchema = qualifyChild ? null : "public";
-        var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureColumn("live_child", new ExpectedColumnDefinition("parent_id", typeof(Guid),
-            isNullable: true, storeType: "uuid"), SafeMigrationPolicy.ThrowIfDifferent, schema: childSchema);
+        var childSchema = qualifyChild
+            ? "public"
+            : null;
 
-        builder.AddForeignKeyIfNotExists("fk_live_child_parent", "live_child", ["parent_id"],
-            "live_parent", ["id"], schema: childSchema, principalSchema: parentSchema);
+        var parentSchema = qualifyChild
+            ? null
+            : "public";
+
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureColumn(
+            "live_child",
+            new ExpectedColumnDefinition(
+                "parent_id",
+                typeof(Guid),
+                isNullable: true,
+                storeType: "uuid"),
+            SafeMigrationPolicy.ThrowIfDifferent,
+            schema: childSchema);
+
+        builder.AddForeignKeyIfNotExists(
+            "fk_live_child_parent",
+            "live_child",
+            ["parent_id"],
+            "live_parent",
+            ["id"],
+            schema: childSchema,
+            principalSchema: parentSchema);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-live-fk-schema"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-live-fk-schema"),
+                CancellationToken.None);
 
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -259,42 +381,60 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
     [InlineData("primary")]
     [InlineData("unique")]
     [InlineData("check")]
-    public async Task EmptyTableMixedConstraintUsesUnchangedLiveColumn(string kind)
+    public async Task EmptyTableMixedConstraintUsesUnchangedLiveColumn(
+        string kind
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (id integer NOT NULL);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE mixed_columns (id integer NOT NULL);",
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExistsFromModel(static operation => operation.AddColumn<int>(
-            "added", "mixed_columns", type: "integer", nullable: false));
+            "added",
+            "mixed_columns",
+            type: "integer",
+            nullable: false));
 
         switch (kind)
         {
             case "primary": builder.AddPrimaryKeyIfNotExists("pk_mixed", "mixed_columns", ["id", "added"]); break;
             case "unique": builder.AddUniqueConstraintIfNotExists("uq_mixed", "mixed_columns", ["id", "added"]); break;
             case "check":
-                builder.EnsureCheckConstraint(ExpectedCheckConstraintDefinition.FromExpression(
-                    "ck_mixed", "mixed_columns", SqlBinary(
-                        SqlColumnAndInt("id", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0),
-                        SafeMigrationSqlBinaryOperator.And,
-                        SqlColumnAndInt("added", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0))),
+                builder.EnsureCheckConstraint(
+                    ExpectedCheckConstraintDefinition.FromExpression(
+                        "ck_mixed",
+                        "mixed_columns",
+                        SqlBinary(
+                            SqlColumnAndInt("id", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0),
+                            SafeMigrationSqlBinaryOperator.And,
+                            SqlColumnAndInt("added", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0))),
                     SafeMigrationPolicy.ThrowIfDifferent);
+
                 break;
             default: throw new ArgumentOutOfRangeException(nameof(kind));
         }
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-live-empty-key"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-live-empty-key"),
+                CancellationToken.None);
 
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var constraints = await ScalarIntAsync(connectionString,
+        var constraints = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE conrelid = 'mixed_columns'::regclass "
-            + "AND conname IN ('pk_mixed', 'uq_mixed', 'ck_mixed');", cancellationToken: CancellationToken.None);
+            + "AND conname IN ('pk_mixed', 'uq_mixed', 'ck_mixed');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -308,22 +448,37 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE mixed_columns (id integer NOT NULL PRIMARY KEY); "
-            + "INSERT INTO mixed_columns VALUES (1), (2);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO mixed_columns VALUES (1), (2);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExistsFromModel(static operation => operation.AddColumn<int>(
-            "added", "mixed_columns", type: "integer", nullable: true));
+            "added",
+            "mixed_columns",
+            type: "integer",
+            nullable: true));
 
-        builder.EnsureIndex(new ExpectedIndexDefinition("ux_nulls_not_distinct", "mixed_columns",
-            [new ExpectedIndexKeyDefinition(column: "added")], unique: true, nullsDistinct: false),
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                "ux_nulls_not_distinct",
+                "mixed_columns",
+                [new ExpectedIndexKeyDefinition(column: "added")],
+                unique: true,
+                nullsDistinct: false),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-live-null-uniqueness"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-live-null-uniqueness"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -336,13 +491,18 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ForeignKeyNewNullableColumnHonorsExactLiveCandidateLifetimes(bool survivingAlias)
+    public async Task ForeignKeyNewNullableColumnHonorsExactLiveCandidateLifetimes(
+        bool survivingAlias
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE live_parent (id uuid NOT NULL, CONSTRAINT pk_native PRIMARY KEY (id)); "
-            + (survivingAlias ? "CREATE UNIQUE INDEX ux_surviving ON live_parent (id); " : "")
+            + (survivingAlias
+                ? "CREATE UNIQUE INDEX ux_surviving ON live_parent (id); "
+                : "")
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);",
             cancellationToken: CancellationToken.None);
 
@@ -350,13 +510,26 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropPrimaryKeyIfExists("pk_native", "live_parent");
         builder.AddColumnIfNotExistsFromModel(static operation => operation.AddColumn<Guid>(
-            "parent_id", "live_child", type: "uuid", nullable: true));
-        builder.AddForeignKeyIfNotExists("fk_live_child_parent", "live_child", ["parent_id"],
-            "live_parent", ["id"]);
+            "parent_id",
+            "live_child",
+            type: "uuid",
+            nullable: true));
+
+        builder.AddForeignKeyIfNotExists(
+            "fk_live_child_parent",
+            "live_child",
+            ["parent_id"],
+            "live_parent",
+            ["id"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-live-fk-key-lifetime"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-live-fk-key-lifetime"),
+                CancellationToken.None);
 
         if (survivingAlias)
         {
@@ -365,9 +538,16 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
         }
 
         // Assert
-        Assert.Equal(survivingAlias ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+        Assert.Equal(
+            survivingAlias
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
             report.Status);
-        Assert.Equal(survivingAlias ? SafeMigrationAction.Apply : SafeMigrationAction.RejectPrerequisiteMissing,
+
+        Assert.Equal(
+            survivingAlias
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectPrerequisiteMissing,
             report.Assessments[2].Action);
     }
 
@@ -377,26 +557,43 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
     [Theory]
     [InlineData("C", true)]
     [InlineData("POSIX", true)]
-    public async Task ForeignKeyNewNullableColumnQualifiesNativeCollation(string childCollation, bool compatible)
+    public async Task ForeignKeyNewNullableColumnQualifiesNativeCollation(
+        string childCollation,
+        bool compatible
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE live_parent (id text COLLATE \"C\" NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);",
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AddColumnIfNotExists<string>("parent_id", "live_child", type: "text", nullable: true,
+        builder.AddColumnIfNotExists<string>(
+            "parent_id",
+            "live_child",
+            type: "text",
+            nullable: true,
             collation: new SafeMigrationCollationIdentifier(childCollation, "pg_catalog"));
 
-        builder.AddForeignKeyIfNotExists("fk_live_child_parent", "live_child", ["parent_id"],
-            "live_parent", ["id"]);
+        builder.AddForeignKeyIfNotExists(
+            "fk_live_child_parent",
+            "live_child",
+            ["parent_id"],
+            "live_parent",
+            ["id"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-live-fk-collation"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-live-fk-collation"),
+                CancellationToken.None);
 
         if (compatible)
         {
@@ -405,8 +602,16 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
         }
 
         // Assert
-        Assert.Equal(compatible ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(compatible ? SafeMigrationAction.Apply : SafeMigrationAction.RejectPrerequisiteMissing,
+        Assert.Equal(
+            compatible
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
+            report.Status);
+
+        Assert.Equal(
+            compatible
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectPrerequisiteMissing,
             report.Assessments[1].Action);
     }
 
@@ -416,32 +621,49 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY, old_parent_id uuid NULL, "
             + "CONSTRAINT fk_live_child_parent FOREIGN KEY (old_parent_id) REFERENCES live_parent (id)); "
-            + "INSERT INTO live_child VALUES (1, NULL), (2, NULL);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO live_child VALUES (1, NULL), (2, NULL);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_live_child_parent", "live_child");
         builder.AddColumnIfNotExistsFromModel(static operation => operation.AddColumn<Guid>(
-            "parent_id", "live_child", type: "uuid", nullable: true));
+            "parent_id",
+            "live_child",
+            type: "uuid",
+            nullable: true));
+
         builder.CreateIndexIfNotExistsFromModel("ix_live_child_parent", "live_child", "parent_id");
-        builder.AddForeignKeyIfNotExists("fk_live_child_parent", "live_child", ["parent_id"],
-            "live_parent", ["id"]);
+        builder.AddForeignKeyIfNotExists(
+            "fk_live_child_parent",
+            "live_child",
+            ["parent_id"],
+            "live_parent",
+            ["id"]);
 
         // Act
         var runner = context.GetService<ISafeMigrationRunner>();
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-live-fk-owned-replacement"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sparse-live-fk-owned-replacement"),
+            CancellationToken.None);
 
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-live-fk-owned-replacement-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sparse-live-fk-owned-replacement-final"),
+            CancellationToken.None);
 
-        var endpoint = await ScalarStringAsync(connectionString,
+        var endpoint = await ScalarStringAsync(
+            connectionString,
             "SELECT a.attname FROM pg_catalog.pg_constraint co JOIN pg_catalog.pg_attribute a "
             + "ON a.attrelid = co.conrelid AND a.attnum = co.conkey[1] "
             + "WHERE co.conrelid = 'live_child'::regclass AND co.conname = 'fk_live_child_parent';",
@@ -460,7 +682,8 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE COLLATION nd_parent (provider = icu, locale = 'und-u-ks-level2', deterministic = false); "
             + "CREATE COLLATION nd_child (provider = icu, locale = 'und-u-ks-level2', deterministic = false); "
             + "CREATE TABLE live_parent (id text COLLATE nd_parent NOT NULL PRIMARY KEY); "
@@ -469,21 +692,39 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureColumn("live_parent", new ExpectedColumnDefinition("id", typeof(string),
-            isNullable: false, storeType: "text",
-            collation: new SafeMigrationCollationIdentifier("nd_parent", "public")),
+        builder.EnsureColumn(
+            "live_parent",
+            new ExpectedColumnDefinition(
+                "id",
+                typeof(string),
+                isNullable: false,
+                storeType: "text",
+                collation: new SafeMigrationCollationIdentifier("nd_parent", "public")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         builder.AddPrimaryKeyIfNotExists("live_parent_pkey", "live_parent", ["id"]);
-        builder.AddColumnIfNotExists<string>("parent_id", "live_child", type: "text", nullable: true,
+        builder.AddColumnIfNotExists<string>(
+            "parent_id",
+            "live_child",
+            type: "text",
+            nullable: true,
             collation: new SafeMigrationCollationIdentifier("nd_child", "public"));
 
-        builder.AddForeignKeyIfNotExists("fk_live_child_parent", "live_child", ["parent_id"],
-            "live_parent", ["id"]);
+        builder.AddForeignKeyIfNotExists(
+            "fk_live_child_parent",
+            "live_child",
+            ["parent_id"],
+            "live_parent",
+            ["id"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-live-fk-nondeterministic"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-live-fk-nondeterministic"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -501,18 +742,24 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(true, true)]
-    public async Task ForeignKeyNewNullableColumnUsesOnlyCertifiedRenameBoundary(bool qualifiedChild, bool callbacks)
+    public async Task ForeignKeyNewNullableColumnUsesOnlyCertifiedRenameBoundary(
+        bool qualifiedChild,
+        bool callbacks
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1); "
-            + "CREATE TABLE unrelated_owner (old_member integer NULL);", cancellationToken: CancellationToken.None);
+            + "CREATE TABLE unrelated_owner (old_member integer NULL);",
+            cancellationToken: CancellationToken.None);
 
         if (callbacks)
         {
-            await ExecuteSqlAsync(connectionString,
+            await ExecuteSqlAsync(
+                connectionString,
                 "CREATE FUNCTION fk_rename_callback() RETURNS event_trigger LANGUAGE plpgsql "
                 + "AS $$ BEGIN PERFORM 1; END $$; CREATE EVENT TRIGGER fk_rename_callback "
                 + "ON ddl_command_end EXECUTE FUNCTION fk_rename_callback();",
@@ -522,44 +769,76 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameColumnIfExists("old_member", "unrelated_owner", "new_member", schema: "public");
-        builder.AddColumnIfNotExists<Guid>("parent_id", "live_child", type: "uuid", nullable: true,
-            schema: qualifiedChild ? "public" : null);
+        builder.AddColumnIfNotExists<Guid>(
+            "parent_id",
+            "live_child",
+            type: "uuid",
+            nullable: true,
+            schema: qualifiedChild
+                ? "public"
+                : null);
 
-        builder.AddForeignKeyIfNotExists("fk_live_child_parent", "live_child", ["parent_id"],
-            "live_parent", ["id"], schema: qualifiedChild ? "public" : null, principalSchema: "public");
+        builder.AddForeignKeyIfNotExists(
+            "fk_live_child_parent",
+            "live_child",
+            ["parent_id"],
+            "live_parent",
+            ["id"],
+            schema: qualifiedChild
+                ? "public"
+                : null,
+            principalSchema: "public");
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-live-fk-unrelated-rename"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sparse-live-fk-unrelated-rename"),
+            CancellationToken.None);
 
         SafeMigrationRunReport? verified = null;
         if (report.Status == SafeMigrationReportStatus.Ready)
         {
             await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-            verified = await runner.VerifyAsync(context, builder.Operations,
-                new SafeMigrationRunOptions("sparse-live-fk-unrelated-rename-final"), CancellationToken.None);
+            verified = await runner.VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-live-fk-unrelated-rename-final"),
+                CancellationToken.None);
         }
 
         // Assert
-        Assert.Equal(callbacks ? SafeMigrationReportStatus.RuntimeValidationRequired : SafeMigrationReportStatus.Ready,
+        Assert.Equal(
+            callbacks
+                ? SafeMigrationReportStatus.RuntimeValidationRequired
+                : SafeMigrationReportStatus.Ready,
             report.Status);
+
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
         if (callbacks)
         {
             Assert.Null(verified);
-            Assert.All(report.Assessments.Skip(1),
+            Assert.All(
+                report.Assessments.Skip(1),
                 static item => Assert.Equal(SafeMigrationAction.ValidateAtRuntime, item.Action));
 
             Assert.Equal("projected_event_trigger_state_unknown", report.Assessments[1].AnalysisCode);
-            Assert.Equal(0, Assert.IsType<SafeMigrationDeferredOrigin>(
-                report.Assessments[1].DeferredOrigin).OperationOrdinal);
+            Assert.Equal(
+                0,
+                Assert.IsType<SafeMigrationDeferredOrigin>(
+                        report.Assessments[1].DeferredOrigin)
+                    .OperationOrdinal);
 
             // WHY: The FK depends on the deferred ADD, not directly on the
             // rename's callback. Its immediate unproven producer is ordinal1.
             Assert.Equal("projected_provider_postcondition_unknown", report.Assessments[2].AnalysisCode);
-            Assert.Equal(1, Assert.IsType<SafeMigrationDeferredOrigin>(
-                report.Assessments[2].DeferredOrigin).OperationOrdinal);
+            Assert.Equal(
+                1,
+                Assert.IsType<SafeMigrationDeferredOrigin>(
+                        report.Assessments[2].DeferredOrigin)
+                    .OperationOrdinal);
         }
         else
         {
@@ -567,12 +846,20 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
             var postflight = Assert.IsType<SafeMigrationRunReport>(verified);
             Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
             Assert.All(postflight.Assessments, static item => Assert.True(item.PostconditionSatisfied));
-            Assert.Equal(1, await ScalarIntAsync(connectionString,
-                "SELECT COUNT(*) FROM live_child WHERE parent_id IS NULL;", cancellationToken: CancellationToken.None));
+            Assert.Equal(
+                1,
+                await ScalarIntAsync(
+                    connectionString,
+                    "SELECT COUNT(*) FROM live_child WHERE parent_id IS NULL;",
+                    cancellationToken: CancellationToken.None));
 
-            Assert.Equal(1, await ScalarIntAsync(connectionString,
-                "SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE conrelid='live_child'::regclass "
-                + "AND conname='fk_live_child_parent' AND contype='f';", cancellationToken: CancellationToken.None));
+            Assert.Equal(
+                1,
+                await ScalarIntAsync(
+                    connectionString,
+                    "SELECT COUNT(*) FROM pg_catalog.pg_constraint WHERE conrelid='live_child'::regclass "
+                    + "AND conname='fk_live_child_parent' AND contype='f';",
+                    cancellationToken: CancellationToken.None));
         }
     }
 
@@ -582,7 +869,8 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE live_parent (id bigint NOT NULL PRIMARY KEY); "
             + "CREATE TABLE live_child (id integer NOT NULL PRIMARY KEY); INSERT INTO live_child VALUES (1);",
             cancellationToken: CancellationToken.None);
@@ -590,12 +878,21 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("parent_id", "live_child", type: "integer", nullable: true);
-        builder.AddForeignKeyIfNotExists("fk_live_child_parent", "live_child", ["parent_id"],
-            "live_parent", ["id"]);
+        builder.AddForeignKeyIfNotExists(
+            "fk_live_child_parent",
+            "live_child",
+            ["parent_id"],
+            "live_parent",
+            ["id"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-live-fk-integer-family"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-live-fk-integer-family"),
+                CancellationToken.None);
 
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -611,33 +908,52 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE live_parent (id uuid NOT NULL PRIMARY KEY);",
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.CreateTableIfNotExists("new_child", table => new
-        {
-            id = table.Column<int>(type: "integer", nullable: false),
-            parent_id = table.Column<Guid>(type: "uuid", nullable: true),
-        }, constraints: table => table.PrimaryKey("pk_new_child", row => row.id));
+        builder.CreateTableIfNotExists(
+            "new_child",
+            table => new
+            {
+                id = table.Column<int>(type: "integer", nullable: false),
+                parent_id = table.Column<Guid>(type: "uuid", nullable: true),
+            },
+            constraints: table => table.PrimaryKey("pk_new_child", row => row.id));
 
         builder.CreateIndexIfNotExistsFromModel("ix_new_child_parent", "new_child", "parent_id");
-        builder.AddForeignKeyIfNotExists("fk_new_child_parent", "new_child", ["parent_id"],
-            "live_parent", ["id"]);
+        builder.AddForeignKeyIfNotExists(
+            "fk_new_child_parent",
+            "new_child",
+            ["parent_id"],
+            "live_parent",
+            ["id"]);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-new-child"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sparse-new-child"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-new-child-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sparse-new-child-final"),
+            CancellationToken.None);
 
-        var replay = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-new-child-replay"), CancellationToken.None);
+        var replay = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sparse-new-child-replay"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -653,30 +969,39 @@ public sealed class PostgreSqlConstraintsProjectedLivePrerequisitesIntegrationTe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (id text NOT NULL);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE mixed_columns (id text NOT NULL);",
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("added", "mixed_columns", type: "integer", nullable: false);
-        builder.EnsureCheckConstraint(ExpectedCheckConstraintDefinition.FromExpression(
-            "ck_mixed_invalid", "mixed_columns", SqlBinary(
-                SqlColumnAndInt("id", SafeMigrationSqlBinaryOperator.GreaterThan, 0),
-                SafeMigrationSqlBinaryOperator.And,
-                SqlColumnAndInt("added", SafeMigrationSqlBinaryOperator.GreaterThan, 0))),
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_mixed_invalid",
+                "mixed_columns",
+                SqlBinary(
+                    SqlColumnAndInt("id", SafeMigrationSqlBinaryOperator.GreaterThan, 0),
+                    SafeMigrationSqlBinaryOperator.And,
+                    SqlColumnAndInt("added", SafeMigrationSqlBinaryOperator.GreaterThan, 0))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-mixed-check-invalid-type"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-mixed-check-invalid-type"),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [builder.Operations[0]], CancellationToken.None);
-        var exception = await Assert.ThrowsAsync<PostgresException>(
-            () => ExecuteOperationsAsync(context, [builder.Operations[1]], CancellationToken.None));
+        var exception = await Assert.ThrowsAsync<PostgresException>(() =>
+            ExecuteOperationsAsync(context, [builder.Operations[1]], CancellationToken.None));
 
         // Assert
         Assert.Equal("42883", exception.SqlState);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
     }
-
 }

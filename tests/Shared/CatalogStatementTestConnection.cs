@@ -55,17 +55,6 @@ internal sealed class CatalogStatementTestConnection : DbConnection
     /// </remarks>
     public bool CaptureObservations { get; init; } = true;
 
-    /// <summary>Clears observations after all prior probe commands, batches and readers are disposed.</summary>
-    public void ResetCaptures()
-    {
-        Submissions.Clear();
-        BatchCounts.Clear();
-        CommandsDisposed = 0;
-        BatchesDisposed = 0;
-        ReadersDisposed = 0;
-        TransactionsDisposed = 0;
-    }
-
     /// <inheritdoc />
     [AllowNull]
     public override string ConnectionString { get; set; } = string.Empty;
@@ -84,6 +73,17 @@ internal sealed class CatalogStatementTestConnection : DbConnection
 
     /// <inheritdoc />
     public override bool CanCreateBatch { get; }
+
+    /// <summary>Clears observations after all prior probe commands, batches and readers are disposed.</summary>
+    public void ResetCaptures()
+    {
+        Submissions.Clear();
+        BatchCounts.Clear();
+        CommandsDisposed = 0;
+        BatchesDisposed = 0;
+        ReadersDisposed = 0;
+        TransactionsDisposed = 0;
+    }
 
     /// <inheritdoc />
     public override void Open() => _state = ConnectionState.Open;

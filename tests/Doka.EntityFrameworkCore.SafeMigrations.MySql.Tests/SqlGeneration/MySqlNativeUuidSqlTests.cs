@@ -26,12 +26,15 @@ public sealed class MySqlNativeUuidSqlTests : IDisposable
         // Arrange
         using var context = CreateContext();
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureColumn("native_uuid_budget",
+        builder.EnsureColumn(
+            "native_uuid_budget",
             new ExpectedColumnDefinition("value", typeof(string), true, "varchar(64)", maxLength: 64),
             SafeMigrationPolicy.RepairIfSafe);
+
         // WHY: Explicit type alterations add an inline-record proof that the
         // separate Ensure repair path does not generate.
-        builder.AlterColumnIfDifferent("native_uuid_budget",
+        builder.AlterColumnIfDifferent(
+            "native_uuid_budget",
             new ExpectedColumnDefinition("alter_value", typeof(string), true, "varchar(64)", maxLength: 64),
             new ExpectedColumnDefinition("alter_value", typeof(string), true, "varchar(32)", maxLength: 32),
             SafeMigrationPolicy.RepairIfSafe);
@@ -40,10 +43,16 @@ public sealed class MySqlNativeUuidSqlTests : IDisposable
         var sql = Generate(context, builder.Operations);
 
         // Assert
-        Assert.Contains("WHEN LOWER(inline_column.DATA_TYPE) = 'uuid' THEN 16 ", sql,
+        Assert.Contains(
+            "WHEN LOWER(inline_column.DATA_TYPE) = 'uuid' THEN 16 ",
+            sql,
             StringComparison.Ordinal);
-        Assert.Contains("WHEN LOWER(row_column.DATA_TYPE) = 'uuid' THEN 16 ", sql,
+
+        Assert.Contains(
+            "WHEN LOWER(row_column.DATA_TYPE) = 'uuid' THEN 16 ",
+            sql,
             StringComparison.Ordinal);
+
         Assert.Contains("WHEN LOWER(ic.DATA_TYPE) = 'uuid' THEN 16 ", sql, StringComparison.Ordinal);
     }
 
@@ -69,10 +78,16 @@ public sealed class MySqlNativeUuidSqlTests : IDisposable
     /// <param name="context">The configured MariaDB provider and SafeMigrations services.</param>
     /// <param name="operations">The authored immutable migration contracts.</param>
     /// <returns>The command text and decoded prepared statements, including physical catalog predicates.</returns>
-    private static string Generate(DbContext context, IReadOnlyList<MigrationOperation> operations)
+    private static string Generate(
+        DbContext context,
+        IReadOnlyList<MigrationOperation> operations
+    )
     {
-        var sql = string.Join(Environment.NewLine,
-            context.GetService<IMigrationsSqlGenerator>().Generate(operations, context.Model)
+        var sql = string.Join(
+            Environment.NewLine,
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate(operations, context.Model)
                 .Select(static command => command.CommandText));
 
         // WHY: Lazy runtime catalog probes are transported as prepared UTF-8
@@ -90,7 +105,10 @@ public sealed class MySqlNativeUuidSqlTests : IDisposable
                 throw new InvalidOperationException("A generated prepared SQL payload is unterminated.");
             }
 
-            decoded.AppendLine().Append(Encoding.UTF8.GetString(Convert.FromHexString(sql.AsSpan(start, end - start))));
+            decoded
+                .AppendLine()
+                .Append(Encoding.UTF8.GetString(Convert.FromHexString(sql.AsSpan(start, end - start))));
+
             offset = end + suffix.Length;
         }
 
@@ -106,6 +124,7 @@ public sealed class MySqlNativeUuidSqlTests : IDisposable
         builder.UseMySql(
             "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
             MySqlServerVersion.MariaDb(new Version(10, 11, 0)));
+
         builder.UseMySqlSafeMigrations();
 
         return new SafeMigrationDbContext(builder.Options);

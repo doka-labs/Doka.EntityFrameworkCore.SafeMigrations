@@ -24,10 +24,14 @@ public sealed partial class SafeMigrationModelManagedDataTests
 
         if (knownExistingTable)
         {
-            Accept(projection,
-                Operation(new EnsureTableIntent(
-                    new ExpectedTableDefinition("other_roles", RoleTable().Columns),
-                    SafeMigrationTableMode.ConvergenceContainer)),
+            Accept(
+                projection,
+                Operation(
+                    new EnsureTableIntent(
+                        new ExpectedTableDefinition("other_roles",
+                            RoleTable()
+                                .Columns),
+                        SafeMigrationTableMode.ConvergenceContainer)),
                 SafeMigrationObservedState.Matching);
         }
 
@@ -35,16 +39,24 @@ public sealed partial class SafeMigrationModelManagedDataTests
         var version = projection.ModelManagedDataChangeVersion;
 
         // Act
-        ObserveAppliedMutation(projection, mutation,
-            kind == "ensure" ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.TransitionReady);
+        ObserveAppliedMutation(
+            projection,
+            mutation,
+            kind == "ensure"
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.TransitionReady);
 
         var earlier = projection.Project(RoleEnsure(), Live(SafeMigrationObservedState.Matching));
         var current = projection.Project(mutation, Live(SafeMigrationObservedState.Different));
 
         // Assert
         AssertSideEffectsUnknown(earlier);
-        Assert.Equal(kind == "delete" ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.Matching,
+        Assert.Equal(
+            kind == "delete"
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.Matching,
             current.ObservedState);
+
         Assert.True(current.PostconditionSatisfied);
         Assert.False(current.IsModelManagedProjectionUnknown);
         Assert.True(projection.ModelManagedDataChangeVersion > version);
@@ -95,20 +107,40 @@ public sealed partial class SafeMigrationModelManagedDataTests
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        var original = Operation(new EnsureModelManagedDataIntent(
-            "roles", ["id"], ["int"], ["id", "name", "description"],
-            ["int", "varchar(64)", "varchar(256)"],
-            new object?[,] { { 1, "administrator", "Built-in role" } }, schema: null, uniqueKeys: null));
+        var original = Operation(
+            new EnsureModelManagedDataIntent(
+                "roles",
+                ["id"],
+                ["int"],
+                ["id", "name", "description"],
+                ["int", "varchar(64)", "varchar(256)"],
+                new object?[,] { { 1, "administrator", "Built-in role" } },
+                schema: null,
+                uniqueKeys: null));
 
         Accept(projection, original, SafeMigrationObservedState.Matching);
 
-        var keyOnly = Operation(new EnsureModelManagedDataIntent(
-            "roles", ["id"], ["int"], ["id"], ["int"],
-            new object?[,] { { 1 } }, schema: null, uniqueKeys: null));
+        var keyOnly = Operation(
+            new EnsureModelManagedDataIntent(
+                "roles",
+                ["id"],
+                ["int"],
+                ["id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                schema: null,
+                uniqueKeys: null));
 
-        var untouchedColumn = Operation(new EnsureModelManagedDataIntent(
-            "roles", ["id"], ["int"], ["id", "description"], ["int", "varchar(256)"],
-            new object?[,] { { 1, "Built-in role" } }, schema: null, uniqueKeys: null));
+        var untouchedColumn = Operation(
+            new EnsureModelManagedDataIntent(
+                "roles",
+                ["id"],
+                ["int"],
+                ["id", "description"],
+                ["int", "varchar(256)"],
+                new object?[,] { { 1, "Built-in role" } },
+                schema: null,
+                uniqueKeys: null));
 
         // Act
         ObserveAppliedMutation(projection, RoleUpdate(), SafeMigrationObservedState.TransitionReady);
@@ -160,7 +192,9 @@ public sealed partial class SafeMigrationModelManagedDataTests
         var version = projection.ModelManagedDataChangeVersion;
 
         // Act
-        ObserveAppliedMutation(projection, RoleEnsure(2, "member", false),
+        ObserveAppliedMutation(
+            projection,
+            RoleEnsure(2, "member", false),
             SafeMigrationObservedState.PrerequisiteMissing);
 
         var earlier = projection.Project(RoleEnsure(), Live(SafeMigrationObservedState.Different));
@@ -232,14 +266,20 @@ public sealed partial class SafeMigrationModelManagedDataTests
         // Act
         var projected = projection.Project(operation, live);
         var decision = SafeMigrationDecisionPlanner.Plan(
-            operation.Intent.Kind, projected.ObservedState, operation.Policy, projected.RepairCapability);
+            operation.Intent.Kind,
+            projected.ObservedState,
+            operation.Policy,
+            projected.RepairCapability);
 
         // Assert
         Assert.Same(live, projected);
         Assert.False(projected.IsModelManagedProjectionUnknown);
-        Assert.Equal(state == SafeMigrationObservedState.DataBlocked
-            ? SafeMigrationAction.RejectDataBlocked
-            : SafeMigrationAction.RejectDifferent, decision.Action);
+        Assert.Equal(
+            state == SafeMigrationObservedState.DataBlocked
+                ? SafeMigrationAction.RejectDataBlocked
+                : SafeMigrationAction.RejectDifferent,
+            decision.Action);
+
         Assert.Equal(0, projection.ModelManagedDataChangeVersion);
     }
 
@@ -249,7 +289,9 @@ public sealed partial class SafeMigrationModelManagedDataTests
     [InlineData("insert")]
     [InlineData("update")]
     [InlineData("delete")]
-    public void SideEffectsProviderMutationRevokesEarlierExactRows(string kind)
+    public void SideEffectsProviderMutationRevokesEarlierExactRows(
+        string kind
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
@@ -273,7 +315,9 @@ public sealed partial class SafeMigrationModelManagedDataTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void SideEffectsRepairInvalidatesRowsOnlyWhenItMutatesData(bool mutatesData)
+    public void SideEffectsRepairInvalidatesRowsOnlyWhenItMutatesData(
+        bool mutatesData
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
@@ -281,18 +325,25 @@ public sealed partial class SafeMigrationModelManagedDataTests
         Accept(projection, RoleEnsure(), SafeMigrationObservedState.Matching);
 
         var operation = new SafeMigrationOperation(
-            new EnsureColumnIntent("other_roles",
+            new EnsureColumnIntent(
+                "other_roles",
                 new ExpectedColumnDefinition("name", typeof(string), false, "varchar(64)")),
             SafeMigrationPolicy.RepairIfSafe);
 
         var analysis = new SafeMigrationProviderAnalysis(
-            SafeMigrationObservedState.Different, SafeMigrationRepairCapability.Safe, false, "repair_test")
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.Safe,
+            false,
+            "repair_test")
         {
             RepairMutatesData = mutatesData,
         };
 
         var decision = SafeMigrationDecisionPlanner.Plan(
-            operation.Intent.Kind, analysis.ObservedState, operation.Policy, analysis.RepairCapability);
+            operation.Intent.Kind,
+            analysis.ObservedState,
+            operation.Policy,
+            analysis.RepairCapability);
 
         var version = projection.ModelManagedDataChangeVersion;
 
@@ -323,22 +374,35 @@ public sealed partial class SafeMigrationModelManagedDataTests
     [InlineData("ensure")]
     [InlineData("update")]
     [InlineData("delete")]
-    public void SideEffectsManagedMutationRevokesEarlierUniqueKeyProof(string kind)
+    public void SideEffectsManagedMutationRevokesEarlierUniqueKeyProof(
+        string kind
+    )
     {
         // Arrange
         var projection = ProjectionWithNewRoleTable();
 
-        ObserveAppliedMutation(projection, RoleEnsure(1, "administrator", true),
+        ObserveAppliedMutation(
+            projection,
+            RoleEnsure(1, "administrator", true),
             SafeMigrationObservedState.PrerequisiteMissing);
 
-        var index = Operation(new EnsureIndexIntent(new ExpectedIndexDefinition(
-            "ux_roles_name", "roles", [new ExpectedIndexKeyDefinition(column: "name")], unique: true)));
+        var index = Operation(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "ux_roles_name",
+                    "roles",
+                    [new ExpectedIndexKeyDefinition(column: "name")],
+                    unique: true)));
 
         var mutation = SideEffectsManagedOperation(kind, "other_roles");
 
         // Act
-        ObserveAppliedMutation(projection, mutation,
-            kind == "ensure" ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.TransitionReady);
+        ObserveAppliedMutation(
+            projection,
+            mutation,
+            kind == "ensure"
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.TransitionReady);
 
         var projected = projection.Project(index, Live(SafeMigrationObservedState.PrerequisiteMissing));
 
@@ -353,10 +417,15 @@ public sealed partial class SafeMigrationModelManagedDataTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void SideEffectsCurrentAbsenceDoesNotResurrectOldDependencyBlockage(bool acceptedDeletion)
+    public void SideEffectsCurrentAbsenceDoesNotResurrectOldDependencyBlockage(
+        bool acceptedDeletion
+    )
     {
         // Arrange
-        var projection = acceptedDeletion ? new SafeMigrationPreflightProjection() : ProjectionWithNewRoleTable();
+        var projection = acceptedDeletion
+            ? new SafeMigrationPreflightProjection()
+            : ProjectionWithNewRoleTable();
+
         var deletion = SideEffectsParentDeletion();
 
         if (acceptedDeletion)
@@ -364,13 +433,18 @@ public sealed partial class SafeMigrationModelManagedDataTests
             ObserveAppliedMutation(projection, deletion, SafeMigrationObservedState.TransitionReady);
         }
 
-        var live = EvidenceAnalysis(SafeMigrationObservedState.DataBlocked,
-            [SafeMigrationModelManagedRowState.Source], [1]);
+        var live = EvidenceAnalysis(
+            SafeMigrationObservedState.DataBlocked,
+            [SafeMigrationModelManagedRowState.Source],
+            [1]);
 
         // Act
         var projected = projection.Project(deletion, live);
         var decision = SafeMigrationDecisionPlanner.Plan(
-            deletion.Intent.Kind, projected.ObservedState, deletion.Policy, projected.RepairCapability);
+            deletion.Intent.Kind,
+            projected.ObservedState,
+            deletion.Policy,
+            projected.RepairCapability);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, projected.ObservedState);
@@ -384,7 +458,9 @@ public sealed partial class SafeMigrationModelManagedDataTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void SideEffectsPresentParentCannotOverrideIncomingDependencyBlockage(bool parentWasInserted)
+    public void SideEffectsPresentParentCannotOverrideIncomingDependencyBlockage(
+        bool parentWasInserted
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
@@ -400,8 +476,10 @@ public sealed partial class SafeMigrationModelManagedDataTests
 
         var parentProof = projection.Project(RoleEnsure(), Live(SafeMigrationObservedState.Different));
         var deletion = SideEffectsParentDeletion();
-        var live = EvidenceAnalysis(SafeMigrationObservedState.DataBlocked,
-            [SafeMigrationModelManagedRowState.Source], [1]);
+        var live = EvidenceAnalysis(
+            SafeMigrationObservedState.DataBlocked,
+            [SafeMigrationModelManagedRowState.Source],
+            [1]);
 
         // Act
         var projected = projection.Project(deletion, live);
@@ -446,26 +524,40 @@ public sealed partial class SafeMigrationModelManagedDataTests
             Accept(projection, RoleEnsure(), SafeMigrationObservedState.Matching);
         }
 
-        var childTable = insertedChildIsReferenced ? "user_roles" : "unrelated_roles";
-        var definition = new ExpectedTableDefinition(childTable,
-        [
-            new ExpectedColumnDefinition("id", typeof(int), isNullable: false, storeType: "int"),
-            new ExpectedColumnDefinition("role_id", typeof(int), isNullable: false, storeType: "int"),
-        ]);
+        var childTable = insertedChildIsReferenced
+            ? "user_roles"
+            : "unrelated_roles";
 
-        Accept(projection,
+        var definition = new ExpectedTableDefinition(
+            childTable,
+            [
+                new ExpectedColumnDefinition("id", typeof(int), isNullable: false, storeType: "int"),
+                new ExpectedColumnDefinition("role_id", typeof(int), isNullable: false, storeType: "int"),
+            ]);
+
+        Accept(
+            projection,
             Operation(new EnsureTableIntent(definition, SafeMigrationTableMode.StrictDefinition)),
             SafeMigrationObservedState.Missing);
 
-        var child = Operation(new EnsureModelManagedDataIntent(
-            childTable, ["id"], ["int"], ["id", "role_id"], ["int", "int"],
-            new object?[,] { { 11, 1 } }, schema: null, uniqueKeys: null));
+        var child = Operation(
+            new EnsureModelManagedDataIntent(
+                childTable,
+                ["id"],
+                ["int"],
+                ["id", "role_id"],
+                ["int", "int"],
+                new object?[,] { { 11, 1 } },
+                schema: null,
+                uniqueKeys: null));
 
         ObserveAppliedMutation(projection, child, SafeMigrationObservedState.PrerequisiteMissing);
 
         var deletion = SideEffectsParentDeletion();
-        var live = EvidenceAnalysis(SafeMigrationObservedState.TransitionReady,
-            [SafeMigrationModelManagedRowState.Source], [0]);
+        var live = EvidenceAnalysis(
+            SafeMigrationObservedState.TransitionReady,
+            [SafeMigrationModelManagedRowState.Source],
+            [0]);
 
         // Act
         var projected = projection.Project(deletion, live);
@@ -504,8 +596,14 @@ public sealed partial class SafeMigrationModelManagedDataTests
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        var foreignKey = Operation(new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition(
-            "fk_user_roles_roles", "user_roles", ["role_id"], "roles", ["id"])));
+        var foreignKey = Operation(
+            new EnsureForeignKeyIntent(
+                new ExpectedForeignKeyDefinition(
+                    "fk_user_roles_roles",
+                    "user_roles",
+                    ["role_id"],
+                    "roles",
+                    ["id"])));
 
         SideEffectsObserveAcceptedForeignKey(projection, foreignKey, replayedForeignKey);
 
@@ -513,12 +611,16 @@ public sealed partial class SafeMigrationModelManagedDataTests
         var deletion = dependencyIsModeled
             ? SideEffectsParentDeletion()
             : SideEffectsManagedOperation("delete", "roles");
+
         var live = Live(SafeMigrationObservedState.TransitionReady);
 
         // Act
         var projected = projection.Project(deletion, live);
         var decision = SafeMigrationDecisionPlanner.Plan(
-            deletion.Intent.Kind, projected.ObservedState, deletion.Policy, projected.RepairCapability);
+            deletion.Intent.Kind,
+            projected.ObservedState,
+            deletion.Policy,
+            projected.RepairCapability);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Matching, foreignKeyProof.ObservedState);
@@ -554,9 +656,18 @@ public sealed partial class SafeMigrationModelManagedDataTests
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        var principalTable = foreignKeyWasDropped ? "roles" : "unrelated_roles";
-        var foreignKey = Operation(new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition(
-            "fk_user_roles_parent", "user_roles", ["role_id"], principalTable, ["id"])));
+        var principalTable = foreignKeyWasDropped
+            ? "roles"
+            : "unrelated_roles";
+
+        var foreignKey = Operation(
+            new EnsureForeignKeyIntent(
+                new ExpectedForeignKeyDefinition(
+                    "fk_user_roles_parent",
+                    "user_roles",
+                    ["role_id"],
+                    principalTable,
+                    ["id"])));
 
         SideEffectsObserveAcceptedForeignKey(projection, foreignKey, replayedForeignKey);
 
@@ -564,7 +675,9 @@ public sealed partial class SafeMigrationModelManagedDataTests
 
         if (foreignKeyWasDropped)
         {
-            Accept(projection, Operation(new DropForeignKeyIntent("fk_user_roles_parent", "user_roles")),
+            Accept(
+                projection,
+                Operation(new DropForeignKeyIntent("fk_user_roles_parent", "user_roles")),
                 SafeMigrationObservedState.Matching);
         }
 
@@ -574,7 +687,10 @@ public sealed partial class SafeMigrationModelManagedDataTests
         // Act
         var projected = projection.Project(deletion, live);
         var decision = SafeMigrationDecisionPlanner.Plan(
-            deletion.Intent.Kind, projected.ObservedState, deletion.Policy, projected.RepairCapability);
+            deletion.Intent.Kind,
+            projected.ObservedState,
+            deletion.Policy,
+            projected.RepairCapability);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Matching, foreignKeyProof.ObservedState);
@@ -606,7 +722,8 @@ public sealed partial class SafeMigrationModelManagedDataTests
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
 
-        Accept(projection,
+        Accept(
+            projection,
             Operation(new EnsureTableIntent(RoleTable(), SafeMigrationTableMode.ConvergenceContainer)),
             SafeMigrationObservedState.Matching);
 
@@ -614,7 +731,11 @@ public sealed partial class SafeMigrationModelManagedDataTests
         {
             MigrationOperation removal = dropTable
                 ? new DropTableOperation { Name = "user_roles" }
-                : new DropColumnOperation { Table = "user_roles", Name = "role_id" };
+                : new DropColumnOperation
+                {
+                    Table = "user_roles",
+                    Name = "role_id",
+                };
 
             projection.ObserveProviderPostcondition(removal);
         }
@@ -627,24 +748,39 @@ public sealed partial class SafeMigrationModelManagedDataTests
             Accept(projection, Operation(removal), SafeMigrationObservedState.Matching);
         }
 
-        var parentFact = parentIsAbsent ? SideEffectsManagedOperation("delete", "roles") : RoleEnsure();
+        var parentFact = parentIsAbsent
+            ? SideEffectsManagedOperation("delete", "roles")
+            : RoleEnsure();
 
-        Accept(projection, parentFact,
-            parentIsAbsent ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.Matching);
+        Accept(
+            projection,
+            parentFact,
+            parentIsAbsent
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.Matching);
 
         var parentProof = projection.Project(parentFact, Live(SafeMigrationObservedState.Different));
         var deletion = SideEffectsParentDeletion();
-        var live = EvidenceAnalysis(SafeMigrationObservedState.TransitionReady,
-            [SafeMigrationModelManagedRowState.Source], [0]);
+        var live = EvidenceAnalysis(
+            SafeMigrationObservedState.TransitionReady,
+            [SafeMigrationModelManagedRowState.Source],
+            [0]);
 
         // Act
         var projected = projection.Project(deletion, live);
         var decision = SafeMigrationDecisionPlanner.Plan(
-            deletion.Intent.Kind, projected.ObservedState, deletion.Policy, projected.RepairCapability);
+            deletion.Intent.Kind,
+            projected.ObservedState,
+            deletion.Policy,
+            projected.RepairCapability);
 
         // Assert
-        Assert.Equal(parentIsAbsent ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.Matching,
+        Assert.Equal(
+            parentIsAbsent
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.Matching,
             parentProof.ObservedState);
+
         Assert.True(parentProof.PostconditionSatisfied);
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, projected.ObservedState);
         Assert.Equal("projected_prerequisite_missing", projected.Code);
@@ -660,23 +796,37 @@ public sealed partial class SafeMigrationModelManagedDataTests
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        var child = Operation(new DeleteModelManagedDataIntent(
-            "user_roles", ["id"], ["int"], new object?[,] { { 11 } },
-            ["id", "role_id"], ["int", "int"], new object?[,] { { 11, 1 } },
-            schema: null, foreignKeys: null));
+        var child = Operation(
+            new DeleteModelManagedDataIntent(
+                "user_roles",
+                ["id"],
+                ["int"],
+                new object?[,] { { 11 } },
+                ["id", "role_id"],
+                ["int", "int"],
+                new object?[,] { { 11, 1 } },
+                schema: null,
+                foreignKeys: null));
 
         var parent = SideEffectsParentDeletion();
 
-        var childLive = EvidenceAnalysis(SafeMigrationObservedState.TransitionReady,
-            [SafeMigrationModelManagedRowState.Source], []);
+        var childLive = EvidenceAnalysis(
+            SafeMigrationObservedState.TransitionReady,
+            [SafeMigrationModelManagedRowState.Source],
+            []);
 
         var childDecision = SafeMigrationDecisionPlanner.Plan(
-            child.Intent.Kind, childLive.ObservedState, child.Policy, childLive.RepairCapability);
+            child.Intent.Kind,
+            childLive.ObservedState,
+            child.Policy,
+            childLive.RepairCapability);
 
         projection.Observe(child, childLive, childLive, childDecision);
 
-        var parentLive = EvidenceAnalysis(SafeMigrationObservedState.DataBlocked,
-            [SafeMigrationModelManagedRowState.Source], [1]);
+        var parentLive = EvidenceAnalysis(
+            SafeMigrationObservedState.DataBlocked,
+            [SafeMigrationModelManagedRowState.Source],
+            [1]);
 
         // Act
         var projected = projection.Project(parent, parentLive);
@@ -692,7 +842,9 @@ public sealed partial class SafeMigrationModelManagedDataTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void SideEffectsPopulatedTableRenamePreservesExactRows(bool providerRename)
+    public void SideEffectsPopulatedTableRenamePreservesExactRows(
+        bool providerRename
+    )
     {
         // Arrange
         var projection = ProjectionWithNewRoleTable();
@@ -702,18 +854,23 @@ public sealed partial class SafeMigrationModelManagedDataTests
         // Act
         if (providerRename)
         {
-            projection.ObserveProviderPostcondition(new RenameTableOperation
-            {
-                Name = "roles", NewName = "application_roles",
-            });
+            projection.ObserveProviderPostcondition(
+                new RenameTableOperation
+                {
+                    Name = "roles",
+                    NewName = "application_roles",
+                });
         }
         else
         {
-            Accept(projection, Operation(new RenameTableIntent("roles", newName: "application_roles")),
+            Accept(
+                projection,
+                Operation(new RenameTableIntent("roles", newName: "application_roles")),
                 SafeMigrationObservedState.Matching);
         }
 
-        var projected = projection.Project(RoleEnsure("application_roles"),
+        var projected = projection.Project(
+            RoleEnsure("application_roles"),
             Live(SafeMigrationObservedState.PrerequisiteMissing));
 
         // Assert
@@ -727,7 +884,9 @@ public sealed partial class SafeMigrationModelManagedDataTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void SideEffectsPopulatedColumnRenameCannotInventMissingRows(bool providerRename)
+    public void SideEffectsPopulatedColumnRenameCannotInventMissingRows(
+        bool providerRename
+    )
     {
         // Arrange
         var projection = ProjectionWithNewRoleTable();
@@ -737,18 +896,24 @@ public sealed partial class SafeMigrationModelManagedDataTests
         // Act
         if (providerRename)
         {
-            projection.ObserveProviderPostcondition(new RenameColumnOperation
-            {
-                Table = "roles", Name = "name", NewName = "display_name",
-            });
+            projection.ObserveProviderPostcondition(
+                new RenameColumnOperation
+                {
+                    Table = "roles",
+                    Name = "name",
+                    NewName = "display_name",
+                });
         }
         else
         {
-            Accept(projection, Operation(new RenameColumnIntent("name", "roles", "display_name")),
+            Accept(
+                projection,
+                Operation(new RenameColumnIntent("name", "roles", "display_name")),
                 SafeMigrationObservedState.Matching);
         }
 
-        var projected = projection.Project(RoleEnsureWithDisplayName(),
+        var projected = projection.Project(
+            RoleEnsureWithDisplayName(),
             Live(SafeMigrationObservedState.PrerequisiteMissing));
 
         // Assert
@@ -760,7 +925,9 @@ public sealed partial class SafeMigrationModelManagedDataTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void SideEffectsDroppedAndRecreatedTableCannotRetainOldRows(bool providerDrop)
+    public void SideEffectsDroppedAndRecreatedTableCannotRetainOldRows(
+        bool providerDrop
+    )
     {
         // Arrange
         var projection = ProjectionWithNewRoleTable();
@@ -794,13 +961,29 @@ public sealed partial class SafeMigrationModelManagedDataTests
     ) => kind switch
     {
         "ensure" => RoleEnsure(table),
-        "update" => Operation(new UpdateModelManagedDataIntent(
-            table, ["id"], ["int"], new object?[,] { { 1 } }, ["name"], ["varchar(64)"],
-            new object?[,] { { "administrator" } }, new object?[,] { { "owner" } },
-            schema: null, uniqueKeys: null)),
-        "delete" => Operation(new DeleteModelManagedDataIntent(
-            table, ["id"], ["int"], new object?[,] { { 1 } }, ["id", "name"], ["int", "varchar(64)"],
-            new object?[,] { { 1, "administrator" } }, schema: null, foreignKeys: null)),
+        "update" => Operation(
+            new UpdateModelManagedDataIntent(
+                table,
+                ["id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                ["name"],
+                ["varchar(64)"],
+                new object?[,] { { "administrator" } },
+                new object?[,] { { "owner" } },
+                schema: null,
+                uniqueKeys: null)),
+        "delete" => Operation(
+            new DeleteModelManagedDataIntent(
+                table,
+                ["id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                ["id", "name"],
+                ["int", "varchar(64)"],
+                new object?[,] { { 1, "administrator" } },
+                schema: null,
+                foreignKeys: null)),
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
@@ -810,50 +993,84 @@ public sealed partial class SafeMigrationModelManagedDataTests
         bool replayedForeignKey
     )
     {
-        var definition = Assert.IsType<EnsureForeignKeyIntent>(operation.Intent).Definition;
+        var definition = Assert.IsType<EnsureForeignKeyIntent>(operation.Intent)
+            .Definition;
+
         var live = new SafeMigrationProviderAnalysis(
-            replayedForeignKey ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Missing,
-            SafeMigrationRepairCapability.None, replayedForeignKey, "test_live")
+            replayedForeignKey
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Missing,
+            SafeMigrationRepairCapability.None,
+            replayedForeignKey,
+            "test_live")
         {
-            MatchedObjectName = replayedForeignKey ? definition.Name : null,
+            MatchedObjectName = replayedForeignKey
+                ? definition.Name
+                : null,
         };
 
         var projected = projection.Project(operation, live);
         var decision = SafeMigrationDecisionPlanner.Plan(
-            operation.Intent.Kind, projected.ObservedState, operation.Policy, projected.RepairCapability);
+            operation.Intent.Kind,
+            projected.ObservedState,
+            operation.Policy,
+            projected.RepairCapability);
 
-        Assert.Equal(replayedForeignKey ? SafeMigrationAction.NoOp : SafeMigrationAction.Apply, decision.Action);
+        Assert.Equal(
+            replayedForeignKey
+                ? SafeMigrationAction.NoOp
+                : SafeMigrationAction.Apply,
+            decision.Action);
+
         projection.Observe(operation, live, projected, decision);
     }
 
-    private static SafeMigrationOperation SideEffectsParentDeletion() => Operation(new DeleteModelManagedDataIntent(
-        "roles", ["id"], ["int"], new object?[,] { { 1 } },
-        ["id", "name"], ["int", "varchar(64)"], new object?[,] { { 1, "administrator" } },
-        schema: null,
-        foreignKeys: [new ExpectedModelManagedDataForeignKeyDefinition("user_roles", ["role_id"], ["id"])]));
+    private static SafeMigrationOperation SideEffectsParentDeletion() => Operation(
+        new DeleteModelManagedDataIntent(
+            "roles",
+            ["id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["id", "name"],
+            ["int", "varchar(64)"],
+            new object?[,] { { 1, "administrator" } },
+            schema: null,
+            foreignKeys: [new ExpectedModelManagedDataForeignKeyDefinition("user_roles", ["role_id"], ["id"])]));
 
-    private static MigrationOperation SideEffectsProviderMutation(string kind) => kind switch
+    private static MigrationOperation SideEffectsProviderMutation(
+        string kind
+    ) => kind switch
     {
         "insert" => new InsertDataOperation
         {
-            Table = "other_roles", Columns = ["id", "name"], ColumnTypes = ["int", "varchar(64)"],
+            Table = "other_roles",
+            Columns = ["id", "name"],
+            ColumnTypes = ["int", "varchar(64)"],
             Values = new object?[,] { { 1, "owner" } },
         },
         "update" => new UpdateDataOperation
         {
-            Table = "other_roles", KeyColumns = ["id"], KeyColumnTypes = ["int"],
-            KeyValues = new object?[,] { { 1 } }, Columns = ["name"], ColumnTypes = ["varchar(64)"],
+            Table = "other_roles",
+            KeyColumns = ["id"],
+            KeyColumnTypes = ["int"],
+            KeyValues = new object?[,] { { 1 } },
+            Columns = ["name"],
+            ColumnTypes = ["varchar(64)"],
             Values = new object?[,] { { "owner" } },
         },
         "delete" => new DeleteDataOperation
         {
-            Table = "other_roles", KeyColumns = ["id"], KeyColumnTypes = ["int"],
+            Table = "other_roles",
+            KeyColumns = ["id"],
+            KeyColumnTypes = ["int"],
             KeyValues = new object?[,] { { 1 } },
         },
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
-    private static void AssertSideEffectsUnknown(SafeMigrationProviderAnalysis analysis)
+    private static void AssertSideEffectsUnknown(
+        SafeMigrationProviderAnalysis analysis
+    )
     {
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
         Assert.Equal("projected_model_managed_data_state_unknown", analysis.Code);

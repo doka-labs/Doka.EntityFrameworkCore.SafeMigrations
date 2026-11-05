@@ -30,6 +30,7 @@ internal static class SafeMigrationExpectedIndexTransitions
 
         var tables = new Dictionary<TableKey, Dictionary<string, ExpectedIndexDefinition>>(
             new TableKeyComparer(normalizeSchema, tableComparer));
+
         foreach (var operation in operations.OfType<SafeMigrationOperation>())
         {
             Apply(tables, operation.Intent, normalizeSchema);
@@ -83,9 +84,12 @@ internal static class SafeMigrationExpectedIndexTransitions
             case EnsureIndexIntent value:
                 GetOrAdd(tables, value.Definition.Schema, value.Definition.Table)[value.Definition.Name] =
                     value.Definition;
+
                 break;
             case DropIndexIntent value:
-                Find(tables, value.Schema, value.Table)?.Remove(value.Name);
+                Find(tables, value.Schema, value.Table)
+                    ?.Remove(value.Name);
+
                 break;
             case RenameIndexIntent value:
                 RenameIndex(tables, value);
@@ -132,9 +136,10 @@ internal static class SafeMigrationExpectedIndexTransitions
     )
     {
         var normalizedSchema = normalizeSchema(schema);
-        foreach (var key in tables.Keys
-                     .Where(key => StringComparer.Ordinal.Equals(normalizeSchema(key.Schema), normalizedSchema))
-                     .ToArray())
+        foreach (var key in tables
+            .Keys
+            .Where(key => StringComparer.Ordinal.Equals(normalizeSchema(key.Schema), normalizedSchema))
+            .ToArray())
         {
             tables.Remove(key);
         }
@@ -175,8 +180,14 @@ internal static class SafeMigrationExpectedIndexTransitions
 
             indexes[pair.Key] = Copy(
                 pair.Value,
-                keys: pair.Value.Keys.Select(key => RenameKey(key, intent.Name, intent.NewName)).ToArray(),
-                includedColumns: pair.Value.IncludedColumns
+                keys: pair
+                    .Value
+                    .Keys
+                    .Select(key => RenameKey(key, intent.Name, intent.NewName))
+                    .ToArray(),
+                includedColumns: pair
+                    .Value
+                    .IncludedColumns
                     .Select(column => StringComparer.Ordinal.Equals(column, intent.Name)
                         ? intent.NewName
                         : column)
@@ -189,9 +200,11 @@ internal static class SafeMigrationExpectedIndexTransitions
         DropColumnIntent intent
     )
     {
-        var dependency = Find(tables, intent.Schema, intent.Table)?
+        var dependency = Find(tables, intent.Schema, intent.Table)
+            ?
             .Values
             .FirstOrDefault(index => MayDependOnColumn(index, intent.Name));
+
         if (dependency is null)
         {
             return;

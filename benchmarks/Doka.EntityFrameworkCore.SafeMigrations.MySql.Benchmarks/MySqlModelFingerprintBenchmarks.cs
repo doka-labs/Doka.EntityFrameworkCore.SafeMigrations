@@ -10,6 +10,13 @@ public class MySqlModelFingerprintBenchmarks : IDisposable
     [Params(10, 100, 1000)]
     public int EntityCount { get; set; }
 
+    /// <summary>Releases the owned fingerprint model context.</summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
     /// <summary>Builds the design-time fingerprint model outside the measurement.</summary>
     [GlobalSetup]
     public void Setup()
@@ -22,6 +29,7 @@ public class MySqlModelFingerprintBenchmarks : IDisposable
             1000 => new MySqlFingerprintContext<Fingerprint1000>(1000),
             _ => throw new InvalidOperationException("The fingerprint entity count is not a retained benchmark case."),
         };
+
         _model = _context.GetService<IDesignTimeModel>()
             .Model;
     }
@@ -29,18 +37,12 @@ public class MySqlModelFingerprintBenchmarks : IDisposable
     /// <summary>Creates the relational model fingerprint for the configured entity count.</summary>
     /// <returns>The fingerprint length.</returns>
     [Benchmark]
-    public int CreateFingerprint() => SafeMigrationModelFingerprint.Create(_model, "doka_mysql").Length;
+    public int CreateFingerprint() => SafeMigrationModelFingerprint.Create(_model, "doka_mysql")
+        .Length;
 
     /// <summary>Disposes the fingerprint model context after measurement.</summary>
     [GlobalCleanup]
     public void Cleanup() => Dispose();
-
-    /// <summary>Releases the owned fingerprint model context.</summary>
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
 
     /// <summary>Releases managed resources owned by this benchmark fixture.</summary>
     /// <param name="disposing">Whether managed resources should be released.</param>

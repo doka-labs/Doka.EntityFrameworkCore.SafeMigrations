@@ -24,7 +24,10 @@ public sealed class SplitPackageDbContext(
         modelBuilder.Entity<SplitPackageEntity>(entity =>
         {
             entity.HasKey(value => value.Id);
-            entity.Property(value => value.Name).HasMaxLength(128).IsRequired();
+            entity
+                .Property(value => value.Name)
+                .HasMaxLength(128)
+                .IsRequired();
         });
     }
 }

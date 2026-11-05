@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the TablesCatalogSnapshotSafety migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlTablesCatalogSnapshotSafetyIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlTablesCatalogSnapshotSafetyIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlTablesCatalogSnapshotSafetyIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlTablesCatalogSnapshotSafetyIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>
     /// Catalog TEXT columns remain snapshot-compatible regardless of the session temporary-table engine.
@@ -49,10 +51,14 @@ public sealed partial class MySqlTablesCatalogSnapshotSafetyIntegrationTests : M
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         AddSnapshotPadding(builder);
-        var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+        var operations = builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
 
         // Act
-        var analysis = await context.GetService<ISafeMigrationProviderAnalyzer>()
+        var analysis = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
             .AnalyzeAsync(context, operations, CancellationToken.None);
 
         // Assert
@@ -87,7 +93,9 @@ public sealed partial class MySqlTablesCatalogSnapshotSafetyIntegrationTests : M
         var qualified = SnapshotCheckOperations(context.Database.ProviderName!, database);
 
         // Act
-        var snapshot = await ClassifySnapshotAsync(connectionString, operation,
+        var snapshot = await ClassifySnapshotAsync(
+            connectionString,
+            operation,
             cancellationToken: CancellationToken.None);
 
         var live = await ClassifySnapshotAsync(connectionString, qualified, cancellationToken: CancellationToken.None);
@@ -138,10 +146,14 @@ public sealed partial class MySqlTablesCatalogSnapshotSafetyIntegrationTests : M
         try
         {
             // Act
-            var snapshot = await ClassifySnapshotAsync(connectionString, operation,
+            var snapshot = await ClassifySnapshotAsync(
+                connectionString,
+                operation,
                 cancellationToken: CancellationToken.None);
 
-            var live = await ClassifySnapshotAsync(connectionString, qualified,
+            var live = await ClassifySnapshotAsync(
+                connectionString,
+                qualified,
                 cancellationToken: CancellationToken.None);
 
             // Assert
@@ -150,14 +162,20 @@ public sealed partial class MySqlTablesCatalogSnapshotSafetyIntegrationTests : M
             AssertSnapshotWasUsed(snapshot);
             Assert.Equal(0, live.SnapshotCreates);
             Assert.Equal(0, live.SnapshotClassifiers);
-            Assert.Equal(1, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `snapshot_parent`;",
-                cancellationToken: CancellationToken.None));
+            Assert.Equal(
+                1,
+                await ScalarIntAsync(
+                    connectionString,
+                    "SELECT COUNT(*) FROM `snapshot_parent`;",
+                    cancellationToken: CancellationToken.None));
         }
         finally
         {
             // WHY: The fixture disposes databases independently; release the cross-database
             // dependency first so cleanup does not depend on their enumeration order.
-            await ExecuteSqlAsync(childConnectionString, "DROP TABLE IF EXISTS `snapshot_child`;",
+            await ExecuteSqlAsync(
+                childConnectionString,
+                "DROP TABLE IF EXISTS `snapshot_child`;",
                 cancellationToken: CancellationToken.None);
         }
     }
@@ -185,6 +203,7 @@ public sealed partial class MySqlTablesCatalogSnapshotSafetyIntegrationTests : M
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
+
         // WHY: Crossing the 512-operation capture boundary proves a denied optimization
         // is not retried for every window of the same otherwise valid analysis call.
         AddSnapshotPadding(builder, count: 600);
@@ -192,7 +211,8 @@ public sealed partial class MySqlTablesCatalogSnapshotSafetyIntegrationTests : M
         // Act
         var result = await ClassifySnapshotAsync(
             connectionString,
-            [.. builder.Operations.Cast<SafeMigrationOperation>()], cancellationToken: CancellationToken.None);
+            [.. builder.Operations.Cast<SafeMigrationOperation>()],
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.All(result.States, state => Assert.Equal(SafeMigrationObservedState.Matching, state));
@@ -223,16 +243,23 @@ public sealed partial class MySqlTablesCatalogSnapshotSafetyIntegrationTests : M
         await using var connection = new CatalogClassificationCountingConnection(new MySqlConnection(connectionString));
         context.Database.SetDbConnection(connection);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
-        await ExecuteSnapshotCommandAsync(connection, "START TRANSACTION READ ONLY;",
+        await ExecuteSnapshotCommandAsync(
+            connection,
+            "START TRANSACTION READ ONLY;",
             cancellationToken: CancellationToken.None);
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         AddSnapshotPadding(builder);
-        var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+        var operations = builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
 
         try
         {
             // Act
-            var analysis = await context.GetService<ISafeMigrationProviderAnalyzer>()
+            var analysis = await context
+                .GetService<ISafeMigrationProviderAnalyzer>()
                 .AnalyzeAsync(context, operations, CancellationToken.None);
 
             var mutationError = await Record.ExceptionAsync(() => ExecuteSnapshotCommandAsync(
@@ -242,10 +269,17 @@ public sealed partial class MySqlTablesCatalogSnapshotSafetyIntegrationTests : M
 
             // Assert
             Assert.All(analysis, entry => Assert.Equal(SafeMigrationObservedState.Matching, entry.ObservedState));
-            Assert.Equal(1792, Assert.IsType<MySqlException>(mutationError).Number);
+            Assert.Equal(1792,
+                Assert.IsType<MySqlException>(mutationError)
+                    .Number);
+
             Assert.Equal(0, connection.CatalogSnapshotClassificationStatementCount);
-            Assert.Equal(0, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `snapshot_padding`;",
-                cancellationToken: CancellationToken.None));
+            Assert.Equal(
+                0,
+                await ScalarIntAsync(
+                    connectionString,
+                    "SELECT COUNT(*) FROM `snapshot_padding`;",
+                    cancellationToken: CancellationToken.None));
         }
         finally
         {
@@ -269,6 +303,7 @@ public sealed partial class MySqlTablesCatalogSnapshotSafetyIntegrationTests : M
             Pooling = true,
             ConnectionReset = false,
         };
+
         TrackOwnedPool(settings.ConnectionString);
 
         await using var context = CreateContext(settings.ConnectionString);
@@ -277,12 +312,16 @@ public sealed partial class MySqlTablesCatalogSnapshotSafetyIntegrationTests : M
         context.Database.SetDbConnection(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         AddSnapshotPadding(builder);
-        var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+        var operations = builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
 
         try
         {
             // Act
-            var analysis = await context.GetService<ISafeMigrationProviderAnalyzer>()
+            var analysis = await context
+                .GetService<ISafeMigrationProviderAnalyzer>()
                 .AnalyzeAsync(context, operations, CancellationToken.None);
 
             // Assert
@@ -324,7 +363,8 @@ public sealed partial class MySqlTablesCatalogSnapshotSafetyIntegrationTests : M
         // Act
         var result = await ClassifySnapshotAsync(
             settings.ConnectionString,
-            [.. builder.Operations.Cast<SafeMigrationOperation>()], cancellationToken: CancellationToken.None);
+            [.. builder.Operations.Cast<SafeMigrationOperation>()],
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(32, result.States.Length);

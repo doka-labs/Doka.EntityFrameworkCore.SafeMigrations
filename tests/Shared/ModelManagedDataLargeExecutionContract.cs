@@ -44,7 +44,9 @@ internal static class ModelManagedDataLargeExecutionContract
         {
             yield return new ModelManagedDataInitialRow(
                 UpdateKeyOffset + ordinal,
-                ordinal % 2 == 0 ? SourceValue : TargetValue);
+                ordinal % 2 == 0
+                    ? SourceValue
+                    : TargetValue);
         }
 
         for (var ordinal = 0; ordinal < DeleteRowCount; ordinal += 2)
@@ -224,11 +226,15 @@ internal sealed class ModelManagedDataLargeExecutionExpectation
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(OperationCount, report.Assessments.Count);
-        Assert.All(report.Assessments, static assessment =>
-            Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
+        Assert.All(
+            report.Assessments,
+            static assessment =>
+                Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
+
         Assert.Contains(
             report.Assessments,
             static assessment => assessment.ObservedState == SafeMigrationObservedState.Matching);
+
         Assert.Contains(
             report.Assessments,
             static assessment => assessment.ObservedState == SafeMigrationObservedState.Missing);
@@ -252,7 +258,7 @@ internal readonly record struct ModelManagedDataMeasuredResult<T>(
 
 internal static class ModelManagedDataLargeExecutionEvidence
 {
-    private static readonly System.Text.Json.JsonSerializerOptions s_serializerOptions = new()
+    private static readonly JsonSerializerOptions s_serializerOptions = new()
     {
         WriteIndented = true,
     };
@@ -273,7 +279,9 @@ internal static class ModelManagedDataLargeExecutionEvidence
         var allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
         var started = Stopwatch.GetTimestamp();
         var result = await action(cancellationToken);
-        var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        var elapsed = Stopwatch.GetElapsedTime(started)
+            .TotalMilliseconds;
+
         var allocated = GC.GetTotalAllocatedBytes(precise: true) - allocatedBefore;
 
         return new ModelManagedDataMeasuredResult<T>(
@@ -298,7 +306,8 @@ internal static class ModelManagedDataLargeExecutionEvidence
         await action(cancellationToken);
 
         return new ModelManagedDataPhaseMeasurement(
-            Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+            Stopwatch.GetElapsedTime(started)
+                .TotalMilliseconds,
             GC.GetTotalAllocatedBytes(precise: true) - allocatedBefore);
     }
 
@@ -339,7 +348,7 @@ internal static class ModelManagedDataLargeExecutionEvidence
             replayAnalysis,
         };
 
-        File.WriteAllBytes(path, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(payload, s_serializerOptions));
+        File.WriteAllBytes(path, JsonSerializer.SerializeToUtf8Bytes(payload, s_serializerOptions));
     }
 
     private static string FindRepositoryRoot(

@@ -61,16 +61,14 @@ internal static class SafeMigrationStateSpaceGenerator
         }
 
         return rows
-            .Select((
-                row,
-                index
-            ) => new SafeMigrationStateScenario(
+            .Select((row,
+                index) => new SafeMigrationStateScenario(
                 index,
                 dimensions
-                    .Select((
-                        dimension,
-                        dimensionIndex
-                    ) => new KeyValuePair<string, string>(dimension.Name, dimension.Values[row[dimensionIndex]]))
+                    .Select((dimension,
+                        dimensionIndex) => new KeyValuePair<string, string>(
+                        dimension.Name,
+                        dimension.Values[row[dimensionIndex]]))
                     .ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal)))
             .ToArray();
     }
@@ -146,7 +144,7 @@ internal static class SafeMigrationStateSpaceGenerator
             for (var rightDimension = leftDimension + 1; rightDimension < row.Length; rightDimension++)
             {
                 if (uncovered.Contains(
-                        new StatePair(leftDimension, row[leftDimension], rightDimension, row[rightDimension])))
+                    new StatePair(leftDimension, row[leftDimension], rightDimension, row[rightDimension])))
                 {
                     score++;
                 }
@@ -195,7 +193,9 @@ internal static class SafeMigrationStateSpaceGenerator
 
             comparison = RightDimension.CompareTo(other.RightDimension);
 
-            return comparison != 0 ? comparison : RightValue.CompareTo(other.RightValue);
+            return comparison != 0
+                ? comparison
+                : RightValue.CompareTo(other.RightValue);
         }
     }
 }

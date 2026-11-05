@@ -5,22 +5,30 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <summary>Guards native unqualified resolution before catalog scope or row queries can be evaluated.</summary>
     /// <param name="intent">The immutable operation and its authored dependencies.</param>
     /// <returns>TRUE for fully qualified operations, otherwise an exact current-schema ownership predicate.</returns>
-    public string BuildObjectIdentityGuard(SafeMigrationIntent intent)
+    public string BuildObjectIdentityGuard(
+        SafeMigrationIntent intent
+    )
     {
-        if (intent is not (EnsureTableIntent or EnsureForeignKeyIntent or DeleteModelManagedDataIntent
-            or DropIndexIntent or RenameIndexIntent))
+        if (intent is not (EnsureTableIntent
+            or EnsureForeignKeyIntent
+            or DeleteModelManagedDataIntent
+            or DropIndexIntent
+            or RenameIndexIntent))
         {
             var owner = PostgreSqlSafeMigrationSchemaIdentity.GetOwner(intent);
 
             return owner is { Table: not null, Schema: null }
-                ? BuildSingleOwnerIdentityGuard(owner.Table,
-                    PostgreSqlSafeMigrationSchemaIdentity.GetOptionalAbsentNativeBinding(intent, null)) : "TRUE";
+                ? BuildSingleOwnerIdentityGuard(
+                    owner.Table,
+                    PostgreSqlSafeMigrationSchemaIdentity.GetOptionalAbsentNativeBinding(intent, null))
+                : "TRUE";
         }
 
         var tables = new HashSet<string>(StringComparer.Ordinal);
         PostgreSqlSafeMigrationSchemaIdentity.CollectUnqualifiedTables(intent, tables);
 
-        return BuildObjectIdentityGuard(tables,
+        return BuildObjectIdentityGuard(
+            tables,
             PostgreSqlSafeMigrationSchemaIdentity.GetOptionalAbsentNativeBinding(intent, null));
     }
 
@@ -28,9 +36,15 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <param name="intent">The immutable operation whose apply/repair branch will execute.</param>
     /// <param name="initialGuard">The existing guard reused for operations without consumed relation names.</param>
     /// <returns>The fresh operation-local native binding proof for execution postflight.</returns>
-    public string BuildPostExecutionObjectIdentityGuard(SafeMigrationIntent intent, string initialGuard)
+    public string BuildPostExecutionObjectIdentityGuard(
+        SafeMigrationIntent intent,
+        string initialGuard
+    )
     {
-        if (intent is not (DropTableIntent or RenameTableIntent or DropIndexIntent or RenameIndexIntent
+        if (intent is not (DropTableIntent
+            or RenameTableIntent
+            or DropIndexIntent
+            or RenameIndexIntent
             or EnsureIndexIntent))
         {
             return initialGuard;
@@ -52,7 +66,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <param name="tables">The exact unqualified native relation bindings.</param>
     /// <param name="optionalAbsentBinding">The source whose local absence cannot execute against a fallback.</param>
     /// <returns>The catalog-only identity guard.</returns>
-    public string BuildObjectIdentityGuard(HashSet<string> tables, string? optionalAbsentBinding = null)
+    public string BuildObjectIdentityGuard(
+        HashSet<string> tables,
+        string? optionalAbsentBinding = null
+    )
     {
         if (tables.Count == 0)
         {
@@ -69,7 +86,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             }
         }
 
-        var predicates = tables.Order(StringComparer.Ordinal)
+        var predicates = tables
+            .Order(StringComparer.Ordinal)
             .Select(table => BuildNativeOwnerPredicate(table, optionalAbsentBinding));
 
         // WHY: Catalog predicates intentionally scope null qualifiers to the
@@ -81,7 +99,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     }
 
     /// <summary>Uses exact quoted native resolution without changing PostgreSQL identifier case.</summary>
-    private string BuildNativeOwnerPredicate(string table, string? optionalAbsentBinding)
+    private string BuildNativeOwnerPredicate(
+        string table,
+        string? optionalAbsentBinding
+    )
     {
         var native = "NOT EXISTS (SELECT 1 FROM pg_catalog.pg_class identity_relation "
             + "JOIN pg_catalog.pg_namespace identity_namespace "
@@ -90,11 +111,15 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             + "AND identity_namespace.nspname <> current_schema())";
 
         return StringComparer.Ordinal.Equals(table, optionalAbsentBinding)
-            ? $"(CASE WHEN {RelationExists(table, null)} THEN ({native}) ELSE TRUE END)" : native;
+            ? $"(CASE WHEN {RelationExists(table, null)} THEN ({native}) ELSE TRUE END)"
+            : native;
     }
 
     /// <summary>Combines the creation-schema prerequisite and native lookup for one exact owner.</summary>
-    private string BuildSingleOwnerIdentityGuard(string table, string? optionalAbsentBinding = null)
+    private string BuildSingleOwnerIdentityGuard(
+        string table,
+        string? optionalAbsentBinding = null
+    )
         => "(current_schema() IS NOT NULL AND " + BuildNativeOwnerPredicate(table, optionalAbsentBinding) + ")";
 
     /// <summary>Builds an exact table plan with runtime-selected current-schema transition alternatives.</summary>
@@ -109,7 +134,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     )
     {
         var plan = Build(operation, exact, includeAnalysisEvidence: false, includeTransitionEvidence: true);
-        if (plan.IsStaticallyUnsupported || alternatives.Count == 0)
+        if (plan.IsStaticallyUnsupported
+            || alternatives.Count == 0)
         {
             return plan;
         }
@@ -118,34 +144,65 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         var postcondition = new StringBuilder("CASE");
         foreach (var (schema, contract) in alternatives)
         {
-            var alternative = Build(operation, contract, includeAnalysisEvidence: false,
+            var alternative = Build(
+                operation,
+                contract,
+                includeAnalysisEvidence: false,
                 includeTransitionEvidence: true);
+
             var condition = "current_schema() = " + Literal(schema);
-            state.Append(" WHEN ").Append(condition).Append(" THEN (").Append(alternative.StateExpression)
+            state
+                .Append(" WHEN ")
+                .Append(condition)
+                .Append(" THEN (")
+                .Append(alternative.StateExpression)
                 .Append(')');
-            postcondition.Append(" WHEN ").Append(condition).Append(" THEN (").Append(alternative.Postcondition)
+
+            postcondition
+                .Append(" WHEN ")
+                .Append(condition)
+                .Append(" THEN (")
+                .Append(alternative.Postcondition)
                 .Append(')');
         }
 
         return plan with
         {
-            StateExpression = state.Append(" ELSE (").Append(plan.StateExpression).Append(") END").ToString(),
-            Postcondition = postcondition.Append(" ELSE (").Append(plan.Postcondition).Append(") END").ToString(),
+            StateExpression = state
+                .Append(" ELSE (")
+                .Append(plan.StateExpression)
+                .Append(") END")
+                .ToString(),
+            Postcondition = postcondition
+                .Append(" ELSE (")
+                .Append(plan.Postcondition)
+                .Append(") END")
+                .ToString(),
         };
     }
 
     /// <summary>Requires the runtime current schema not to activate a statically invalid alias transition.</summary>
     /// <param name="schemas">Candidate schemas whose normalized index or constraint stream is invalid.</param>
     /// <returns>The exact, quoted predicate retaining valid foreign-schema operation streams.</returns>
-    public string BuildRejectedAliasGuard(IReadOnlyList<string> schemas)
-        => schemas.Count == 0 ? "TRUE"
-            : "(" + string.Join(" AND ", schemas.Select(schema =>
-                "current_schema() IS DISTINCT FROM " + Literal(schema))) + ")";
+    public string BuildRejectedAliasGuard(
+        IReadOnlyList<string> schemas
+    )
+        => schemas.Count == 0
+            ? "TRUE"
+            : "("
+            + string.Join(
+                " AND ",
+                schemas.Select(schema =>
+                    "current_schema() IS DISTINCT FROM " + Literal(schema)))
+            + ")";
 
     /// <summary>Requires a connected native owner proof only when this qualifier is the active schema.</summary>
     /// <param name="schema">The authored candidate, not an assumed connection identity.</param>
     /// <param name="guard">The exact native owner proof for its connected unqualified bindings.</param>
     /// <returns>The conditional guard, retaining distinct foreign schemas.</returns>
-    public string BuildConditionalAliasGuard(string schema, string guard)
+    public string BuildConditionalAliasGuard(
+        string schema,
+        string guard
+    )
         => "(CASE WHEN current_schema() = " + Literal(schema) + " THEN (" + guard + ") ELSE TRUE END)";
 }

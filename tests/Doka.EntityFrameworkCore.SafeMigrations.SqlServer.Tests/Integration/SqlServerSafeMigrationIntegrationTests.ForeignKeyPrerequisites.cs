@@ -23,11 +23,17 @@ public sealed class SqlServerSafeMigrationForeignKeyPrerequisitesIntegrationTest
             "CREATE TABLE dbo.valid_parent (Id int NOT NULL CONSTRAINT PK_valid_parent PRIMARY KEY); "
             + "CREATE TABLE dbo.valid_child (Id int NOT NULL, ParentId int NOT NULL); "
             + "INSERT INTO dbo.valid_parent (Id) VALUES (3); "
-            + "INSERT INTO dbo.valid_child (Id, ParentId) VALUES (1, 3);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO dbo.valid_child (Id, ParentId) VALUES (1, 3);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddForeignKeyIfNotExists(
-            "FK_valid_child_parent", "valid_child", ["ParentId"], "valid_parent", ["Id"]);
+            "FK_valid_child_parent",
+            "valid_child",
+            ["ParentId"],
+            "valid_parent",
+            ["Id"]);
 
         // Act
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
@@ -57,17 +63,26 @@ public sealed class SqlServerSafeMigrationForeignKeyPrerequisitesIntegrationTest
             "CREATE TABLE dbo.orphan_parent (Id int NOT NULL CONSTRAINT PK_orphan_parent PRIMARY KEY); "
             + "CREATE TABLE dbo.orphan_child (Id int NOT NULL, ParentId int NOT NULL); "
             + "INSERT INTO dbo.orphan_parent (Id) VALUES (3); "
-            + "INSERT INTO dbo.orphan_child (Id, ParentId) VALUES (1, 4);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO dbo.orphan_child (Id, ParentId) VALUES (1, 4);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddForeignKeyIfNotExists(
-            "FK_orphan_child_parent", "orphan_child", ["ParentId"], "orphan_parent", ["Id"]);
+            "FK_orphan_child_parent",
+            "orphan_child",
+            ["ParentId"],
+            "orphan_parent",
+            ["Id"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-fk-orphan"), cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-fk-orphan"),
+                cancellationToken: CancellationToken.None);
 
         var foreignKeyCount = await ScalarIntAsync(
             connectionString,
@@ -76,7 +91,10 @@ public sealed class SqlServerSafeMigrationForeignKeyPrerequisitesIntegrationTest
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.DataBlocked, Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.DataBlocked,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
         Assert.Equal(0, foreignKeyCount);
     }
 
@@ -93,22 +111,33 @@ public sealed class SqlServerSafeMigrationForeignKeyPrerequisitesIntegrationTest
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        var parentKey = hasCandidateKey ? "CONSTRAINT PK_prereq_parent PRIMARY KEY" : string.Empty;
+        var parentKey = hasCandidateKey
+            ? "CONSTRAINT PK_prereq_parent PRIMARY KEY"
+            : string.Empty;
+
         await ExecuteSqlAsync(
             connectionString,
             $"CREATE TABLE dbo.prereq_parent (Id int NOT NULL {parentKey}); "
             + $"CREATE TABLE dbo.prereq_child (Id int NOT NULL, ParentId {dependentType} NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddForeignKeyIfNotExists(
-            "FK_prereq_child_parent", "prereq_child", ["ParentId"], "prereq_parent", ["Id"]);
+            "FK_prereq_child_parent",
+            "prereq_child",
+            ["ParentId"],
+            "prereq_parent",
+            ["Id"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-fk-prerequisite"), cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-fk-prerequisite"),
+                cancellationToken: CancellationToken.None);
 
         var foreignKeyCount = await ScalarIntAsync(
             connectionString,
@@ -117,7 +146,10 @@ public sealed class SqlServerSafeMigrationForeignKeyPrerequisitesIntegrationTest
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
         Assert.Equal(0, foreignKeyCount);
     }
 }

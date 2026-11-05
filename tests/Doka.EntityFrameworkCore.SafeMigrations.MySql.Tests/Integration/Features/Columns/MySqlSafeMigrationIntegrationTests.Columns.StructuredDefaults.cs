@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the ColumnsStructuredDefaults migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlColumnsStructuredDefaultsIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlColumnsStructuredDefaultsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlColumnsStructuredDefaultsIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlColumnsStructuredDefaultsIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     [Fact]
     public async Task CurrentTimestampDefault_FromEfOperationConvergesAndIsIdempotent()
@@ -25,6 +27,7 @@ public sealed partial class MySqlColumnsStructuredDefaultsIntegrationTests : MyS
                     defaultValueSql: "CURRENT_TIMESTAMP(6)"),
             },
             constraints: table => table.PrimaryKey("pk_timestamp_defaults", value => value.Id));
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var preflight = await runner.AnalyzeAsync(
@@ -45,7 +48,9 @@ public sealed partial class MySqlColumnsStructuredDefaultsIntegrationTests : MyS
             CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
-        Assert.True(Assert.Single(postflight.Assessments).PostconditionSatisfied);
+        Assert.True(Assert.Single(postflight.Assessments)
+            .PostconditionSatisfied);
+
         Assert.Empty(postflight.UnexpectedObjects);
     }
 

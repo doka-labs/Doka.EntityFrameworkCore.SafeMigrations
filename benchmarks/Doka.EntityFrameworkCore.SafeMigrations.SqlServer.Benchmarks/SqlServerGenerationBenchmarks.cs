@@ -12,6 +12,16 @@ public class SqlServerGenerationBenchmarks : IDisposable
     [Params(1, 100, 1000)]
     public int OperationCount { get; set; }
 
+    private SqlServerGenerationContext Context =>
+        _context ?? throw new InvalidOperationException("Setup has not completed.");
+
+    /// <summary>Releases the context owned by this benchmark instance.</summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
     /// <summary>Builds the provider services and operations without including them in the measurement.</summary>
     [GlobalSetup]
     public void Setup()
@@ -33,13 +43,6 @@ public class SqlServerGenerationBenchmarks : IDisposable
     [GlobalCleanup]
     public void Cleanup() => Dispose();
 
-    /// <summary>Releases the context owned by this benchmark instance.</summary>
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
-
     /// <summary>Releases managed resources when the benchmark owner is disposed.</summary>
     /// <param name="disposing">Whether managed resources are eligible for disposal.</param>
     protected virtual void Dispose(
@@ -52,22 +55,26 @@ public class SqlServerGenerationBenchmarks : IDisposable
             _context = null;
         }
     }
-
-    private SqlServerGenerationContext Context =>
-        _context ?? throw new InvalidOperationException("Setup has not completed.");
 }
 
 /// <summary>Measures catalog-plan construction independently of SQL rendering.</summary>
 [MemoryDiagnoser]
 public class SqlServerAnalyzerBenchmarks : IDisposable
 {
-    private SqlServerGenerationContext? _context;
     private SqlServerSafeMigrationCatalogSqlBuilder? _catalogBuilder;
+    private SqlServerGenerationContext? _context;
     private IReadOnlyList<MigrationOperation> _operations = [];
 
     /// <summary>Gets or sets the analyzer operation cardinality.</summary>
     [Params(1, 512, 1000)]
     public int OperationCount { get; set; }
+
+    /// <summary>Releases the context owned by this benchmark instance.</summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
 
     /// <summary>Prepares services and immutable operations before timing begins.</summary>
     [GlobalSetup]
@@ -90,13 +97,6 @@ public class SqlServerAnalyzerBenchmarks : IDisposable
     [GlobalCleanup]
     public void Cleanup() => Dispose();
 
-    /// <summary>Releases the context owned by this benchmark instance.</summary>
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
-
     /// <summary>Releases managed resources when the benchmark owner is disposed.</summary>
     /// <param name="disposing">Whether managed resources are eligible for disposal.</param>
     protected virtual void Dispose(
@@ -115,10 +115,20 @@ public class SqlServerAnalyzerBenchmarks : IDisposable
 [MemoryDiagnoser]
 public class SqlServerRepairBenchmarks : IDisposable
 {
+    private SqlServerSafeMigrationCatalogSqlBuilder? _catalogBuilder;
     private SqlServerGenerationContext? _context;
     private IMigrationsSqlGenerator? _generator;
-    private SqlServerSafeMigrationCatalogSqlBuilder? _catalogBuilder;
     private IReadOnlyList<MigrationOperation> _operations = [];
+
+    private SqlServerGenerationContext Context =>
+        _context ?? throw new InvalidOperationException("Setup has not completed.");
+
+    /// <summary>Releases the context owned by this benchmark instance.</summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
 
     /// <summary>Preconstructs repairs and requires a real safe repair plan for every operation.</summary>
     [GlobalSetup]
@@ -162,13 +172,6 @@ public class SqlServerRepairBenchmarks : IDisposable
     [GlobalCleanup]
     public void Cleanup() => Dispose();
 
-    /// <summary>Releases the context owned by this benchmark instance.</summary>
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
-
     /// <summary>Releases managed resources when the benchmark owner is disposed.</summary>
     /// <param name="disposing">Whether managed resources are eligible for disposal.</param>
     protected virtual void Dispose(
@@ -181,19 +184,26 @@ public class SqlServerRepairBenchmarks : IDisposable
             _context = null;
         }
     }
-
-    private SqlServerGenerationContext Context =>
-        _context ?? throw new InvalidOperationException("Setup has not completed.");
 }
 
 /// <summary>Measures the 384-operation model-managed data workload without fixture construction.</summary>
 [MemoryDiagnoser]
 public class SqlServerModelManagedDataBenchmarks : IDisposable
 {
+    private SqlServerSafeMigrationCatalogSqlBuilder? _catalogBuilder;
     private SqlServerGenerationContext? _context;
     private IMigrationsSqlGenerator? _generator;
-    private SqlServerSafeMigrationCatalogSqlBuilder? _catalogBuilder;
     private IReadOnlyList<MigrationOperation> _operations = [];
+
+    private SqlServerGenerationContext Context =>
+        _context ?? throw new InvalidOperationException("Setup has not completed.");
+
+    /// <summary>Releases the context owned by this benchmark instance.</summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
 
     /// <summary>Creates provider-specific typed data operations before measurement.</summary>
     [GlobalSetup]
@@ -227,13 +237,6 @@ public class SqlServerModelManagedDataBenchmarks : IDisposable
     [GlobalCleanup]
     public void Cleanup() => Dispose();
 
-    /// <summary>Releases the context owned by this benchmark instance.</summary>
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
-
     /// <summary>Releases managed resources when the benchmark owner is disposed.</summary>
     /// <param name="disposing">Whether managed resources are eligible for disposal.</param>
     protected virtual void Dispose(
@@ -246,9 +249,6 @@ public class SqlServerModelManagedDataBenchmarks : IDisposable
             _context = null;
         }
     }
-
-    private SqlServerGenerationContext Context =>
-        _context ?? throw new InvalidOperationException("Setup has not completed.");
 }
 
 /// <summary>Measures canonical model validation and fingerprint creation.</summary>
@@ -256,6 +256,13 @@ public class SqlServerModelManagedDataBenchmarks : IDisposable
 public class SqlServerCanonicalModelBenchmarks : IDisposable
 {
     private SqlServerGenerationContext? _context;
+
+    /// <summary>Releases the context owned by this benchmark instance.</summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
 
     /// <summary>Creates the provider context before timing model validation.</summary>
     [GlobalSetup]
@@ -276,13 +283,6 @@ public class SqlServerCanonicalModelBenchmarks : IDisposable
     /// <summary>Disposes the context owned by this case.</summary>
     [GlobalCleanup]
     public void Cleanup() => Dispose();
-
-    /// <summary>Releases the context owned by this benchmark instance.</summary>
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
 
     /// <summary>Releases managed resources when the benchmark owner is disposed.</summary>
     /// <param name="disposing">Whether managed resources are eligible for disposal.</param>
@@ -336,6 +336,7 @@ internal sealed class SqlServerGenerationContext : DbContext
     {
         optionsBuilder.UseSqlServer(
             "Server=127.0.0.1,1;Database=benchmark;User ID=sa;Password=BenchmarkOnly123!;TrustServerCertificate=True");
+
         optionsBuilder.UseSqlServerSafeMigrations<SqlServerGenerationContext>();
     }
 }

@@ -8,21 +8,26 @@ public sealed class SharedContainerSchedulingTests
     [Theory]
     [InlineData(1)]
     [InlineData(-1)]
-    public async Task RunAsync_ForwardsExactCallerTokenToAction(int maximum)
+    public async Task RunAsync_ForwardsExactCallerTokenToAction(
+        int maximum
+    )
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
         using var scheduler = new SharedContainerCollectionScheduler(
             new SharedContainerExecutionPolicy(maximum, false));
+
         var observed = CancellationToken.None;
 
         // Act
-        var result = await scheduler.RunAsync(token =>
-        {
-            observed = token;
+        var result = await scheduler.RunAsync(
+            token =>
+            {
+                observed = token;
 
-            return Task.FromResult(42);
-        }, cancellation.Token);
+                return Task.FromResult(42);
+            },
+            cancellation.Token);
 
         // Assert
         Assert.Equal(42, result);
@@ -39,13 +44,16 @@ public sealed class SharedContainerSchedulingTests
         var admitted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         // Act
-        var pending = scheduler.RunAsync(async token =>
-        {
-            admitted.SetResult();
-            await Task.Delay(Timeout.Infinite, token);
+        var pending = scheduler.RunAsync(
+            async token =>
+            {
+                admitted.SetResult();
+                await Task.Delay(Timeout.Infinite, token);
 
-            return 0;
-        }, cancellation.Token);
+                return 0;
+            },
+            cancellation.Token);
+
         await admitted.Task.WaitAsync(TimeSpan.FromSeconds(10));
         cancellation.Cancel();
         var failure = await Record.ExceptionAsync(() => pending);
@@ -88,7 +96,11 @@ public sealed class SharedContainerSchedulingTests
 
         // Act
         var policy = SharedContainerExecutionPolicy.Resolve(
-            optionMaximum, optionDisable, attributeMaximum, attributeDisable, processorCount);
+            optionMaximum,
+            optionDisable,
+            attributeMaximum,
+            attributeDisable,
+            processorCount);
 
         // Assert
         Assert.Equal(expectedMaximum, policy.MaximumParallelThreads);
@@ -109,7 +121,9 @@ public sealed class SharedContainerSchedulingTests
         var activeBeforeRelease = 0;
         var startedBeforeRelease = 0;
 
-        async Task<int> RunCollectionAsync(CancellationToken cancellationToken)
+        async Task<int> RunCollectionAsync(
+            CancellationToken cancellationToken
+        )
         {
             var nowActive = Interlocked.Increment(ref active);
 
@@ -133,7 +147,8 @@ public sealed class SharedContainerSchedulingTests
         }
 
         // Act
-        var collections = Enumerable.Range(0, 8)
+        var collections = Enumerable
+            .Range(0, 8)
             .Select(_ => scheduler.RunAsync(RunCollectionAsync, CancellationToken.None))
             .ToArray();
 
@@ -149,7 +164,9 @@ public sealed class SharedContainerSchedulingTests
             release.TrySetResult();
         }
 
-        await Task.WhenAll(collections).WaitAsync(TimeSpan.FromSeconds(10));
+        await Task
+            .WhenAll(collections)
+            .WaitAsync(TimeSpan.FromSeconds(10));
 
         // Assert
         Assert.Equal(2, activeBeforeRelease);
@@ -169,8 +186,11 @@ public sealed class SharedContainerSchedulingTests
 
         // Act
         var observedFailure = await Record.ExceptionAsync(() => scheduler.RunAsync(
-            _ => Task.FromException<int>(failure), CancellationToken.None));
-        var nextResult = await scheduler.RunAsync(_ => Task.FromResult(42), CancellationToken.None)
+            _ => Task.FromException<int>(failure),
+            CancellationToken.None));
+
+        var nextResult = await scheduler
+            .RunAsync(_ => Task.FromResult(42), CancellationToken.None)
             .WaitAsync(TimeSpan.FromSeconds(10));
 
         // Assert
@@ -191,18 +211,23 @@ public sealed class SharedContainerSchedulingTests
 
         // Act
         var first = scheduler.RunAsync(_ => release.Task, CancellationToken.None);
-        var canceled = scheduler.RunAsync(_ =>
-        {
-            canceledCollectionExecuted = true;
+        var canceled = scheduler.RunAsync(
+            _ =>
+            {
+                canceledCollectionExecuted = true;
 
-            return Task.FromResult(2);
-        }, cancellation.Token);
-        var next = scheduler.RunAsync(_ =>
-        {
-            nextCollectionExecuted = true;
+                return Task.FromResult(2);
+            },
+            cancellation.Token);
 
-            return Task.FromResult(3);
-        }, CancellationToken.None);
+        var next = scheduler.RunAsync(
+            _ =>
+            {
+                nextCollectionExecuted = true;
+
+                return Task.FromResult(3);
+            },
+            CancellationToken.None);
 
         cancellation.Cancel();
 
@@ -211,7 +236,9 @@ public sealed class SharedContainerSchedulingTests
 
         release.SetResult(1);
 
-        await Task.WhenAll(first, next).WaitAsync(TimeSpan.FromSeconds(10));
+        await Task
+            .WhenAll(first, next)
+            .WaitAsync(TimeSpan.FromSeconds(10));
 
         // Assert
         Assert.IsAssignableFrom<OperationCanceledException>(cancellationFailure);
@@ -233,12 +260,14 @@ public sealed class SharedContainerSchedulingTests
         cancellation.Cancel();
 
         // Act
-        var failure = await Record.ExceptionAsync(() => scheduler.RunAsync(_ =>
-        {
-            executed = true;
+        var failure = await Record.ExceptionAsync(() => scheduler.RunAsync(
+            _ =>
+            {
+                executed = true;
 
-            return Task.FromResult(1);
-        }, cancellation.Token));
+                return Task.FromResult(1);
+            },
+            cancellation.Token));
 
         // Assert
         Assert.IsAssignableFrom<OperationCanceledException>(failure);
@@ -256,9 +285,22 @@ public sealed class SharedContainerSchedulingTests
         using var configuration = JsonDocument.Parse(File.ReadAllText(configurationPath));
 
         // Assert
-        Assert.True(configuration.RootElement.GetProperty("parallelizeAssembly").GetBoolean());
-        Assert.True(configuration.RootElement.GetProperty("parallelizeTestCollections").GetBoolean());
-        Assert.Equal("conservative", configuration.RootElement.GetProperty("parallelAlgorithm").GetString());
+        Assert.True(configuration
+            .RootElement
+            .GetProperty("parallelizeAssembly")
+            .GetBoolean());
+
+        Assert.True(configuration
+            .RootElement
+            .GetProperty("parallelizeTestCollections")
+            .GetBoolean());
+
+        Assert.Equal("conservative",
+            configuration
+                .RootElement
+                .GetProperty("parallelAlgorithm")
+                .GetString());
+
         Assert.False(configuration.RootElement.TryGetProperty("parallelizeAssemblies", out _));
         Assert.False(configuration.RootElement.TryGetProperty("maxParallelThreads", out _));
     }

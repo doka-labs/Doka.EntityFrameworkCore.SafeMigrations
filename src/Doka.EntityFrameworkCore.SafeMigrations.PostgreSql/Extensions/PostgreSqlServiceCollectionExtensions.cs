@@ -12,7 +12,7 @@ public static class PostgreSqlServiceCollectionExtensions
     /// <returns>The same service collection so additional registrations can be chained.</returns>
     public static IServiceCollection AddPostgreSqlSafeMigrations(
         this IServiceCollection services
-    ) => AddPostgreSqlSafeMigrations(services, typeof(NpgsqlMigrationsSqlGenerator), canonicalContextType: null);
+    ) => services.AddPostgreSqlSafeMigrations(typeof(NpgsqlMigrationsSqlGenerator), canonicalContextType: null);
 
     /// <summary>
     /// Registers SafeMigrations with explicit ordinary-operation and canonical-context contracts.
@@ -25,8 +25,7 @@ public static class PostgreSqlServiceCollectionExtensions
         this IServiceCollection services
     )
         where TBaselineGenerator : class, IMigrationsSqlGenerator
-        where TCanonicalMigrationContext : DbContext => AddPostgreSqlSafeMigrations(
-        services,
+        where TCanonicalMigrationContext : DbContext => services.AddPostgreSqlSafeMigrations(
         typeof(TBaselineGenerator),
         typeof(TCanonicalMigrationContext));
 

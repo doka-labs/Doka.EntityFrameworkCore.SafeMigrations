@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the Schemas migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlSchemasIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlSchemasIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlSchemasIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     [Fact]
     public async Task SchemaOperations_AreClassifiedUnsupportedWithoutDatabaseDdl()
@@ -19,7 +21,8 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
         var report = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("test-instance"), CancellationToken.None);
+            new SafeMigrationRunOptions("test-instance"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(
@@ -41,18 +44,25 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
         var report = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("current-database-schema"), CancellationToken.None);
+            new SafeMigrationRunOptions("current-database-schema"),
+            CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var replay = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("current-database-schema-replay"), CancellationToken.None);
+            new SafeMigrationRunOptions("current-database-schema-replay"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(report.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(report.Assessments)
+                .Action);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(replay.Assessments)
+                .Action);
     }
 
     [Fact]
@@ -68,10 +78,12 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
         var report = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("current-database-drop-schema"), CancellationToken.None);
+            new SafeMigrationRunOptions("current-database-drop-schema"),
+            CancellationToken.None);
 
-        var exception = await AssertOwnedGuardFailureAsync(operationToken =>
-            ExecuteOperationsAsync(context, builder.Operations, operationToken),
+        var exception = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
@@ -94,7 +106,11 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var foreignDatabase = "doka_foreign_" + Guid.NewGuid().ToString("N");
+        var foreignDatabase = "doka_foreign_"
+            + Guid
+                .NewGuid()
+                .ToString("N");
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropSchemaIfExists(foreignDatabase);
@@ -104,10 +120,12 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
         var report = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("foreign-database-drop-schema"), CancellationToken.None);
+            new SafeMigrationRunOptions("foreign-database-drop-schema"),
+            CancellationToken.None);
 
-        var exception = await AssertOwnedGuardFailureAsync(operationToken =>
-            ExecuteOperationsAsync(context, builder.Operations, operationToken),
+        var exception = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -123,7 +141,8 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SCHEMATA "
-                + $"WHERE SCHEMA_NAME = '{foreignDatabase}';", cancellationToken: CancellationToken.None));
+                + $"WHERE SCHEMA_NAME = '{foreignDatabase}';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -136,6 +155,7 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
             "CREATE TABLE `qualified_inventory` (`Id` int NOT NULL, PRIMARY KEY (`Id`)) ENGINE=InnoDB; "
             + "CREATE INDEX `IX_qualified_inventory_Id` ON `qualified_inventory` (`Id`);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -146,6 +166,7 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
             },
             constraints: table => table.PrimaryKey("PK_qualified_inventory", value => value.Id),
             schema: database);
+
         builder.CreateIndexIfNotExists(
             "IX_qualified_inventory_Id",
             "qualified_inventory",
@@ -156,7 +177,8 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("current-database-inventory"), CancellationToken.None);
+                new SafeMigrationRunOptions("current-database-inventory"),
+                CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(report.Assessments, assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
@@ -175,6 +197,7 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
             connectionString,
             "CREATE TABLE `qualified_index` (`value` varchar(800) NOT NULL) ENGINE=InnoDB;",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexWithPrefixesIfNotExistsFromModel(
@@ -183,25 +206,34 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
             "value",
             [191],
             database);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("current-database-index"), CancellationToken.None);
+            new SafeMigrationRunOptions("current-database-index"),
+            CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var replay = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("current-database-index-replay"), CancellationToken.None);
+            new SafeMigrationRunOptions("current-database-index-replay"),
+            CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-        Assert.Equal(SafeMigrationAction.Apply, Assert.Single(preflight.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.Apply,
+            Assert.Single(preflight.Assessments)
+                .Action);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(replay.Assessments)
+                .Action);
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -224,6 +256,7 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
             + "PRIMARY KEY (`id`)) ENGINE=InnoDB; "
             + "INSERT INTO `qualified_index_lifecycle` VALUES (1, 'value', 'other');",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var runner = context.GetService<ISafeMigrationRunner>();
 
@@ -238,13 +271,15 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
         var createReport = await runner.AnalyzeAsync(
             context,
             create.Operations,
-            new SafeMigrationRunOptions("qualified-index-create"), CancellationToken.None);
+            new SafeMigrationRunOptions("qualified-index-create"),
+            CancellationToken.None);
 
         await ExecuteOperationsAsync(context, create.Operations, CancellationToken.None);
         var replayReport = await runner.AnalyzeAsync(
             context,
             create.Operations,
-            new SafeMigrationRunOptions("qualified-index-replay"), CancellationToken.None);
+            new SafeMigrationRunOptions("qualified-index-replay"),
+            CancellationToken.None);
 
         var drift = new MigrationBuilder(context.Database.ProviderName!);
         drift.CreateIndexWithPrefixesIfNotExistsFromModel(
@@ -257,7 +292,8 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
         var driftReport = await runner.AnalyzeAsync(
             context,
             drift.Operations,
-            new SafeMigrationRunOptions("qualified-index-drift"), CancellationToken.None);
+            new SafeMigrationRunOptions("qualified-index-drift"),
+            CancellationToken.None);
 
         var rename = new MigrationBuilder(context.Database.ProviderName!);
         rename.RenameIndexIfExists(
@@ -269,7 +305,8 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
         var renameReport = await runner.AnalyzeAsync(
             context,
             rename.Operations,
-            new SafeMigrationRunOptions("qualified-index-rename"), CancellationToken.None);
+            new SafeMigrationRunOptions("qualified-index-rename"),
+            CancellationToken.None);
 
         await ExecuteOperationsAsync(context, rename.Operations, CancellationToken.None);
 
@@ -282,28 +319,50 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
         var dropReport = await runner.AnalyzeAsync(
             context,
             drop.Operations,
-            new SafeMigrationRunOptions("qualified-index-drop"), CancellationToken.None);
+            new SafeMigrationRunOptions("qualified-index-drop"),
+            CancellationToken.None);
 
         await ExecuteOperationsAsync(context, drop.Operations, CancellationToken.None);
         var dropReplayReport = await runner.AnalyzeAsync(
             context,
             drop.Operations,
-            new SafeMigrationRunOptions("qualified-index-drop-replay"), CancellationToken.None);
+            new SafeMigrationRunOptions("qualified-index-drop-replay"),
+            CancellationToken.None);
 
-        Assert.Equal(SafeMigrationAction.Apply, Assert.Single(createReport.Assessments).Action);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replayReport.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.Apply,
+            Assert.Single(createReport.Assessments)
+                .Action);
+
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(replayReport.Assessments)
+                .Action);
+
         Assert.Equal(SafeMigrationReportStatus.Blocked, driftReport.Status);
-        Assert.Equal(SafeMigrationAction.RejectDifferent, Assert.Single(driftReport.Assessments).Action);
-        Assert.Equal(SafeMigrationAction.Apply, Assert.Single(renameReport.Assessments).Action);
-        Assert.Equal(SafeMigrationAction.Apply, Assert.Single(dropReport.Assessments).Action);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(dropReplayReport.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.RejectDifferent,
+            Assert.Single(driftReport.Assessments)
+                .Action);
+
+        Assert.Equal(SafeMigrationAction.Apply,
+            Assert.Single(renameReport.Assessments)
+                .Action);
+
+        Assert.Equal(SafeMigrationAction.Apply,
+            Assert.Single(dropReport.Assessments)
+                .Action);
+
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(dropReplayReport.Assessments)
+                .Action);
+
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'qualified_index_lifecycle' "
-                + "AND INDEX_NAME LIKE 'ix_qualified_index_lifecycle%';", cancellationToken: CancellationToken.None));
+                + "AND INDEX_NAME LIKE 'ix_qualified_index_lifecycle%';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -324,29 +383,34 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
             "CREATE TABLE `qualified_postflight` (`id` int NOT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB; "
             + "CREATE INDEX `ix_qualified_postflight_id` ON `qualified_postflight` (`id`);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropIndexIfExists(
             "ix_qualified_postflight_id",
             "qualified_postflight",
             database);
+
         builder.CreateIndexIfNotExists(
             "ix_qualified_postflight_id",
             "qualified_postflight",
             ["id"]);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("qualified-postflight-preflight"), CancellationToken.None);
+            new SafeMigrationRunOptions("qualified-postflight-preflight"),
+            CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var postflight = await runner.VerifyAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("qualified-postflight-postflight"), CancellationToken.None);
+            new SafeMigrationRunOptions("qualified-postflight-postflight"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -366,6 +430,7 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
             "CREATE TABLE `qualified_roles` ("
             + "`id` int NOT NULL, `name` varchar(64) NOT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB;",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureModelManagedDataFromModel(
@@ -376,38 +441,52 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
             ["int", "varchar(64)"],
             new object?[,] { { 1, "administrator" } },
             database);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("current-database-model-data"), CancellationToken.None);
+            new SafeMigrationRunOptions("current-database-model-data"),
+            CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var replay = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("current-database-model-data-replay"), CancellationToken.None);
+            new SafeMigrationRunOptions("current-database-model-data-replay"),
+            CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-        Assert.Equal(SafeMigrationAction.Apply, Assert.Single(preflight.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.Apply,
+            Assert.Single(preflight.Assessments)
+                .Action);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(replay.Assessments)
+                .Action);
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM `qualified_roles` "
-                + "WHERE `id` = 1 AND `name` = 'administrator';", cancellationToken: CancellationToken.None));
+                + "WHERE `id` = 1 AND `name` = 'administrator';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
     public async Task ForeignDatabaseQualificationRejectsBeforeIndexOrDataMutation()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var foreignDatabase = "doka_foreign_" + Guid.NewGuid().ToString("N");
+        var foreignDatabase = "doka_foreign_"
+            + Guid
+                .NewGuid()
+                .ToString("N");
+
         await ExecuteSqlAsync(
             connectionString,
             $"CREATE DATABASE `{foreignDatabase}`; "
@@ -438,20 +517,27 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
                 new object?[,] { { 1, "foreign" } },
                 foreignDatabase);
 
-            var operations = index.Operations.Concat(data.Operations).ToArray();
+            var operations = index
+                .Operations
+                .Concat(data.Operations)
+                .ToArray();
+
             var report = await context
                 .GetService<ISafeMigrationRunner>()
                 .AnalyzeAsync(
                     context,
                     operations,
-                    new SafeMigrationRunOptions("foreign-database-isolation"), CancellationToken.None);
+                    new SafeMigrationRunOptions("foreign-database-isolation"),
+                    CancellationToken.None);
 
-            var exception = await AssertOwnedGuardFailureAsync(operationToken =>
-                ExecuteOperationsAsync(context, operations, operationToken),
+            var exception = await AssertOwnedGuardFailureAsync(
+                operationToken =>
+                    ExecuteOperationsAsync(context, operations, operationToken),
                 cancellationToken: CancellationToken.None);
 
-            var dataException = await AssertOwnedGuardFailureAsync(operationToken =>
-                ExecuteOperationsAsync(context, data.Operations, operationToken),
+            var dataException = await AssertOwnedGuardFailureAsync(
+                operationToken =>
+                    ExecuteOperationsAsync(context, data.Operations, operationToken),
                 cancellationToken: CancellationToken.None);
 
             Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -463,6 +549,7 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
                     Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
                     Assert.Equal("database_qualifier_mismatch", assessment.AnalysisCode);
                 });
+
             Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("doka_sm_unsupported", dataException.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Equal(
@@ -472,7 +559,9 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
                     "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
                     + $"WHERE TABLE_SCHEMA IN (DATABASE(), '{foreignDatabase}') "
                     + "AND TABLE_NAME = 'qualified_isolation' "
-                    + "AND INDEX_NAME = 'ix_qualified_isolation_value';", cancellationToken: CancellationToken.None));
+                    + "AND INDEX_NAME = 'ix_qualified_isolation_value';",
+                    cancellationToken: CancellationToken.None));
+
             Assert.Equal(
                 0,
                 await ScalarIntAsync(
@@ -483,7 +572,9 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
         }
         finally
         {
-            await ExecuteSqlAsync(connectionString, $"DROP DATABASE IF EXISTS `{foreignDatabase}`;",
+            await ExecuteSqlAsync(
+                connectionString,
+                $"DROP DATABASE IF EXISTS `{foreignDatabase}`;",
                 cancellationToken: CancellationToken.None);
         }
     }
@@ -493,7 +584,11 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var foreignDatabase = "doka_foreign_" + Guid.NewGuid().ToString("N");
+        var foreignDatabase = "doka_foreign_"
+            + Guid
+                .NewGuid()
+                .ToString("N");
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(
@@ -502,6 +597,7 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
                 [new ExpectedColumnDefinition("id", typeof(int), isNullable: false, storeType: "int")]),
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.AddUniqueConstraintIfNotExists(
             "uq_guarded_stream_id",
             "guarded_stream",
@@ -509,8 +605,9 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
             foreignDatabase);
 
         // Act
-        var exception = await AssertOwnedGuardFailureAsync(operationToken =>
-            ExecuteOperationsAsync(context, builder.Operations, operationToken),
+        var exception = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -540,6 +637,7 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
                 Id = table.Column<int>(nullable: false),
             },
             schema: "tenant_schema");
+
         builder.DropTableIfExists("qualified_table", "tenant_schema");
         builder.RenameTableIfExists("qualified_table", "renamed_table", "tenant_schema");
         builder.RenameTableIfExists("qualified_table", "qualified_table", newSchema: "tenant_archive");
@@ -552,6 +650,7 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
             new ExpectedColumnDefinition("value", typeof(int), true, "int"),
             SafeMigrationPolicy.RepairIfSafe,
             "tenant_schema");
+
         builder.CreateIndexIfNotExists("ix_qualified_value", "qualified_table", ["value"], "tenant_schema");
         builder.DropIndexIfExists("ix_qualified_value", "qualified_table", "tenant_schema");
         builder.RenameIndexIfExists(
@@ -559,6 +658,7 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
             "qualified_table",
             "ix_qualified_value_renamed",
             "tenant_schema");
+
         builder.AddPrimaryKeyIfNotExists("pk_qualified_table", "qualified_table", ["value"], "tenant_schema");
         builder.DropPrimaryKeyIfExists("pk_qualified_table", "qualified_table", "tenant_schema");
         builder.AddUniqueConstraintIfNotExists("uq_qualified_value", "qualified_table", ["value"], "tenant_schema");
@@ -572,6 +672,7 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
             "qualified_parent",
             ["id"],
             schema: "tenant_schema");
+
         builder.AddForeignKeyIfNotExists(
             "fk_qualified_principal",
             "qualified_table",
@@ -579,12 +680,16 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
             "qualified_parent",
             ["id"],
             principalSchema: "tenant_schema");
+
         builder.DropForeignKeyIfExists("fk_qualified_parent", "qualified_table", "tenant_schema");
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("schema-qualified-matrix"),
-                          CancellationToken.None);
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("schema-qualified-matrix"),
+                CancellationToken.None);
 
         Assert.Equal(22, builder.Operations.Count);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -597,8 +702,9 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
                 Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
             });
 
-        var exception = await AssertOwnedGuardFailureAsync(operationToken =>
-            ExecuteOperationsAsync(context, [builder.Operations[2]], operationToken),
+        var exception = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, [builder.Operations[2]], operationToken),
             cancellationToken: CancellationToken.None);
 
         Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -620,7 +726,9 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
             "CREATE TABLE `legacy` (`id` int NOT NULL, `extra` int NULL); "
             + "CREATE INDEX `ix_legacy_extra` ON `legacy` (`extra`); "
             + "CREATE TABLE `managed` (`id` int NOT NULL, `extra` int NULL); "
-            + "CREATE INDEX `ix_managed_extra` ON `managed` (`extra`);", cancellationToken: CancellationToken.None);
+            + "CREATE INDEX `ix_managed_extra` ON `managed` (`extra`);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -630,6 +738,7 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
                 Id = table.Column<int>(type: "int", nullable: false),
             },
             schema: "other_schema");
+
         builder.CreateTableIfNotExists(
             "managed",
             columns: table => new
@@ -639,8 +748,11 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("schema-inventory-collision"),
-                          CancellationToken.None);
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("schema-inventory-collision"),
+                CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.Unsupported, report.Assessments[0].ObservedState);
@@ -650,16 +762,19 @@ public sealed partial class MySqlSchemasIntegrationTests : MySqlSafeMigrationInt
             value => value.ObjectKind == SafeMigrationDatabaseObjectKind.Table
                 && value.Table is null
                 && StringComparer.Ordinal.Equals(value.Name, "legacy"));
+
         Assert.Contains(
             report.UnexpectedObjects,
             value => value.ObjectKind == SafeMigrationDatabaseObjectKind.Column
                 && StringComparer.Ordinal.Equals(value.Table, "managed")
                 && StringComparer.Ordinal.Equals(value.Name, "extra"));
+
         Assert.Contains(
             report.UnexpectedObjects,
             value => value.ObjectKind == SafeMigrationDatabaseObjectKind.Index
                 && StringComparer.Ordinal.Equals(value.Table, "managed")
                 && StringComparer.Ordinal.Equals(value.Name, "ix_managed_extra"));
+
         Assert.DoesNotContain(
             report.UnexpectedObjects,
             value => value.ObjectKind == SafeMigrationDatabaseObjectKind.Table

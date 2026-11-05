@@ -21,6 +21,7 @@ internal sealed partial class SafeMigrationPostflightProjection
         Dictionary<PostflightResource, PendingTable>? tables = null;
         Dictionary<int, SafeMigrationPostflightRenameProbe>? rewritten = null;
         var safeOrdinal = 0;
+
         // WHY: Keep whole-stream positions aligned with safe-only analyses when tracking rename lineage.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -79,15 +80,16 @@ internal sealed partial class SafeMigrationPostflightProjection
                 Kind = PostflightResourceKind.Table,
                 Name = null,
             };
+
             if (!tables.TryGetValue(owner, out var pending))
             {
                 continue;
             }
 
             if (PreservesKnownTableShape(
-                    operation.Intent,
-                    ((EnsureTableIntent)pending.Operation.Intent).Definition,
-                    normalizer))
+                operation.Intent,
+                ((EnsureTableIntent)pending.Operation.Intent).Definition,
+                normalizer))
             {
                 // WHY: Independent indexes are not strict-table facets. Exact
                 // column reassertions also leave this known shape unchanged.
@@ -125,6 +127,7 @@ internal sealed partial class SafeMigrationPostflightProjection
             {
                 Operation = rewrittenOperation,
             };
+
             tables[owner] = pending;
             rewritten ??= [];
             rewritten[pending.SafeOrdinal] = new SafeMigrationPostflightRenameProbe(
@@ -133,14 +136,18 @@ internal sealed partial class SafeMigrationPostflightProjection
                 rewrittenOperation);
         }
 
-        return rewritten is { Count: > 0 } ? rewritten.Values.ToList() : null;
+        return rewritten is { Count: > 0 }
+            ? rewritten.Values.ToList()
+            : null;
 
         PostflightResource Resource(
             string table,
             string? schema
         ) => new(
             PostflightResourceKind.Table,
-            normalizer is null ? schema : normalizer.NormalizeSchema(schema),
+            normalizer is null
+                ? schema
+                : normalizer.NormalizeSchema(schema),
             table,
             null);
     }

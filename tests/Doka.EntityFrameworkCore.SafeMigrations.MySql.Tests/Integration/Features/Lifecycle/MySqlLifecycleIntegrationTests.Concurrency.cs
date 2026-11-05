@@ -18,6 +18,7 @@ public sealed partial class MySqlLifecycleIntegrationTests
         var secondGate = new MigrationAdmissionGate();
         await using var first = CreateAdmissionContext(connectionString, firstGate);
         await using var second = CreateAdmissionContext(connectionString, secondGate);
+
         // WHY: This deadline only prevents a broken admission protocol from hanging the suite;
         // no duration or relative execution-speed assertion is used.
         using var watchdog = new CancellationTokenSource(TimeSpan.FromMinutes(2));
@@ -29,7 +30,10 @@ public sealed partial class MySqlLifecycleIntegrationTests
         try
         {
             await AwaitMigrationAdmissionAsync(firstMigration, firstGate.Entered, watchdog.Token);
-            secondMigration = second.GetService<IMigrator>().MigrateAsync(cancellationToken: watchdog.Token);
+            secondMigration = second
+                .GetService<IMigrator>()
+                .MigrateAsync(cancellationToken: watchdog.Token);
+
             await AwaitNativeMigrationLockWaitAsync(connectionString, watchdog.Token);
             secondEnteredBeforeRelease = secondGate.HasEntered;
         }
@@ -43,15 +47,20 @@ public sealed partial class MySqlLifecycleIntegrationTests
         // Assert.
         Assert.True(firstGate.HasEntered);
         Assert.False(secondEnteredBeforeRelease);
-        Assert.Equal(1, await ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM `__ApplicationDbContextMigrationsHistory` "
-            + $"WHERE `MigrationId` = '{CoreConvergenceMigration.MigrationIdentifier}';",
-            cancellationToken: watchdog.Token));
-        Assert.Equal(1, await ScalarIntAsync(
-            connectionString,
-            "SELECT COUNT(*) FROM `__LegacyMigrationsHistory` WHERE `MigrationId` = 'legacy-unchanged';",
-            cancellationToken: watchdog.Token));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `__ApplicationDbContextMigrationsHistory` "
+                + $"WHERE `MigrationId` = '{CoreConvergenceMigration.MigrationIdentifier}';",
+                cancellationToken: watchdog.Token));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `__LegacyMigrationsHistory` WHERE `MigrationId` = 'legacy-unchanged';",
+                cancellationToken: watchdog.Token));
     }
 
     /// <summary>Admits both databases before either migrator is permitted to execute its first target DDL.</summary>
@@ -65,6 +74,7 @@ public sealed partial class MySqlLifecycleIntegrationTests
         var rightGate = new MigrationAdmissionGate();
         await using var left = CreateAdmissionContext(leftConnectionString, leftGate);
         await using var right = CreateAdmissionContext(rightConnectionString, rightGate);
+
         // WHY: Admission is the concurrency evidence; the deadline is only a deadlock watchdog.
         using var watchdog = new CancellationTokenSource(TimeSpan.FromMinutes(2));
 
@@ -87,16 +97,21 @@ public sealed partial class MySqlLifecycleIntegrationTests
         // Assert.
         Assert.True(leftGate.HasEntered);
         Assert.True(rightGate.HasEntered);
-        Assert.Equal(1, await ScalarIntAsync(
-            leftConnectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pipeline_state';",
-            cancellationToken: watchdog.Token));
-        Assert.Equal(1, await ScalarIntAsync(
-            rightConnectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
-            + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pipeline_state';",
-            cancellationToken: watchdog.Token));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                leftConnectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pipeline_state';",
+                cancellationToken: watchdog.Token));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                rightConnectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES "
+                + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pipeline_state';",
+                cancellationToken: watchdog.Token));
     }
 
     /// <summary>Uses the ordinary migration context with an operation-local test admission observer.</summary>
@@ -126,7 +141,10 @@ public sealed partial class MySqlLifecycleIntegrationTests
         CancellationToken cancellationToken
     )
     {
-        var completed = await Task.WhenAny(migration, admission).WaitAsync(cancellationToken);
+        var completed = await Task
+            .WhenAny(migration, admission)
+            .WaitAsync(cancellationToken);
+
         if (completed == migration)
         {
             await migration;
@@ -144,6 +162,7 @@ public sealed partial class MySqlLifecycleIntegrationTests
     )
     {
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
+
         // WHY: Fixture-owned sm_<guid> names fit the provider's un-hashed lock-name form.
         // Filtering both the native statement and exact owner excludes other parallel tests.
         var lockName = "__ef_migrations_lock:" + database;
@@ -153,6 +172,7 @@ public sealed partial class MySqlLifecycleIntegrationTests
         command.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.PROCESSLIST "
             + "WHERE ID <> CONNECTION_ID() AND COMMAND = 'Query' "
             + "AND INFO LIKE 'SELECT GET_LOCK(%' AND LOCATE(@lockName, INFO) > 0;";
+
         command.Parameters.AddWithValue("@lockName", lockName);
 
         while (true)

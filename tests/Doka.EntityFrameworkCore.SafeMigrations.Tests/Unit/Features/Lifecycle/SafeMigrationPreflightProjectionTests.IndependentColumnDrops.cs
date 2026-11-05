@@ -9,19 +9,27 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Arrange
         var provider = new IndependentColumnDropProbe();
         var projection = new SafeMigrationPreflightProjection(projectedColumnAnalyzer: provider);
-        ObserveAccepted(projection, new DropPrimaryKeyIntent("pk_items", "items"),
+        ObserveAccepted(
+            projection,
+            new DropPrimaryKeyIntent("pk_items", "items"),
             SafeMigrationObservedState.Matching);
 
         projection.CurrentOperationOrdinal = 1;
-        ObserveAccepted(projection, new DropColumnIntent("legacy", "items"),
+        ObserveAccepted(
+            projection,
+            new DropColumnIntent("legacy", "items"),
             SafeMigrationObservedState.Matching);
 
         var source = new ExpectedColumnDefinition("reference", typeof(int), true, "int");
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("items", Column("reference"), source),
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent("items", Column("reference"), source),
             SafeMigrationPolicy.RepairIfSafe);
 
-        var live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.Safe, false, "independent_native_nullability");
+        var live = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.Safe,
+            false,
+            "independent_native_nullability");
 
         // Act
         var result = projection.Project(operation, live);
@@ -29,8 +37,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Assert
         Assert.Same(live, result);
         Assert.True(provider.ColumnQueries > 0);
-        Assert.True(((ISafeMigrationProjectedTableSource)projection).TryGetProjectedTableState(
-            "items", null, out var state));
+        Assert.True(
+            ((ISafeMigrationProjectedTableSource)projection).TryGetProjectedTableState(
+                "items",
+                null,
+                out var state));
+
         Assert.True(state.HasUnknownStructure);
         Assert.True(state.PrimaryKeyWasDropped);
     }
@@ -41,13 +53,21 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     {
         // Arrange
         var provider = new IndependentColumnDropProbe();
-        var projection = new SafeMigrationPreflightProjection(projectedColumnAnalyzer: provider,
+        var projection = new SafeMigrationPreflightProjection(
+            projectedColumnAnalyzer: provider,
             projectedKeyAnalyzer: provider);
-        ObserveAccepted(projection, new DropPrimaryKeyIntent("pk_items", "items"),
+
+        ObserveAccepted(
+            projection,
+            new DropPrimaryKeyIntent("pk_items", "items"),
             SafeMigrationObservedState.Matching);
+
         projection.CurrentOperationOrdinal = 1;
-        ObserveAccepted(projection, new DropColumnIntent("legacy", "items"),
+        ObserveAccepted(
+            projection,
+            new DropColumnIntent("legacy", "items"),
             SafeMigrationObservedState.Matching);
+
         var operation = PrimaryKeyReplacementOperation();
         var live = Live(SafeMigrationObservedState.Different);
 
@@ -96,7 +116,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("insert")]
     [InlineData("rename")]
     [InlineData("provider-add")]
-    public void IndependentColumnDropLineageExpiresAtUncertifiedBoundaries(string boundary)
+    public void IndependentColumnDropLineageExpiresAtUncertifiedBoundaries(
+        string boundary
+    )
     {
         // Arrange
         var provider = new IndependentColumnDropProbe();
@@ -106,10 +128,22 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             "sql" => new SqlOperation { Sql = "SELECT 1;" },
             "insert" => new InsertDataOperation
             {
-                Table = "items", Columns = ["reference"], Values = new object[,] { { 1 } },
+                Table = "items",
+                Columns = ["reference"],
+                Values = new object[,] { { 1 } },
             },
-            "rename" => new RenameColumnOperation { Table = "items", Name = "legacy", NewName = "renamed" },
-            _ => new AddColumnOperation { Table = "items", Name = "other", ClrType = typeof(int) },
+            "rename" => new RenameColumnOperation
+            {
+                Table = "items",
+                Name = "legacy",
+                NewName = "renamed",
+            },
+            _ => new AddColumnOperation
+            {
+                Table = "items",
+                Name = "other",
+                ClrType = typeof(int),
+            },
         };
 
         // Act
@@ -129,17 +163,25 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var provider = new IndependentColumnDropProbe();
         var projection = IndependentDropProjection(provider);
         projection.CurrentOperationOrdinal = 7;
-        var add = new SafeMigrationOperation(new EnsureColumnIntent("items", Column("new_id")),
+        var add = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", Column("new_id")),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var live = Live(SafeMigrationObservedState.Missing);
-        var decision = SafeMigrationDecisionPlanner.Plan(add.Intent.Kind, live.ObservedState,
-            add.Policy, live.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            add.Intent.Kind,
+            live.ObservedState,
+            add.Policy,
+            live.RepairCapability);
+
         var columns = (ISafeMigrationProjectedColumnSource)projection;
 
         // Act
         projection.Observe(add, live, live, decision);
         var hasTable = ((ISafeMigrationProjectedTableSource)projection).TryGetProjectedTableState(
-            "items", null, out var state);
+            "items",
+            null,
+            out var state);
 
         // Assert
         Assert.True(hasTable);
@@ -160,11 +202,16 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Arrange
         var provider = new IndependentColumnDropProbe();
         var projection = IndependentDropProjection(provider);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items", Column("id")),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", Column("id")),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var live = Live(SafeMigrationObservedState.Matching);
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, live.ObservedState,
-            operation.Policy, live.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            live.ObservedState,
+            operation.Policy,
+            live.RepairCapability);
 
         // Act
         projection.Observe(operation, live, live, decision);
@@ -183,18 +230,37 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var provider = new IndependentColumnDropProbe();
         var projection = IndependentDropProjection(provider);
         var source = NullableColumn("reference");
-        var observed = new SafeMigrationOperation(new EnsureColumnIntent("items", source),
+        var observed = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", source),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var matching = Live(SafeMigrationObservedState.Matching);
-        projection.Observe(observed, matching, matching, SafeMigrationDecisionPlanner.Plan(
-            observed.Intent.Kind, matching.ObservedState, observed.Policy, matching.RepairCapability));
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("items", Column("reference"), source),
+        projection.Observe(
+            observed,
+            matching,
+            matching,
+            SafeMigrationDecisionPlanner.Plan(
+                observed.Intent.Kind,
+                matching.ObservedState,
+                observed.Policy,
+                matching.RepairCapability));
+
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent("items", Column("reference"), source),
             SafeMigrationPolicy.RepairIfSafe);
-        var live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.Safe, false, "independent_native_nullability");
+
+        var live = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.Safe,
+            false,
+            "independent_native_nullability");
+
         var result = projection.Project(operation, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, result.ObservedState,
-            operation.Policy, result.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            result.ObservedState,
+            operation.Policy,
+            result.RepairCapability);
 
         // Act
         projection.Observe(operation, live, result, decision);
@@ -211,13 +277,20 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(SafeMigrationObservedState.DataBlocked)]
     [InlineData(SafeMigrationObservedState.Unsupported)]
-    public void IndependentColumnDropRetainsIndependentColumnRejection(SafeMigrationObservedState state)
+    public void IndependentColumnDropRetainsIndependentColumnRejection(
+        SafeMigrationObservedState state
+    )
     {
         // Arrange
         var provider = new IndependentColumnDropProbe();
         var projection = IndependentDropProjection(provider);
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("items", Column("reference"),
-            NullableColumn("reference")), SafeMigrationPolicy.RepairIfSafe);
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "items",
+                Column("reference"),
+                NullableColumn("reference")),
+            SafeMigrationPolicy.RepairIfSafe);
+
         var live = Live(state);
 
         // Act
@@ -237,10 +310,15 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var projection = IndependentDropProjection(provider);
         var source = NullableColumn("reference");
         var target = new ExpectedColumnDefinition("reference", typeof(int), false, "bigint");
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("items", target, source),
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent("items", target, source),
             SafeMigrationPolicy.RepairIfSafe);
-        var live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.Safe, false, "stale_widening");
+
+        var live = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.Safe,
+            false,
+            "stale_widening");
 
         // Act
         var result = projection.Project(operation, live);
@@ -256,16 +334,25 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void IndependentColumnDropKeyFamilyDoesNotReuseHistoricalMatching(bool unique)
+    public void IndependentColumnDropKeyFamilyDoesNotReuseHistoricalMatching(
+        bool unique
+    )
     {
         // Arrange
         var provider = new IndependentColumnDropProbe();
         var projection = IndependentDropProjection(provider);
         SafeMigrationIntent intent = unique
-            ? new EnsureUniqueConstraintIntent(new ExpectedUniqueConstraintDefinition("uq_reference", "items",
-                ["reference"]))
-            : new EnsureIndexIntent(new ExpectedIndexDefinition("ix_reference", "items",
-                [new ExpectedIndexKeyDefinition("reference")]));
+            ? new EnsureUniqueConstraintIntent(
+                new ExpectedUniqueConstraintDefinition(
+                    "uq_reference",
+                    "items",
+                    ["reference"]))
+            : new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "ix_reference",
+                    "items",
+                    [new ExpectedIndexKeyDefinition("reference")]));
+
         var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
         var live = Live(SafeMigrationObservedState.Matching);
 
@@ -287,8 +374,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Arrange
         var provider = new IndependentColumnDropProbe();
         var projection = IndependentDropProjection(provider);
-        var operation = new SafeMigrationOperation(new EnsurePrimaryKeyIntent(
-            new ExpectedPrimaryKeyDefinition("pk_items", "items", ["legacy"])),
+        var operation = new SafeMigrationOperation(
+            new EnsurePrimaryKeyIntent(
+                new ExpectedPrimaryKeyDefinition("pk_items", "items", ["legacy"])),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -304,25 +392,41 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(-1)]
     [InlineData(0)]
-    public void IndependentColumnDropOriginRequiresRealStreamPosition(int ordinal)
+    public void IndependentColumnDropOriginRequiresRealStreamPosition(
+        int ordinal
+    )
     {
         // Arrange
         var provider = new IndependentColumnDropProbe();
-        var projection = new SafeMigrationPreflightProjection(projectedColumnAnalyzer: provider,
+        var projection = new SafeMigrationPreflightProjection(
+            projectedColumnAnalyzer: provider,
             projectedKeyAnalyzer: provider);
-        ObserveAccepted(projection, new DropPrimaryKeyIntent("pk_items", "items"),
+
+        ObserveAccepted(
+            projection,
+            new DropPrimaryKeyIntent("pk_items", "items"),
             SafeMigrationObservedState.Matching);
+
         projection.CurrentOperationOrdinal = ordinal;
 
         // Act
-        ObserveAccepted(projection, new DropColumnIntent("legacy", "items"),
+        ObserveAccepted(
+            projection,
+            new DropColumnIntent("legacy", "items"),
             SafeMigrationObservedState.Matching);
+
         var hasTable = ((ISafeMigrationProjectedTableSource)projection).TryGetProjectedTableState(
-            "items", null, out var state);
+            "items",
+            null,
+            out var state);
 
         // Assert
         Assert.True(hasTable);
-        Assert.Equal(ordinal < 0 ? null : ordinal, state.ColumnDropOriginOrdinal);
+        Assert.Equal(
+            ordinal < 0
+                ? null
+                : ordinal,
+            state.ColumnDropOriginOrdinal);
     }
 
     /// <summary>A new member keeps its own value origin even when no sibling DROP occurred.</summary>
@@ -336,12 +440,16 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             CurrentOperationOrdinal = 0,
         };
 
-        var add = new SafeMigrationOperation(new EnsureColumnIntent("items", Column("new_id")),
+        var add = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", Column("new_id")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var missing = Live(SafeMigrationObservedState.Missing);
-        var decision = SafeMigrationDecisionPlanner.Plan(add.Intent.Kind, missing.ObservedState,
-            add.Policy, missing.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            add.Intent.Kind,
+            missing.ObservedState,
+            add.Policy,
+            missing.RepairCapability);
 
         // Act
         projection.Observe(add, missing, missing, decision);
@@ -358,20 +466,27 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     {
         // Arrange
         var provider = new IndependentColumnDropProbe();
-        var projection = new SafeMigrationPreflightProjection(projectedColumnAnalyzer: provider,
+        var projection = new SafeMigrationPreflightProjection(
+            projectedColumnAnalyzer: provider,
             projectedKeyAnalyzer: provider);
 
-        ObserveAccepted(projection, new DropPrimaryKeyIntent("pk_items", "items"),
+        ObserveAccepted(
+            projection,
+            new DropPrimaryKeyIntent("pk_items", "items"),
             SafeMigrationObservedState.Missing);
 
         projection.CurrentOperationOrdinal = 1;
-        ObserveAccepted(projection, new DropColumnIntent("legacy", "items"),
+        ObserveAccepted(
+            projection,
+            new DropColumnIntent("legacy", "items"),
             SafeMigrationObservedState.Matching);
 
         // Act
         var result = projection.Project(PrimaryKeyReplacementOperation(), Live(SafeMigrationObservedState.Missing));
         var hasTable = ((ISafeMigrationProjectedTableSource)projection).TryGetProjectedTableState(
-            "items", null, out var state);
+            "items",
+            null,
+            out var state);
 
         // Assert
         Assert.Same(provider.KeyResult, result);
@@ -386,16 +501,23 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     {
         // Arrange
         var provider = new IndependentColumnDropProbe();
-        var projection = new SafeMigrationPreflightProjection(projectedColumnAnalyzer: provider,
+        var projection = new SafeMigrationPreflightProjection(
+            projectedColumnAnalyzer: provider,
             projectedKeyAnalyzer: provider);
 
-        ObserveAccepted(projection, new DropPrimaryKeyIntent("pk_items", "items"),
+        ObserveAccepted(
+            projection,
+            new DropPrimaryKeyIntent("pk_items", "items"),
             SafeMigrationObservedState.Missing);
 
-        ObserveAccepted(projection, new DropColumnIntent("legacy", "items"),
+        ObserveAccepted(
+            projection,
+            new DropColumnIntent("legacy", "items"),
             SafeMigrationObservedState.Missing);
 
-        ObserveAccepted(projection, new EnsureColumnIntent("items", Column("id")),
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("items", Column("id")),
             SafeMigrationObservedState.Matching);
 
         // Act
@@ -405,8 +527,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Assert
         Assert.True(unchanged);
         Assert.Null(columns.GetColumnValueMutationOrigin("items", null, "id"));
-        Assert.True(((ISafeMigrationProjectedTableSource)projection).TryGetProjectedTableState(
-            "items", null, out var state));
+        Assert.True(
+            ((ISafeMigrationProjectedTableSource)projection).TryGetProjectedTableState(
+                "items",
+                null,
+                out var state));
+
         Assert.True(state.PrimaryKeyWasDropped);
         Assert.False(state.HasUnknownStructure);
         Assert.Null(state.ColumnDropOriginOrdinal);
@@ -418,18 +544,25 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     {
         // Arrange
         var provider = new IndependentColumnDropProbe();
-        var projection = new SafeMigrationPreflightProjection(projectedColumnAnalyzer: provider,
+        var projection = new SafeMigrationPreflightProjection(
+            projectedColumnAnalyzer: provider,
             projectedKeyAnalyzer: provider);
-        var operation = new SafeMigrationOperation(new DropPrimaryKeyIntent("pk_items", "items"),
+
+        var operation = new SafeMigrationOperation(
+            new DropPrimaryKeyIntent("pk_items", "items"),
             SafeMigrationPolicy.ExistenceOnly);
+
         var different = Live(SafeMigrationObservedState.Different);
         var noOp = new SafeMigrationDecision(SafeMigrationAction.NoOp, "test_existence_only");
         projection.CurrentOperationOrdinal = 1;
 
         // Act
         projection.Observe(operation, different, different, noOp);
-        ObserveAccepted(projection, new DropColumnIntent("legacy", "items"),
+        ObserveAccepted(
+            projection,
+            new DropColumnIntent("legacy", "items"),
             SafeMigrationObservedState.Matching);
+
         var result = projection.Project(PrimaryKeyReplacementOperation(), Live(SafeMigrationObservedState.Different));
 
         // Assert
@@ -444,27 +577,48 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("structured")]
     [InlineData("opaque")]
     [InlineData("unaccepted")]
-    public void IndependentColumnDropIndexPreservesGeneratedQualificationBoundary(string kind)
+    public void IndependentColumnDropIndexPreservesGeneratedQualificationBoundary(
+        string kind
+    )
     {
         // Arrange
         var provider = new IndependentColumnDropProbe();
         var projection = IndependentDropProjection(provider);
-        var column = new ExpectedColumnDefinition("derived", typeof(int), true, "int",
-            computedColumnSql: kind == "opaque" ? "reference + 1" : null,
-            computedExpression: kind == "structured" ? SafeMigrationSql.Literal(1) : null);
+        var column = new ExpectedColumnDefinition(
+            "derived",
+            typeof(int),
+            true,
+            "int",
+            computedColumnSql: kind == "opaque"
+                ? "reference + 1"
+                : null,
+            computedExpression: kind == "structured"
+                ? SafeMigrationSql.Literal(1)
+                : null);
+
         if (kind != "unaccepted")
         {
             ObserveAccepted(projection, new EnsureColumnIntent("items", column), SafeMigrationObservedState.Missing);
         }
-        var operation = new SafeMigrationOperation(new EnsureIndexIntent(new ExpectedIndexDefinition(
-            "ix_derived", "items", [new ExpectedIndexKeyDefinition("derived")])),
+
+        var operation = new SafeMigrationOperation(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "ix_derived",
+                    "items",
+                    [new ExpectedIndexKeyDefinition("derived")])),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var result = projection.Project(operation, Live(SafeMigrationObservedState.PrerequisiteMissing));
 
         // Assert
-        Assert.Equal(kind == "ordinary" ? 1 : 0, provider.KeyQueries);
+        Assert.Equal(
+            kind == "ordinary"
+                ? 1
+                : 0,
+            provider.KeyQueries);
+
         if (kind == "ordinary")
         {
             Assert.Same(provider.KeyResult, result);
@@ -480,32 +634,55 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void IndependentColumnDropIndexRequiresBoundedMissingPrerequisites(bool capturesOriginalMember)
+    public void IndependentColumnDropIndexRequiresBoundedMissingPrerequisites(
+        bool capturesOriginalMember
+    )
     {
         // Arrange
         var provider = new IndependentColumnDropProbe();
         var projection = IndependentDropProjection(provider);
-        ObserveAccepted(projection, new EnsureColumnIntent("items", NullableColumn("new_id")),
+        ObserveAccepted(
+            projection,
+            new EnsureColumnIntent("items", NullableColumn("new_id")),
             SafeMigrationObservedState.Missing);
-        var operation = new SafeMigrationOperation(new EnsureIndexIntent(new ExpectedIndexDefinition(
-            "ix_mixed", "items", [new ExpectedIndexKeyDefinition("new_id"),
-                new ExpectedIndexKeyDefinition("reference")])), SafeMigrationPolicy.ThrowIfDifferent);
+
+        var operation = new SafeMigrationOperation(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "ix_mixed",
+                    "items",
+                    [
+                        new ExpectedIndexKeyDefinition("new_id"),
+                        new ExpectedIndexKeyDefinition("reference"),
+                    ])),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
         var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
         if (capturesOriginalMember)
         {
-            live = live.WithIndexPhysicalEnvironment(new SafeMigrationIndexPhysicalEnvironment(3072,
-                new Dictionary<string, SafeMigrationIndexColumnPhysicalShape>(StringComparer.Ordinal)
-                {
-                    ["reference"] = new(null, 0, 4, false),
-                }));
+            live = live.WithIndexPhysicalEnvironment(
+                new SafeMigrationIndexPhysicalEnvironment(
+                    3072,
+                    new Dictionary<string, SafeMigrationIndexColumnPhysicalShape>(StringComparer.Ordinal)
+                    {
+                        ["reference"] = new(null, 0, 4, false),
+                    }));
         }
 
         // Act
         var result = projection.Project(operation, live);
 
         // Assert
-        Assert.Equal(capturesOriginalMember ? 1 : 0, provider.KeyQueries);
-        Assert.Equal(capturesOriginalMember ? provider.KeyResult.Code : "projected_structure_state_unknown",
+        Assert.Equal(
+            capturesOriginalMember
+                ? 1
+                : 0,
+            provider.KeyQueries);
+
+        Assert.Equal(
+            capturesOriginalMember
+                ? provider.KeyResult.Code
+                : "projected_structure_state_unknown",
             result.Code);
     }
 
@@ -516,29 +693,44 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData(false, false)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void OwnedStagingResumeRetainsOnlyUnchangedOriginalMemberValues(bool resumesStaging, bool previouslyAdded)
+    public void OwnedStagingResumeRetainsOnlyUnchangedOriginalMemberValues(
+        bool resumesStaging,
+        bool previouslyAdded
+    )
     {
         // Arrange
         var provider = new IndependentColumnDropProbe();
         var projection = new SafeMigrationPreflightProjection(projectedColumnAnalyzer: provider);
-        ObserveAccepted(projection, new DropPrimaryKeyIntent("pk_items", "items"),
+        ObserveAccepted(
+            projection,
+            new DropPrimaryKeyIntent("pk_items", "items"),
             SafeMigrationObservedState.Matching);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items", Column("id")),
+
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", Column("id")),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         projection.CurrentOperationOrdinal = 2;
         if (previouslyAdded)
         {
             ObserveAccepted(projection, operation.Intent, SafeMigrationObservedState.Missing);
         }
 
-        var missing = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
-            SafeMigrationRepairCapability.None, false, "column_atomic_add_resume")
+        var missing = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Missing,
+            SafeMigrationRepairCapability.None,
+            false,
+            "column_atomic_add_resume")
         {
             RequiredColumnAddResumesOwnedStaging = resumesStaging,
         };
+
         projection.CurrentOperationOrdinal = 3;
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, missing.ObservedState,
-            operation.Policy, missing.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            missing.ObservedState,
+            operation.Policy,
+            missing.RepairCapability);
 
         // Act
         projection.Observe(operation, missing, missing, decision);
@@ -547,7 +739,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         // Assert
         var preservesValues = resumesStaging && !previouslyAdded;
         Assert.Equal(preservesValues, columns.PreservesLiveColumnValues("items", null, "id"));
-        Assert.Equal(preservesValues ? null : 3, columns.GetColumnValueMutationOrigin("items", null, "id"));
+        Assert.Equal(
+            preservesValues
+                ? null
+                : 3,
+            columns.GetColumnValueMutationOrigin("items", null, "id"));
+
         Assert.Null(columns.GetColumnValueMutationOrigin("items", "other", "id"));
     }
 
@@ -556,24 +753,46 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void OwnedStagingResumeValueProofExpiresAtDataBoundaries(bool opaque)
+    public void OwnedStagingResumeValueProofExpiresAtDataBoundaries(
+        bool opaque
+    )
     {
         // Arrange
         var provider = new IndependentColumnDropProbe();
         var projection = new SafeMigrationPreflightProjection(projectedColumnAnalyzer: provider);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items", Column("id")),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", Column("id")),
             SafeMigrationPolicy.ThrowIfDifferent);
-        var missing = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
-            SafeMigrationRepairCapability.None, false, "column_atomic_add_resume")
+
+        var missing = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Missing,
+            SafeMigrationRepairCapability.None,
+            false,
+            "column_atomic_add_resume")
         {
             RequiredColumnAddResumesOwnedStaging = true,
         };
-        projection.Observe(operation, missing, missing, SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind,
-            missing.ObservedState, operation.Policy, missing.RepairCapability));
+
+        projection.Observe(
+            operation,
+            missing,
+            missing,
+            SafeMigrationDecisionPlanner.Plan(
+                operation.Intent.Kind,
+                missing.ObservedState,
+                operation.Policy,
+                missing.RepairCapability));
+
         var columns = (ISafeMigrationProjectedColumnSource)projection;
         var originalValuesPreserved = columns.PreservesLiveColumnValues("items", null, "id");
-        MigrationOperation boundary = opaque ? new SqlOperation { Sql = "SELECT 1;" }
-            : new InsertDataOperation { Table = "items", Columns = ["id"], Values = new object[,] { { 1 } } };
+        MigrationOperation boundary = opaque
+            ? new SqlOperation { Sql = "SELECT 1;" }
+            : new InsertDataOperation
+            {
+                Table = "items",
+                Columns = ["id"],
+                Values = new object[,] { { 1 } },
+            };
 
         // Act
         projection.ObserveProviderPostcondition(boundary);
@@ -591,40 +810,40 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         bool dropPrimary = true
     )
     {
-        var projection = new SafeMigrationPreflightProjection(projectedColumnAnalyzer: provider,
+        var projection = new SafeMigrationPreflightProjection(
+            projectedColumnAnalyzer: provider,
             projectedKeyAnalyzer: provider);
+
         if (dropPrimary)
         {
-            ObserveAccepted(projection, new DropPrimaryKeyIntent("pk_items", "items"),
+            ObserveAccepted(
+                projection,
+                new DropPrimaryKeyIntent("pk_items", "items"),
                 SafeMigrationObservedState.Matching);
         }
 
         projection.CurrentOperationOrdinal = 1;
-        ObserveAccepted(projection, new DropColumnIntent("legacy", "items"),
+        ObserveAccepted(
+            projection,
+            new DropColumnIntent("legacy", "items"),
             SafeMigrationObservedState.Matching);
 
         return projection;
     }
 
     /// <summary>Models narrow native certificates without treating complete physical tables as known.</summary>
-    private sealed class IndependentColumnDropProbe(bool certifiesDrop = true, bool validatesKey = true)
+    private sealed class IndependentColumnDropProbe(
+        bool certifiesDrop = true,
+        bool validatesKey = true
+    )
         : ISafeMigrationProjectedColumnAnalyzer,
-        ISafeMigrationProjectedKeyAnalyzer
+            ISafeMigrationProjectedKeyAnalyzer
     {
         /// <summary>Gets native exact-column certificate queries.</summary>
         public int ColumnQueries { get; private set; }
 
         /// <summary>Gets independent provider-key validation queries.</summary>
         public int KeyQueries { get; private set; }
-
-        /// <inheritdoc />
-        public bool SharesUniqueConstraintAndIndexIdentity => false;
-
-        /// <inheritdoc />
-        public bool PrimaryKeyUsesNameIndependentIdentity => true;
-
-        /// <inheritdoc />
-        public bool CanValidateAfterColumnDrops => validatesKey;
 
         /// <summary>Gets the exact native result returned by this key proof.</summary>
         public SafeMigrationProviderAnalysis KeyResult { get; } = Live(SafeMigrationObservedState.Missing);
@@ -636,12 +855,16 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         public SafeMigrationProviderAnalysis? KeyProjected { get; private set; }
 
         /// <inheritdoc />
-        public bool PreservesIntrinsicColumnSources(SafeMigrationIntent intent)
+        public bool PreservesIntrinsicColumnSources(
+            SafeMigrationIntent intent
+        )
             => intent is DropPrimaryKeyIntent || (certifiesDrop && intent is DropColumnIntent);
 
         /// <inheritdoc />
-        public bool CanReuseLiveColumnProofAfterKeyChanges(AlterColumnIntent intent,
-            SafeMigrationProviderAnalysis liveAnalysis)
+        public bool CanReuseLiveColumnProofAfterKeyChanges(
+            AlterColumnIntent intent,
+            SafeMigrationProviderAnalysis liveAnalysis
+        )
         {
             ColumnQueries++;
 
@@ -652,15 +875,31 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         }
 
         /// <inheritdoc />
-        public SafeMigrationProviderAnalysis ValidateProjectedAlterColumn(AlterColumnIntent intent,
-            ExpectedColumnDefinition source, SafeMigrationProjectedAlterColumnContext context,
-            SafeMigrationProviderAnalysis liveAnalysis, SafeMigrationProviderAnalysis projectedAnalysis)
+        public SafeMigrationProviderAnalysis ValidateProjectedAlterColumn(
+            AlterColumnIntent intent,
+            ExpectedColumnDefinition source,
+            SafeMigrationProjectedAlterColumnContext context,
+            SafeMigrationProviderAnalysis liveAnalysis,
+            SafeMigrationProviderAnalysis projectedAnalysis
+        )
             => projectedAnalysis;
 
         /// <inheritdoc />
-        public SafeMigrationProviderAnalysis ValidateProjectedPrimaryKey(EnsurePrimaryKeyIntent intent,
-            ISafeMigrationProjectedColumnSource columns, SafeMigrationProviderAnalysis liveAnalysis,
-            SafeMigrationProviderAnalysis projectedAnalysis)
+        public bool SharesUniqueConstraintAndIndexIdentity => false;
+
+        /// <inheritdoc />
+        public bool PrimaryKeyUsesNameIndependentIdentity => true;
+
+        /// <inheritdoc />
+        public bool CanValidateAfterColumnDrops => validatesKey;
+
+        /// <inheritdoc />
+        public SafeMigrationProviderAnalysis ValidateProjectedPrimaryKey(
+            EnsurePrimaryKeyIntent intent,
+            ISafeMigrationProjectedColumnSource columns,
+            SafeMigrationProviderAnalysis liveAnalysis,
+            SafeMigrationProviderAnalysis projectedAnalysis
+        )
         {
             KeyQueries++;
             KeyLive = liveAnalysis;
@@ -670,9 +909,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         }
 
         /// <inheritdoc />
-        public SafeMigrationProviderAnalysis ValidateProjectedIndex(EnsureIndexIntent intent,
-            ISafeMigrationProjectedColumnSource columns, SafeMigrationProviderAnalysis liveAnalysis,
-            SafeMigrationProviderAnalysis projectedAnalysis)
+        public SafeMigrationProviderAnalysis ValidateProjectedIndex(
+            EnsureIndexIntent intent,
+            ISafeMigrationProjectedColumnSource columns,
+            SafeMigrationProviderAnalysis liveAnalysis,
+            SafeMigrationProviderAnalysis projectedAnalysis
+        )
         {
             KeyQueries++;
             KeyLive = liveAnalysis;
@@ -682,9 +924,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         }
 
         /// <inheritdoc />
-        public SafeMigrationProviderAnalysis ValidateProjectedUniqueConstraint(EnsureUniqueConstraintIntent intent,
-            ISafeMigrationProjectedColumnSource columns, SafeMigrationProviderAnalysis liveAnalysis,
-            SafeMigrationProviderAnalysis projectedAnalysis)
+        public SafeMigrationProviderAnalysis ValidateProjectedUniqueConstraint(
+            EnsureUniqueConstraintIntent intent,
+            ISafeMigrationProjectedColumnSource columns,
+            SafeMigrationProviderAnalysis liveAnalysis,
+            SafeMigrationProviderAnalysis projectedAnalysis
+        )
         {
             KeyQueries++;
             KeyLive = liveAnalysis;

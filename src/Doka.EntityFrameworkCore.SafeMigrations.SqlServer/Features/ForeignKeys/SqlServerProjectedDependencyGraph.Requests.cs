@@ -33,6 +33,7 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                 case EnsureTableIntent table:
                     result.Add(
                         new BindingRequest(table.Definition.Schema ?? "dbo", table.Definition.Table, null, null));
+
                     foreach (var foreignKey in table.Definition.ForeignKeys)
                     {
                         AddForeignKey(foreignKey);
@@ -50,6 +51,7 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                             table.NewName ?? table.Name,
                             null,
                             null));
+
                     if ((table.NewName ?? table.Name) != table.Name
                         && (table.NewSchema ?? table.Schema ?? "dbo") != (table.Schema ?? "dbo"))
                     {
@@ -104,6 +106,7 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                         definition.Table,
                         definition.Columns[ordinal],
                         definition.Name));
+
                 result.Add(
                     new BindingRequest(
                         definition.PrincipalSchema ?? "dbo",
@@ -203,9 +206,11 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                     authoredTables.Remove(new TableKey(rename.Schema ?? "dbo", rename.Name));
                     authoredTables.Remove(
                         new TableKey(rename.NewSchema ?? rename.Schema ?? "dbo", rename.NewName ?? rename.Name));
+
                     authoredColumns.Remove(new TableKey(rename.Schema ?? "dbo", rename.Name));
                     authoredColumns.Remove(
                         new TableKey(rename.NewSchema ?? rename.Schema ?? "dbo", rename.NewName ?? rename.Name));
+
                     continue;
                 default:
                     continue;

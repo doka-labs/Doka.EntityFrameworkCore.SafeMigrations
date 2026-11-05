@@ -7,19 +7,19 @@ public partial class SqlServerColumnAttribution : IDisposable
 {
     private const int CommandTimeoutSeconds = 180;
     private static readonly JsonSerializerOptions s_jsonOptions = new() { WriteIndented = true };
-
-    private SqlConnection? _root;
+    private ISafeMigrationProviderAnalyzer? _analyzer;
+    private IReadOnlyList<MigrationCommand> _commands = [];
     private SqlConnection? _connection;
     private AttributionContext? _context;
-    private IMigrationsSqlGenerator? _generator;
-    private ISafeMigrationProviderAnalyzer? _analyzer;
-    private Scenario? _scenario;
     private string? _database;
-    private string _output = string.Empty;
-    private string _original = string.Empty;
-    private string _sql = string.Empty;
+    private IMigrationsSqlGenerator? _generator;
     private List<SafeMigrationOperation> _operations = [];
-    private IReadOnlyList<MigrationCommand> _commands = [];
+    private string _original = string.Empty;
+    private string _output = string.Empty;
+
+    private SqlConnection? _root;
+    private Scenario? _scenario;
+    private string _sql = string.Empty;
 
     /// <summary>Gets or sets the exact live column fixture and expected classification contract.</summary>
     [Params(
@@ -55,6 +55,13 @@ public partial class SqlServerColumnAttribution : IDisposable
         _analyzer ?? throw new InvalidOperationException("Setup has not completed.");
 
     private Scenario ScenarioDefinition => _scenario ?? throw new InvalidOperationException("Setup has not completed.");
+
+    /// <summary>Releases connections and removes only the owned generated diagnostic database.</summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
 
     /// <summary>Creates an owned database and captures fixture, safety and server evidence before timing.</summary>
     [GlobalSetup]
@@ -134,7 +141,8 @@ public partial class SqlServerColumnAttribution : IDisposable
     /// <summary>Measures complete provider SQL generation against the preconstructed live scenario.</summary>
     /// <returns>The number of generated migration commands.</returns>
     [Benchmark]
-    public int Generate() => Generator.Generate(_operations, Context.Model).Count;
+    public int Generate() => Generator.Generate(_operations, Context.Model)
+        .Count;
 
     /// <summary>Measures actual catalog analysis, including its database round trips.</summary>
     /// <returns>The number of provider analysis results.</returns>
@@ -193,13 +201,6 @@ public partial class SqlServerColumnAttribution : IDisposable
         {
             Dispose();
         }
-    }
-
-    /// <summary>Releases connections and removes only the owned generated diagnostic database.</summary>
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
     }
 
     /// <summary>Releases managed diagnostic resources when the benchmark owner is disposed.</summary>
@@ -262,6 +263,7 @@ public partial class SqlServerColumnAttribution : IDisposable
         var rows = string.IsNullOrWhiteSpace(configured)
             ? 10_000
             : int.Parse(configured, CultureInfo.InvariantCulture);
+
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(rows);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(rows, 200_000);
 
@@ -287,6 +289,7 @@ public partial class SqlServerColumnAttribution : IDisposable
                     _root,
                     $"ALTER DATABASE [{_database}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; "
                     + $"DROP DATABASE [{_database}];");
+
                 _database = null;
             }
         }
@@ -372,7 +375,7 @@ public partial class SqlServerColumnAttribution : IDisposable
         if (analyses.Count != scenario.Columns
             || analyses.Any(analysis => analysis.ObservedState != scenario.ExpectedState
                 || analysis.PostconditionSatisfied != (scenario.ExpectedState == SafeMigrationObservedState.Matching)
-                || scenario.RejectRuntime && analysis.RepairCapability == SafeMigrationRepairCapability.Safe))
+                || (scenario.RejectRuntime && analysis.RepairCapability == SafeMigrationRepairCapability.Safe)))
         {
             throw new InvalidOperationException(
                 $"{scenario.Name}: unexpected analyzer state: " + JsonSerializer.Serialize(analyses, s_jsonOptions));

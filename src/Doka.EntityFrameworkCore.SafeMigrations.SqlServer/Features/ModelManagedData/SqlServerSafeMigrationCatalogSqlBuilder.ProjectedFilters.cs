@@ -20,7 +20,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 switch (expression)
                 {
                     case SafeMigrationSqlNullTestExpression
-                        { Operand: SafeMigrationSqlIdentifierExpression identifier }:
+                    {
+                        Operand: SafeMigrationSqlIdentifierExpression identifier,
+                    }:
                         yield return (identifier.Parts[0], null);
                         break;
 
@@ -38,7 +40,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                         break;
 
                     case SafeMigrationSqlInExpression
-                        { Operand: SafeMigrationSqlIdentifierExpression identifier } predicate:
+                    {
+                        Operand: SafeMigrationSqlIdentifierExpression identifier,
+                    } predicate:
                         foreach (var value in predicate.Values)
                         {
                             yield return (identifier.Parts[0], (SafeMigrationSqlLiteralExpression)value);
@@ -56,8 +60,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 {
                     yield break;
                 }
-            }
-            while (true);
+            } while (true);
         }
         finally
         {
@@ -75,7 +78,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     )
     {
         var target = _typeMappingSource.FindMapping(storeType);
-        if (target is null || _expressionRenderer.GetUnsupportedFeature(literal) is not null)
+        if (target is null
+            || _expressionRenderer.GetUnsupportedFeature(literal) is not null)
         {
             return false;
         }
@@ -92,11 +96,15 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     /// <summary>Gets the built-in scalar type of the actual emitted right-hand SQL literal.</summary>
     /// <param name="literal">The immutable constant already validated by the expression renderer.</param>
     /// <returns>The SQL literal's built-in type name, or an empty string for an unmapped literal.</returns>
-    internal string EmittedIndexFilterLiteralStoreType(SafeMigrationSqlLiteralExpression literal)
+    internal string EmittedIndexFilterLiteralStoreType(
+        SafeMigrationSqlLiteralExpression literal
+    )
     {
         if (literal.StoreType is { } explicitType)
         {
-            return _typeMappingSource.FindMapping(explicitType)?.StoreTypeNameBase ?? string.Empty;
+            return _typeMappingSource.FindMapping(explicitType)
+                    ?.StoreTypeNameBase
+                ?? string.Empty;
         }
 
         // WHY: CLR mapping types are not necessarily SQL literal types. GUID
@@ -122,17 +130,27 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         if (rendered.StartsWith("CAST(", StringComparison.OrdinalIgnoreCase)
             || rendered.StartsWith("TRY_CAST(", StringComparison.OrdinalIgnoreCase))
         {
-            return literal.Value is null ? string.Empty
-                : _typeMappingSource.FindMapping(literal.Value.GetType())?.StoreTypeNameBase ?? string.Empty;
+            return literal.Value is null
+                ? string.Empty
+                : _typeMappingSource.FindMapping(literal.Value.GetType())
+                    ?.StoreTypeNameBase
+                ?? string.Empty;
         }
 
-        if (rendered.Contains('E') || rendered.Contains('e'))
+        if (rendered.Contains('E')
+            || rendered.Contains('e'))
         {
             return "float";
         }
 
-        return rendered.Contains('.') || !int.TryParse(rendered,
-            NumberStyles.Integer, CultureInfo.InvariantCulture, out _) ? "decimal" : "int";
+        return rendered.Contains('.')
+            || !int.TryParse(
+                rendered,
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out _)
+                ? "decimal"
+                : "int";
     }
 
     /// <summary>Qualifies constant conversions for exactly captured authored filtered-index columns.</summary>
@@ -164,15 +182,25 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             }
 
             var mapping = _typeMappingSource.FindMapping(
-                column.ClrType, column.StoreType, unicode: column.IsUnicode,
-                size: column.MaxLength, rowVersion: column.IsRowVersion,
-                fixedLength: column.IsFixedLength, precision: column.Precision, scale: column.Scale);
+                column.ClrType,
+                column.StoreType,
+                unicode: column.IsUnicode,
+                size: column.MaxLength,
+                rowVersion: column.IsRowVersion,
+                fixedLength: column.IsFixedLength,
+                precision: column.Precision,
+                scale: column.Scale);
 
-            if (mapping is null || !IsSupportedManagedStoreType(mapping.StoreType)
-                || column.ComputedExpression is not null || column.ComputedColumnSql is not null
-                || column.Collation is { } collation && _expressionRenderer.GetUnsupportedFeature(
-                    new SafeMigrationSqlCollateExpression(SafeMigrationSql.Identifier(name),
-                        collation.Name, collation.Schema)) is not null)
+            if (mapping is null
+                || !IsSupportedManagedStoreType(mapping.StoreType)
+                || column.ComputedExpression is not null
+                || column.ComputedColumnSql is not null
+                || (column.Collation is { } collation
+                    && _expressionRenderer.GetUnsupportedFeature(
+                        new SafeMigrationSqlCollateExpression(
+                            SafeMigrationSql.Identifier(name),
+                            collation.Name,
+                            collation.Schema)) is not null))
             {
                 return null;
             }
@@ -193,8 +221,12 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             }
 
             var scalar = ManagedValueRepresentationGuard(literal.Value, mapping.StoreType);
-            if (!AddPredicate(scalar) || !AddPredicate(ManagedAnsiValueRepresentationGuard(
-                literal.Value, mapping.StoreType, column.Collation?.Name)))
+            if (!AddPredicate(scalar)
+                || !AddPredicate(
+                    ManagedAnsiValueRepresentationGuard(
+                        literal.Value,
+                        mapping.StoreType,
+                        column.Collation?.Name)))
             {
                 return null;
             }
@@ -218,26 +250,39 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             }
         }
 
-        var condition = predicates.Count == 0 ? "1 = 1"
+        var condition = predicates.Count == 0
+            ? "1 = 1"
             : string.Join(" AND ", predicates.Select(static predicate => $"({predicate})"));
 
         var body = $"SELECT CASE WHEN {condition} THEN 1 ELSE 0 END;";
-        var installedGuard = collations.Count == 0 ? "1 = 1"
-            : string.Join(" AND ", collations.Select(collation =>
-                $"EXISTS (SELECT 1 FROM sys.fn_helpcollations() WHERE name = {Literal(collation)})"));
+        var installedGuard = collations.Count == 0
+            ? "1 = 1"
+            : string.Join(
+                " AND ",
+                collations.Select(collation =>
+                    $"EXISTS (SELECT 1 FROM sys.fn_helpcollations() WHERE name = {Literal(collation)})"));
 
         // WHY: Bind constant-only SQL only after installed-collation validation.
         // Neither missing destinations nor empty row sets can authorize an
         // invalid filter conversion, and malformed constants never touch rows.
         var argument = SqlServerSqlStringLiteral.ProcedureArgument(
-            body, Literal(body), "@doka_projected_filter_sql", out var declaration);
-        var sql = declaration + $"IF {installedGuard} BEGIN TRY EXEC sys.sp_executesql {argument}; "
+            body,
+            Literal(body),
+            "@doka_projected_filter_sql",
+            out var declaration);
+
+        var sql = declaration
+            + $"IF {installedGuard} BEGIN TRY EXEC sys.sp_executesql {argument}; "
             + "END TRY BEGIN CATCH IF ERROR_NUMBER() IN (241, 242, 245, 248, 529, 8114, 8115) "
             + "SELECT 0; ELSE THROW; END CATCH ELSE SELECT 0;";
 
-        return Encoding.UTF8.GetByteCount(sql) <= SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes ? sql : null;
+        return Encoding.UTF8.GetByteCount(sql) <= SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes
+            ? sql
+            : null;
 
-        bool AddPredicate(string predicate)
+        bool AddPredicate(
+            string predicate
+        )
         {
             if (!predicates.Add(predicate))
             {
@@ -245,7 +290,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             }
 
             var size = Encoding.UTF8.GetByteCount(predicate)
-                + predicate.Count(static character => character == '\'') + 8;
+                + predicate.Count(static character => character == '\'')
+                + 8;
 
             if (size > SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes - bytes)
             {
@@ -258,7 +304,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         }
     }
 
-    private static int FilterTypePrecedence(string storeType)
+    private static int FilterTypePrecedence(
+        string storeType
+    )
         => storeType.ToLowerInvariant() switch
         {
             "datetimeoffset" => 27,
@@ -294,7 +342,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         SafeMigrationSqlExpression filter
     )
         => IsSupportedIndexFilter(filter) && _expressionRenderer.GetUnsupportedFeature(filter) is null
-            ? _expressionRenderer.Render(filter) : null;
+            ? _expressionRenderer.Render(filter)
+            : null;
 
     /// <summary>
     /// Validates SQL Server's filtered-index predicate grammar, independently of general SQL expressions.
@@ -311,7 +360,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             do
             {
                 if (expression is SafeMigrationSqlBinaryExpression
-                    { Operator: SafeMigrationSqlBinaryOperator.And } conjunction)
+                    {
+                        Operator: SafeMigrationSqlBinaryOperator.And,
+                    } conjunction)
                 {
                     pending.Push(conjunction.Right);
                     expression = conjunction.Left;
@@ -321,22 +372,28 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 var supported = expression switch
                 {
                     SafeMigrationSqlNullTestExpression
-                        { Operand: SafeMigrationSqlIdentifierExpression { Parts.Count: 1 } } => true,
-                    SafeMigrationSqlBinaryExpression
                     {
-                        Left: SafeMigrationSqlIdentifierExpression { Parts.Count: 1 },
-                        Right: SafeMigrationSqlLiteralExpression { Value: not null } literal,
-                    } comparison when comparison.Operator is SafeMigrationSqlBinaryOperator.Equal
-                        or SafeMigrationSqlBinaryOperator.NotEqual or SafeMigrationSqlBinaryOperator.LessThan
-                        or SafeMigrationSqlBinaryOperator.LessThanOrEqual or SafeMigrationSqlBinaryOperator.GreaterThan
-                        or SafeMigrationSqlBinaryOperator.GreaterThanOrEqual
+                        Operand: SafeMigrationSqlIdentifierExpression { Parts.Count: 1 },
+                    } => true,
+                    SafeMigrationSqlBinaryExpression
+                        {
+                            Left: SafeMigrationSqlIdentifierExpression { Parts.Count: 1 },
+                            Right: SafeMigrationSqlLiteralExpression { Value: not null } literal,
+                        } comparison when comparison.Operator is SafeMigrationSqlBinaryOperator.Equal
+                            or SafeMigrationSqlBinaryOperator.NotEqual
+                            or SafeMigrationSqlBinaryOperator.LessThan
+                            or SafeMigrationSqlBinaryOperator.LessThanOrEqual
+                            or SafeMigrationSqlBinaryOperator.GreaterThan
+                            or SafeMigrationSqlBinaryOperator.GreaterThanOrEqual
                         => literal.StoreType is null || IsManagedValueRepresentable(literal.Value, literal.StoreType),
                     SafeMigrationSqlInExpression
                     {
                         Operand: SafeMigrationSqlIdentifierExpression { Parts.Count: 1 },
                         Negated: false,
                     } predicate => predicate.Values.All(static value => value is SafeMigrationSqlLiteralExpression
-                        { Value: not null } literal
+                        {
+                            Value: not null,
+                        } literal
                         && (literal.StoreType is null
                             || IsManagedValueRepresentable(literal.Value, literal.StoreType))),
                     _ => false,
@@ -351,8 +408,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 {
                     return true;
                 }
-            }
-            while (true);
+            } while (true);
         }
         finally
         {
@@ -371,7 +427,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     private static SafeMigrationSqlExpression? RewriteFilter<TRewriter>(
         SafeMigrationSqlExpression expression,
         TRewriter rewriter
-    ) where TRewriter : struct, IFilterRewriter
+    )
+        where TRewriter : struct, IFilterRewriter
     {
         var pending = default(SafeMigrationWorkStack<FilterRewriteFrame>);
         try
@@ -403,7 +460,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 }
 
                 var result = expression is SafeMigrationSqlInExpression unchanged && !rewriter.RewriteOperands
-                    ? unchanged.Operand : rewriter.RewriteLeaf(expression);
+                    ? unchanged.Operand
+                    : rewriter.RewriteLeaf(expression);
 
                 do
                 {
@@ -415,18 +473,28 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     switch (frame.Expression)
                     {
                         case SafeMigrationSqlBinaryExpression binary when frame.Index == 0:
-                            pending.Push(frame with { Index = 1, First = result });
+                            pending.Push(
+                                frame with
+                                {
+                                    Index = 1,
+                                    First = result,
+                                });
+
                             expression = binary.Right;
                             break;
 
                         case SafeMigrationSqlBinaryExpression binary:
-                            result = frame.First is null || result is null ? null
+                            result = frame.First is null || result is null
+                                ? null
                                 : new SafeMigrationSqlBinaryExpression(frame.First, binary.Operator, result);
+
                             continue;
 
                         case SafeMigrationSqlNullTestExpression test:
-                            result = result is null ? null
+                            result = result is null
+                                ? null
                                 : new SafeMigrationSqlNullTestExpression(result, test.Negated);
+
                             continue;
 
                         case SafeMigrationSqlInExpression predicate:
@@ -447,9 +515,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                                 break;
                             }
 
-                            result = frame.First is null || frame.Values!.Any(static value => value is null) ? null
-                                : new SafeMigrationSqlInExpression(frame.First,
-                                    frame.Values!.Select(static value => value!), predicate.Negated);
+                            result = frame.First is null || frame.Values!.Any(static value => value is null)
+                                ? null
+                                : new SafeMigrationSqlInExpression(
+                                    frame.First,
+                                    frame.Values!.Select(static value => value!),
+                                    predicate.Negated);
+
                             continue;
 
                         default:
@@ -457,10 +529,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                     }
 
                     break;
-                }
-                while (true);
-            }
-            while (true);
+                } while (true);
+            } while (true);
         }
         finally
         {
@@ -475,10 +545,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         bool RewriteOperands { get; }
 
         /// <summary>Recognizes binary nodes admitted by this existing reconstruction path.</summary>
-        bool SupportsBinary(SafeMigrationSqlBinaryOperator operation);
+        bool SupportsBinary(
+            SafeMigrationSqlBinaryOperator operation
+        );
 
         /// <summary>Rewrites a leaf, retaining the policy's original unsupported-node result.</summary>
-        SafeMigrationSqlExpression? RewriteLeaf(SafeMigrationSqlExpression expression);
+        SafeMigrationSqlExpression? RewriteLeaf(
+            SafeMigrationSqlExpression expression
+        );
     }
 
     /// <summary>Binds immutable identifiers to invocation-owned aliases without replacing SQL text.</summary>
@@ -501,12 +575,16 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         public bool RewriteOperands => true;
 
         /// <inheritdoc />
-        public bool SupportsBinary(SafeMigrationSqlBinaryOperator operation)
+        public bool SupportsBinary(
+            SafeMigrationSqlBinaryOperator operation
+        )
             => operation is SafeMigrationSqlBinaryOperator.And
                 or >= SafeMigrationSqlBinaryOperator.Equal and <= SafeMigrationSqlBinaryOperator.GreaterThanOrEqual;
 
         /// <inheritdoc />
-        public SafeMigrationSqlExpression? RewriteLeaf(SafeMigrationSqlExpression expression)
+        public SafeMigrationSqlExpression? RewriteLeaf(
+            SafeMigrationSqlExpression expression
+        )
         {
             if (expression is SafeMigrationSqlLiteralExpression)
             {
@@ -536,7 +614,9 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         private readonly Queue<string> _strings;
 
         /// <summary>Retains the already tokenized raw-literal encoding order.</summary>
-        internal LiteralTypeFilterRewriter(Queue<string> strings)
+        internal LiteralTypeFilterRewriter(
+            Queue<string> strings
+        )
         {
             _strings = strings;
         }
@@ -545,12 +625,17 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         public bool RewriteOperands => false;
 
         /// <inheritdoc />
-        public bool SupportsBinary(SafeMigrationSqlBinaryOperator operation) => true;
+        public bool SupportsBinary(
+            SafeMigrationSqlBinaryOperator operation
+        ) => true;
 
         /// <inheritdoc />
-        public SafeMigrationSqlExpression RewriteLeaf(SafeMigrationSqlExpression expression)
+        public SafeMigrationSqlExpression RewriteLeaf(
+            SafeMigrationSqlExpression expression
+        )
             => expression is SafeMigrationSqlLiteralExpression { Value: string } literal
-                ? new SafeMigrationSqlLiteralExpression(literal.Value, _strings.Dequeue()) : expression;
+                ? new SafeMigrationSqlLiteralExpression(literal.Value, _strings.Dequeue())
+                : expression;
     }
 
     /// <summary>Retains reconstructed siblings until their immutable parent can be rebuilt.</summary>

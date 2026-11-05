@@ -18,7 +18,9 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
             "CREATE TABLE projection_parents (id integer NOT NULL PRIMARY KEY); "
             + "CREATE TABLE projection_children (id integer NOT NULL PRIMARY KEY); "
             + "INSERT INTO projection_parents (id) VALUES (1); "
-            + "INSERT INTO projection_children (id) VALUES (1);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO projection_children (id) VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = ExistingTableForeignKeyConvergence(context, defaultValue: null);
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -61,6 +63,7 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
                 "SELECT COUNT(*) FROM pg_catalog.pg_constraint "
                 + "WHERE conname = 'fk_projection_children_parents' AND contype = 'f';",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -78,7 +81,9 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
             "CREATE TABLE projection_parents (id integer NOT NULL PRIMARY KEY); "
             + "CREATE TABLE projection_children (id integer NOT NULL PRIMARY KEY); "
             + "INSERT INTO projection_parents (id) VALUES (1); "
-            + "INSERT INTO projection_children (id) VALUES (1);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO projection_children (id) VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = ExistingTableForeignKeyConvergence(context, defaultValue: 999);
 
@@ -103,7 +108,8 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
                 connectionString,
                 "SELECT COUNT(*) FROM information_schema.columns "
                 + "WHERE table_schema = current_schema() AND table_name = 'projection_children' "
-                + "AND column_name = 'parent_id';", cancellationToken: CancellationToken.None));
+                + "AND column_name = 'parent_id';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -115,7 +121,9 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
             "CREATE TABLE alias_projection_parents ("
             + "id integer NOT NULL, code integer NOT NULL, "
             + "CONSTRAINT pk_alias_projection_parents PRIMARY KEY (id), "
-            + "CONSTRAINT uq_alias_projection_parents_code UNIQUE (code));", cancellationToken: CancellationToken.None);
+            + "CONSTRAINT uq_alias_projection_parents_code UNIQUE (code));",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = SemanticUniqueDropProjection(context);
 
@@ -164,10 +172,15 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
             + "id integer NOT NULL, parent_id integer NULL, "
             + "CONSTRAINT pk_identity_children PRIMARY KEY (id), "
             + "CONSTRAINT fk_identity_parent FOREIGN KEY (parent_id) "
-            + "REFERENCES identity_parents (id) ON DELETE CASCADE);", cancellationToken: CancellationToken.None);
+            + "REFERENCES identity_parents (id) ON DELETE CASCADE);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = SemanticAliasOperations(context, "identity");
-        var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+        var operations = builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
 
         var analyses = await context
             .GetService<ISafeMigrationProviderAnalyzer>()
@@ -211,7 +224,9 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
             + "CONSTRAINT fk_ambiguous_parent_a FOREIGN KEY (parent_id) "
             + "REFERENCES ambiguous_parents (id) ON DELETE CASCADE, "
             + "CONSTRAINT fk_ambiguous_parent_b FOREIGN KEY (parent_id) "
-            + "REFERENCES ambiguous_parents (id) ON DELETE CASCADE);", cancellationToken: CancellationToken.None);
+            + "REFERENCES ambiguous_parents (id) ON DELETE CASCADE);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
 
         Assert.Equal(
@@ -223,7 +238,10 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
                 cancellationToken: CancellationToken.None));
 
         var builder = SemanticAliasOperations(context, "ambiguous");
-        var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+        var operations = builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
 
         var analyses = await context
             .GetService<ISafeMigrationProviderAnalyzer>()
@@ -247,6 +265,7 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
             connectionString,
             "CREATE TABLE projection_constraints (legacy_marker integer NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = EmptyExistingTableConstraintConvergence(context);
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -271,11 +290,12 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
             new SafeMigrationRunOptions("existing-table-constraints-replay"),
             CancellationToken.None);
 
-        var constraints = preflight.Assessments
+        var constraints = preflight
+            .Assessments
             .Where(static assessment => assessment.OperationKind is
-                SafeMigrationOperationKind.EnsurePrimaryKey or
-                SafeMigrationOperationKind.EnsureUniqueConstraint or
-                SafeMigrationOperationKind.EnsureCheckConstraint)
+                SafeMigrationOperationKind.EnsurePrimaryKey
+                or SafeMigrationOperationKind.EnsureUniqueConstraint
+                or SafeMigrationOperationKind.EnsureCheckConstraint)
             .ToArray();
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -285,6 +305,7 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
             static assessment => Assert.Equal(
                 SafeMigrationObservedState.Missing,
                 assessment.ObservedState));
+
         Assert.All(constraints, static assessment => Assert.Equal(SafeMigrationAction.Apply, assessment.Action));
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
@@ -299,7 +320,10 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
         bool useSemanticAliases
     )
     {
-        var suffix = useSemanticAliases ? "alias" : "exact";
+        var suffix = useSemanticAliases
+            ? "alias"
+            : "exact";
+
         var parentTable = $"ordered_{suffix}_parents";
         var childTable = $"ordered_{suffix}_children";
         var primaryKey = $"pk_{parentTable}";
@@ -325,7 +349,9 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
             + $"CREATE TABLE {childTable} ("
             + "id integer NOT NULL PRIMARY KEY, parent_id integer NULL, "
             + $"CONSTRAINT {foreignKey} FOREIGN KEY (parent_id) "
-            + $"REFERENCES {parentTable} (id) ON DELETE CASCADE);", cancellationToken: CancellationToken.None);
+            + $"REFERENCES {parentTable} (id) ON DELETE CASCADE);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = DropThenEnsureOperations(
             context,
@@ -352,36 +378,40 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
             SafeMigrationOperationKind.EnsurePrimaryKey,
             expectedPrimaryKey,
             useSemanticAliases);
+
         AssertProjectedReplacement(
             preflight,
             SafeMigrationOperationKind.EnsureUniqueConstraint,
             expectedUniqueConstraint,
             useSemanticAliases);
+
         AssertProjectedReplacement(
             preflight,
             SafeMigrationOperationKind.EnsureCheckConstraint,
             expectedCheckConstraint,
             useSemanticAliases);
+
         AssertProjectedReplacement(
             preflight,
             SafeMigrationOperationKind.EnsureForeignKey,
             expectedForeignKey,
             useSemanticAliases);
+
         AssertProjectedReplacement(
             preflight,
             SafeMigrationOperationKind.EnsureIndex,
             expectedIndex,
             useSemanticAliases);
+
         Assert.Equal(
             5,
-            preflight.Assessments.Count(
-                static assessment => (assessment.OperationKind is
-                        SafeMigrationOperationKind.DropPrimaryKey or
-                        SafeMigrationOperationKind.DropUniqueConstraint or
-                        SafeMigrationOperationKind.DropCheckConstraint or
-                        SafeMigrationOperationKind.DropForeignKey or
-                        SafeMigrationOperationKind.DropIndex)
-                    && assessment.Action == SafeMigrationAction.Apply));
+            preflight.Assessments.Count(static assessment => assessment.OperationKind is
+                    SafeMigrationOperationKind.DropPrimaryKey
+                    or SafeMigrationOperationKind.DropUniqueConstraint
+                    or SafeMigrationOperationKind.DropCheckConstraint
+                    or SafeMigrationOperationKind.DropForeignKey
+                    or SafeMigrationOperationKind.DropIndex
+                && assessment.Action == SafeMigrationAction.Apply));
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -406,14 +436,17 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
             connectionString,
             $"CREATE TABLE {table} ("
             + "id integer NOT NULL PRIMARY KEY, code integer NOT NULL, "
-            + $"CONSTRAINT {constraint} UNIQUE (code));", cancellationToken: CancellationToken.None);
+            + $"CONSTRAINT {constraint} UNIQUE (code));",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropUniqueConstraintIfExists(constraint, table);
         builder.InsertData(
             table,
             ["id", "code"],
-            new object[,] { { 1, 7 }, { 2, 7 }, });
+            new object[,] { { 1, 7 }, { 2, 7 } });
+
         builder.AddUniqueConstraintIfNotExists(constraint, table, ["code"]);
         var runner = context.GetService<ISafeMigrationRunner>();
 
@@ -431,8 +464,12 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, replacement.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, replacement.Action);
         Assert.Equal("projected_data_state_unknown", replacement.AnalysisCode);
-        Assert.Equal(0, await ScalarIntAsync(connectionString, $"SELECT COUNT(*) FROM {table};",
-            cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                $"SELECT COUNT(*) FROM {table};",
+                cancellationToken: CancellationToken.None));
     }
 
     private static MigrationBuilder ExistingTableForeignKeyConvergence(
@@ -481,12 +518,18 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
         bool hasInitialSemanticMatch
     )
     {
-        var assessments = report.Assessments
+        var assessments = report
+            .Assessments
             .Where(assessment => assessment.OperationKind == kind
                 && StringComparer.Ordinal.Equals(assessment.ObjectName, objectName))
             .ToArray();
 
-        Assert.Equal(hasInitialSemanticMatch ? 2 : 1, assessments.Length);
+        Assert.Equal(
+            hasInitialSemanticMatch
+                ? 2
+                : 1,
+            assessments.Length);
+
         if (hasInitialSemanticMatch)
         {
             Assert.Equal(SafeMigrationAction.NoOp, assessments[0].Action);
@@ -545,6 +588,7 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
                         SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
                         0)),
                 SafeMigrationPolicy.ThrowIfDifferent);
+
             builder.CreateIndexIfNotExists(expectedIndex, parentTable, ["quantity"]);
             builder.AddForeignKeyIfNotExists(
                 expectedForeignKey,
@@ -572,6 +616,7 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
                     SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
                     0)),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.CreateIndexIfNotExists(expectedIndex, parentTable, ["quantity"]);
         builder.AddForeignKeyIfNotExists(
             expectedForeignKey,
@@ -587,7 +632,9 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
     private static string TargetName(
         string physicalName,
         bool useSemanticAlias
-    ) => useSemanticAlias ? $"{physicalName}_alias" : physicalName;
+    ) => useSemanticAlias
+        ? $"{physicalName}_alias"
+        : physicalName;
 
     private static MigrationBuilder SemanticUniqueDropProjection(
         DbContext context
@@ -603,6 +650,7 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
                 code = table.Column<int>(type: "integer", nullable: false),
             },
             constraints: table => table.PrimaryKey("pk_alias_projection_parents", value => value.id));
+
         _ = builder.ConvergeTableFromModel(
             "alias_projection_children",
             table => new
@@ -611,13 +659,16 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
                 parent_code = table.Column<int>(type: "integer", nullable: true),
             },
             constraints: table => table.PrimaryKey("pk_alias_projection_children", value => value.id));
+
         builder.AddUniqueConstraintIfNotExists(
             "uq_alias_projection_parents_code_alias",
             "alias_projection_parents",
             ["code"]);
+
         builder.DropUniqueConstraintIfExists(
             "uq_alias_projection_parents_code",
             "alias_projection_parents");
+
         builder.AddForeignKeyIfNotExists(
             "fk_alias_projection_children_parents",
             "alias_projection_children",
@@ -639,6 +690,7 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
             $"uq_{prefix}_code_alias",
             $"{prefix}_parents",
             ["code"]);
+
         builder.EnsureCheckConstraint(
             ExpectedCheckConstraintDefinition.FromExpression(
                 $"ck_{prefix}_quantity_alias",
@@ -648,6 +700,7 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
                     SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
                     0)),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.AddForeignKeyIfNotExists(
             $"fk_{prefix}_parent_alias",
             $"{prefix}_children",
@@ -655,6 +708,7 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
             $"{prefix}_parents",
             ["id"],
             onDelete: ReferentialAction.Cascade);
+
         _ = builder.CreateIndexIfNotExistsFromModel(
             $"ix_{prefix}_quantity_alias",
             $"{prefix}_parents",
@@ -686,5 +740,4 @@ public sealed class PostgreSqlProviderProjectionIntegrationTests : PostgreSqlSaf
 
         return builder;
     }
-
 }

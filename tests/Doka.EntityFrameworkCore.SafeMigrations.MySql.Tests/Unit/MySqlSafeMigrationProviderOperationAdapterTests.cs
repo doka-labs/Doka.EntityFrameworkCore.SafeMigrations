@@ -175,7 +175,9 @@ public sealed class MySqlSafeMigrationProviderOperationAdapterTests
         var safeOperation = Assert.IsType<SafeMigrationOperation>(result.Operation);
         var intent = Assert.IsType<EnsureIndexIntent>(safeOperation.Intent);
 
-        Assert.Equal(768, Assert.Single(intent.Definition.Keys).PrefixLength);
+        Assert.Equal(768,
+            Assert.Single(intent.Definition.Keys)
+                .PrefixLength);
     }
 
     [Theory]

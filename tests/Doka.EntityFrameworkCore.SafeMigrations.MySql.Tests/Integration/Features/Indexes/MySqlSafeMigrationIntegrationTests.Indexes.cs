@@ -1,25 +1,34 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the Indexes migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlIndexesIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlIndexesIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlIndexesIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlIndexesIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     [Fact]
     public async Task UnsupportedFilteredIndex_FailsBeforeTargetDdl()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `events` (`id` int NOT NULL);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `events` (`id` int NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexIfNotExists("ix_events_filtered", "events", ["id"], filter: "id > 0");
 
         var exception =
-            await AssertOwnedGuardFailureAsync(operationToken => ExecuteOperationsAsync(context, builder.Operations,
-                operationToken), cancellationToken: CancellationToken.None);
+            await AssertOwnedGuardFailureAsync(
+                operationToken => ExecuteOperationsAsync(
+                    context,
+                    builder.Operations,
+                    operationToken),
+                cancellationToken: CancellationToken.None);
 
         Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(
@@ -28,7 +37,8 @@ public sealed partial class MySqlIndexesIntegrationTests : MySqlSafeMigrationInt
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'events' "
-                + "AND INDEX_NAME = 'ix_events_filtered';", cancellationToken: CancellationToken.None));
+                + "AND INDEX_NAME = 'ix_events_filtered';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -39,6 +49,7 @@ public sealed partial class MySqlIndexesIntegrationTests : MySqlSafeMigrationInt
             connectionString,
             "CREATE TABLE `advanced_indexes` (`id` int NOT NULL, `value` varchar(80) NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var definition = new ExpectedIndexDefinition(
             "ix_advanced_value",
@@ -47,7 +58,7 @@ public sealed partial class MySqlIndexesIntegrationTests : MySqlSafeMigrationInt
                 new ExpectedIndexKeyDefinition(
                     column: "value",
                     sortOrder: SafeMigrationIndexSortOrder.Descending,
-                    prefixLength: 12)
+                    prefixLength: 12),
             ],
             method: "BTREE");
 
@@ -65,10 +76,14 @@ public sealed partial class MySqlIndexesIntegrationTests : MySqlSafeMigrationInt
                 [new ExpectedIndexKeyDefinition(column: "value", prefixLength: 12)],
                 method: "BTREE"),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, drift.Operations, new SafeMigrationRunOptions("test-instance"),
-                          CancellationToken.None);
+            .AnalyzeAsync(
+                context,
+                drift.Operations,
+                new SafeMigrationRunOptions("test-instance"),
+                CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(
@@ -81,8 +96,11 @@ public sealed partial class MySqlIndexesIntegrationTests : MySqlSafeMigrationInt
     public async Task FunctionalIndexCreation_FailsClosedWhenPhysicalWidthCannotBeProven()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `functional_indexes` (`value` varchar(80) NULL);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `functional_indexes` (`value` varchar(80) NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureIndex(
@@ -94,8 +112,11 @@ public sealed partial class MySqlIndexesIntegrationTests : MySqlSafeMigrationInt
 
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"),
-                          CancellationToken.None);
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("test-instance"),
+                CancellationToken.None);
 
         var assessment = Assert.Single(preflight.Assessments);
 
@@ -103,14 +124,18 @@ public sealed partial class MySqlIndexesIntegrationTests : MySqlSafeMigrationInt
         Assert.Equal(SafeMigrationObservedState.Unsupported, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, assessment.Action);
         Assert.Equal(
-            Fixture.IsMariaDb ? "functional_index" : "index_key_length_unverifiable",
+            Fixture.IsMariaDb
+                ? "functional_index"
+                : "index_key_length_unverifiable",
             assessment.Code);
+
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'functional_indexes' "
-                + "AND INDEX_NAME = 'ix_functional_lower_value';", cancellationToken: CancellationToken.None));
+                + "AND INDEX_NAME = 'ix_functional_lower_value';",
+                cancellationToken: CancellationToken.None));
     }
 }

@@ -28,13 +28,18 @@ public sealed class PostgreSqlIndexesSimpleFilterProjectionIntegrationTests : Po
             SimpleFilterTableDefinition(includePredicateColumn: false),
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
-        builder.Operations.Add(SimpleFilterBuilder(context, filter).Operations[0]);
+
+        builder.Operations.Add(SimpleFilterBuilder(context, filter)
+            .Operations[0]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("simple-filter-projected-missing"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("simple-filter-projected-missing"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -76,13 +81,17 @@ public sealed class PostgreSqlIndexesSimpleFilterProjectionIntegrationTests : Po
                 schema: "hierarchy");
         }
 
-        builder.Operations.Add(SimpleFilterBuilder(context, filter).Operations[0]);
+        builder.Operations.Add(SimpleFilterBuilder(context, filter)
+            .Operations[0]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("simple-filter-projected-present"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("simple-filter-projected-present"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -110,19 +119,25 @@ public sealed class PostgreSqlIndexesSimpleFilterProjectionIntegrationTests : Po
             connectionString,
             "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters (id integer NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(
             SimpleFilterTableDefinition(includePredicateColumn: false),
             mode,
             SafeMigrationPolicy.ThrowIfDifferent);
-        builder.Operations.Add(SimpleFilterBuilder(context, filter).Operations[0]);
+
+        builder.Operations.Add(SimpleFilterBuilder(context, filter)
+            .Operations[0]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("simple-filter-compact-missing"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("simple-filter-compact-missing"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -146,24 +161,31 @@ public sealed class PostgreSqlIndexesSimpleFilterProjectionIntegrationTests : Po
             connectionString,
             "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters (id integer NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(
             SimpleFilterTableDefinition(includePredicateColumn: false),
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.EnsureColumn(
             "simple_filters",
             new ExpectedColumnDefinition("parent", typeof(int), true, "integer"),
             SafeMigrationPolicy.ThrowIfDifferent,
             schema: "hierarchy");
-        builder.Operations.Add(SimpleFilterBuilder(context, filter).Operations[0]);
+
+        builder.Operations.Add(SimpleFilterBuilder(context, filter)
+            .Operations[0]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("simple-filter-compact-present"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("simple-filter-compact-present"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -185,13 +207,18 @@ public sealed class PostgreSqlIndexesSimpleFilterProjectionIntegrationTests : Po
             SimpleFilterTableDefinition(includePredicateColumn: true),
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
-        builder.Operations.Add(SimpleFilterBuilder(context, "parent IS NULL OR true").Operations[0]);
+
+        builder.Operations.Add(SimpleFilterBuilder(context, "parent IS NULL OR true")
+            .Operations[0]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("simple-filter-projected-opaque"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("simple-filter-projected-opaque"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -206,11 +233,11 @@ public sealed class PostgreSqlIndexesSimpleFilterProjectionIntegrationTests : Po
     ) => new(
         "simple_filters",
         includePredicateColumn
-            ? [
+            ?
+            [
                 new ExpectedColumnDefinition("id", typeof(int), false, "integer"),
                 new ExpectedColumnDefinition("parent", typeof(int), true, "integer"),
             ]
             : [new ExpectedColumnDefinition("id", typeof(int), false, "integer")],
         schema: "hierarchy");
-
 }

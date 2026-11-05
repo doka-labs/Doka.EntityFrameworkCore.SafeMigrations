@@ -40,7 +40,10 @@ internal sealed partial class SafeMigrationPreflightProjection
             ? AnalyzeAcceptedDefinition(prerequisites.Indexes, definition.Name, definition, liveAnalysis)
             : null;
 
-        return accepted ?? (table is not null ? Analysis(SafeMigrationObservedState.Missing) : null);
+        return accepted
+            ?? (table is not null
+                ? Analysis(SafeMigrationObservedState.Missing)
+                : null);
     }
 
     /// <summary>Checks only native-qualified current constraint names, never unbound semantic aliases.</summary>
@@ -150,8 +153,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
 
         if (_prerequisites.TryGetValue(
-                new TableKey(intent.Definition.Table, intent.Definition.Schema),
-                out var prerequisites))
+            new TableKey(intent.Definition.Table, intent.Definition.Schema),
+            out var prerequisites))
         {
             var accepted = AnalyzeAcceptedDefinition(
                 prerequisites.Indexes,
@@ -253,7 +256,10 @@ internal sealed partial class SafeMigrationPreflightProjection
                     : SafeMigrationObservedState.Missing)
             : _prerequisites.TryGetValue(new TableKey(intent.Table, intent.Schema), out var prerequisites)
             && prerequisites.Indexes.TryGetPhysicalState(intent.Name, out var present)
-                ? Analysis(present ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Missing)
+                ? Analysis(
+                    present
+                        ? SafeMigrationObservedState.Matching
+                        : SafeMigrationObservedState.Missing)
                 : liveAnalysis;
 
     private SafeMigrationProviderAnalysis Project(
@@ -290,9 +296,11 @@ internal sealed partial class SafeMigrationPreflightProjection
             sourceExists = prerequisites.Indexes.TryGetPhysicalState(intent.Name, out var sourcePresent)
                 ? sourcePresent
                 : null;
+
             targetExists = prerequisites.Indexes.TryGetPhysicalState(intent.NewName, out var targetPresent)
                 ? targetPresent
                 : null;
+
             sourceCreated = prerequisites.Indexes.WasCreatedByProjection(intent.Name);
         }
 
@@ -348,7 +356,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             {
                 ObservedState: SafeMigrationObservedState.Different,
                 RenameSourceSupported: false,
-                RenameTargetExists: false
+                RenameTargetExists: false,
             }
             && targetExists != true)
         {
@@ -378,6 +386,7 @@ internal sealed partial class SafeMigrationPreflightProjection
                 intent.Definition,
                 liveAnalysis,
                 decision);
+
             ObserveSharedUniqueIndex(prerequisites, intent, liveAnalysis, decision);
         }
 
@@ -478,20 +487,6 @@ internal sealed partial class SafeMigrationPreflightProjection
         SetProjectedTableStructureUnknown(intent.Table, intent.Schema, preservesGeneratedColumns: true);
     }
 
-    private sealed partial class ProjectedTable
-    {
-        public void RenameIndex(
-            string source,
-            string target
-        )
-        {
-            if (Indexes.Remove(source, out var index))
-            {
-                Indexes[target] = Copy(index, name: target);
-            }
-        }
-    }
-
     private bool CanProjectMissingIndex(
         EnsureIndexIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis,
@@ -516,11 +511,11 @@ internal sealed partial class SafeMigrationPreflightProjection
         if (prerequisites.NewlyCreated)
         {
             return ProvesTableEmpty(intent.Definition.Table, intent.Definition.Schema, prerequisites)
-                || (prerequisites.ModelManagedDataMutationVersion == _providerDataMutationVersion
+                || (prerequisites.ModelManagedDataMutationVersion == DataMutationVersion
                     && HasProjectedModelManagedUniqueKey(intent.Definition));
         }
 
-        if (prerequisites.DataMutationVersion < _providerDataMutationVersion)
+        if (prerequisites.DataMutationVersion < DataMutationVersion)
         {
             return false;
         }
@@ -673,7 +668,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         || defaultValue is
         {
             Kind: SafeMigrationDefaultValueKind.Sql,
-            StructuredExpression: SafeMigrationSqlLiteralExpression { Value: null, },
+            StructuredExpression: SafeMigrationSqlLiteralExpression { Value: null },
         };
 
     private static bool CanProjectProviderNeutralIndexReplacement(
@@ -695,4 +690,18 @@ internal sealed partial class SafeMigrationPreflightProjection
         definition.Method,
         definition.NullsDistinct,
         definition.StructuredFilter);
+
+    private sealed partial class ProjectedTable
+    {
+        public void RenameIndex(
+            string source,
+            string target
+        )
+        {
+            if (Indexes.Remove(source, out var index))
+            {
+                Indexes[target] = Copy(index, name: target);
+            }
+        }
+    }
 }

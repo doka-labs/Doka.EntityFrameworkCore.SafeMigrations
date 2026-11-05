@@ -5,10 +5,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     /// <summary>Collects only proven CHECK column roles for native rename-dependency comparison.</summary>
     /// <param name="definition">The exact authored CHECK contract.</param>
     /// <returns>Known local members, or null when native argument roles remain unproven.</returns>
-    internal static string[]? GetCheckRenamePrerequisiteColumns(ExpectedCheckConstraintDefinition definition)
+    internal static string[]? GetCheckRenamePrerequisiteColumns(
+        ExpectedCheckConstraintDefinition definition
+    )
     {
         var expression = GetStructuredCheckExpression(definition);
-        if (expression is null || !SqlServerComputedColumnContract.IsDeterministic(expression)
+        if (expression is null
+            || !SqlServerComputedColumnContract.IsDeterministic(expression)
             || !SqlServerSourceExpressionRoles.IsNativePredicate(expression))
         {
             // WHY: Portable function arguments do not identify every native
@@ -29,9 +32,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     internal static SafeMigrationSqlExpression? GetStructuredCheckExpression(
         ExpectedCheckConstraintDefinition definition
     )
-        => (definition.CapturedSql ?? definition.Sql) is { } authored && !HasSupportedRawCheckQuoting(authored) ? null
-            : definition.Expression ?? (definition.Sql is { } sql
-                && SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var parsed) ? parsed : null);
+        => (definition.CapturedSql ?? definition.Sql) is { } authored && !HasSupportedRawCheckQuoting(authored)
+            ? null
+            : definition.Expression
+            ?? (definition.Sql is { } sql
+                && SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var parsed)
+                    ? parsed
+                    : null);
 
     private static bool HasSupportedRawCheckQuoting(
         string sql
@@ -87,8 +94,11 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
     /// <summary>Qualifies an accepted authored operand against the native integer CHECK contract.</summary>
     /// <param name="definition">The accepted projected physical column definition.</param>
     /// <returns>Whether comparison is nonthrowing under the same scalar family as live catalog validation.</returns>
-    internal bool IsSupportedIntegerCheckColumn(ExpectedColumnDefinition definition)
-        => definition.ComputedColumnSql is null && definition.ComputedExpression is null
+    internal bool IsSupportedIntegerCheckColumn(
+        ExpectedColumnDefinition definition
+    )
+        => definition.ComputedColumnSql is null
+            && definition.ComputedExpression is null
             && TryGetColumnType(definition, out var type)
             && type.Name is "tinyint" or "smallint" or "int" or "bigint";
 
@@ -107,10 +117,10 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             SafeMigrationSqlUnaryExpression { Operator: SafeMigrationSqlUnaryOperator.Not } unary
                 => IsSafeIntegerCheckPredicate(unary.Operand, depth + 1),
             SafeMigrationSqlBinaryExpression binary when binary.Operator is SafeMigrationSqlBinaryOperator.And
-                or SafeMigrationSqlBinaryOperator.Or => IsSafeIntegerCheckPredicate(binary.Left, depth + 1)
-                    && IsSafeIntegerCheckPredicate(binary.Right, depth + 1),
+                    or SafeMigrationSqlBinaryOperator.Or => IsSafeIntegerCheckPredicate(binary.Left, depth + 1)
+                && IsSafeIntegerCheckPredicate(binary.Right, depth + 1),
             SafeMigrationSqlBinaryExpression binary when binary.Operator is >= SafeMigrationSqlBinaryOperator.Equal
-                and <= SafeMigrationSqlBinaryOperator.GreaterThanOrEqual
+                    and <= SafeMigrationSqlBinaryOperator.GreaterThanOrEqual
                 => IsSafeIntegerCheckScalar(binary.Left) && IsSafeIntegerCheckScalar(binary.Right),
             SafeMigrationSqlNullTestExpression nullTest => IsSafeIntegerCheckScalar(nullTest.Operand),
             _ => false,
@@ -132,7 +142,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             {
                 Operator: SafeMigrationSqlUnaryOperator.Negate,
                 Operand: SafeMigrationSqlLiteralExpression { StoreType: null } operand,
-            } && TryGetUnsignedCheckLiteral(operand, out var positive))
+            }
+            && TryGetUnsignedCheckLiteral(operand, out var positive))
         {
             value = -positive;
 
@@ -222,6 +233,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
 
         var predicate = string.Join(" AND ", proofs);
 
-        return predicate.Length == 0 ? "1 = 1" : predicate;
+        return predicate.Length == 0
+            ? "1 = 1"
+            : predicate;
     }
 }

@@ -12,7 +12,11 @@ public readonly struct SafeMigrationDiagnosticExplanation
     /// <param name="reasonCode">The stable diagnostic reason identity.</param>
     /// <param name="reason">The constant description of established or explicitly unavailable evidence.</param>
     /// <param name="nextStep">The constant safe next step, or an empty string when no action is needed.</param>
-    internal SafeMigrationDiagnosticExplanation(string reasonCode, string reason, string nextStep)
+    internal SafeMigrationDiagnosticExplanation(
+        string reasonCode,
+        string reason,
+        string nextStep
+    )
     {
         _reasonCode = reasonCode;
         _reason = reason;

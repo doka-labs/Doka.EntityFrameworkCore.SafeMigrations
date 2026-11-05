@@ -45,11 +45,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 _projectedAlterPhysicalSnapshots[analyses[index]] = snapshot;
             }
             else if (operations[index].Intent is DropIndexIntent drop
-                     && snapshots.TryGetValue(drop.Table, out var dropSnapshot))
+                && snapshots.TryGetValue(drop.Table, out var dropSnapshot))
             {
                 // WHY: A proof is tied to the captured physical owner and member,
                 // not merely to a caller-supplied index name on another table.
-                (_indexDropPhysicalSnapshots ??= new(ReferenceEqualityComparer.Instance))[analyses[index]] =
+                (_indexDropPhysicalSnapshots ??=
+                        new Dictionary<SafeMigrationProviderAnalysis, IndexDropColumnSourceProof>(
+                            ReferenceEqualityComparer.Instance))[analyses[index]] =
                     new IndexDropColumnSourceProof(
                         drop.Table,
                         NormalizeProofSchema(drop.Schema),
@@ -58,10 +60,6 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             }
         }
     }
-
-    /// <summary>Binds one immutable native index snapshot to its exact qualified owner and physical member.</summary>
-    private readonly record struct IndexDropColumnSourceProof(string Table, string? Schema, string Name,
-        MySqlProjectedAlterPhysicalSnapshot Snapshot);
 
     /// <summary>Captures row contributors and index parts once per table needing type-transition projection.</summary>
     /// <param name="connection">The open connection that owns this analysis snapshot.</param>
@@ -99,6 +97,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
         var columns = tables.ToDictionary(
             static table => table,
+
             // WHY: Native column identity is case-insensitive on both engines,
             // independently of the verified table/database owner-name profile.
             static _ => new Dictionary<string, MySqlAlterColumnPhysicalShape>(StringComparer.OrdinalIgnoreCase),
@@ -116,13 +115,17 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         // per Alter. Keeping the result sets separate avoids multiplying every
         // column by every index part on wide brownfield tables.
         await SafeMigrationCatalogProbeBatch.ReadAsync(
-            connection, windows * 2, maximumPayloadBytes, commandTimeout,
+            connection,
+            windows * 2,
+            maximumPayloadBytes,
+            commandTimeout,
             (command, slot) =>
             {
-                var offset = (slot / 2) * SafeMigrationCatalogQueryLimits.MaximumInventoryValues;
+                var offset = slot / 2 * SafeMigrationCatalogQueryLimits.MaximumInventoryValues;
                 var count = Math.Min(SafeMigrationCatalogQueryLimits.MaximumInventoryValues, tables.Length - offset);
                 var names = new string[count];
                 var valueBytes = 0;
+
                 // WHY: Keep bounded owner parameters aligned with their generated parameter-name slots.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery
@@ -139,30 +142,30 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 var requested = string.Join(", ", names);
                 command.CommandText = slot % 2 == 0
                     ? "SELECT c.TABLE_NAME, c.COLUMN_NAME, c.DATA_TYPE, c.IS_NULLABLE, "
-                        + "c.CHARACTER_MAXIMUM_LENGTH, c.CHARACTER_OCTET_LENGTH, "
-                        + "c.NUMERIC_PRECISION, c.NUMERIC_SCALE, c.DATETIME_PRECISION, "
-                        + "COALESCE(cs.MAXLEN, 1), c.COLLATION_NAME, c.CHARACTER_SET_NAME, "
-                        + "(fk.COLUMN_NAME IS NOT NULL) FROM INFORMATION_SCHEMA.COLUMNS c "
-                        + "LEFT JOIN INFORMATION_SCHEMA.CHARACTER_SETS cs "
-                        + "ON cs.CHARACTER_SET_NAME = c.CHARACTER_SET_NAME "
-                        + "LEFT JOIN (SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE "
-                        + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ({requested}) "
-                        + "AND REFERENCED_TABLE_NAME IS NOT NULL UNION "
-                        + "SELECT REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME "
-                        + "FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE "
-                        + $"WHERE REFERENCED_TABLE_SCHEMA = DATABASE() AND REFERENCED_TABLE_NAME IN ({requested})) fk "
-                        + "ON fk.TABLE_NAME = c.TABLE_NAME AND fk.COLUMN_NAME = c.COLUMN_NAME "
-                        + $"WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME IN ({requested});"
+                    + "c.CHARACTER_MAXIMUM_LENGTH, c.CHARACTER_OCTET_LENGTH, "
+                    + "c.NUMERIC_PRECISION, c.NUMERIC_SCALE, c.DATETIME_PRECISION, "
+                    + "COALESCE(cs.MAXLEN, 1), c.COLLATION_NAME, c.CHARACTER_SET_NAME, "
+                    + "(fk.COLUMN_NAME IS NOT NULL) FROM INFORMATION_SCHEMA.COLUMNS c "
+                    + "LEFT JOIN INFORMATION_SCHEMA.CHARACTER_SETS cs "
+                    + "ON cs.CHARACTER_SET_NAME = c.CHARACTER_SET_NAME "
+                    + "LEFT JOIN (SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE "
+                    + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ({requested}) "
+                    + "AND REFERENCED_TABLE_NAME IS NOT NULL UNION "
+                    + "SELECT REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME "
+                    + "FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE "
+                    + $"WHERE REFERENCED_TABLE_SCHEMA = DATABASE() AND REFERENCED_TABLE_NAME IN ({requested})) fk "
+                    + "ON fk.TABLE_NAME = c.TABLE_NAME AND fk.COLUMN_NAME = c.COLUMN_NAME "
+                    + $"WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME IN ({requested});"
                     : "SELECT s.TABLE_NAME, s.INDEX_NAME, s.INDEX_TYPE, s.SEQ_IN_INDEX, "
-                        + "s.COLUMN_NAME, s.SUB_PART, s.NON_UNIQUE FROM INFORMATION_SCHEMA.STATISTICS s "
-                        + $"WHERE s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME IN ({requested}) "
-                        + "ORDER BY s.TABLE_NAME, s.INDEX_NAME, s.SEQ_IN_INDEX;";
+                    + "s.COLUMN_NAME, s.SUB_PART, s.NON_UNIQUE FROM INFORMATION_SCHEMA.STATISTICS s "
+                    + $"WHERE s.TABLE_SCHEMA = DATABASE() AND s.TABLE_NAME IN ({requested}) "
+                    + "ORDER BY s.TABLE_NAME, s.INDEX_NAME, s.SEQ_IN_INDEX;";
 
                 return new SafeMigrationCatalogProbeStatement(1, valueBytes, slot);
             },
             async (reader, slot, _, token) =>
             {
-                var offset = (slot / 2) * SafeMigrationCatalogQueryLimits.MaximumInventoryValues;
+                var offset = slot / 2 * SafeMigrationCatalogQueryLimits.MaximumInventoryValues;
                 var count = Math.Min(SafeMigrationCatalogQueryLimits.MaximumInventoryValues, tables.Length - offset);
                 while (await reader.ReadAsync(token))
                 {
@@ -175,16 +178,24 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     if (slot % 2 == 0)
                     {
                         var shape = MySqlProjectedAlterPhysicalSnapshot.CreateCatalogColumn(
-                            reader.GetString(2), StringComparer.Ordinal.Equals(reader.GetString(3), "YES"),
-                            ReadNullableInt64(reader, 4), ReadNullableInt64(reader, 5),
-                            ReadNullableInt32(reader, 6), ReadNullableInt32(reader, 7),
+                            reader.GetString(2),
+                            StringComparer.Ordinal.Equals(reader.GetString(3), "YES"),
+                            ReadNullableInt64(reader, 4),
+                            ReadNullableInt64(reader, 5),
+                            ReadNullableInt32(reader, 6),
+                            ReadNullableInt32(reader, 7),
                             ReadNullableInt32(reader, 8),
                             Convert.ToInt32(reader.GetValue(9), CultureInfo.InvariantCulture),
-                            reader.IsDBNull(10) ? null : reader.GetString(10),
-                            reader.IsDBNull(11) ? null : reader.GetString(11),
+                            reader.IsDBNull(10)
+                                ? null
+                                : reader.GetString(10),
+                            reader.IsDBNull(11)
+                                ? null
+                                : reader.GetString(11),
                             Convert.ToBoolean(reader.GetValue(12), CultureInfo.InvariantCulture));
 
-                        if (!columns[table].TryAdd(reader.GetString(1), shape))
+                        if (!columns[table]
+                            .TryAdd(reader.GetString(1), shape))
                         {
                             throw new InvalidOperationException("MySQL returned a duplicate alter physical column.");
                         }
@@ -196,7 +207,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                     var fullText = StringComparer.OrdinalIgnoreCase.Equals(reader.GetString(2), "FULLTEXT");
                     var unique = Convert.ToInt32(reader.GetValue(6), CultureInfo.InvariantCulture) == 0;
                     if (!indexes[table]
-                            .TryGetValue(name, out var index))
+                        .TryGetValue(name, out var index))
                     {
                         index = new AlterPhysicalIndexBuilder(
                             fullText,
@@ -216,9 +227,12 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                         throw new InvalidOperationException("MySQL returned inconsistent alter physical index parts.");
                     }
 
-                    index.Parts.Add(new MySqlAlterIndexPart(
-                        reader.IsDBNull(4) ? null : reader.GetString(4),
-                        ReadNullableInt32(reader, 5)));
+                    index.Parts.Add(
+                        new MySqlAlterIndexPart(
+                            reader.IsDBNull(4)
+                                ? null
+                                : reader.GetString(4),
+                            ReadNullableInt32(reader, 5)));
                 }
             },
             cancellationToken);
@@ -234,17 +248,32 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 continue;
             }
 
-            result.Add(table, new MySqlProjectedAlterPhysicalSnapshot(
-                columns[table],
-                indexes[table].Select(static index => new MySqlAlterIndexPhysicalShape(
-                    index.Value.IsFullText, index.Value.Parts,
-                    StringComparer.Ordinal.Equals(index.Key, "PRIMARY"), index.Value.IsUnique,
-                    index.Key, index.Value.IsOrdinaryBtree)).ToArray(),
-                environment));
+            result.Add(
+                table,
+                new MySqlProjectedAlterPhysicalSnapshot(
+                    columns[table],
+                    indexes[table]
+                        .Select(static index => new MySqlAlterIndexPhysicalShape(
+                            index.Value.IsFullText,
+                            index.Value.Parts,
+                            StringComparer.Ordinal.Equals(index.Key, "PRIMARY"),
+                            index.Value.IsUnique,
+                            index.Key,
+                            index.Value.IsOrdinaryBtree))
+                        .ToArray(),
+                    environment));
         }
 
         return result;
     }
+
+    /// <summary>Binds one immutable native index snapshot to its exact qualified owner and physical member.</summary>
+    private readonly record struct IndexDropColumnSourceProof(
+        string Table,
+        string? Schema,
+        string Name,
+        MySqlProjectedAlterPhysicalSnapshot Snapshot
+    );
 
     private sealed class AlterPhysicalIndexBuilder(
         bool isFullText,

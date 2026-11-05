@@ -29,8 +29,8 @@ public static class SafeMigrationReportJson
         ArgumentNullException.ThrowIfNull(report);
 
         var estimatedSize = EstimatedReportEnvelopeSize
-            + ((long)report.Assessments.Count * EstimatedAssessmentSize)
-            + ((long)report.UnexpectedObjects.Count * EstimatedUnexpectedObjectSize);
+            + (long)report.Assessments.Count * EstimatedAssessmentSize
+            + (long)report.UnexpectedObjects.Count * EstimatedUnexpectedObjectSize;
 
         // WHY: Bounded diagnostic fields accompany every assessment.
         // A proportional first buffer avoids repeated full-buffer copies while
@@ -70,8 +70,8 @@ public static class SafeMigrationReportJson
         ValidateBlockingSelection(report, selection, counts.AssessmentCount);
 
         var estimatedSize = EstimatedReportViewEnvelopeSize
-            + ((long)counts.AssessmentCount * EstimatedAssessmentSize)
-            + ((long)counts.UnexpectedObjectCount * EstimatedUnexpectedObjectSize);
+            + (long)counts.AssessmentCount * EstimatedAssessmentSize
+            + (long)counts.UnexpectedObjectCount * EstimatedUnexpectedObjectSize;
 
         // WHY: Selection is evaluated without materializing a second report or
         // filtered collection. The bounded estimate therefore scales with the
@@ -224,10 +224,9 @@ public static class SafeMigrationReportJson
         }
 
         var unexpectedObjectCount = selection is
-            SafeMigrationReportSelection.Complete or
-            SafeMigrationReportSelection.NonMatching
-                ? report.UnexpectedObjects.Count
-                : 0;
+            SafeMigrationReportSelection.Complete or SafeMigrationReportSelection.NonMatching
+            ? report.UnexpectedObjects.Count
+            : 0;
 
         return new ReportSelectionCounts(assessmentCount, unexpectedObjectCount);
     }
@@ -314,14 +313,25 @@ public static class SafeMigrationReportJson
         WriteNullableString(
             writer,
             "operationKind",
-            assessment.OperationKind is null ? null : OperationKindCode(assessment.OperationKind.Value));
+            assessment.OperationKind is null
+                ? null
+                : OperationKindCode(assessment.OperationKind.Value));
+
         WriteNullableString(writer, "objectName", assessment.ObjectName);
         WriteDiagnosticContext(writer, assessment);
         WriteNullableString(
             writer,
             "observedState",
-            assessment.ObservedState is null ? null : ObservedStateCode(assessment.ObservedState.Value));
-        WriteNullableString(writer, "action", assessment.Action is null ? null : ActionCode(assessment.Action.Value));
+            assessment.ObservedState is null
+                ? null
+                : ObservedStateCode(assessment.ObservedState.Value));
+
+        WriteNullableString(
+            writer,
+            "action",
+            assessment.Action is null
+                ? null
+                : ActionCode(assessment.Action.Value));
 
         if (assessment.PostconditionSatisfied is null)
         {
@@ -384,7 +394,13 @@ public static class SafeMigrationReportJson
         WriteIdentityString(writer, "newTable", identity?.NewTable, ref truncated);
         WriteIdentityString(writer, "newObjectName", identity?.NewObjectName, ref truncated);
         WriteIdentityString(writer, "migrationId", assessment.MigrationId, ref truncated);
-        WriteNullableString(writer, "policy", assessment.Policy is { } policy ? PolicyCode(policy) : null);
+        WriteNullableString(
+            writer,
+            "policy",
+            assessment.Policy is { } policy
+                ? PolicyCode(policy)
+                : null);
+
         writer.WriteString("reasonCode", assessment.Explanation.ReasonCode);
         writer.WriteString("reason", assessment.Explanation.Reason);
         WriteNullableString(writer, "nextStep", assessment.Explanation.NextStep);
@@ -414,7 +430,8 @@ public static class SafeMigrationReportJson
         }
 
         var contentLength = MaximumIdentityFieldLength - 3;
-        if (char.IsHighSurrogate(value[contentLength - 1]) && char.IsLowSurrogate(value[contentLength]))
+        if (char.IsHighSurrogate(value[contentLength - 1])
+            && char.IsLowSurrogate(value[contentLength]))
         {
             contentLength--;
         }
@@ -443,6 +460,7 @@ public static class SafeMigrationReportJson
 
         writer.WriteStartArray(propertyName);
         var count = Math.Min(columns.Count, MaximumIdentityColumnCount);
+
         // WHY: Bound identifier output by count while retaining the original ordered snapshot.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -457,7 +475,8 @@ public static class SafeMigrationReportJson
             }
 
             var contentLength = MaximumIdentityFieldLength - 3;
-            if (char.IsHighSurrogate(value[contentLength - 1]) && char.IsLowSurrogate(value[contentLength]))
+            if (char.IsHighSurrogate(value[contentLength - 1])
+                && char.IsLowSurrogate(value[contentLength]))
             {
                 contentLength--;
             }
@@ -619,5 +638,6 @@ public static class SafeMigrationReportJson
 
     private readonly record struct ReportSelectionCounts(
         int AssessmentCount,
-        int UnexpectedObjectCount);
+        int UnexpectedObjectCount
+    );
 }

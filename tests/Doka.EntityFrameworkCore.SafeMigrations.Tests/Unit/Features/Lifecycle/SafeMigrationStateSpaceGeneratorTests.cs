@@ -20,6 +20,7 @@ public sealed class SafeMigrationStateSpaceGeneratorTests
                 .Select(Serialize)
                 .Distinct(StringComparer.Ordinal)
                 .Count());
+
         for (var left = 0; left < dimensions.Count; left++)
         {
             for (var right = left + 1; right < dimensions.Count; right++)
@@ -45,6 +46,7 @@ public sealed class SafeMigrationStateSpaceGeneratorTests
             SafeMigrationStateSpaceGenerator.GeneratePairwise(
                 [new SafeMigrationStateDimension("only", ["one"])],
                 FixedSeed));
+
         Assert.Throws<ArgumentException>(() => SafeMigrationStateSpaceGenerator.GeneratePairwise(
             [
                 new SafeMigrationStateDimension("duplicate", ["one"]),
@@ -69,8 +71,8 @@ public sealed class SafeMigrationStateSpaceGeneratorTests
             [
                 "missing_subset", "matching", "single_drift", "multiple_drift",
             ]),
-        new("relations", ["missing", "matching", "different",]),
-        new("extras", ["none", "unknown_objects",]),
+        new("relations", ["missing", "matching", "different"]),
+        new("extras", ["none", "unknown_objects"]),
         new(
             "data",
             [
@@ -85,8 +87,8 @@ public sealed class SafeMigrationStateSpaceGeneratorTests
             [
                 "none", "legacy", "partial_failure", "complete_core",
             ]),
-        new("parallelism", ["separate_databases", "same_database",]),
-        new("context", ["canonical", "derived_matching", "derived_different",]),
+        new("parallelism", ["separate_databases", "same_database"]),
+        new("context", ["canonical", "derived_matching", "derived_different"]),
     ];
 
     private static string Serialize(

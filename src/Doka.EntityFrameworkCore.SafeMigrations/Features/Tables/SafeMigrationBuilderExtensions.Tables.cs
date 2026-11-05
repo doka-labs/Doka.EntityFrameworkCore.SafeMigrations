@@ -33,7 +33,7 @@ public static partial class SafeMigrationBuilderExtensions
     /// <typeparam name="TColumns">The anonymous type that exposes the configured table columns.</typeparam>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
     /// <exception cref="ArgumentNullException">
-    /// <paramref name="migrationBuilder"/> or <paramref name="columns"/> is null.
+    /// <paramref name="migrationBuilder" /> or <paramref name="columns" /> is null.
     /// </exception>
     /// <exception cref="InvalidOperationException">
     /// EF Core does not append exactly one table operation for the supplied definition.
@@ -75,7 +75,7 @@ public static partial class SafeMigrationBuilderExtensions
     /// annotation cannot be compared safely with live catalog state.
     /// </returns>
     /// <exception cref="ArgumentNullException">
-    /// <paramref name="migrationBuilder"/> or <paramref name="columns"/> is null.
+    /// <paramref name="migrationBuilder" /> or <paramref name="columns" /> is null.
     /// </exception>
     /// <exception cref="InvalidOperationException">
     /// EF Core does not append exactly one table operation for the supplied definition.
@@ -118,7 +118,7 @@ public static partial class SafeMigrationBuilderExtensions
 
         var indexSnapshot = SafeMigrationDefinitionValidator.Definitions(indexes ?? [], nameof(indexes));
         if (indexSnapshot.Any(index => !StringComparer.Ordinal.Equals(index.Table, definition.Table)
-                || !StringComparer.Ordinal.Equals(index.Schema, definition.Schema)))
+            || !StringComparer.Ordinal.Equals(index.Schema, definition.Schema)))
         {
             throw new ArgumentException(
                 "Every convergence index must target the supplied table and schema.",

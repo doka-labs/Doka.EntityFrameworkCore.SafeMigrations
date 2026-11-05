@@ -8,8 +8,9 @@ internal static class SafeMigrationFacetDifferenceParser
 {
     private const char RecordSeparator = '\u001e';
     private const char FieldSeparator = '\u001f';
+
     private const int MaximumPayloadLength = SafeMigrationFacetDifference.MaximumDifferenceCount
-        * ((SafeMigrationFacetDifference.MaximumValueLength * 2) + 67);
+        * (SafeMigrationFacetDifference.MaximumValueLength * 2 + 67);
 
     /// <summary>Parses bounded evidence into owned values without copying intermediate records.</summary>
     /// <param name="payload">The provider's delimiter-separated evidence payload.</param>
@@ -61,7 +62,9 @@ internal static class SafeMigrationFacetDifferenceParser
             var firstSeparator = record.IndexOf(FieldSeparator);
             var secondSeparator = firstSeparator < 0
                 ? -1
-                : record[(firstSeparator + 1)..].IndexOf(FieldSeparator);
+                : record[(firstSeparator + 1)..]
+                    .IndexOf(FieldSeparator);
+
             if (firstSeparator < 0
                 || secondSeparator < 0)
             {
@@ -80,7 +83,9 @@ internal static class SafeMigrationFacetDifferenceParser
             }
 
             differences[ordinal++] = new SafeMigrationFacetDifference(
-                facet.ToString(), expected.ToString(), actual.ToString());
+                facet.ToString(),
+                expected.ToString(),
+                actual.ToString());
         }
 
         return Array.AsReadOnly(differences);

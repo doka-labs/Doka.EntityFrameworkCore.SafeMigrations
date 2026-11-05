@@ -5,11 +5,31 @@ internal sealed class PostgreSqlSafeMigrationsOptionsExtension
 {
     private DbContextOptionsExtensionInfo? _info;
 
-    public DbContextOptionsExtensionInfo Info => _info ??= new ExtensionInfo(this);
-
     public Type BaselineGeneratorType { get; private init; } = typeof(NpgsqlMigrationsSqlGenerator);
 
     public Type? CanonicalContextType { get; private init; }
+
+    public DbContextOptionsExtensionInfo Info => _info ??= new ExtensionInfo(this);
+
+    public void ApplyServices(
+        IServiceCollection services
+    ) => services.AddPostgreSqlSafeMigrations(BaselineGeneratorType, CanonicalContextType);
+
+    public void Validate(
+        IDbContextOptions options
+    )
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        var npgsqlAssembly = typeof(NpgsqlDbContextOptionsBuilderExtensions).Assembly;
+        if (!options.Extensions.Any(extension => extension.Info.IsDatabaseProvider
+            && extension.GetType()
+                .Assembly
+            == npgsqlAssembly))
+        {
+            throw new InvalidOperationException("PostgreSQL safe migrations require the Npgsql EF Core provider.");
+        }
+    }
 
     /// <summary>Gets the mode consumed by the SafeMigrations design-time scaffolder.</summary>
     public SafeMigrationScaffoldingMode ScaffoldingMode { get; private init; }
@@ -19,10 +39,6 @@ internal sealed class PostgreSqlSafeMigrationsOptionsExtension
 
     /// <summary>Gets whether excluded tables also exclude model-managed-data differences.</summary>
     public bool ExcludeModelManagedDataForExcludedTablesEnabled { get; private init; }
-
-    public void ApplyServices(
-        IServiceCollection services
-    ) => services.AddPostgreSqlSafeMigrations(BaselineGeneratorType, CanonicalContextType);
 
     public static PostgreSqlSafeMigrationsOptionsExtension WithConfiguration(
         Type baselineGeneratorType,
@@ -38,22 +54,6 @@ internal sealed class PostgreSqlSafeMigrationsOptionsExtension
         LegacyConvergencePolicy = legacyConvergencePolicy,
         ExcludeModelManagedDataForExcludedTablesEnabled = excludeModelManagedDataForExcludedTables,
     };
-
-    public void Validate(
-        IDbContextOptions options
-    )
-    {
-        ArgumentNullException.ThrowIfNull(options);
-
-        var npgsqlAssembly = typeof(NpgsqlDbContextOptionsBuilderExtensions).Assembly;
-        if (!options.Extensions.Any(extension => extension.Info.IsDatabaseProvider
-                && extension.GetType()
-                    .Assembly
-                == npgsqlAssembly))
-        {
-            throw new InvalidOperationException("PostgreSQL safe migrations require the Npgsql EF Core provider.");
-        }
-    }
 
     private sealed class ExtensionInfo : DbContextOptionsExtensionInfo
     {

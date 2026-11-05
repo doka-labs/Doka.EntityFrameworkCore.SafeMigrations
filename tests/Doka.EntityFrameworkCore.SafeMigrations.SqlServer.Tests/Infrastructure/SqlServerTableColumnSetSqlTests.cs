@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 /// <summary>Verifies bounded table-wide matching without relaxing any authored column facet.</summary>
@@ -15,7 +17,8 @@ public sealed class SqlServerTableColumnSetSqlTests
         var operation = TableOperation([new ExpectedColumnDefinition("Value", typeof(int), true, "int")]);
 
         // Act
-        var plan = CreateCatalog(context).Build(operation);
+        var plan = CreateCatalog(context)
+            .Build(operation);
 
         // Assert
         foreach (var predicate in new[] { plan.StateExpression, plan.Postcondition, plan.ExecutionPostcondition! })
@@ -36,7 +39,10 @@ public sealed class SqlServerTableColumnSetSqlTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void OptionalColumnMetadata_RetainsEveryAuthoredProof(bool identity, bool defaults)
+    public void OptionalColumnMetadata_RetainsEveryAuthoredProof(
+        bool identity,
+        bool defaults
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
@@ -51,11 +57,18 @@ public sealed class SqlServerTableColumnSetSqlTests
             ProviderAnnotations = SafeMigrationProviderAnnotation.Capture(annotations),
         };
 
-        var value = new ExpectedColumnDefinition("Value", typeof(int), true, "int",
-            defaultValue: defaults ? SafeMigrationDefaultValue.Literal(7) : SafeMigrationDefaultValue.None);
+        var value = new ExpectedColumnDefinition(
+            "Value",
+            typeof(int),
+            true,
+            "int",
+            defaultValue: defaults
+                ? SafeMigrationDefaultValue.Literal(7)
+                : SafeMigrationDefaultValue.None);
 
         // Act
-        var plan = CreateCatalog(context).Build(TableOperation([id, value]));
+        var plan = CreateCatalog(context)
+            .Build(TableOperation([id, value]));
 
         // Assert
         foreach (var predicate in new[] { plan.StateExpression, plan.Postcondition, plan.ExecutionPostcondition! })
@@ -75,8 +88,14 @@ public sealed class SqlServerTableColumnSetSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         const int count = 1024;
-        var columns = Enumerable.Range(0, count).Select(index => new ExpectedColumnDefinition(
-            "C" + index.ToString(CultureInfo.InvariantCulture), typeof(int), false, "int")).ToArray();
+        var columns = Enumerable
+            .Range(0, count)
+            .Select(index => new ExpectedColumnDefinition(
+                "C" + index.ToString(CultureInfo.InvariantCulture),
+                typeof(int),
+                false,
+                "int"))
+            .ToArray();
 
         var operation = TableOperation(columns);
         var catalog = CreateCatalog(context);
@@ -84,7 +103,8 @@ public sealed class SqlServerTableColumnSetSqlTests
         // Act
         var plan = catalog.Build(operation);
         var predicates = new[] { plan.StateExpression, plan.Postcondition, plan.ExecutionPostcondition! };
-        var nameCounts = columns.Select(column => CountFragment(plan.Postcondition, "(N'" + column.Name + "',"))
+        var nameCounts = columns
+            .Select(column => CountFragment(plan.Postcondition, "(N'" + column.Name + "',"))
             .ToArray();
 
         // Assert
@@ -97,7 +117,9 @@ public sealed class SqlServerTableColumnSetSqlTests
             Assert.Equal(count, CountFragment(predicate, "N'int'"));
             Assert.Contains("SELECT COUNT(*) FROM sys.columns c", predicate, StringComparison.Ordinal);
             Assert.Contains("= 1024", predicate, StringComparison.Ordinal);
-            Assert.DoesNotContain("EXISTS (SELECT 1 FROM sys.columns c JOIN sys.types", predicate,
+            Assert.DoesNotContain(
+                "EXISTS (SELECT 1 FROM sys.columns c JOIN sys.types",
+                predicate,
                 StringComparison.Ordinal);
 
             Assert.True(predicate.Length < count * 256 + 12000);
@@ -174,11 +196,26 @@ public sealed class SqlServerTableColumnSetSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
-        var inferred = new ExpectedColumnDefinition("Value", clrType, true, isUnicode: unicode, maxLength: length,
-            isFixedLength: fixedLength, precision: precision, scale: scale);
+        var inferred = new ExpectedColumnDefinition(
+            "Value",
+            clrType,
+            true,
+            isUnicode: unicode,
+            maxLength: length,
+            isFixedLength: fixedLength,
+            precision: precision,
+            scale: scale);
 
-        var explicitType = new ExpectedColumnDefinition("Value", clrType, true, storeType, unicode, length,
-            fixedLength, precision: precision, scale: scale);
+        var explicitType = new ExpectedColumnDefinition(
+            "Value",
+            clrType,
+            true,
+            storeType,
+            unicode,
+            length,
+            fixedLength,
+            precision: precision,
+            scale: scale);
 
         // Act
         var inferredPlan = catalog.Build(TableOperation([inferred]));
@@ -189,14 +226,20 @@ public sealed class SqlServerTableColumnSetSqlTests
         Assert.Equal(explicitPlan.StateExpression, inferredPlan.StateExpression);
         Assert.Equal(explicitPlan.Postcondition, inferredPlan.Postcondition);
         Assert.Contains(expectedRow, inferredPlan.Postcondition, StringComparison.Ordinal);
-        Assert.Contains("expected.max_length IS NULL OR c.max_length = expected.max_length",
-            inferredPlan.Postcondition, StringComparison.Ordinal);
+        Assert.Contains(
+            "expected.max_length IS NULL OR c.max_length = expected.max_length",
+            inferredPlan.Postcondition,
+            StringComparison.Ordinal);
 
-        Assert.Contains("expected.precision_value IS NULL OR c.precision = expected.precision_value",
-            inferredPlan.Postcondition, StringComparison.Ordinal);
+        Assert.Contains(
+            "expected.precision_value IS NULL OR c.precision = expected.precision_value",
+            inferredPlan.Postcondition,
+            StringComparison.Ordinal);
 
-        Assert.Contains("expected.scale_value IS NULL OR c.scale = expected.scale_value",
-            inferredPlan.Postcondition, StringComparison.Ordinal);
+        Assert.Contains(
+            "expected.scale_value IS NULL OR c.scale = expected.scale_value",
+            inferredPlan.Postcondition,
+            StringComparison.Ordinal);
     }
 
     /// <summary>Rejects provider-owned physical attributes and nonbuilt-in type identities.</summary>
@@ -221,7 +264,8 @@ public sealed class SqlServerTableColumnSetSqlTests
         var operation = TableOperation([new ExpectedColumnDefinition("Value", typeof(int), true, "int")]);
 
         // Act
-        var plan = CreateCatalog(context).Build(operation);
+        var plan = CreateCatalog(context)
+            .Build(operation);
 
         // Assert
         Assert.False(plan.IsStaticallyUnsupported);
@@ -241,24 +285,35 @@ public sealed class SqlServerTableColumnSetSqlTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var column = new ExpectedColumnDefinition("Value", typeof(string), true, "varchar(80)",
-            collation: name is null ? null : new SafeMigrationCollationIdentifier(name));
+        var column = new ExpectedColumnDefinition(
+            "Value",
+            typeof(string),
+            true,
+            "varchar(80)",
+            collation: name is null
+                ? null
+                : new SafeMigrationCollationIdentifier(name));
 
         // Act
-        var plan = CreateCatalog(context).Build(TableOperation([column]));
+        var plan = CreateCatalog(context)
+            .Build(TableOperation([column]));
 
         // Assert
         Assert.False(plan.IsStaticallyUnsupported);
         Assert.Contains(expectedCollation, plan.Postcondition, StringComparison.Ordinal);
-        Assert.Contains("expected.is_character = 0 OR c.collation_name = expected.collation_name",
-            plan.Postcondition, StringComparison.Ordinal);
+        Assert.Contains(
+            "expected.is_character = 0 OR c.collation_name = expected.collation_name",
+            plan.Postcondition,
+            StringComparison.Ordinal);
     }
 
     /// <summary>Does not narrow signed identity bounds or accept replication-specific identities.</summary>
     [Theory]
     [InlineData("1, -1", "CAST(1 AS decimal(38,0))", "CAST(-1 AS decimal(38,0))")]
-    [InlineData("-9223372036854775808, 9223372036854775807",
-        "CAST(-9223372036854775808 AS decimal(38,0))", "CAST(9223372036854775807 AS decimal(38,0))")]
+    [InlineData(
+        "-9223372036854775808, 9223372036854775807",
+        "CAST(-9223372036854775808 AS decimal(38,0))",
+        "CAST(9223372036854775807 AS decimal(38,0))")]
     public void IdentityColumnSet_PreservesNonthrowingExactNumericMetadata(
         string identity,
         string expectedSeed,
@@ -275,21 +330,28 @@ public sealed class SqlServerTableColumnSetSqlTests
         };
 
         // Act
-        var plan = CreateCatalog(context).Build(TableOperation([column]));
+        var plan = CreateCatalog(context)
+            .Build(TableOperation([column]));
 
         // Assert
         Assert.False(plan.IsStaticallyUnsupported);
         Assert.Contains(expectedSeed, plan.Postcondition, StringComparison.Ordinal);
         Assert.Contains(expectedIncrement, plan.Postcondition, StringComparison.Ordinal);
         Assert.Contains("identity_column.is_not_for_replication = 0", plan.Postcondition, StringComparison.Ordinal);
-        Assert.Contains("TRY_CONVERT(decimal(38,0), identity_column.seed_value) = expected.identity_seed",
-            plan.Postcondition, StringComparison.Ordinal);
+        Assert.Contains(
+            "TRY_CONVERT(decimal(38,0), identity_column.seed_value) = expected.identity_seed",
+            plan.Postcondition,
+            StringComparison.Ordinal);
 
-        Assert.Contains("TRY_CONVERT(decimal(38,0), identity_column.increment_value) = expected.identity_increment",
-            plan.Postcondition, StringComparison.Ordinal);
+        Assert.Contains(
+            "TRY_CONVERT(decimal(38,0), identity_column.increment_value) = expected.identity_increment",
+            plan.Postcondition,
+            StringComparison.Ordinal);
 
         Assert.DoesNotContain("CONVERT(bigint, identity_column", plan.Postcondition, StringComparison.Ordinal);
-        Assert.DoesNotContain("EXISTS (SELECT 1 FROM sys.identity_columns identity_column", plan.Postcondition,
+        Assert.DoesNotContain(
+            "EXISTS (SELECT 1 FROM sys.identity_columns identity_column",
+            plan.Postcondition,
             StringComparison.Ordinal);
     }
 
@@ -304,17 +366,25 @@ public sealed class SqlServerTableColumnSetSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
-        var defaultColumn = new ExpectedColumnDefinition("Value", typeof(int), false, "int",
-            defaultValue: sqlDefault ? SafeMigrationDefaultValue.Sql("7") : SafeMigrationDefaultValue.Literal(7));
+        var defaultColumn = new ExpectedColumnDefinition(
+            "Value",
+            typeof(int),
+            false,
+            "int",
+            defaultValue: sqlDefault
+                ? SafeMigrationDefaultValue.Sql("7")
+                : SafeMigrationDefaultValue.Literal(7));
 
         var noDefaultColumn = new ExpectedColumnDefinition("Other", typeof(int), true, "int");
-        var columnOperation = new SafeMigrationOperation(new EnsureColumnIntent("set_items", defaultColumn),
+        var columnOperation = new SafeMigrationOperation(
+            new EnsureColumnIntent("set_items", defaultColumn),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var columnPlan = catalog.Build(columnOperation);
         var tablePlan = catalog.Build(TableOperation([defaultColumn, noDefaultColumn]));
-        var fingerprint = System.Text.RegularExpressions.Regex.Matches(columnPlan.Postcondition, "N'[0-9A-F]{64}'")
+        var fingerprint = Regex
+            .Matches(columnPlan.Postcondition, "N'[0-9A-F]{64}'")
             .Select(static match => match.Value)
             .Single();
 
@@ -322,21 +392,31 @@ public sealed class SqlServerTableColumnSetSqlTests
         Assert.False(tablePlan.IsStaticallyUnsupported);
         Assert.Contains(fingerprint, tablePlan.Postcondition, StringComparison.Ordinal);
         Assert.Contains(fingerprint, tablePlan.PostApplySql!, StringComparison.Ordinal);
-        Assert.Contains("expected.default_fingerprint IS NULL AND c.default_object_id = 0",
-            tablePlan.Postcondition, StringComparison.Ordinal);
-
-        Assert.Contains("expected.default_fingerprint IS NOT NULL AND dc.object_id IS NOT NULL",
-            tablePlan.Postcondition, StringComparison.Ordinal);
-
-        Assert.Contains("ep.class = 1 AND ep.major_id = dc.object_id", tablePlan.Postcondition,
+        Assert.Contains(
+            "expected.default_fingerprint IS NULL AND c.default_object_id = 0",
+            tablePlan.Postcondition,
             StringComparison.Ordinal);
 
-        Assert.Contains("ep.minor_id = 0 AND ep.name = N'Doka:SafeMigrations:Contract'", tablePlan.Postcondition,
+        Assert.Contains(
+            "expected.default_fingerprint IS NOT NULL AND dc.object_id IS NOT NULL",
+            tablePlan.Postcondition,
             StringComparison.Ordinal);
 
-        Assert.Contains("CONVERT(nvarchar(64), ep.value) = expected.default_fingerprint "
+        Assert.Contains(
+            "ep.class = 1 AND ep.major_id = dc.object_id",
+            tablePlan.Postcondition,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "ep.minor_id = 0 AND ep.name = N'Doka:SafeMigrations:Contract'",
+            tablePlan.Postcondition,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "CONVERT(nvarchar(64), ep.value) = expected.default_fingerprint "
             + "COLLATE Latin1_General_100_BIN2",
-            tablePlan.Postcondition, StringComparison.Ordinal);
+            tablePlan.Postcondition,
+            StringComparison.Ordinal);
 
         Assert.DoesNotContain("dc.definition", tablePlan.Postcondition, StringComparison.Ordinal);
         Assert.DoesNotContain("default_column", tablePlan.Postcondition, StringComparison.Ordinal);
@@ -357,11 +437,19 @@ public sealed class SqlServerTableColumnSetSqlTests
             ProviderAnnotations = SafeMigrationProviderAnnotation.Capture(annotations),
         };
 
-        var operation = TableOperation([identity, new ExpectedColumnDefinition("Value", typeof(int), true, "int",
-            defaultValue: SafeMigrationDefaultValue.Literal(7))]);
+        var operation = TableOperation(
+        [
+            identity, new ExpectedColumnDefinition(
+                "Value",
+                typeof(int),
+                true,
+                "int",
+                defaultValue: SafeMigrationDefaultValue.Literal(7)),
+        ]);
 
         // Act
-        var plan = CreateCatalog(context).Build(operation);
+        var plan = CreateCatalog(context)
+            .Build(operation);
 
         // Assert
         Assert.Contains("WHERE CASE WHEN c.column_id IS NOT NULL", plan.Postcondition, StringComparison.Ordinal);
@@ -376,8 +464,11 @@ public sealed class SqlServerTableColumnSetSqlTests
     /// <summary>Builds an ordinary strict table operation with unchanged default constraint ownership.</summary>
     private static SafeMigrationOperation TableOperation(
         ExpectedColumnDefinition[] columns
-    ) => new(new EnsureTableIntent(new ExpectedTableDefinition("set_items", columns),
-        SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent);
+    ) => new(
+        new EnsureTableIntent(
+            new ExpectedTableDefinition("set_items", columns),
+            SafeMigrationTableMode.StrictDefinition),
+        SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Uses the active EF mappings and identifier renderer without opening a connection.</summary>
     private static SqlServerSafeMigrationCatalogSqlBuilder CreateCatalog(
@@ -388,5 +479,7 @@ public sealed class SqlServerTableColumnSetSqlTests
     private static int CountFragment(
         string sql,
         string fragment
-    ) => sql.Split(fragment, StringSplitOptions.None).Length - 1;
+    ) => sql.Split(fragment)
+            .Length
+        - 1;
 }

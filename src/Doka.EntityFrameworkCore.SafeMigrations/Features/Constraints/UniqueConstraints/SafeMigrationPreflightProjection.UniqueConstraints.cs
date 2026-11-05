@@ -43,8 +43,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         if (!TryGet(intent.Definition.Table, intent.Definition.Schema, out var table))
         {
             if (_prerequisites.TryGetValue(
-                    new TableKey(intent.Definition.Table, intent.Definition.Schema),
-                    out var prerequisites))
+                new TableKey(intent.Definition.Table, intent.Definition.Schema),
+                out var prerequisites))
             {
                 var accepted = AnalyzeAcceptedDefinition(
                     prerequisites.UniqueConstraints,
@@ -91,8 +91,10 @@ internal sealed partial class SafeMigrationPreflightProjection
         }
 
         var analysis = table.UniqueConstraints.TryGetValue(intent.Definition.Name, out var exact)
-            ? Analysis(ProjectedUniqueConstraintSemantics(exact, intent.Definition)
-                ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different)
+            ? Analysis(
+                ProjectedUniqueConstraintSemantics(exact, intent.Definition)
+                    ? SafeMigrationObservedState.Matching
+                    : SafeMigrationObservedState.Different)
             : Analysis(SafeMigrationObservedState.Missing);
 
         if (analysis.ObservedState == SafeMigrationObservedState.Missing)
@@ -119,7 +121,9 @@ internal sealed partial class SafeMigrationPreflightProjection
     private bool ProjectedUniqueConstraintSemantics(
         ExpectedUniqueConstraintDefinition left,
         ExpectedUniqueConstraintDefinition right
-    ) => SafeMigrationDefinitionEquivalence.UniqueConstraintSemantics(left, right,
+    ) => SafeMigrationDefinitionEquivalence.UniqueConstraintSemantics(
+        left,
+        right,
         _objectIdentityNormalizer?.ColumnIdentifierComparer ?? StringComparer.Ordinal);
 
     private SafeMigrationProviderAnalysis Project(
@@ -133,9 +137,12 @@ internal sealed partial class SafeMigrationPreflightProjection
                     ? SafeMigrationObservedState.Matching
                     : SafeMigrationObservedState.Missing)
             : _prerequisites.TryGetValue(new TableKey(intent.Table, intent.Schema), out var prerequisites)
-                && prerequisites.UniqueConstraints.TryGetPhysicalState(intent.Name, out var present)
-                    ? Analysis(present ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Missing)
-                    : liveAnalysis;
+            && prerequisites.UniqueConstraints.TryGetPhysicalState(intent.Name, out var present)
+                ? Analysis(
+                    present
+                        ? SafeMigrationObservedState.Matching
+                        : SafeMigrationObservedState.Missing)
+                : liveAnalysis;
 
     private void Observe(
         EnsureUniqueConstraintIntent intent,
@@ -153,6 +160,7 @@ internal sealed partial class SafeMigrationPreflightProjection
                 intent.Definition,
                 liveAnalysis,
                 decision);
+
             ObserveSharedUniqueConstraint(prerequisites, intent, liveAnalysis, decision);
         }
 
@@ -167,6 +175,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         {
             _droppedPhysicalKeys.Remove(
                 new IndexKey(intent.Definition.Table, intent.Definition.Schema, intent.Definition.Name));
+
             _projectedCandidateKeyMutationTables.Add(
                 new TableKey(intent.Definition.Table, intent.Definition.Schema));
         }
@@ -215,12 +224,12 @@ internal sealed partial class SafeMigrationPreflightProjection
         analysis = StringComparer.Ordinal.Equals(
             liveAnalysis.Code,
             "unique_constraint_replacement_data_blocked")
-                ? new SafeMigrationProviderAnalysis(
-                    SafeMigrationObservedState.DataBlocked,
-                    SafeMigrationRepairCapability.None,
-                    postconditionSatisfied: false,
-                    liveAnalysis.Code)
-                : Analysis(SafeMigrationObservedState.Missing);
+            ? new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.DataBlocked,
+                SafeMigrationRepairCapability.None,
+                postconditionSatisfied: false,
+                liveAnalysis.Code)
+            : Analysis(SafeMigrationObservedState.Missing);
 
         return true;
     }

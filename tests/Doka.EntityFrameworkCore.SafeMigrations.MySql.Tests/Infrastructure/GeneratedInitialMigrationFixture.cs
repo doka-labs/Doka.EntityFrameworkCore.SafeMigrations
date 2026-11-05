@@ -3,8 +3,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 /// <summary>Applies each externally provisioned tooling schema once without imposing test-method order.</summary>
 public sealed class GeneratedInitialMigrationFixture
 {
-    private readonly Lazy<Task<GeneratedInitialMigrationObservation>> _strict;
     private readonly Lazy<Task<GeneratedInitialMigrationObservation>> _legacy;
+    private readonly Lazy<Task<GeneratedInitialMigrationObservation>> _strict;
 
     /// <summary>Creates shared initializers whose lifetime is independent of each observing test.</summary>
     public GeneratedInitialMigrationFixture()
@@ -16,14 +16,16 @@ public sealed class GeneratedInitialMigrationFixture
             "StrictScaffoldingProbe",
             static connectionString => new StrictSafeMigrationScaffoldingDbContext(
                 connectionString,
-                MySqlDesignTimeContextConfiguration.ServerVersion()), CancellationToken.None));
+                MySqlDesignTimeContextConfiguration.ServerVersion()),
+            CancellationToken.None));
 
         _legacy = new Lazy<Task<GeneratedInitialMigrationObservation>>(() => InitializeAsync(
             "SAFE_MIGRATIONS_GENERATED_LEGACY_CONNECTION_STRING",
             "LegacyScaffoldingProbe",
             static connectionString => new LegacySafeMigrationScaffoldingDbContext(
                 connectionString,
-                MySqlDesignTimeContextConfiguration.ServerVersion()), CancellationToken.None));
+                MySqlDesignTimeContextConfiguration.ServerVersion()),
+            CancellationToken.None));
     }
 
     /// <summary>Supplies a resource-free initializer for ownership and observer-cancellation counterprobes.</summary>
@@ -51,7 +53,9 @@ public sealed class GeneratedInitialMigrationFixture
 
         // WHY: The first selected fact owns setup, not a particular method order. Lazy also
         // retains a fault instead of retrying a partially applied schema behind another fact.
-        var initialization = (legacy ? _legacy : _strict).Value;
+        var initialization = (legacy
+            ? _legacy
+            : _strict).Value;
 
         // WHY: Only this observer stops waiting; the retained owner must finish its schema
         // mutation independently so neither a peer nor cleanup can race a second initializer.
@@ -107,7 +111,11 @@ public sealed class GeneratedInitialMigrationFixture
             cancellationToken: cancellationToken);
 
         return new GeneratedInitialMigrationObservation(
-            preflight, replay, postflight, seedCount, () => createContext(connectionString));
+            preflight,
+            replay,
+            postflight,
+            seedCount,
+            () => createContext(connectionString));
     }
 
     /// <summary>Finds the real freshly scaffolded migration for the selected tooling profile.</summary>
@@ -129,14 +137,17 @@ public sealed class GeneratedInitialMigrationFixture
     }
 
     /// <summary>Reports every blocking operation instead of hiding setup failure behind a dependent query.</summary>
-    internal static void AssertReady(SafeMigrationRunReport report)
+    internal static void AssertReady(
+        SafeMigrationRunReport report
+    )
     {
         if (report.Status == SafeMigrationReportStatus.Ready)
         {
             return;
         }
 
-        var blockers = report.Assessments
+        var blockers = report
+            .Assessments
             .Where(static assessment => assessment.Action is
                 SafeMigrationAction.RejectDifferent
                 or SafeMigrationAction.RejectUnsupported
@@ -176,12 +187,16 @@ public sealed class GeneratedInitialMigrationFixture
 
     /// <summary>Reads the source-controlled seed without retaining a connection outside its setup context.</summary>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
-    private static async Task<int> ScalarIntAsync(DbContext context, string sql, CancellationToken cancellationToken)
+    private static async Task<int> ScalarIntAsync(
+        DbContext context,
+        string sql,
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         var connection = context.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open)
+        if (connection.State != ConnectionState.Open)
         {
             await connection.OpenAsync(cancellationToken);
         }

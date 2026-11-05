@@ -21,12 +21,15 @@ public sealed class PostgreSqlServiceCompositionTests
         Assert.Equal(
             SafeMigrationScaffoldingMode.Strict,
             strict.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()!.ScaffoldingMode);
+
         Assert.Equal(
             SafeMigrationPolicy.ThrowIfDifferent,
             strict.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()!.LegacyConvergencePolicy);
+
         Assert.Equal(
             SafeMigrationScaffoldingMode.LegacyConvergence,
             legacy.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>()!.ScaffoldingMode);
+
         Assert.Equal(strictInfo.GetServiceProviderHashCode(), legacyInfo.GetServiceProviderHashCode());
         Assert.True(strictInfo.ShouldUseSameServiceProvider(legacyInfo));
     }
@@ -72,6 +75,7 @@ public sealed class PostgreSqlServiceCompositionTests
 
         Assert.Throws<ArgumentNullException>(() =>
             options.UsePostgreSqlSafeMigrations(configure: null!));
+
         Assert.Null(options.Options.FindExtension<PostgreSqlSafeMigrationsOptionsExtension>());
     }
 
@@ -221,7 +225,10 @@ public sealed class PostgreSqlServiceCompositionTests
             context.GetService<IPostgreSqlSafeMigrationsBaselineGenerator>(),
             context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
-        var historySql = context.GetService<IHistoryRepository>().GetCreateIfNotExistsScript();
+
+        var historySql = context
+            .GetService<IHistoryRepository>()
+            .GetCreateIfNotExistsScript();
 
         // Act
         var commands = generator.Generate([new SqlOperation { Sql = historySql }], model: null);
@@ -294,7 +301,7 @@ public sealed class PostgreSqlServiceCompositionTests
         // Arrange
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
         options.UseNpgsql("Host=localhost;Database=composition;Username=test;Password=test");
-        ((DbContextOptionsBuilder)options)
+        options
             .UsePostgreSqlSafeMigrations<RecordingNpgsqlMigrationsSqlGenerator, SafeMigrationDbContext>();
 
         using var context = new SafeMigrationDbContext(options.Options);
@@ -313,7 +320,11 @@ public sealed class PostgreSqlServiceCompositionTests
 
         // Assert
         Assert.Equal(2, commands.Count);
-        Assert.Equal("SELECT 1;", commands[0].CommandText.Trim());
+        Assert.Equal("SELECT 1;",
+            commands[0]
+                .CommandText
+                .Trim());
+
         Assert.StartsWith("DO $doka_", commands[1].CommandText, StringComparison.Ordinal);
         Assert.NotEmpty(RecordingNpgsqlMigrationsSqlGenerator.ObservedOperationTypes);
     }
@@ -323,7 +334,7 @@ public sealed class PostgreSqlServiceCompositionTests
     {
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
         options.UseNpgsql("Host=localhost;Database=composition;Username=test;Password=test");
-        ((DbContextOptionsBuilder)options)
+        options
             .UsePostgreSqlSafeMigrations<RecordingNpgsqlMigrationsSqlGenerator, SafeMigrationDbContext>();
 
         using var context = new SafeMigrationDbContext(options.Options);
@@ -348,9 +359,11 @@ public sealed class PostgreSqlServiceCompositionTests
         Assert.Contains(
             RecordingNpgsqlMigrationsSqlGenerator.ObservedOperationTypes,
             type => type == typeof(AddColumnOperation));
+
         Assert.Contains(
             RecordingNpgsqlMigrationsSqlGenerator.ObservedOperationTypes,
             type => type == typeof(AlterColumnOperation));
+
         Assert.Contains("IF doka_action OPERATOR(pg_catalog.=) 'apply'", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("-- custom baseline: AddColumnOperation", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("-- custom baseline: AlterColumnOperation", command.CommandText, StringComparison.Ordinal);
@@ -385,6 +398,7 @@ public sealed class PostgreSqlServiceCompositionTests
         const string action = "doka_action := CASE WHEN doka_state OPERATOR(pg_catalog.=)";
         const string exit = "EXIT WHEN doka_action OPERATOR(pg_catalog.<>) 'repair' "
             + "OR doka_evaluation_pass OPERATOR(pg_catalog.=) 2;";
+
         const string tableLock = " IN ACCESS EXCLUSIVE MODE;";
         const string mutationBranch = "IF doka_action OPERATOR(pg_catalog.=) 'reject_different' THEN";
 
@@ -439,7 +453,7 @@ public sealed class PostgreSqlServiceCompositionTests
     {
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
         options.UseNpgsql("Host=localhost;Database=composition;Username=test;Password=test");
-        ((DbContextOptionsBuilder)options).UsePostgreSqlSafeMigrations<UnrelatedContext>();
+        options.UsePostgreSqlSafeMigrations<UnrelatedContext>();
 
         using var context = new SafeMigrationDbContext(options.Options);
 
@@ -511,8 +525,6 @@ public sealed class PostgreSqlServiceCompositionTests
 
         public static IReadOnlyList<Type> ObservedOperationTypes => s_operationTypes;
 
-        public static void Clear() => s_operationTypes.Clear();
-
         public IReadOnlyList<MigrationCommand> Generate(
             IReadOnlyList<MigrationOperation> operations,
             IModel? model = null,
@@ -542,5 +554,7 @@ public sealed class PostgreSqlServiceCompositionTests
                 })
                 .ToArray();
         }
+
+        public static void Clear() => s_operationTypes.Clear();
     }
 }

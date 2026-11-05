@@ -3,8 +3,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 /// <summary>Invalidates cached catalog state after an ordinary provider command.</summary>
 internal sealed class SqliteInvalidatingMigrationCommand : MigrationCommand
 {
-    private readonly MigrationCommand _inner;
     private readonly SqliteSafeMigrationExecutionState _executionState;
+    private readonly MigrationCommand _inner;
     private readonly bool _invalidatesCatalog;
 
     /// <summary>Initializes the catalog-invalidating command wrapper.</summary>

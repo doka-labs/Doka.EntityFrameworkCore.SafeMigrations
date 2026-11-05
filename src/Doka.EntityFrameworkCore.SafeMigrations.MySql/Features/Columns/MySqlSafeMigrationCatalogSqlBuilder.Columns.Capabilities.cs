@@ -145,7 +145,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             var definition = definitions[index];
             if (definition.DefaultValue.Kind == SafeMigrationDefaultValueKind.Sql)
             {
-                return !Supported(features, MySqlMigrationFeature.ExpressionDefaults) ? "expression_default" : null;
+                return !Supported(features, MySqlMigrationFeature.ExpressionDefaults)
+                    ? "expression_default"
+                    : null;
             }
         }
 
@@ -180,8 +182,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 definition.Scale) is not null;
         }
         catch (Exception exception) when (exception is ArgumentException
-                                              or InvalidOperationException
-                                              or NotSupportedException)
+            or InvalidOperationException
+            or NotSupportedException)
         {
             return false;
         }

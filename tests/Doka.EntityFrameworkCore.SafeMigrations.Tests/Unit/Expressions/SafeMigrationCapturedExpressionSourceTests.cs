@@ -10,7 +10,9 @@ public sealed class SafeMigrationCapturedExpressionSourceTests
     [InlineData("1 / 9223372036854775807")]
     [InlineData("1e0 / 3")]
     [InlineData("CASE WHEN [source_value] > 1 THEN 2147483648 ELSE 0 END")]
-    public void CapturedComputedSourceSurvivesAddAndAlterReconstruction(string sql)
+    public void CapturedComputedSourceSurvivesAddAndAlterReconstruction(
+        string sql
+    )
     {
         // Arrange
         var definition = CaptureColumn(sql);
@@ -18,11 +20,15 @@ public sealed class SafeMigrationCapturedExpressionSourceTests
         var alterIntent = new AlterColumnIntent("items", definition, definition);
 
         // Act
-        var add = Assert.IsType<AddColumnOperation>(SafeMigrationStandardOperationFactory.Create(
-            addIntent, static _ => throw new InvalidOperationException("Captured SQL must not be re-rendered.")));
+        var add = Assert.IsType<AddColumnOperation>(
+            SafeMigrationStandardOperationFactory.Create(
+                addIntent,
+                static _ => throw new InvalidOperationException("Captured SQL must not be re-rendered.")));
 
-        var alter = Assert.IsType<AlterColumnOperation>(SafeMigrationStandardOperationFactory.Create(
-            alterIntent, static _ => throw new InvalidOperationException("Captured SQL must not be re-rendered.")));
+        var alter = Assert.IsType<AlterColumnOperation>(
+            SafeMigrationStandardOperationFactory.Create(
+                alterIntent,
+                static _ => throw new InvalidOperationException("Captured SQL must not be re-rendered.")));
 
         // Assert
         Assert.NotNull(definition.ComputedExpression);
@@ -39,15 +45,18 @@ public sealed class SafeMigrationCapturedExpressionSourceTests
     [InlineData("2147483648 / 2147483647 > 1")]
     [InlineData("1e0 / 3 > 0")]
     [InlineData("CASE WHEN [source_value] > 0 THEN 1 ELSE 0 END = 1")]
-    public void CapturedCheckSourceSurvivesReconstruction(string sql)
+    public void CapturedCheckSourceSurvivesReconstruction(
+        string sql
+    )
     {
         // Arrange
         var definition = CaptureCheck(sql);
 
         // Act
-        var operation = Assert.IsType<AddCheckConstraintOperation>(SafeMigrationStandardOperationFactory.Create(
-            new EnsureCheckConstraintIntent(definition),
-            static _ => throw new InvalidOperationException("Captured SQL must not be re-rendered.")));
+        var operation = Assert.IsType<AddCheckConstraintOperation>(
+            SafeMigrationStandardOperationFactory.Create(
+                new EnsureCheckConstraintIntent(definition),
+                static _ => throw new InvalidOperationException("Captured SQL must not be re-rendered.")));
 
         // Assert
         Assert.NotNull(definition.Expression);
@@ -102,17 +111,24 @@ public sealed class SafeMigrationCapturedExpressionSourceTests
     {
         // Arrange
         var expression = SafeMigrationSql.Literal(2147483648L);
-        var column = new ExpectedColumnDefinition("computed_value", typeof(long), true,
+        var column = new ExpectedColumnDefinition(
+            "computed_value",
+            typeof(long),
+            true,
             computedExpression: expression);
 
         var check = ExpectedCheckConstraintDefinition.FromExpression("ck_items", "items", expression);
 
         // Act
-        var add = Assert.IsType<AddColumnOperation>(SafeMigrationStandardOperationFactory.Create(
-            new EnsureColumnIntent("items", column), static _ => "typed_column"));
+        var add = Assert.IsType<AddColumnOperation>(
+            SafeMigrationStandardOperationFactory.Create(
+                new EnsureColumnIntent("items", column),
+                static _ => "typed_column"));
 
-        var constraint = Assert.IsType<AddCheckConstraintOperation>(SafeMigrationStandardOperationFactory.Create(
-            new EnsureCheckConstraintIntent(check), static _ => "typed_check"));
+        var constraint = Assert.IsType<AddCheckConstraintOperation>(
+            SafeMigrationStandardOperationFactory.Create(
+                new EnsureCheckConstraintIntent(check),
+                static _ => "typed_check"));
 
         // Assert
         Assert.Null(column.CapturedComputedSql);
@@ -129,7 +145,10 @@ public sealed class SafeMigrationCapturedExpressionSourceTests
         var plain = CaptureColumn("2147483648 / 2147483647");
         var parenthesized = CaptureColumn("(2147483648 / 2147483647)");
         var repeated = CaptureColumn("2147483648 / 2147483647");
-        var typed = new ExpectedColumnDefinition("computed_value", typeof(long), true,
+        var typed = new ExpectedColumnDefinition(
+            "computed_value",
+            typeof(long),
+            true,
             computedExpression: plain.ComputedExpression);
 
         // Act
@@ -141,8 +160,11 @@ public sealed class SafeMigrationCapturedExpressionSourceTests
         var secondHash = Fingerprint(new EnsureColumnIntent("items", parenthesized));
 
         // Assert
-        Assert.True(SafeMigrationSqlExpressionContract.Equivalent(
-            plain.ComputedExpression, parenthesized.ComputedExpression));
+        Assert.True(
+            SafeMigrationSqlExpressionContract.Equivalent(
+                plain.ComputedExpression,
+                parenthesized.ComputedExpression));
+
         Assert.False(differentSourceEqual);
         Assert.True(repeatedSourceEqual);
         Assert.False(typedSourceEqual);
@@ -160,7 +182,12 @@ public sealed class SafeMigrationCapturedExpressionSourceTests
         var parenthesized = CaptureCheck("(2147483648 / 2147483647 > 1)");
         var repeated = CaptureCheck("2147483648 / 2147483647 > 1");
         var comparer = SafeMigrationSemanticDefinitionComparers.CheckConstraint;
-        var definitions = new HashSet<ExpectedCheckConstraintDefinition>(comparer) { plain, parenthesized, repeated, };
+        var definitions = new HashSet<ExpectedCheckConstraintDefinition>(comparer)
+        {
+            plain,
+            parenthesized,
+            repeated,
+        };
 
         // Act
         var repeatedEquals = comparer.Equals(plain, repeated);
@@ -184,14 +211,20 @@ public sealed class SafeMigrationCapturedExpressionSourceTests
         const string sql = "2147483648 / 2147483647 > 1";
         var definition = CaptureCheck(sql);
         var operation = new SafeMigrationOperation(
-            new EnsureCheckConstraintIntent(definition), SafeMigrationPolicy.ThrowIfDifferent);
+            new EnsureCheckConstraintIntent(definition),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         var unexpected = new SafeMigrationUnexpectedObject(
-            SafeMigrationDatabaseObjectKind.CheckConstraint, null, "items", "ck_legacy", "unexpected_check_constraint");
+            SafeMigrationDatabaseObjectKind.CheckConstraint,
+            null,
+            "items",
+            "ck_legacy",
+            "unexpected_check_constraint");
 
         // Act
         var candidate = Assert.Single(SafeMigrationSemanticCandidateFactory.Create([operation], [unexpected]));
-        var copied = Assert.IsType<EnsureCheckConstraintIntent>(candidate.Operation.Intent).Definition;
+        var copied = Assert.IsType<EnsureCheckConstraintIntent>(candidate.Operation.Intent)
+            .Definition;
 
         // Assert
         Assert.Equal("ck_legacy", copied.Name);
@@ -199,20 +232,27 @@ public sealed class SafeMigrationCapturedExpressionSourceTests
         Assert.Same(definition.Expression, copied.Expression);
     }
 
-    private static ExpectedColumnDefinition CaptureColumn(string sql) =>
-        SafeMigrationExpectedDefinitionFactory.From(new AddColumnOperation
-        {
-            Name = "computed_value",
-            Table = "items",
-            ClrType = typeof(long),
-            IsNullable = true,
-            ComputedColumnSql = sql,
-        });
+    private static ExpectedColumnDefinition CaptureColumn(
+        string sql
+    ) =>
+        SafeMigrationExpectedDefinitionFactory.From(
+            new AddColumnOperation
+            {
+                Name = "computed_value",
+                Table = "items",
+                ClrType = typeof(long),
+                IsNullable = true,
+                ComputedColumnSql = sql,
+            });
 
-    private static ExpectedCheckConstraintDefinition CaptureCheck(string sql) =>
+    private static ExpectedCheckConstraintDefinition CaptureCheck(
+        string sql
+    ) =>
         SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_items", "items", sql, null);
 
-    private static string Fingerprint(SafeMigrationIntent intent) =>
+    private static string Fingerprint(
+        SafeMigrationIntent intent
+    ) =>
         SafeMigrationContractFingerprint.Create(
             [new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent)]);
 }

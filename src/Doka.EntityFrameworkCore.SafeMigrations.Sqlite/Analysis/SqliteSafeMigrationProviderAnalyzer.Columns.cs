@@ -38,7 +38,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
                     IsNullable: false,
                     DefaultValue.Kind: SafeMigrationDefaultValueKind.None,
                     ComputedColumnSql: null,
-                    ComputedExpression: null
+                    ComputedExpression: null,
                 }
                 && TableHasRows(connection, transaction, intent.Table))
             {
@@ -70,7 +70,9 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
     )
     {
         var unsupported = ColumnUnsupportedFeature(intent.Definition)
-            ?? (intent.OldDefinition is null ? null : ColumnUnsupportedFeature(intent.OldDefinition));
+            ?? (intent.OldDefinition is null
+                ? null
+                : ColumnUnsupportedFeature(intent.OldDefinition));
 
         if (unsupported is not null)
         {
@@ -101,9 +103,13 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
 
         return new SafeMigrationProviderAnalysis(
             SafeMigrationObservedState.Different,
-            repairIsLossless ? SafeMigrationRepairCapability.Safe : SafeMigrationRepairCapability.None,
+            repairIsLossless
+                ? SafeMigrationRepairCapability.Safe
+                : SafeMigrationRepairCapability.None,
             postconditionSatisfied: false,
-            repairIsLossless ? "classified_different_repairable" : "classified_different",
+            repairIsLossless
+                ? "classified_different_repairable"
+                : "classified_different",
             repairIsLossless
                 ? SafeMigrationOperationalImpact.TableRewritePossible
                 : SafeMigrationOperationalImpact.NotApplicable,
@@ -170,7 +176,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         {
             true when !targetExists => Matching(postconditionSatisfied: false, matchedObjectName: intent.Name),
             false => Missing(postconditionSatisfied: true),
-            _ => Different("rename_target", "missing", "existing")
+            _ => Different("rename_target", "missing", "existing"),
         };
 
         return analysis.WithRenameTargetExists(targetExists);
@@ -339,7 +345,9 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         }
         else
         {
-            value = underlyingType.IsValueType ? Activator.CreateInstance(underlyingType) : null;
+            value = underlyingType.IsValueType
+                ? Activator.CreateInstance(underlyingType)
+                : null;
         }
 
         if (value is null)
@@ -450,8 +458,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             result.Add(
                 new SafeMigrationFacetDifference(
                     "column_nullability",
-                    expected.IsNullable ? "nullable" : "required",
-                    actual.IsNullable ? "nullable" : "required"));
+                    expected.IsNullable
+                        ? "nullable"
+                        : "required",
+                    actual.IsNullable
+                        ? "nullable"
+                        : "required"));
         }
 
         var expectedDefault = ExpectedDefaultSql(expected);
@@ -484,8 +496,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             result.Add(
                 new SafeMigrationFacetDifference(
                     "column_generated_storage",
-                    expected.IsStored == true ? "stored" : "virtual",
-                    actual.IsStored ? "stored" : "virtual"));
+                    expected.IsStored == true
+                        ? "stored"
+                        : "virtual",
+                    actual.IsStored
+                        ? "stored"
+                        : "virtual"));
         }
 
         if (!CollationMatches(actual.Collation, expected.Collation))
@@ -507,8 +523,12 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             result.Add(
                 new SafeMigrationFacetDifference(
                     "column_autoincrement",
-                    expectedAutoincrement ? "enabled" : "disabled",
-                    actual.AutoIncrement ? "enabled" : "disabled"));
+                    expectedAutoincrement
+                        ? "enabled"
+                        : "disabled",
+                    actual.AutoIncrement
+                        ? "enabled"
+                        : "disabled"));
         }
 
         if (result.Count == 0)

@@ -33,7 +33,9 @@ public sealed class PostgreSqlDatabaseOwnershipTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ReleaseDatabase_RejectsForeignOwnership(bool foreignEndpoint)
+    public async Task ReleaseDatabase_RejectsForeignOwnership(
+        bool foreignEndpoint
+    )
     {
         // Arrange
         var dropped = new List<string>();
@@ -78,6 +80,7 @@ public sealed class PostgreSqlDatabaseOwnershipTests
                     : Task.CompletedTask;
             },
             ConnectionString);
+
         var owned = await fixture.CreateDatabaseAsync(CancellationToken.None);
 
         // Act
@@ -111,6 +114,7 @@ public sealed class PostgreSqlDatabaseOwnershipTests
         Exception sentinel = canceled
             ? new OperationCanceledException("CREATE cancellation sentinel")
             : new InvalidOperationException("CREATE acknowledgement sentinel");
+
         using var fixture = new PostgreSqlContainerFixture(
             (database, _) =>
             {
@@ -138,7 +142,12 @@ public sealed class PostgreSqlDatabaseOwnershipTests
         // Assert
         Assert.Same(sentinel, failure);
         Assert.Single(attempts);
-        Assert.Equal(physicalCreateSucceeded ? 1 : 0, physicalDatabasesBeforeCleanup.Length);
+        Assert.Equal(
+            physicalCreateSucceeded
+                ? 1
+                : 0,
+            physicalDatabasesBeforeCleanup.Length);
+
         Assert.Equal(attempts, dropped);
         Assert.Empty(physicalDatabases);
     }
@@ -206,6 +215,7 @@ public sealed class PostgreSqlDatabaseOwnershipTests
                 preparations++;
                 return ConnectionString(database);
             });
+
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
@@ -233,7 +243,9 @@ public sealed class PostgreSqlDatabaseOwnershipTests
             (database, _) =>
             {
                 stages.Add(database);
-                return stages.Count == 1 ? Task.FromException(databaseFailure) : Task.CompletedTask;
+                return stages.Count == 1
+                    ? Task.FromException(databaseFailure)
+                    : Task.CompletedTask;
             },
             ConnectionString,
             disposeContainer: () =>
@@ -241,12 +253,17 @@ public sealed class PostgreSqlDatabaseOwnershipTests
                 stages.Add("container");
                 return Task.FromException(containerFailure);
             });
+
         var first = await fixture.CreateDatabaseAsync(CancellationToken.None);
         var second = await fixture.CreateDatabaseAsync(CancellationToken.None);
 
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(fixture.DisposeAsync);
-        var retainedFailures = Assert.IsType<AggregateException>(failure.InnerException).Flatten().InnerExceptions;
+        var retainedFailures = Assert
+            .IsType<AggregateException>(failure.InnerException)
+            .Flatten()
+            .InnerExceptions;
+
         await fixture.DisposeAsync();
 
         // Assert
@@ -265,8 +282,10 @@ public sealed class PostgreSqlDatabaseOwnershipTests
         using var fixture = CreateFixture(dropped);
         using var firstOwner = new DatabaseOwner(fixture);
         using var secondOwner = new DatabaseOwner(fixture);
-        var databases = await Task.WhenAll(firstOwner.CreateAsync(
-            cancellationToken: CancellationToken.None), secondOwner.CreateAsync(
+        var databases = await Task.WhenAll(
+            firstOwner.CreateAsync(
+                cancellationToken: CancellationToken.None),
+            secondOwner.CreateAsync(
                 cancellationToken: CancellationToken.None));
 
         // Act
@@ -296,6 +315,7 @@ public sealed class PostgreSqlDatabaseOwnershipTests
                     : Task.CompletedTask;
             },
             ConnectionString);
+
         using var owner = new DatabaseOwner(fixture);
         var first = await owner.CreateAsync(cancellationToken: CancellationToken.None);
         var second = await owner.CreateAsync(cancellationToken: CancellationToken.None);
@@ -306,7 +326,10 @@ public sealed class PostgreSqlDatabaseOwnershipTests
         await fixture.DisposeAsync();
 
         // Assert
-        Assert.Equal("test cleanup sentinel", Assert.Single(failure.InnerExceptions).Message);
+        Assert.Equal("test cleanup sentinel",
+            Assert.Single(failure.InnerExceptions)
+                .Message);
+
         Assert.Equal([DatabaseName(first), DatabaseName(second)], attemptsBeforeFinalCleanup);
         Assert.Equal([DatabaseName(first), DatabaseName(second), DatabaseName(first)], attempts);
     }
@@ -333,6 +356,7 @@ public sealed class PostgreSqlDatabaseOwnershipTests
                 return Task.CompletedTask;
             },
             ConnectionString);
+
         var first = fixture.CreateDatabaseAsync(CancellationToken.None);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
         using var cancellation = new CancellationTokenSource();
@@ -365,6 +389,7 @@ public sealed class PostgreSqlDatabaseOwnershipTests
             },
             static (_, _) => Task.CompletedTask,
             ConnectionString);
+
         using var owner = new DatabaseOwner(fixture);
         await owner.DisposeAsync();
 
@@ -411,6 +436,8 @@ public sealed class PostgreSqlDatabaseOwnershipTests
         /// <summary>Creates an isolated database owned by this test-local lifetime.</summary>
         /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
         /// <returns>The asynchronous fixture operation or observation.</returns>
-        public Task<string> CreateAsync(CancellationToken cancellationToken) => CreateDatabaseAsync(cancellationToken);
+        public Task<string> CreateAsync(
+            CancellationToken cancellationToken
+        ) => CreateDatabaseAsync(cancellationToken);
     }
 }

@@ -25,6 +25,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 SafeMigrationAction.RejectDataBlocked,
                 SafeMigrationAction.RejectPrerequisiteMissing,
             });
+
         projection.Observe(operation, liveAnalysis, analysis, decision);
     }
 
@@ -67,7 +68,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             operation.Policy,
             analysis.RepairCapability);
 
-        Assert.Contains(decision.Action, new[] { SafeMigrationAction.Apply, SafeMigrationAction.NoOp, });
+        Assert.Contains(decision.Action, new[] { SafeMigrationAction.Apply, SafeMigrationAction.NoOp });
         projection.Observe(operation, liveAnalysis, analysis, decision);
     }
 

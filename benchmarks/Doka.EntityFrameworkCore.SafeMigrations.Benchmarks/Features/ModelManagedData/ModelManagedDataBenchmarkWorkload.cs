@@ -38,6 +38,7 @@ internal static class ModelManagedDataBenchmarkWorkload
             ["id", "managed_value"],
             [integerStoreType, textStoreType],
             ensureValues);
+
         _ = builder.UpdateModelManagedDataFromModel(
             "benchmark_model_data",
             ["id"],
@@ -47,6 +48,7 @@ internal static class ModelManagedDataBenchmarkWorkload
             [textStoreType],
             updateSource,
             updateTarget);
+
         _ = builder.DeleteModelManagedDataFromModel(
             "benchmark_model_data",
             ["id"],

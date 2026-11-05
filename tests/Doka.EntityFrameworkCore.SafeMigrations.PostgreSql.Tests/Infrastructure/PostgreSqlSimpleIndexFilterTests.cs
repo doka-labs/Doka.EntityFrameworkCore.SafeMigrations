@@ -48,6 +48,7 @@ public sealed class PostgreSqlSimpleIndexFilterTests
             "a.attname IN ('key', 'payload', '" + column.Replace("'", "''", StringComparison.Ordinal) + "')",
             plan.PrerequisiteExpression,
             StringComparison.Ordinal);
+
         Assert.Same(definition, ((EnsureIndexIntent)operation.Intent).Definition);
         Assert.Equal(filter, definition.Filter);
         Assert.Null(definition.StructuredFilter);
@@ -85,11 +86,12 @@ public sealed class PostgreSqlSimpleIndexFilterTests
         // Arrange
         using var context = Context();
         var operation = new SafeMigrationOperation(
-            new EnsureIndexIntent(new ExpectedIndexDefinition(
-                "lookup",
-                "nodes",
-                [new ExpectedIndexKeyDefinition("key")],
-                filter: filter)),
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "lookup",
+                    "nodes",
+                    [new ExpectedIndexKeyDefinition("key")],
+                    filter: filter)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var catalog = Catalog(context);
@@ -109,11 +111,12 @@ public sealed class PostgreSqlSimpleIndexFilterTests
         // Arrange
         using var context = Context();
         var operation = new SafeMigrationOperation(
-            new EnsureIndexIntent(new ExpectedIndexDefinition(
-                "lookup",
-                "nodes",
-                [new ExpectedIndexKeyDefinition("parent")],
-                structuredFilter: SafeMigrationSql.IsNull(SafeMigrationSql.Identifier("parent")))),
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "lookup",
+                    "nodes",
+                    [new ExpectedIndexKeyDefinition("parent")],
+                    structuredFilter: SafeMigrationSql.IsNull(SafeMigrationSql.Identifier("parent")))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var catalog = Catalog(context);
@@ -140,18 +143,19 @@ public sealed class PostgreSqlSimpleIndexFilterTests
     {
         // Arrange
         using var context = Context();
-        var intent = new EnsureIndexIntent(new ExpectedIndexDefinition(
-            "lookup",
-            "nodes",
-            [new ExpectedIndexKeyDefinition("key")],
-            filter: filter));
+        var intent = new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "lookup",
+                "nodes",
+                [new ExpectedIndexKeyDefinition("key")],
+                filter: filter));
 
         var analyzer = new PostgreSqlSafeMigrationProviderAnalyzer(
             context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
         // Act
-        var columns = ((ISafeMigrationIndexPrerequisiteSource)analyzer).GetIndexPrerequisiteColumns(intent);
+        var columns = analyzer.GetIndexPrerequisiteColumns(intent);
 
         // Assert
         Assert.Equal(["key", column], columns);
@@ -163,11 +167,12 @@ public sealed class PostgreSqlSimpleIndexFilterTests
     {
         // Arrange
         using var context = Context();
-        var intent = new EnsureIndexIntent(new ExpectedIndexDefinition(
-            "lookup",
-            "nodes",
-            [new ExpectedIndexKeyDefinition("parent")],
-            filter: "parent IS NOT NULL"));
+        var intent = new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "lookup",
+                "nodes",
+                [new ExpectedIndexKeyDefinition("parent")],
+                filter: "parent IS NOT NULL"));
 
         var catalog = Catalog(context);
 
@@ -202,7 +207,8 @@ public sealed class PostgreSqlSimpleIndexFilterTests
 
         // Assert
         Assert.False(plan.IsStaticallyUnsupported);
-        var definition = Assert.IsType<EnsureIndexIntent>(operation.Intent).Definition;
+        var definition = Assert.IsType<EnsureIndexIntent>(operation.Intent)
+            .Definition;
 
         Assert.Equal("parent IS NOT NULL", definition.Filter);
         Assert.Null(definition.StructuredFilter);

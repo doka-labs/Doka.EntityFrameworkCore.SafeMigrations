@@ -25,9 +25,18 @@ internal sealed record SqlServerProjectedSeedKeyProof(
         EnsureModelManagedDataIntent? prospective = null
     )
     {
-        var expectedCount = accepted.Seeds.Count + (prospective is null ? 0 : 1);
-        var count = SeedCount < 0 ? Seeds.Length : SeedCount;
-        if (!ReferenceEquals(Table, accepted.Table) || count != expectedCount || count > Seeds.Length)
+        var expectedCount = accepted.Seeds.Count
+            + (prospective is null
+                ? 0
+                : 1);
+
+        var count = SeedCount < 0
+            ? Seeds.Length
+            : SeedCount;
+
+        if (!ReferenceEquals(Table, accepted.Table)
+            || count != expectedCount
+            || count > Seeds.Length)
         {
             return false;
         }
@@ -43,7 +52,8 @@ internal sealed record SqlServerProjectedSeedKeyProof(
             }
         }
 
-        if (prospective is not null && !ReferenceEquals(Seeds[count - 1], prospective))
+        if (prospective is not null
+            && !ReferenceEquals(Seeds[count - 1], prospective))
         {
             return false;
         }
@@ -107,6 +117,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 {
     private readonly Dictionary<(string Schema, string Table), SqlServerProjectedSeedLineage>
         _acceptedSeedLineages = [];
+
     private Dictionary<SafeMigrationIntent, List<SqlServerProjectedSeedKeyProof>> _projectedSeedKeys = [];
     private Dictionary<EnsureModelManagedDataIntent, List<SqlServerProjectedSeedKeyProof>> _projectedSeedRows = [];
 
@@ -125,7 +136,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         SafeMigrationDecision decision
     )
     {
-        if (decision.Action is not (SafeMigrationAction.Apply or SafeMigrationAction.NoOp
+        if (decision.Action is not (SafeMigrationAction.Apply
+            or SafeMigrationAction.NoOp
             or SafeMigrationAction.Repair))
         {
             return;
@@ -142,7 +154,6 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         CancellationToken cancellationToken
     )
     {
-
         return CaptureProjectedSeedProofsAsync(operations, ExecuteProofAsync, cancellationToken);
 
         async Task<int> ExecuteProofAsync(
@@ -175,6 +186,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         var rows = new Dictionary<EnsureModelManagedDataIntent, List<SqlServerProjectedSeedKeyProof>>();
         var caches = new Dictionary<SqlServerProjectedSeedLineage, SqlServerProjectedSeedProofCache>();
         var buffers = PrepareSeedBuffers(operations, cancellationToken);
+
         // WHY: Evaluate seed proofs against the authored prefix at each operation ordinal.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -184,7 +196,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             var operation = operations[ordinal];
 
             var identity = UniqueKeyIdentity(operation.Intent);
-            if (identity is not null && authored.TryGetValue(identity.Value, out var lineage)
+            if (identity is not null
+                && authored.TryGetValue(identity.Value, out var lineage)
                 && lineage.Seeds.Count != 0)
             {
                 var columns = UniqueKeyColumns(operation.Intent);
@@ -193,7 +206,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     || seed.UniqueKeys.Any(key => key.Columns.SequenceEqual(columns, StringComparer.Ordinal)));
 
                 var filter = operation.Intent is EnsureIndexIntent index
-                    ? SqlServerSafeMigrationCatalogSqlBuilder.GetStructuredIndexFilter(index.Definition) : null;
+                    ? SqlServerSafeMigrationCatalogSqlBuilder.GetStructuredIndexFilter(index.Definition)
+                    : null;
 
                 var proof = await CaptureAsync(lineage, columns, capturedMetadataMatches || filter is not null, filter);
                 AddProof(result, operation.Intent, proof);
@@ -202,31 +216,52 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             ObserveSeedLineage(authored, operation.Intent, noOp: false);
             if (operation.Intent is EnsureTableIntent table)
             {
-                caches.Add(authored[(table.Definition.Schema ?? "dbo", table.Definition.Table)],
+                caches.Add(
+                    authored[(table.Definition.Schema ?? "dbo", table.Definition.Table)],
                     new SqlServerProjectedSeedProofCache(buffers[ordinal]));
             }
 
             if (operation.Intent is EnsureModelManagedDataIntent seed
                 && authored.TryGetValue((seed.Schema ?? "dbo", seed.Table), out var prospective))
             {
-                var candidates = prospective.UniqueContracts.Values
-                    .Concat(prospective.Seeds.SelectMany(static value => value.UniqueKeys)
-                        .Select(static key => new SqlServerProjectedSeedContract(key.Columns)))
+                var candidates = prospective
+                    .UniqueContracts
+                    .Values
+                    .Concat(
+                        prospective
+                            .Seeds
+                            .SelectMany(static value => value.UniqueKeys)
+                            .Select(static key => new SqlServerProjectedSeedContract(key.Columns)))
                     .Append(new SqlServerProjectedSeedContract(seed.KeyColumns));
 
                 var cache = GetCache(prospective);
-                var outcome = prospective.HasUnprovenContract ? -1 : 1;
+                var outcome = prospective.HasUnprovenContract
+                    ? -1
+                    : 1;
+
                 foreach (var candidate in candidates)
                 {
                     var proof = await CaptureAsync(
-                        prospective, candidate.Columns, metadataMatches: true, candidate.Filter);
+                        prospective,
+                        candidate.Columns,
+                        metadataMatches: true,
+                        candidate.Filter);
 
-                    outcome = proof.Result == 0 || outcome == 0 ? 0
-                        : proof.Result == -1 || outcome == -1 ? -1 : 1;
+                    outcome = proof.Result == 0 || outcome == 0
+                        ? 0
+                        : proof.Result == -1 || outcome == -1
+                            ? -1
+                            : 1;
                 }
 
-                AddProof(rows, seed, new SqlServerProjectedSeedKeyProof(
-                    prospective.Table, cache.Seeds, outcome, prospective.Seeds.Count));
+                AddProof(
+                    rows,
+                    seed,
+                    new SqlServerProjectedSeedKeyProof(
+                        prospective.Table,
+                        cache.Seeds,
+                        outcome,
+                        prospective.Seeds.Count));
             }
         }
 
@@ -247,14 +282,19 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         {
             var cache = GetCache(lineage);
 
-            return await cache.GetAsync(lineage, columns, metadataMatches, filter, _catalogSqlBuilder,
-                execute, cancellationToken);
+            return await cache.GetAsync(
+                lineage,
+                columns,
+                metadataMatches,
+                filter,
+                _catalogSqlBuilder,
+                execute,
+                cancellationToken);
         }
 
-        SqlServerProjectedSeedProofCache GetCache(SqlServerProjectedSeedLineage lineage)
-        {
-            return caches[lineage];
-        }
+        SqlServerProjectedSeedProofCache GetCache(
+            SqlServerProjectedSeedLineage lineage
+        ) => caches[lineage];
     }
 
     private static Dictionary<int, EnsureModelManagedDataIntent[]> PrepareSeedBuffers(
@@ -264,6 +304,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     {
         var lineages = new Dictionary<(string Schema, string Table), SqlServerProjectedSeedLineage>();
         var tables = new Dictionary<int, SqlServerProjectedSeedLineage>();
+
         // WHY: Retain table-creation ordinals while advancing seed lineage in order.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -291,11 +332,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     )
     {
         if (operation.Intent is not EnsureModelManagedDataIntent seed
-            || analysis.IsInvariantUnsupported || analysis.IsOpaqueProjectionUnknown
+            || analysis.IsInvariantUnsupported
+            || analysis.IsOpaqueProjectionUnknown
             || analysis.ObservedState is not (SafeMigrationObservedState.Missing or SafeMigrationObservedState.Matching)
             || columns is not ISafeMigrationProjectedTableSource tableSource
             || !tableSource.TryGetProjectedTableState(seed.Table, seed.Schema, out var state)
-            || !state.IsNewlyCreated || state.HasUnknownStructure)
+            || !state.IsNewlyCreated
+            || state.HasUnknownStructure)
         {
             return analysis;
         }
@@ -311,21 +354,28 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         return proof?.Result switch
         {
             1 => analysis,
-            0 => new SafeMigrationProviderAnalysis(SafeMigrationObservedState.DataBlocked,
-                SafeMigrationRepairCapability.None, false, "projected_seed_row_collision"),
+            0 => new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.DataBlocked,
+                SafeMigrationRepairCapability.None,
+                false,
+                "projected_seed_row_collision"),
             _ => UnprovenProjectedSeed(),
         };
     }
 
     private static SafeMigrationProviderAnalysis UnprovenProjectedSeed()
-        => new(SafeMigrationObservedState.PrerequisiteMissing, SafeMigrationRepairCapability.None,
-            false, "projected_seed_row_data_unproven");
+        => new(
+            SafeMigrationObservedState.PrerequisiteMissing,
+            SafeMigrationRepairCapability.None,
+            false,
+            "projected_seed_row_data_unproven");
 
     private static void AddProof<TIntent>(
         Dictionary<TIntent, List<SqlServerProjectedSeedKeyProof>> target,
         TIntent intent,
         SqlServerProjectedSeedKeyProof proof
-    ) where TIntent : SafeMigrationIntent
+    )
+        where TIntent : SafeMigrationIntent
     {
         if (!target.TryGetValue(intent, out var proofs))
         {
@@ -342,7 +392,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     )
     {
         var identity = UniqueKeyIdentity(intent);
-        if (identity is null || !_projectedSeedKeys.TryGetValue(intent, out var proofs)
+        if (identity is null
+            || !_projectedSeedKeys.TryGetValue(intent, out var proofs)
             || !_acceptedSeedLineages.TryGetValue(identity.Value, out var accepted))
         {
             return null;
@@ -356,12 +407,21 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
         return proof.Result switch
         {
-            1 => new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
-                SafeMigrationRepairCapability.None, false, "projected_seed_key_data_safe"),
-            0 => new SafeMigrationProviderAnalysis(SafeMigrationObservedState.DataBlocked,
-                SafeMigrationRepairCapability.None, false, "projected_seed_key_collision"),
-            _ => new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
-                SafeMigrationRepairCapability.None, false, "projected_seed_key_data_unproven"),
+            1 => new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.Missing,
+                SafeMigrationRepairCapability.None,
+                false,
+                "projected_seed_key_data_safe"),
+            0 => new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.DataBlocked,
+                SafeMigrationRepairCapability.None,
+                false,
+                "projected_seed_key_collision"),
+            _ => new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.PrerequisiteMissing,
+                SafeMigrationRepairCapability.None,
+                false,
+                "projected_seed_key_data_unproven"),
         };
     }
 
@@ -376,6 +436,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             case EnsureTableIntent ensure when !noOp:
                 lineages[(ensure.Definition.Schema ?? "dbo", ensure.Definition.Table)]
                     = new SqlServerProjectedSeedLineage(ensure.Definition);
+
                 break;
             case EnsureModelManagedDataIntent seed:
                 if (lineages.TryGetValue((seed.Schema ?? "dbo", seed.Table), out var lineage))
@@ -385,24 +446,37 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
                 break;
             case EnsurePrimaryKeyIntent key:
-                AddUniqueContract(key.Definition.Table, key.Definition.Schema,
-                    key.Definition.Name, key.Definition.Columns);
+                AddUniqueContract(
+                    key.Definition.Table,
+                    key.Definition.Schema,
+                    key.Definition.Name,
+                    key.Definition.Columns);
+
                 break;
             case EnsureUniqueConstraintIntent key:
-                AddUniqueContract(key.Definition.Table, key.Definition.Schema,
-                    key.Definition.Name, key.Definition.Columns);
+                AddUniqueContract(
+                    key.Definition.Table,
+                    key.Definition.Schema,
+                    key.Definition.Name,
+                    key.Definition.Columns);
+
                 break;
             case EnsureIndexIntent { Definition.Unique: true } key:
                 if (lineages.TryGetValue((key.Definition.Schema ?? "dbo", key.Definition.Table), out var indexLineage))
                 {
                     var filter = SqlServerSafeMigrationCatalogSqlBuilder.GetStructuredIndexFilter(key.Definition);
-                    indexLineage.HasUnprovenContract |= key.Definition.Filter is not null && filter is null
+                    indexLineage.HasUnprovenContract |= (key.Definition.Filter is not null && filter is null)
                         || key.Definition.Keys.Any(static column => column.Column is null);
+
                     if (!indexLineage.HasUnprovenContract)
                     {
                         indexLineage.UniqueContracts[key.Definition.Name]
                             = new SqlServerProjectedSeedContract(
-                                key.Definition.Keys.Select(static column => column.Column!).ToArray(),
+                                key
+                                    .Definition
+                                    .Keys
+                                    .Select(static column => column.Column!)
+                                    .ToArray(),
                                 filter);
                     }
                 }
@@ -458,23 +532,31 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         }
     }
 
-    private static (string Schema, string Table)? UniqueKeyIdentity(SafeMigrationIntent intent)
+    private static (string Schema, string Table)? UniqueKeyIdentity(
+        SafeMigrationIntent intent
+    )
         => intent switch
         {
             EnsurePrimaryKeyIntent key => (key.Definition.Schema ?? "dbo", key.Definition.Table),
             EnsureUniqueConstraintIntent key => (key.Definition.Schema ?? "dbo", key.Definition.Table),
-            EnsureIndexIntent { Definition.Unique: true, } key
+            EnsureIndexIntent { Definition.Unique: true } key
                 when key.Definition.Keys.All(static column => column.Column is not null)
                 => (key.Definition.Schema ?? "dbo", key.Definition.Table),
             _ => null,
         };
 
-    private static IReadOnlyList<string> UniqueKeyColumns(SafeMigrationIntent intent)
+    private static IReadOnlyList<string> UniqueKeyColumns(
+        SafeMigrationIntent intent
+    )
         => intent switch
         {
             EnsurePrimaryKeyIntent key => key.Definition.Columns,
             EnsureUniqueConstraintIntent key => key.Definition.Columns,
-            EnsureIndexIntent key => key.Definition.Keys.Select(static column => column.Column!).ToArray(),
+            EnsureIndexIntent key => key
+                .Definition
+                .Keys
+                .Select(static column => column.Column!)
+                .ToArray(),
             _ => throw new UnreachableException(),
         };
 }

@@ -45,7 +45,11 @@ internal static class MySqlCatalogSqlTemplate
             if (markerStart < 0)
             {
                 reader.AppendResolved(
-                    builder, template, position, template.Length - position, relations);
+                    builder,
+                    template,
+                    position,
+                    template.Length - position,
+                    relations);
 
                 break;
             }
@@ -87,7 +91,11 @@ internal static class MySqlCatalogSqlTemplate
         ArgumentNullException.ThrowIfNull(values);
         ArgumentNullException.ThrowIfNull(renderValue);
 
-        return RenderPrepared(template, values.Select(renderValue).ToArray(), relations);
+        return RenderPrepared(template,
+            values
+                .Select(renderValue)
+                .ToArray(),
+            relations);
     }
 
     /// <summary>Substitutes prepared values without interpreting or redirecting their SQL text.</summary>
@@ -119,7 +127,11 @@ internal static class MySqlCatalogSqlTemplate
             if (markerStart < 0)
             {
                 reader.AppendResolved(
-                    builder, template, position, template.Length - position, relations);
+                    builder,
+                    template,
+                    position,
+                    template.Length - position,
+                    relations);
 
                 break;
             }

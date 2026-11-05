@@ -12,8 +12,12 @@ public sealed class SqliteOwnedHelperCancellationTests : SqliteIntegrationTestBa
 
         // Act
         await using var connection = await OpenConnectionAsync(cancellation.Token);
-        await ExecuteSqlAsync(connection, "CREATE TABLE helper_probe (Id INTEGER NOT NULL); "
-            + "INSERT INTO helper_probe VALUES (17);", cancellation.Token);
+        await ExecuteSqlAsync(
+            connection,
+            "CREATE TABLE helper_probe (Id INTEGER NOT NULL); "
+            + "INSERT INTO helper_probe VALUES (17);",
+            cancellation.Token);
+
         var count = await ScalarIntAsync(connection, "SELECT COUNT(*) FROM helper_probe;", cancellation.Token);
 
         // Assert
@@ -27,7 +31,9 @@ public sealed class SqliteOwnedHelperCancellationTests : SqliteIntegrationTestBa
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(2)]
-    public async Task PreCanceledHelpersPreserveTheCallerTokenAndExistingRows(int operation)
+    public async Task PreCanceledHelpersPreserveTheCallerTokenAndExistingRows(
+        int operation
+    )
     {
         // Arrange
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -44,9 +50,7 @@ public sealed class SqliteOwnedHelperCancellationTests : SqliteIntegrationTestBa
             switch (operation)
             {
                 case 0:
-                    await using (await OpenConnectionAsync(cancellation.Token))
-                    {
-                    }
+                    await using (await OpenConnectionAsync(cancellation.Token)) { }
 
                     break;
                 case 1:

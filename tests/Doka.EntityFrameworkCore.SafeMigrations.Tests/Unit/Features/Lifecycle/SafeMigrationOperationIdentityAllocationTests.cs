@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>Compares one-column identity metadata using deterministic retained-object allocation evidence.</summary>
+
 // WHY: Forced collections must not interrupt allocation windows in other parallel test classes.
 [Collection(ProcessWideTestGroup.Name)]
 public sealed class SafeMigrationOperationIdentityAllocationTests
@@ -11,7 +12,8 @@ public sealed class SafeMigrationOperationIdentityAllocationTests
     {
         // Arrange
         const int count = 10_000;
-        var intent = new EnsureColumnIntent("Items",
+        var intent = new EnsureColumnIntent(
+            "Items",
             new ExpectedColumnDefinition("IsActive", typeof(bool), isNullable: false));
 
         var baseline = new SafeMigrationOperationIdentity[count];
@@ -41,14 +43,21 @@ public sealed class SafeMigrationOperationIdentityAllocationTests
         Assert.All(baseline, identity => Assert.Equal("IsActive", Assert.Single(identity.Columns)));
         Assert.All(candidate, identity => Assert.Equal("IsActive", Assert.Single(identity.Columns)));
         Assert.True(candidateBytes < baselineBytes, "The candidate must prove lower retained metadata allocation.");
-        Console.WriteLine($"Identity metadata: count={count}; baseline-bytes={baselineBytes}; "
+        Console.WriteLine(
+            $"Identity metadata: count={count}; baseline-bytes={baselineBytes}; "
             + $"candidate-bytes={candidateBytes}; saved-bytes={baselineBytes - candidateBytes}.");
     }
 
     // WHY: Retaining every identity in a preallocated array prevents ephemeral-object
     // elimination from changing the comparison. No timestamps, hardware budgets or database work are involved.
-    private static SafeMigrationOperationIdentity FrozenArrayIdentity(EnsureColumnIntent intent) =>
-        SafeMigrationOperationIdentity.CreateKnown(intent.Kind, intent.Schema, intent.Table, intent.ObjectName,
+    private static SafeMigrationOperationIdentity FrozenArrayIdentity(
+        EnsureColumnIntent intent
+    ) =>
+        SafeMigrationOperationIdentity.CreateKnown(
+            intent.Kind,
+            intent.Schema,
+            intent.Table,
+            intent.ObjectName,
             Array.AsReadOnly(new[] { intent.ObjectName }));
 
     /// <summary>Ordinary column families reduce allocation against their original validated captures.</summary>
@@ -58,7 +67,9 @@ public sealed class SafeMigrationOperationIdentityAllocationTests
     [InlineData(SafeMigrationOperationKind.AlterColumn)]
     [InlineData(SafeMigrationOperationKind.DropColumn)]
     [InlineData(SafeMigrationOperationKind.RenameColumn)]
-    public void OrdinaryColumnProductionReducesRetainedMetadataAllocation(SafeMigrationOperationKind kind)
+    public void OrdinaryColumnProductionReducesRetainedMetadataAllocation(
+        SafeMigrationOperationKind kind
+    )
     {
         // Arrange
         const int count = 10_000;
@@ -91,20 +102,23 @@ public sealed class SafeMigrationOperationIdentityAllocationTests
         Assert.All(candidate, identity => Assert.Equal("Value", Assert.Single(identity!.Columns)));
         Assert.Equal(baseline[0]!.NewObjectName, candidate[0]!.NewObjectName);
         Assert.True(candidateBytes < baselineBytes, "Production must reduce retained ordinary-column allocation.");
-        Console.WriteLine($"Ordinary column metadata: kind={kind}; count={count}; baseline-bytes={baselineBytes}; "
+        Console.WriteLine(
+            $"Ordinary column metadata: kind={kind}; count={count}; baseline-bytes={baselineBytes}; "
             + $"candidate-bytes={candidateBytes}; saved-bytes={baselineBytes - candidateBytes}.");
     }
 
     // WHY: This frozen baseline includes the original member-validation enumeration.
     // Comparing against bare CreateKnown would omit allocation already paid by ordinary EF captures.
-    private static SafeMigrationOperationIdentity? FrozenOrdinaryColumnIdentity(MigrationOperation operation)
+    private static SafeMigrationOperationIdentity? FrozenOrdinaryColumnIdentity(
+        MigrationOperation operation
+    )
     {
         var (kind, schema, table, name, newName) = operation switch
         {
             AddColumnOperation value =>
-                (SafeMigrationOperationKind.EnsureColumn, value.Schema, value.Table, value.Name, (string?)null),
+                (SafeMigrationOperationKind.EnsureColumn, value.Schema, value.Table, value.Name, null),
             AlterColumnOperation value =>
-                (SafeMigrationOperationKind.AlterColumn, value.Schema, value.Table, value.Name, (string?)null),
+                (SafeMigrationOperationKind.AlterColumn, value.Schema, value.Table, value.Name, null),
             DropColumnOperation value =>
                 (SafeMigrationOperationKind.DropColumn, value.Schema, value.Table, value.Name, (string?)null),
             RenameColumnOperation value =>
@@ -127,10 +141,8 @@ public sealed class SafeMigrationOperationIdentityAllocationTests
             {
                 return null;
             }
-
         }
 
         return SafeMigrationOperationIdentity.CreateKnown(kind, schema, table, name, columns, newObjectName: newName);
     }
-
 }

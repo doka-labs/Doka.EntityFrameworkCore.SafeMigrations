@@ -31,20 +31,30 @@ public sealed class PostgreSqlModelManagedDataSqlTests
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var command = Assert.Single(
-            context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([operation], context.Model));
 
-        Assert.Contains("WHEN doka_state OPERATOR(pg_catalog.=) 'transition_ready' THEN 'apply'", command.CommandText,
+        Assert.Contains(
+            "WHEN doka_state OPERATOR(pg_catalog.=) 'transition_ready' THEN 'apply'",
+            command.CommandText,
             StringComparison.Ordinal);
+
         Assert.Contains(
             "DELETE FROM app.roles AS doka_actual",
             command.CommandText,
             StringComparison.Ordinal);
+
         Assert.Contains(
             "doka_actual.name IS NOT DISTINCT FROM doka_expected.o1",
             command.CommandText,
             StringComparison.Ordinal);
-        Assert.Contains("JOIN app.user_roles AS doka_dependent", command.CommandText,
+
+        Assert.Contains(
+            "JOIN app.user_roles AS doka_dependent",
+            command.CommandText,
             StringComparison.Ordinal);
+
         Assert.Contains("MESSAGE = E'doka_sm_data_blocked:", command.CommandText, StringComparison.Ordinal);
     }
 
@@ -69,7 +79,9 @@ public sealed class PostgreSqlModelManagedDataSqlTests
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var command = Assert.Single(
-            context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([operation], context.Model));
 
         Assert.Contains("INSERT INTO roles", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("WHERE NOT EXISTS", command.CommandText, StringComparison.Ordinal);
@@ -92,25 +104,26 @@ public sealed class PostgreSqlModelManagedDataSqlTests
                 ["integer"],
                 ["id", "json_payload", "jsonb_payload", "json_like_text"],
                 ["integer", "json", "jsonb", "text"],
-                new object?[,]
-                {
-                    { 1, "{\"b\":2,\"a\":1}", "{\"b\":2,\"a\":1}", "{\"b\":2,\"a\":1}" },
-                },
+                new object?[,] { { 1, "{\"b\":2,\"a\":1}", "{\"b\":2,\"a\":1}", "{\"b\":2,\"a\":1}" } },
                 schema: null,
                 uniqueKeys: null),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var command = Assert.Single(
-            context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([operation], context.Model));
 
         Assert.Contains(
             "(doka_actual.json_payload)::jsonb IS NOT DISTINCT FROM (doka_expected.t1)::jsonb",
             command.CommandText,
             StringComparison.Ordinal);
+
         Assert.Contains(
             "(doka_actual.jsonb_payload)::jsonb IS NOT DISTINCT FROM (doka_expected.t2)::jsonb",
             command.CommandText,
             StringComparison.Ordinal);
+
         Assert.Contains(
             "doka_actual.json_like_text IS NOT DISTINCT FROM doka_expected.t3",
             command.CommandText,

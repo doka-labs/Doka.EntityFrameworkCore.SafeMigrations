@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
 /// <summary>Visits structured operands in authored order without recursive calls or wide-list copies.</summary>
@@ -10,7 +12,10 @@ internal ref struct PostgreSqlSafeMigrationExpressionWalker
     /// <summary>Starts one independently owned preorder traversal.</summary>
     /// <param name="expression">The expression whose descendants are visited.</param>
     /// <param name="inValuesFirst">Preserves the captured CAST collector's historical IN registration order.</param>
-    public PostgreSqlSafeMigrationExpressionWalker(SafeMigrationSqlExpression expression, bool inValuesFirst = false)
+    public PostgreSqlSafeMigrationExpressionWalker(
+        SafeMigrationSqlExpression expression,
+        bool inValuesFirst = false
+    )
     {
         _next = expression;
         _inValuesFirst = inValuesFirst;
@@ -19,9 +24,12 @@ internal ref struct PostgreSqlSafeMigrationExpressionWalker
     /// <summary>Takes the next operand, retaining only continuations for actual branches.</summary>
     /// <param name="expression">The next node, or null after the traversal has completed.</param>
     /// <returns>Whether another node was available.</returns>
-    public bool TryTake([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out SafeMigrationSqlExpression? expression)
+    public bool TryTake(
+        [NotNullWhen(true)] out SafeMigrationSqlExpression? expression
+    )
     {
-        if (_next is null && _pending.TryPop(out var continuation))
+        if (_next is null
+            && _pending.TryPop(out var continuation))
         {
             TryGetTraversalChild(continuation.Expression, continuation.Index, out _next);
             if (TryGetTraversalChild(continuation.Expression, continuation.Index + 1, out _))
@@ -50,12 +58,18 @@ internal ref struct PostgreSqlSafeMigrationExpressionWalker
 
     /// <summary>Keeps the one historical collector ordering separate from ordinary authored traversal.</summary>
     private readonly bool TryGetTraversalChild(
-        SafeMigrationSqlExpression expression, int index,
-        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out SafeMigrationSqlExpression? child)
+        SafeMigrationSqlExpression expression,
+        int index,
+        [NotNullWhen(true)] out SafeMigrationSqlExpression? child
+    )
     {
         if (_inValuesFirst && expression is SafeMigrationSqlInExpression list)
         {
-            child = index < list.Values.Count ? list.Values[index] : index == list.Values.Count ? list.Operand : null;
+            child = index < list.Values.Count
+                ? list.Values[index]
+                : index == list.Values.Count
+                    ? list.Operand
+                    : null;
 
             return child is not null;
         }
@@ -65,13 +79,18 @@ internal ref struct PostgreSqlSafeMigrationExpressionWalker
 
     /// <summary>Reads one direct operand without allocating an enumerable or inspecting later siblings.</summary>
     internal static bool TryGetChild(
-        SafeMigrationSqlExpression expression, int index,
-        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out SafeMigrationSqlExpression? child)
+        SafeMigrationSqlExpression expression,
+        int index,
+        [NotNullWhen(true)] out SafeMigrationSqlExpression? child
+    )
     {
         child = expression switch
         {
             SafeMigrationSqlUnaryExpression value when index == 0 => value.Operand,
-            SafeMigrationSqlBinaryExpression value => index switch { 0 => value.Left, 1 => value.Right, _ => null },
+            SafeMigrationSqlBinaryExpression value => index switch
+            {
+                0 => value.Left, 1 => value.Right, _ => null,
+            },
             SafeMigrationSqlNullTestExpression value when index == 0 => value.Operand,
             SafeMigrationSqlBetweenExpression value => index switch
             {
@@ -83,7 +102,8 @@ internal ref struct PostgreSqlSafeMigrationExpressionWalker
             SafeMigrationSqlCastExpression value when index == 0 => value.Operand,
             SafeMigrationSqlCollateExpression value when index == 0 => value.Operand,
             SafeMigrationSqlCaseExpression value when index / 2 < value.WhenClauses.Count => index % 2 == 0
-                ? value.WhenClauses[index / 2].Condition : value.WhenClauses[index / 2].Result,
+                ? value.WhenClauses[index / 2].Condition
+                : value.WhenClauses[index / 2].Result,
             SafeMigrationSqlCaseExpression value when index / 2 == value.WhenClauses.Count && index % 2 == 0
                 => value.ElseResult,
             _ => null,

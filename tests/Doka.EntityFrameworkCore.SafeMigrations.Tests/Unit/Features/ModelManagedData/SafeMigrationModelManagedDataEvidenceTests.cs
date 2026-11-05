@@ -2,7 +2,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>Verifies compact provider evidence parsing, ownership and allocation bounds.</summary>
 /// <param name="output">The diagnostic output retaining the observed allocation count.</param>
-public sealed class SafeMigrationModelManagedDataEvidenceTests(Xunit.Abstractions.ITestOutputHelper output)
+public sealed class SafeMigrationModelManagedDataEvidenceTests(ITestOutputHelper output)
 {
     /// <summary>Accepts only complete invariant nonnegative integer evidence.</summary>
     /// <param name="counts">The compact dependency payload.</param>
@@ -10,8 +10,11 @@ public sealed class SafeMigrationModelManagedDataEvidenceTests(Xunit.Abstraction
     [Theory]
     [InlineData("", new long[0])]
     [InlineData("0", new long[] { 0 })]
-    [InlineData("00,17,9223372036854775807", new long[] { 0, 17, long.MaxValue })]
-    public void ParsePreservesCompleteDependencyValues(string counts, long[] expected)
+    [InlineData("00,17,9223372036854775807", new[] { 0, 17, long.MaxValue })]
+    public void ParsePreservesCompleteDependencyValues(
+        string counts,
+        long[] expected
+    )
     {
         // Arrange
         const string states = "0123";
@@ -21,13 +24,15 @@ public sealed class SafeMigrationModelManagedDataEvidenceTests(Xunit.Abstraction
 
         // Assert
         Assert.Equal(expected, evidence.DependencyCounts);
-        Assert.Equal(new[]
-        {
-            SafeMigrationModelManagedRowState.Missing,
-            SafeMigrationModelManagedRowState.Source,
-            SafeMigrationModelManagedRowState.Target,
-            SafeMigrationModelManagedRowState.Different,
-        }, evidence.RowStates);
+        Assert.Equal(
+            new[]
+            {
+                SafeMigrationModelManagedRowState.Missing,
+                SafeMigrationModelManagedRowState.Source,
+                SafeMigrationModelManagedRowState.Target,
+                SafeMigrationModelManagedRowState.Different,
+            },
+            evidence.RowStates);
     }
 
     /// <summary>Malformed tokens remain invalid even when their cardinality is also wrong.</summary>
@@ -44,7 +49,9 @@ public sealed class SafeMigrationModelManagedDataEvidenceTests(Xunit.Abstraction
     [InlineData("1.0")]
     [InlineData("9223372036854775808")]
     [InlineData("not-a-count")]
-    public void ParseRejectsMalformedDependencyBeforeCountMismatch(string counts)
+    public void ParseRejectsMalformedDependencyBeforeCountMismatch(
+        string counts
+    )
     {
         // Arrange
         const string states = "0";
@@ -65,7 +72,10 @@ public sealed class SafeMigrationModelManagedDataEvidenceTests(Xunit.Abstraction
     [InlineData("1", 0)]
     [InlineData("1,2", 1)]
     [InlineData("1", -1)]
-    public void ParseRejectsInconsistentDependencyCount(string counts, int expectedCount)
+    public void ParseRejectsInconsistentDependencyCount(
+        string counts,
+        int expectedCount
+    )
     {
         // Arrange
         const string states = "0";

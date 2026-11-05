@@ -26,8 +26,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 // WHY: SQL Server rejects sp_rename on an enforced computed
                 // dependency. A declared empty owner cannot make that operation
                 // legal, and renaming an unrelated source remains independent.
-                return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-                    SafeMigrationRepairCapability.None, false, "projected_computed_source_dependency");
+                return new SafeMigrationProviderAnalysis(
+                    SafeMigrationObservedState.Different,
+                    SafeMigrationRepairCapability.None,
+                    false,
+                    "projected_computed_source_dependency");
             }
         }
 
@@ -44,6 +47,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     )
     {
         var hasComputed = false;
+
         // WHY: Stop the indexed stream scan as soon as a computed column is found.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -86,6 +90,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 case EnsureTableIntent table:
                     authored[(table.Definition.Schema ?? "dbo", table.Definition.Table)]
                         = table.Definition.Columns.ToDictionary(static column => column.Name, StringComparer.Ordinal);
+
                     foreach (var column in table.Definition.Columns)
                     {
                         AddCandidate(table.Definition.Table, table.Definition.Schema, column);
@@ -125,27 +130,41 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
         var captured = new Dictionary<ExpectedColumnDefinition, List<SqlServerProjectedComputedKeyProof>>();
 
-        await SafeMigrationCatalogProbeBatch.ReadAsync(connection, candidates.Count,
-            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes, commandTimeout,
+        await SafeMigrationCatalogProbeBatch.ReadAsync(
+            connection,
+            candidates.Count,
+            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes,
+            commandTimeout,
             (command, ordinal) =>
             {
                 var item = candidates[ordinal];
                 command.CommandText = _catalogSqlBuilder.BuildProjectedComputedKeyProofSql(
-                    item.Table, item.Schema, item.Definition, item.AuthoredTable, ordinal);
+                    item.Table,
+                    item.Schema,
+                    item.Definition,
+                    item.AuthoredTable,
+                    ordinal);
 
                 return new SafeMigrationCatalogProbeStatement(1, 0, ordinal);
             },
             async (reader, ordinal, _, token) =>
             {
-                if (reader.FieldCount != 3 || !await reader.ReadAsync(token)
-                    || reader.IsDBNull(0) || reader.GetInt32(0) != ordinal || reader.IsDBNull(1))
+                if (reader.FieldCount != 3
+                    || !await reader.ReadAsync(token)
+                    || reader.IsDBNull(0)
+                    || reader.GetInt32(0) != ordinal
+                    || reader.IsDBNull(1))
                 {
                     throw new InvalidOperationException("SQL Server omitted its computed-column index proof.");
                 }
 
                 var proof = reader.GetInt32(1);
-                var encodedBindings = reader.IsDBNull(2) ? null : reader.GetString(2);
-                if (proof is < 0 or > 6 || await reader.ReadAsync(token))
+                var encodedBindings = reader.IsDBNull(2)
+                    ? null
+                    : reader.GetString(2);
+
+                if (proof is < 0 or > 6
+                    || await reader.ReadAsync(token))
                 {
                     throw new InvalidOperationException("SQL Server returned an invalid computed-column index proof.");
                 }
@@ -157,9 +176,12 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     var candidate = candidates[ordinal];
                     var bindings = proof == 0
                         ? new Dictionary<string, ExpectedColumnDefinition?>(StringComparer.Ordinal)
-                        : encodedBindings is null ? throw new InvalidOperationException(
-                            "SQL Server omitted its computed-column source bindings.")
-                            : SqlServerComputedColumnBindings.Read(encodedBindings, candidate.ReferenceCount,
+                        : encodedBindings is null
+                            ? throw new InvalidOperationException(
+                                "SQL Server omitted its computed-column source bindings.")
+                            : SqlServerComputedColumnBindings.Read(
+                                encodedBindings,
+                                candidate.ReferenceCount,
                                 candidate.AuthoredTable);
 
                     if (!captured.TryGetValue(definition, out var proofs))
@@ -185,45 +207,65 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                         }
                     }
 
-                    proofs.Add(new SqlServerProjectedComputedKeyProof(shape, bindings,
-                        candidate.Table, candidate.Schema, proof != 0)
-                    {
-                        LiveOperandIdentities = liveIdentities,
-                        CurrentColumnBindings = layout?.Bindings,
-                        RenamedOperandDefinitions = renamedBindings,
-                    });
+                    proofs.Add(
+                        new SqlServerProjectedComputedKeyProof(
+                            shape,
+                            bindings,
+                            candidate.Table,
+                            candidate.Schema,
+                            proof != 0)
+                        {
+                            LiveOperandIdentities = liveIdentities,
+                            CurrentColumnBindings = layout?.Bindings,
+                            RenamedOperandDefinitions = renamedBindings,
+                        });
                 }
-            }, cancellationToken, transaction, SqlServerCatalogParameterBindings.MaximumParameters);
+            },
+            cancellationToken,
+            transaction,
+            SqlServerCatalogParameterBindings.MaximumParameters);
 
         // WHY: Only the completed invocation may publish these reference-bound
         // proofs. A cancellation or malformed result cannot lend partial success.
         _projectedComputedKeys = captured;
 
-        void AddCandidate(string table, string? schema, ExpectedColumnDefinition definition)
+        void AddCandidate(
+            string table,
+            string? schema,
+            ExpectedColumnDefinition definition
+        )
         {
             if (!SqlServerComputedColumnContract.IsComputed(definition))
             {
                 return;
             }
 
-            var plan = _catalogSqlBuilder.Build(new SafeMigrationOperation(
-                new EnsureColumnIntent(table, definition, schema), SafeMigrationPolicy.ThrowIfDifferent));
+            var plan = _catalogSqlBuilder.Build(
+                new SafeMigrationOperation(
+                    new EnsureColumnIntent(table, definition, schema),
+                    SafeMigrationPolicy.ThrowIfDifferent));
 
             if (!plan.IsStaticallyUnsupported)
             {
                 authored.TryGetValue((schema ?? "dbo", table), out var columns);
-                var tableDefinition = columns is { Count: > 0, }
-                    ? new ExpectedTableDefinition(table, columns.Values, schema) : null;
+                var tableDefinition = columns is { Count: > 0 }
+                    ? new ExpectedTableDefinition(table, columns.Values, schema)
+                    : null;
 
                 var names = new HashSet<string>(StringComparer.Ordinal);
                 SafeMigrationSqlExpressionInspector.CollectIdentifiers(
-                    SqlServerComputedColumnContract.Expression(definition)!, names);
+                    SqlServerComputedColumnContract.Expression(definition)!,
+                    names);
 
                 candidates.Add((table, schema, definition, tableDefinition, names.Count));
             }
         }
 
-        void SetColumn(string table, string? schema, ExpectedColumnDefinition definition)
+        void SetColumn(
+            string table,
+            string? schema,
+            ExpectedColumnDefinition definition
+        )
         {
             if (!authored.TryGetValue((schema ?? "dbo", table), out var columns))
             {
@@ -236,9 +278,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     }
 
     /// <summary>Transfers native owner identity only after a certified accepted table rename.</summary>
-    private void ObserveProjectedComputedOwnerRename(SafeMigrationOperation operation, SafeMigrationDecision decision)
+    private void ObserveProjectedComputedOwnerRename(
+        SafeMigrationOperation operation,
+        SafeMigrationDecision decision
+    )
     {
-        if (!decision.ShouldExecute || operation.Intent is not RenameTableIntent rename)
+        if (!decision.ShouldExecute
+            || operation.Intent is not RenameTableIntent rename)
         {
             return;
         }
@@ -273,8 +319,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     {
         if (operation.Intent is not EnsureColumnIntent column
             || !_projectedComputedKeys.TryGetValue(column.Definition, out var proofs)
-            || analysis.IsInvariantUnsupported || analysis.IsOpaqueProjectionUnknown
-            || analysis.ObservedState is not (SafeMigrationObservedState.Missing or SafeMigrationObservedState.Matching
+            || analysis.IsInvariantUnsupported
+            || analysis.IsOpaqueProjectionUnknown
+            || analysis.ObservedState is not (SafeMigrationObservedState.Missing
+                or SafeMigrationObservedState.Matching
                 or SafeMigrationObservedState.PrerequisiteMissing))
         {
             return analysis;
@@ -282,7 +330,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 
         foreach (var proof in proofs)
         {
-            if (!proof.ColumnSupported || !proof.Matches(columns, column.Table, column.Schema))
+            if (!proof.ColumnSupported
+                || !proof.Matches(columns, column.Table, column.Schema))
             {
                 continue;
             }
@@ -293,11 +342,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 return analysis;
             }
 
-            var ownerProven = _projectedColumnLayouts.TryGetValue((column.Schema ?? "dbo", column.Table),
-                    out var layout) && layout is not null
-                || columns is ISafeMigrationProjectedTableSource tables
+            var ownerProven = (_projectedColumnLayouts.TryGetValue(
+                        (column.Schema ?? "dbo", column.Table),
+                        out var layout)
+                    && layout is not null)
+                || (columns is ISafeMigrationProjectedTableSource tables
                     && tables.TryGetProjectedTableState(column.Table, column.Schema, out var state)
-                    && state.IsNewlyCreated;
+                    && state.IsNewlyCreated);
 
             if (!ownerProven)
             {
@@ -309,13 +360,19 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             // WHY: The initial classifier cannot bind a source added earlier
             // in this stream. The native compiler captured its exact authored
             // type and unchanged live siblings, independently of indexability.
-            return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
-                SafeMigrationRepairCapability.None, false, "projected_computed_column_dependencies_proven");
+            return new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.Missing,
+                SafeMigrationRepairCapability.None,
+                false,
+                "projected_computed_column_dependencies_proven");
         }
 
         return analysis.ObservedState is SafeMigrationObservedState.Missing or SafeMigrationObservedState.Matching
-            ? new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
-                SafeMigrationRepairCapability.None, false, "projected_computed_column_source_unknown")
+            ? new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.PrerequisiteMissing,
+                SafeMigrationRepairCapability.None,
+                false,
+                "projected_computed_column_source_unknown")
             : analysis;
     }
 
@@ -328,28 +385,39 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         ISafeMigrationProjectedColumnSource columns
     )
     {
-        if (operation.Intent is not EnsureIndexIntent { Definition.Unique: false, } index
+        if (operation.Intent is not EnsureIndexIntent { Definition.Unique: false } index
             || _columnMatchingEvidenceInvalidated
-            || live.IsInvariantUnsupported || live.IsOpaqueProjectionUnknown
+            || live.IsInvariantUnsupported
+            || live.IsOpaqueProjectionUnknown
             || live.ObservedState is not (SafeMigrationObservedState.Missing
                 or SafeMigrationObservedState.PrerequisiteMissing)
-            || index.Definition.Filter is not null || index.Definition.StructuredFilter is not null
-            || !_projectedColumnLayouts.TryGetValue((index.Definition.Schema ?? "dbo", index.Definition.Table),
-                out var layout) || layout is null
-            || !_projectedKeyTables.TryGetValue((index.Definition.Schema ?? "dbo", index.Definition.Table),
-                out var snapshot) || !snapshot.Exists || !snapshot.PhysicalSupported
+            || index.Definition.Filter is not null
+            || index.Definition.StructuredFilter is not null
+            || !_projectedColumnLayouts.TryGetValue(
+                (index.Definition.Schema ?? "dbo", index.Definition.Table),
+                out var layout)
+            || layout is null
+            || !_projectedKeyTables.TryGetValue(
+                (index.Definition.Schema ?? "dbo", index.Definition.Table),
+                out var snapshot)
+            || !snapshot.Exists
+            || !snapshot.PhysicalSupported
             || columns is not ISafeMigrationProjectedTableSource tables
             || !tables.TryGetProjectedTableState(index.Definition.Table, index.Definition.Schema, out var state)
-            || !state.HasUnknownStructure || state.IsNewlyCreated)
+            || !state.HasUnknownStructure
+            || state.IsNewlyCreated)
         {
             return null;
         }
 
         // WHY: SQL Server's PK/UNIQUE constraint allocates an identically named
         // backing index even though its logical constraint identity is separate.
-        var accepted = columns.GetProjectedIndexIdentityAnalysis(index.Definition, live,
+        var accepted = columns.GetProjectedIndexIdentityAnalysis(
+            index.Definition,
+            live,
             includeConstraintBackingIndexNames: true);
-        if (accepted is { ObservedState: SafeMigrationObservedState.Different, })
+
+        if (accepted is { ObservedState: SafeMigrationObservedState.Different })
         {
             return accepted;
         }
@@ -364,7 +432,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         var hasNewComputed = false;
         foreach (var key in index.Definition.Keys)
         {
-            if (key.Column is null || !ProvesColumn(key.Column))
+            if (key.Column is null
+                || !ProvesColumn(key.Column))
             {
                 return null;
             }
@@ -386,13 +455,26 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         // WHY: A newly accepted computed member could not have belonged to an
         // original index. Exact operand identities preserve only that narrower
         // absence proof through sibling drops; no row or filter proof is waived.
-        var projected = accepted ?? new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
-            SafeMigrationRepairCapability.None, false, "projected_computed_index_dependencies_proven");
+        var projected = accepted
+            ?? new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.Missing,
+                SafeMigrationRepairCapability.None,
+                false,
+                "projected_computed_index_dependencies_proven");
 
-        return SqlServerProjectedKeyShape.Validate(index, columns, live, projected, snapshot, _typeMappingSource,
-            computedColumns: _projectedComputedKeys, structuralIdentityProven: true);
+        return SqlServerProjectedKeyShape.Validate(
+            index,
+            columns,
+            live,
+            projected,
+            snapshot,
+            _typeMappingSource,
+            computedColumns: _projectedComputedKeys,
+            structuralIdentityProven: true);
 
-        bool ProvesColumn(string name)
+        bool ProvesColumn(
+            string name
+        )
         {
             if (columns.TryGetProjectedColumn(index.Definition.Table, index.Definition.Schema, name, out var column))
             {

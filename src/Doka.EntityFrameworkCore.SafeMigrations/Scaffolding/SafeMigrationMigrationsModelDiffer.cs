@@ -6,9 +6,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 /// </summary>
 internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffer
 {
-    private readonly IMigrationsModelDiffer _providerDiffer;
     private readonly bool _excludeModelManagedDataForExcludedTables;
     private readonly bool _isScaffoldingEnabled;
+    private readonly IMigrationsModelDiffer _providerDiffer;
 
     /// <summary>Initializes the provider differ decorator with immutable scaffolding ownership settings.</summary>
     /// <param name="providerDiffer">The active provider's relational model differ.</param>
@@ -32,7 +32,9 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
         IRelationalModel? target
     ) => !_excludeModelManagedDataForExcludedTables
         ? _providerDiffer.HasDifferences(source, target)
-        : GetOwnedDifferences(source, target).Count > 0;
+        : GetOwnedDifferences(source, target)
+            .Count
+        > 0;
 
     /// <inheritdoc />
     public IReadOnlyList<MigrationOperation> GetDifferences(
@@ -67,6 +69,7 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
         // the fallback path where the SafeMigrations generator was never loaded.
         var guarded = new MigrationOperation[operations.Count + 1];
         guarded[0] = new SafeMigrationDesignTimeServicesRequiredOperation();
+
         // WHY: Reconstruct the operation list at the exact insertion ordinal of the design-time guard.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -99,61 +102,67 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
         switch (operation)
         {
             case InsertDataOperation insert:
-            {
-                var table = RequiredTable(target, insert.Table, insert.Schema, "insert target");
-                insert.ColumnTypes = CompleteTypes(insert.Columns, insert.ColumnTypes, table, "insert");
-                var primaryKey = RequiredPrimaryKey(table, insert.Columns);
+                {
+                    var table = RequiredTable(target, insert.Table, insert.Schema, "insert target");
+                    insert.ColumnTypes = CompleteTypes(insert.Columns, insert.ColumnTypes, table, "insert");
+                    var primaryKey = RequiredPrimaryKey(table, insert.Columns);
 
-                SafeMigrationModelManagedDataMetadataStore.Set(
-                    insert,
-                    new SafeMigrationModelManagedDataMetadata(
-                        primaryKey.Columns,
-                        primaryKey.ColumnTypes,
-                        UniqueKeys(table, insert.Columns),
-                        []));
-                break;
-            }
+                    SafeMigrationModelManagedDataMetadataStore.Set(
+                        insert,
+                        new SafeMigrationModelManagedDataMetadata(
+                            primaryKey.Columns,
+                            primaryKey.ColumnTypes,
+                            UniqueKeys(table, insert.Columns),
+                            []));
+
+                    break;
+                }
 
             case UpdateDataOperation update:
-            {
-                var sourceTable = RequiredTable(source, update.Table, update.Schema, "update source");
-                var targetTable = RequiredTable(target, update.Table, update.Schema, "update target");
-                update.KeyColumnTypes = CompleteTypes(
-                    update.KeyColumns,
-                    update.KeyColumnTypes,
-                    sourceTable,
-                    "update key");
-                update.ColumnTypes = CompleteTransitionTypes(
-                    update.Columns,
-                    update.ColumnTypes,
-                    sourceTable,
-                    targetTable,
-                    "update");
+                {
+                    var sourceTable = RequiredTable(source, update.Table, update.Schema, "update source");
+                    var targetTable = RequiredTable(target, update.Table, update.Schema, "update target");
+                    update.KeyColumnTypes = CompleteTypes(
+                        update.KeyColumns,
+                        update.KeyColumnTypes,
+                        sourceTable,
+                        "update key");
 
-                ValidateTypes(update.KeyColumns, update.KeyColumnTypes, targetTable, "update target key");
-                SafeMigrationModelManagedDataMetadataStore.Set(
-                    update,
-                    new SafeMigrationModelManagedDataMetadata(
-                        [],
-                        [],
-                        UniqueKeys(targetTable, update.Columns),
-                        []));
-                break;
-            }
+                    update.ColumnTypes = CompleteTransitionTypes(
+                        update.Columns,
+                        update.ColumnTypes,
+                        sourceTable,
+                        targetTable,
+                        "update");
+
+                    ValidateTypes(update.KeyColumns, update.KeyColumnTypes, targetTable, "update target key");
+                    SafeMigrationModelManagedDataMetadataStore.Set(
+                        update,
+                        new SafeMigrationModelManagedDataMetadata(
+                            [],
+                            [],
+                            UniqueKeys(targetTable, update.Columns),
+                            []));
+
+                    break;
+                }
 
             case DeleteDataOperation delete:
-            {
-                var table = RequiredTable(source, delete.Table, delete.Schema, "delete source");
-                delete.KeyColumnTypes = CompleteTypes(delete.KeyColumns, delete.KeyColumnTypes, table, "delete key");
-                SafeMigrationModelManagedDataMetadataStore.Set(
-                    delete,
-                    new SafeMigrationModelManagedDataMetadata(
-                        [],
-                        [],
-                        [],
-                        IncomingForeignKeys(source!, table)));
-                break;
-            }
+                {
+                    var table = RequiredTable(source, delete.Table, delete.Schema, "delete source");
+                    delete.KeyColumnTypes =
+                        CompleteTypes(delete.KeyColumns, delete.KeyColumnTypes, table, "delete key");
+
+                    SafeMigrationModelManagedDataMetadataStore.Set(
+                        delete,
+                        new SafeMigrationModelManagedDataMetadata(
+                            [],
+                            [],
+                            [],
+                            IncomingForeignKeys(source!, table)));
+
+                    break;
+                }
         }
     }
 
@@ -182,7 +191,7 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
     ) => schema is null
         ? $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(table)}'"
         : $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(schema)}."
-            + $"{SafeMigrationDiagnosticMessages.BoundForDisplay(table)}'";
+        + $"{SafeMigrationDiagnosticMessages.BoundForDisplay(table)}'";
 
     private static string[] CompleteTypes(
         string[] columns,
@@ -208,8 +217,8 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
 
         return columns
             .Select(column => table.Columns.SingleOrDefault(candidate =>
-                    StringComparer.Ordinal.Equals(candidate.Name, column))
-                ?.StoreType
+                        StringComparer.Ordinal.Equals(candidate.Name, column))
+                    ?.StoreType
                 ?? throw new InvalidOperationException(
                     $"SafeMigrations could not resolve {context} column "
                     + $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(column)}' in relational table "
@@ -230,8 +239,8 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
         for (var ordinal = 0; ordinal < columns.Length; ordinal++)
         {
             var modelType = table.Columns.SingleOrDefault(candidate =>
-                    StringComparer.Ordinal.Equals(candidate.Name, columns[ordinal]))
-                ?.StoreType
+                        StringComparer.Ordinal.Equals(candidate.Name, columns[ordinal]))
+                    ?.StoreType
                 ?? throw new InvalidOperationException(
                     $"SafeMigrations could not resolve {context} column "
                     + $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(columns[ordinal])}' "
@@ -271,6 +280,7 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
         }
 
         var result = new string[columns.Length];
+
         // WHY: Fill unresolved type entries without changing their association with authored columns.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -338,12 +348,22 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
                 continue;
             }
 
-            AddUniqueKey(keys, constraint.Columns.Select(static column => column.Name).ToArray(), managedColumns);
+            AddUniqueKey(keys,
+                constraint
+                    .Columns
+                    .Select(static column => column.Name)
+                    .ToArray(),
+                managedColumns);
         }
 
         foreach (var index in table.Indexes.Where(static index => index.IsUnique))
         {
-            AddUniqueKey(keys, index.Columns.Select(static column => column.Name).ToArray(), managedColumns);
+            AddUniqueKey(keys,
+                index
+                    .Columns
+                    .Select(static column => column.Name)
+                    .ToArray(),
+                managedColumns);
         }
 
         return keys
@@ -362,7 +382,10 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
                 + $"{DisplayTable(table.Name, table.Schema)} without a primary key. Configure an explicit "
                 + "stable primary key before scaffolding model-managed rows.");
 
-        var columns = primaryKey.Columns.Select(static column => column.Name).ToArray();
+        var columns = primaryKey
+            .Columns
+            .Select(static column => column.Name)
+            .ToArray();
 
         if (columns.Any(column => !managedColumns.Contains(column, StringComparer.Ordinal)))
         {
@@ -374,7 +397,10 @@ internal sealed class SafeMigrationMigrationsModelDiffer : IMigrationsModelDiffe
 
         return (
             columns,
-            primaryKey.Columns.Select(static column => column.StoreType).ToArray());
+            primaryKey
+                .Columns
+                .Select(static column => column.StoreType)
+                .ToArray());
     }
 
     private static void AddUniqueKey(

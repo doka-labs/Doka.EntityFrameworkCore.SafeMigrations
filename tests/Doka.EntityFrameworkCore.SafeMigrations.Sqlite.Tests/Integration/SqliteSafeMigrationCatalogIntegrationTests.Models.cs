@@ -12,7 +12,10 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
         /// <summary>Initializes the fixture with its independent open connection.</summary>
         /// <param name="connection">The test-owned native connection.</param>
         /// <param name="internalServices">The class-owned shared provider services.</param>
-        protected SqliteConstraintShapeContext(DbConnection connection, IServiceProvider internalServices)
+        protected SqliteConstraintShapeContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        )
         {
             _connection = connection ?? throw new ArgumentNullException(nameof(connection));
             _internalServices = internalServices ?? throw new ArgumentNullException(nameof(internalServices));
@@ -20,7 +23,9 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
 
         /// <summary>Registers each concrete fixture context without additional services or dependencies.</summary>
         /// <param name="optionsBuilder">The concrete fixture's context options.</param>
-        protected void ConfigureConstraintShapeOptions(DbContextOptionsBuilder optionsBuilder)
+        protected void ConfigureConstraintShapeOptions(
+            DbContextOptionsBuilder optionsBuilder
+        )
         {
             optionsBuilder.UseSqlite(_connection);
             optionsBuilder.UseSqliteSafeMigrations();
@@ -36,40 +41,63 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
         /// </summary>
         /// <param name="modelBuilder">The fixed concrete type's model.</param>
         /// <param name="kind">The fixed native constraint family.</param>
-        protected static void ConfigureConstraintShapeModel(ModelBuilder modelBuilder, SafeMigrationOperationKind kind)
+        protected static void ConfigureConstraintShapeModel(
+            ModelBuilder modelBuilder,
+            SafeMigrationOperationKind kind
+        )
         {
             modelBuilder.Entity<ConstraintShapeParent>(entity =>
             {
                 entity.ToTable("shape_parents");
-                entity.HasKey(value => value.Id).HasName("pk_shape_parents");
-                entity.Property(value => value.Id).ValueGeneratedNever();
+                entity
+                    .HasKey(value => value.Id)
+                    .HasName("pk_shape_parents");
+
+                entity
+                    .Property(value => value.Id)
+                    .ValueGeneratedNever();
             });
 
             modelBuilder.Entity<ConstraintShapeItem>(entity =>
             {
-                entity.ToTable("shape_items", table =>
-                {
-                    if (kind == SafeMigrationOperationKind.EnsureCheckConstraint)
+                entity.ToTable(
+                    "shape_items",
+                    table =>
                     {
-                        table.HasCheckConstraint("logical_constraint", "Code > 0");
-                    }
+                        if (kind == SafeMigrationOperationKind.EnsureCheckConstraint)
+                        {
+                            table.HasCheckConstraint("logical_constraint", "Code > 0");
+                        }
+                    });
 
-                });
+                entity
+                    .HasKey(value => value.Id)
+                    .HasName("pk_shape_items");
 
-                entity.HasKey(value => value.Id).HasName("pk_shape_items");
-                entity.Property(value => value.Id).ValueGeneratedNever();
+                entity
+                    .Property(value => value.Id)
+                    .ValueGeneratedNever();
+
                 if (kind == SafeMigrationOperationKind.EnsureUniqueConstraint)
                 {
-                    entity.HasAlternateKey(value => value.Code).HasName("logical_constraint");
+                    entity
+                        .HasAlternateKey(value => value.Code)
+                        .HasName("logical_constraint");
                 }
 
                 if (kind == SafeMigrationOperationKind.EnsureForeignKey)
                 {
-                    entity.HasIndex(value => value.ParentId).HasDatabaseName("ix_shape_items_parent");
-                    entity.HasOne<ConstraintShapeParent>().WithMany().HasForeignKey(value => value.ParentId)
-                        .HasConstraintName("logical_constraint").OnDelete(DeleteBehavior.NoAction);
-                }
+                    entity
+                        .HasIndex(value => value.ParentId)
+                        .HasDatabaseName("ix_shape_items_parent");
 
+                    entity
+                        .HasOne<ConstraintShapeParent>()
+                        .WithMany()
+                        .HasForeignKey(value => value.ParentId)
+                        .HasConstraintName("logical_constraint")
+                        .OnDelete(DeleteBehavior.NoAction);
+                }
             });
         }
 
@@ -100,17 +128,22 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
         /// <summary>Initializes the fixed UNIQUE fixture.</summary>
         /// <param name="connection">The test-owned native connection.</param>
         /// <param name="internalServices">The class-owned shared provider services.</param>
-        public SqliteUniqueConstraintShapeContext(DbConnection connection, IServiceProvider internalServices)
-            : base(connection, internalServices)
-        {
-        }
+        public SqliteUniqueConstraintShapeContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        )
+            : base(connection, internalServices) { }
 
         /// <inheritdoc />
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
+        protected override void OnConfiguring(
+            DbContextOptionsBuilder optionsBuilder
+        ) =>
             ConfigureConstraintShapeOptions(optionsBuilder);
 
         /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder) =>
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        ) =>
             ConfigureConstraintShapeModel(modelBuilder, SafeMigrationOperationKind.EnsureUniqueConstraint);
     }
 
@@ -120,17 +153,22 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
         /// <summary>Initializes the fixed CHECK fixture.</summary>
         /// <param name="connection">The test-owned native connection.</param>
         /// <param name="internalServices">The class-owned shared provider services.</param>
-        public SqliteCheckConstraintShapeContext(DbConnection connection, IServiceProvider internalServices)
-            : base(connection, internalServices)
-        {
-        }
+        public SqliteCheckConstraintShapeContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        )
+            : base(connection, internalServices) { }
 
         /// <inheritdoc />
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
+        protected override void OnConfiguring(
+            DbContextOptionsBuilder optionsBuilder
+        ) =>
             ConfigureConstraintShapeOptions(optionsBuilder);
 
         /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder) =>
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        ) =>
             ConfigureConstraintShapeModel(modelBuilder, SafeMigrationOperationKind.EnsureCheckConstraint);
     }
 
@@ -140,27 +178,35 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
         /// <summary>Initializes the fixed FK fixture.</summary>
         /// <param name="connection">The test-owned native connection.</param>
         /// <param name="internalServices">The class-owned shared provider services.</param>
-        public SqliteForeignKeyConstraintShapeContext(DbConnection connection, IServiceProvider internalServices)
-            : base(connection, internalServices)
-        {
-        }
+        public SqliteForeignKeyConstraintShapeContext(
+            DbConnection connection,
+            IServiceProvider internalServices
+        )
+            : base(connection, internalServices) { }
 
         /// <inheritdoc />
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
+        protected override void OnConfiguring(
+            DbContextOptionsBuilder optionsBuilder
+        ) =>
             ConfigureConstraintShapeOptions(optionsBuilder);
 
         /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder) =>
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        ) =>
             ConfigureConstraintShapeModel(modelBuilder, SafeMigrationOperationKind.EnsureForeignKey);
     }
 
     /// <summary>Keeps the target rebuild model aligned with an explicit NULL-default ADD.</summary>
     protected sealed class SqliteProjectedForeignKeyNullDefaultContext(
         DbConnection connection,
-        IServiceProvider internalServices) : DbContext
+        IServiceProvider internalServices
+    ) : DbContext
     {
         /// <inheritdoc />
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        protected override void OnConfiguring(
+            DbContextOptionsBuilder optionsBuilder
+        )
         {
             optionsBuilder.UseSqlite(connection);
             optionsBuilder.UseSqliteSafeMigrations();
@@ -171,24 +217,47 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
         }
 
         /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        )
         {
             modelBuilder.Entity<NullDefaultParent>(entity =>
             {
                 entity.ToTable("constraint_parents");
-                entity.HasKey(value => value.Id).HasName("pk_constraint_parents");
-                entity.Property(value => value.Id).ValueGeneratedNever();
+                entity
+                    .HasKey(value => value.Id)
+                    .HasName("pk_constraint_parents");
+
+                entity
+                    .Property(value => value.Id)
+                    .ValueGeneratedNever();
             });
 
             modelBuilder.Entity<NullDefaultChild>(entity =>
             {
                 entity.ToTable("constraint_children");
-                entity.HasKey(value => value.Id).HasName("pk_constraint_children");
-                entity.Property(value => value.Id).ValueGeneratedNever();
-                entity.Property(value => value.ParentId).HasDefaultValueSql("NULL");
-                entity.HasIndex(value => value.ParentId).HasDatabaseName("ix_constraint_children_parent_id");
-                entity.HasOne<NullDefaultParent>().WithMany().HasForeignKey(value => value.ParentId)
-                    .HasConstraintName("fk_constraint_children_parent").OnDelete(DeleteBehavior.Cascade);
+                entity
+                    .HasKey(value => value.Id)
+                    .HasName("pk_constraint_children");
+
+                entity
+                    .Property(value => value.Id)
+                    .ValueGeneratedNever();
+
+                entity
+                    .Property(value => value.ParentId)
+                    .HasDefaultValueSql("NULL");
+
+                entity
+                    .HasIndex(value => value.ParentId)
+                    .HasDatabaseName("ix_constraint_children_parent_id");
+
+                entity
+                    .HasOne<NullDefaultParent>()
+                    .WithMany()
+                    .HasForeignKey(value => value.ParentId)
+                    .HasConstraintName("fk_constraint_children_parent")
+                    .OnDelete(DeleteBehavior.Cascade);
             });
         }
 
@@ -213,10 +282,13 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
     /// <summary>Models one FK containing both an unchanged live column and a newly added nullable column.</summary>
     protected sealed class SqliteProjectedCompositeForeignKeyContext(
         DbConnection connection,
-        IServiceProvider internalServices) : DbContext
+        IServiceProvider internalServices
+    ) : DbContext
     {
         /// <inheritdoc />
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        protected override void OnConfiguring(
+            DbContextOptionsBuilder optionsBuilder
+        )
         {
             optionsBuilder.UseSqlite(connection);
             optionsBuilder.UseSqliteSafeMigrations();
@@ -227,25 +299,59 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
         }
 
         /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        )
         {
             modelBuilder.Entity<CompositeParent>(entity =>
             {
                 entity.ToTable("composite_parents");
-                entity.HasKey(value => new { value.TenantId, value.Id }).HasName("pk_composite_parents");
-                entity.Property(value => value.TenantId).ValueGeneratedNever();
-                entity.Property(value => value.Id).ValueGeneratedNever();
+                entity
+                    .HasKey(value => new
+                    {
+                        value.TenantId,
+                        value.Id,
+                    })
+                    .HasName("pk_composite_parents");
+
+                entity
+                    .Property(value => value.TenantId)
+                    .ValueGeneratedNever();
+
+                entity
+                    .Property(value => value.Id)
+                    .ValueGeneratedNever();
             });
 
             modelBuilder.Entity<CompositeChild>(entity =>
             {
                 entity.ToTable("composite_children");
-                entity.HasKey(value => value.Id).HasName("pk_composite_children");
-                entity.Property(value => value.Id).ValueGeneratedNever();
-                entity.HasIndex(value => new { value.Id, value.ParentId })
+                entity
+                    .HasKey(value => value.Id)
+                    .HasName("pk_composite_children");
+
+                entity
+                    .Property(value => value.Id)
+                    .ValueGeneratedNever();
+
+                entity
+                    .HasIndex(value => new
+                    {
+                        value.Id,
+                        value.ParentId,
+                    })
                     .HasDatabaseName("ix_composite_children_parent");
-                entity.HasOne<CompositeParent>().WithMany().HasForeignKey(value => new { value.Id, value.ParentId })
-                    .HasConstraintName("fk_composite_children_parent").OnDelete(DeleteBehavior.NoAction);
+
+                entity
+                    .HasOne<CompositeParent>()
+                    .WithMany()
+                    .HasForeignKey(value => new
+                    {
+                        value.Id,
+                        value.ParentId,
+                    })
+                    .HasConstraintName("fk_composite_children_parent")
+                    .OnDelete(DeleteBehavior.NoAction);
             });
         }
 
@@ -273,10 +379,13 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
     /// <summary>Supplies only the final rebuild model; preflight consumes actual operation definitions.</summary>
     protected sealed class SqliteProjectedSeparateAddContext(
         DbConnection connection,
-        IServiceProvider internalServices) : DbContext
+        IServiceProvider internalServices
+    ) : DbContext
     {
         /// <inheritdoc />
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        protected override void OnConfiguring(
+            DbContextOptionsBuilder optionsBuilder
+        )
         {
             optionsBuilder.UseSqlite(connection);
             optionsBuilder.UseSqliteSafeMigrations();
@@ -284,23 +393,43 @@ public abstract partial class SqliteSafeMigrationCatalogIntegrationTests : Sqlit
         }
 
         /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        )
         {
             modelBuilder.Entity<SeparateAddParent>(entity =>
             {
                 entity.ToTable("constraint_parents");
-                entity.HasKey(value => value.Id).HasName("pk_constraint_parents");
-                entity.Property(value => value.Id).ValueGeneratedNever();
+                entity
+                    .HasKey(value => value.Id)
+                    .HasName("pk_constraint_parents");
+
+                entity
+                    .Property(value => value.Id)
+                    .ValueGeneratedNever();
             });
 
             modelBuilder.Entity<SeparateAddChild>(entity =>
             {
                 entity.ToTable("constraint_children");
-                entity.HasKey(value => value.Id).HasName("pk_constraint_children");
-                entity.Property(value => value.Id).ValueGeneratedNever();
-                entity.HasIndex(value => value.ParentId).HasDatabaseName("ix_constraint_children_parent_id");
-                entity.HasOne<SeparateAddParent>().WithMany().HasForeignKey(value => value.ParentId)
-                    .HasConstraintName("fk_constraint_children_parent").OnDelete(DeleteBehavior.Cascade);
+                entity
+                    .HasKey(value => value.Id)
+                    .HasName("pk_constraint_children");
+
+                entity
+                    .Property(value => value.Id)
+                    .ValueGeneratedNever();
+
+                entity
+                    .HasIndex(value => value.ParentId)
+                    .HasDatabaseName("ix_constraint_children_parent_id");
+
+                entity
+                    .HasOne<SeparateAddParent>()
+                    .WithMany()
+                    .HasForeignKey(value => value.ParentId)
+                    .HasConstraintName("fk_constraint_children_parent")
+                    .OnDelete(DeleteBehavior.Cascade);
             });
         }
 

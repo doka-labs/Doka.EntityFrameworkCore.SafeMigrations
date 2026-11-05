@@ -6,8 +6,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 /// </summary>
 public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
 {
-    private readonly PostgreSqlSafeMigrationCatalogSqlBuilder _catalogSqlBuilder;
     private readonly IPostgreSqlSafeMigrationsBaselineGenerator _baselineGenerator;
+    private readonly PostgreSqlSafeMigrationCatalogSqlBuilder _catalogSqlBuilder;
     private readonly PostgreSqlSafeMigrationSqlExpressionRenderer _expressionRenderer;
     private readonly ISqlGenerationHelper _sqlGenerationHelper;
     private readonly IRelationalTypeMappingSource _typeMappingSource;
@@ -89,12 +89,21 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 || effectiveRepairBaseline.Any(static command => command.TransactionSuppressed))
             {
                 throw new NotSupportedException(
-                    SafeMigrationDiagnosticMessages.FormatRuntime(safeOperation,
-                        "doka_sm_unsupported", ordinal, "baseline_transaction_suppressed"));
+                    SafeMigrationDiagnosticMessages.FormatRuntime(
+                        safeOperation,
+                        "doka_sm_unsupported",
+                        ordinal,
+                        "baseline_transaction_suppressed"));
             }
 
-            var guardedSql = BuildGuardedSqlAtOrdinal(safeOperation, runtimePlan, baseline, effectiveRepairBaseline,
-                ordinal, (options & MigrationsSqlGenerationOptions.Idempotent) != 0);
+            var guardedSql = BuildGuardedSqlAtOrdinal(
+                safeOperation,
+                runtimePlan,
+                baseline,
+                effectiveRepairBaseline,
+                ordinal,
+                (options & MigrationsSqlGenerationOptions.Idempotent) != 0);
+
             var sqlOperation = new SqlOperation { Sql = guardedSql };
             commands.AddRange(_baselineGenerator.Generate([sqlOperation], model, options));
         }
@@ -134,7 +143,9 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         var standardOperation = SafeMigrationStandardOperationFactory.Create(
             operation.Intent,
             _expressionRenderer.Render,
-            static collation => collation.Schema is null ? collation.Name : null);
+            static collation => collation.Schema is null
+                ? collation.Name
+                : null);
 
         var operations = new List<MigrationOperation> { standardOperation };
         foreach (var (table, schema, definition) in QualifiedColumnCollations(operation.Intent))
@@ -167,7 +178,9 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             intent,
             "text",
             _expressionRenderer.Render,
-            static collation => collation.Schema is null ? collation.Name : null,
+            static collation => collation.Schema is null
+                ? collation.Name
+                : null,
             PostgreSqlSafeMigrationColumnMetadata.CanSafelyConverge);
 
         if (intent.Definition.Collation?.Schema is null)
@@ -190,22 +203,22 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         QualifiedColumnCollations(
             SafeMigrationIntent intent
         ) => intent switch
-        {
-            EnsureTableIntent value => value
-                .Definition
-                .Columns
-                .Where(static definition => definition.Collation?.Schema is not null)
-                .Select(definition => (value.Definition.Table, value.Definition.Schema, definition)),
-            EnsureColumnIntent { Definition.Collation.Schema: not null } value =>
-            [
-                (value.Table, value.Schema, value.Definition)
-            ],
-            AlterColumnIntent { Definition.Collation.Schema: not null } value =>
-            [
-                (value.Table, value.Schema, value.Definition)
-            ],
-            _ => [],
-        };
+    {
+        EnsureTableIntent value => value
+            .Definition
+            .Columns
+            .Where(static definition => definition.Collation?.Schema is not null)
+            .Select(definition => (value.Definition.Table, value.Definition.Schema, definition)),
+        EnsureColumnIntent { Definition.Collation.Schema: not null } value =>
+        [
+            (value.Table, value.Schema, value.Definition),
+        ],
+        AlterColumnIntent { Definition.Collation.Schema: not null } value =>
+        [
+            (value.Table, value.Schema, value.Definition),
+        ],
+        _ => [],
+    };
 
     private string BuildQualifiedColumnCollationSql(
         string table,
@@ -223,9 +236,12 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 fixedLength: definition.IsFixedLength,
                 precision: definition.Precision,
                 scale: definition.Scale)
-            ?? throw new NotSupportedException("PostgreSQL has no type mapping for owner="
-                + SafeMigrationDiagnosticMessages.BoundForDisplay(schema ?? "<unqualified>") + "."
-                + SafeMigrationDiagnosticMessages.BoundForDisplay(table) + " column="
+            ?? throw new NotSupportedException(
+                "PostgreSQL has no type mapping for owner="
+                + SafeMigrationDiagnosticMessages.BoundForDisplay(schema ?? "<unqualified>")
+                + "."
+                + SafeMigrationDiagnosticMessages.BoundForDisplay(table)
+                + " column="
                 + SafeMigrationDiagnosticMessages.BoundForDisplay(definition.Name)
                 + "; next=Choose a supported explicit storage type and verify the model mapping.");
 
@@ -270,45 +286,52 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         // immutable SQL text. Build it once without reusing observed evidence.
         var blockedExpression = runtimePlan.DataProbe?.BuildBlockedExpression() ?? string.Empty;
         var proofTable = runtimePlan.DataProbe?.QualifiedTable ?? runtimePlan.NullabilityDataProbe?.QualifiedTable;
-        var requiresLockedRecheck = proofTable is not null || runtimePlan.ModelManagedDeleteLockTable is not null
+        var requiresLockedRecheck = proofTable is not null
+            || runtimePlan.ModelManagedDeleteLockTable is not null
             || runtimePlan.GeneratedDropLockSqlExpression is not null
             || runtimePlan.ColumnTransitionLockSqlExpression is not null;
+
         var hasObjectIdentityGuard = !StringComparer.Ordinal.Equals(runtimePlan.ObjectIdentityGuardExpression, "TRUE");
-        var evaluationIndentation = requiresLockedRecheck ? "        " : "    ";
+        var evaluationIndentation = requiresLockedRecheck
+            ? "        "
+            : "    ";
+
         var evaluationBodyIndentation = evaluationIndentation + "    ";
         var classificationIndentation = proofTable is null
             ? evaluationBodyIndentation
             : evaluationBodyIndentation + "    ";
 
         var diagnostic = new PostgreSqlSafeMigrationRuntimeDiagnostic(operation, ordinal);
-        var tag = escapeAnonymousBody ? string.Empty : SelectDollarTag(
-            baseline,
-            repairBaseline,
-            diagnostic.DelimiterContent,
-            runtimePlan.ObjectIdentityGuardExpression,
-            runtimePlan.PostExecutionObjectIdentityGuardExpression,
-            runtimePlan.ObjectIdentityGuardFailureCodeExpression,
-            runtimePlan.ModelManagedDeleteLockTable ?? string.Empty,
-            runtimePlan.GeneratedDropLockSqlExpression ?? string.Empty,
-            runtimePlan.GeneratedDropRuntimeGuardExpression ?? string.Empty,
-            runtimePlan.ColumnTransitionLockSqlExpression ?? string.Empty,
-            runtimePlan.ColumnTransitionRuntimeGuardExpression ?? string.Empty,
-            runtimePlan.ColumnTransitionTargetCatalogGuardExpression ?? string.Empty,
-            runtimePlan.PrerequisiteExpression,
-            runtimePlan.StateEvaluationGuardExpression,
-            runtimePlan.StateEvaluationGuardFailureExpression ?? string.Empty,
-            runtimePlan.StateExpression,
-            runtimePlan.RepairPrecondition,
-            runtimePlan.DataProbe?.TransitionInvariantExpression ?? string.Empty,
-            runtimePlan.DataProbe?.NarrowingExpression ?? string.Empty,
-            blockedExpression,
-            runtimePlan.DataProbe?.QualifiedTable ?? string.Empty,
-            runtimePlan.NullabilityDataProbe?.NotNullContractExpression ?? string.Empty,
-            runtimePlan.NullabilityDataProbe?.RepairInvariantExpression ?? string.Empty,
-            runtimePlan.NullabilityDataProbe?.BlockedExpression ?? string.Empty,
-            runtimePlan.NullabilityDataProbe?.QualifiedTable ?? string.Empty,
-            runtimePlan.Postcondition,
-            runtimePlan.ExecutionPostcondition ?? runtimePlan.Postcondition);
+        var tag = escapeAnonymousBody
+            ? string.Empty
+            : SelectDollarTag(
+                baseline,
+                repairBaseline,
+                diagnostic.DelimiterContent,
+                runtimePlan.ObjectIdentityGuardExpression,
+                runtimePlan.PostExecutionObjectIdentityGuardExpression,
+                runtimePlan.ObjectIdentityGuardFailureCodeExpression,
+                runtimePlan.ModelManagedDeleteLockTable ?? string.Empty,
+                runtimePlan.GeneratedDropLockSqlExpression ?? string.Empty,
+                runtimePlan.GeneratedDropRuntimeGuardExpression ?? string.Empty,
+                runtimePlan.ColumnTransitionLockSqlExpression ?? string.Empty,
+                runtimePlan.ColumnTransitionRuntimeGuardExpression ?? string.Empty,
+                runtimePlan.ColumnTransitionTargetCatalogGuardExpression ?? string.Empty,
+                runtimePlan.PrerequisiteExpression,
+                runtimePlan.StateEvaluationGuardExpression,
+                runtimePlan.StateEvaluationGuardFailureExpression ?? string.Empty,
+                runtimePlan.StateExpression,
+                runtimePlan.RepairPrecondition,
+                runtimePlan.DataProbe?.TransitionInvariantExpression ?? string.Empty,
+                runtimePlan.DataProbe?.NarrowingExpression ?? string.Empty,
+                blockedExpression,
+                runtimePlan.DataProbe?.QualifiedTable ?? string.Empty,
+                runtimePlan.NullabilityDataProbe?.NotNullContractExpression ?? string.Empty,
+                runtimePlan.NullabilityDataProbe?.RepairInvariantExpression ?? string.Empty,
+                runtimePlan.NullabilityDataProbe?.BlockedExpression ?? string.Empty,
+                runtimePlan.NullabilityDataProbe?.QualifiedTable ?? string.Empty,
+                runtimePlan.Postcondition,
+                runtimePlan.ExecutionPostcondition ?? runtimePlan.Postcondition);
 
         // The selected dollar tag cannot occur in embedded SQL, so provider
         // output cannot terminate the anonymous block accidentally.
@@ -316,26 +339,33 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         // in the first buffer instead of growing several initial chunks;
         // the variable SQL body still grows normally without a size guess.
         var builder = new StringBuilder(checked("DO ".Length + tag.Length + declarations.Length))
-            .Append(escapeAnonymousBody ? string.Empty : "DO ")
+            .Append(
+                escapeAnonymousBody
+                    ? string.Empty
+                    : "DO ")
             .Append(tag)
             .Append(declarations)
-            .Append(hasObjectIdentityGuard
-                ? "    doka_identity_schema pg_catalog.name := pg_catalog.current_schema();\n"
-                + "    doka_identity_failure text;\n"
-                : string.Empty)
-            .Append(proofTable is null
-                ? string.Empty
-                : "    doka_target_matches boolean := FALSE;\n")
-            .Append(runtimePlan.DataProbe is null
-                ? string.Empty
-                : "    doka_data_probe_required boolean := FALSE;\n"
-                + "    doka_data_blocked boolean := FALSE;\n"
-                + "    doka_transition_eligible boolean := FALSE;\n")
-            .Append(runtimePlan.NullabilityDataProbe is null
-                ? string.Empty
-                : "    doka_nullability_blocked boolean := FALSE;\n"
-                + "    doka_nullability_repair_eligible boolean := FALSE;\n"
-                + "    doka_complete_not_null boolean := FALSE;\n")
+            .Append(
+                hasObjectIdentityGuard
+                    ? "    doka_identity_schema pg_catalog.name := pg_catalog.current_schema();\n"
+                    + "    doka_identity_failure text;\n"
+                    : string.Empty)
+            .Append(
+                proofTable is null
+                    ? string.Empty
+                    : "    doka_target_matches boolean := FALSE;\n")
+            .Append(
+                runtimePlan.DataProbe is null
+                    ? string.Empty
+                    : "    doka_data_probe_required boolean := FALSE;\n"
+                    + "    doka_data_blocked boolean := FALSE;\n"
+                    + "    doka_transition_eligible boolean := FALSE;\n")
+            .Append(
+                runtimePlan.NullabilityDataProbe is null
+                    ? string.Empty
+                    : "    doka_nullability_blocked boolean := FALSE;\n"
+                    + "    doka_nullability_repair_eligible boolean := FALSE;\n"
+                    + "    doka_complete_not_null boolean := FALSE;\n")
             .Append("BEGIN\n");
 
         if (requiresLockedRecheck)
@@ -370,7 +400,8 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             builder
                 .Append(evaluationIndentation)
                 .Append("ELSIF NOT COALESCE((")
-                .Append(runtimePlan.ColumnTransitionRuntimeGuardExpression
+                .Append(
+                    runtimePlan.ColumnTransitionRuntimeGuardExpression
                     ?? runtimePlan.GeneratedDropRuntimeGuardExpression ?? runtimePlan.StateEvaluationGuardExpression)
                 .Append("), FALSE) THEN\n");
 
@@ -379,24 +410,32 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 // WHY: PostgreSQL checks relation privileges before CASE arms.
                 // Admit equality metadata before binding the target fallback;
                 // repair-only missing catalogs can still permit an exact no-op.
-                builder.Append(evaluationBodyIndentation).Append("IF NOT COALESCE((")
+                builder
+                    .Append(evaluationBodyIndentation)
+                    .Append("IF NOT COALESCE((")
                     .Append(runtimePlan.ColumnTransitionTargetCatalogGuardExpression)
-                    .Append("), FALSE) THEN\n").Append(evaluationBodyIndentation)
+                    .Append("), FALSE) THEN\n")
+                    .Append(evaluationBodyIndentation)
                     .Append("    doka_state := 'unsupported';\n")
-                    .Append(evaluationBodyIndentation).Append("ELSE\n");
+                    .Append(evaluationBodyIndentation)
+                    .Append("ELSE\n");
             }
 
-            builder.Append(evaluationBodyIndentation)
+            builder
+                .Append(evaluationBodyIndentation)
                 .Append("doka_state := (")
                 .Append(runtimePlan.StateEvaluationGuardFailureExpression)
                 .Append(");\n");
 
             if (runtimePlan.ColumnTransitionTargetCatalogGuardExpression is not null)
             {
-                builder.Append(evaluationBodyIndentation).Append("END IF;\n");
+                builder
+                    .Append(evaluationBodyIndentation)
+                    .Append("END IF;\n");
             }
 
-            builder.Append(evaluationBodyIndentation)
+            builder
+                .Append(evaluationBodyIndentation)
                 .Append("doka_repair_ok := FALSE;\n");
         }
 
@@ -427,7 +466,10 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             builder
                 .Append(evaluationBodyIndentation)
                 .Append("IF doka_target_matches")
-                .Append(runtimePlan.NullabilityDataProbe is null ? string.Empty : " AND doka_complete_not_null")
+                .Append(
+                    runtimePlan.NullabilityDataProbe is null
+                        ? string.Empty
+                        : " AND doka_complete_not_null")
                 .Append(" THEN\n")
                 .Append(classificationIndentation)
                 .Append("doka_state := 'matching';\n")
@@ -440,13 +482,19 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         if (runtimePlan.DataProbe is not null)
         {
             AppendDataProbeEvaluationSql(
-                builder, runtimePlan.DataProbe, blockedExpression, classificationIndentation);
+                builder,
+                runtimePlan.DataProbe,
+                blockedExpression,
+                classificationIndentation);
         }
 
         if (runtimePlan.NullabilityDataProbe is not null)
         {
             AppendNullabilityDataProbeEvaluationSql(
-                builder, runtimePlan, classificationIndentation, "doka_complete_not_null");
+                builder,
+                runtimePlan,
+                classificationIndentation,
+                "doka_complete_not_null");
         }
 
         builder
@@ -457,9 +505,11 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             builder,
             dataBlockedExpression,
             transitionEligibleExpression,
-            proofTable is null ? null : runtimePlan.NullabilityDataProbe?.MatchingRequiresSourceContractProof != true
-                ? "doka_target_matches"
-                : "(doka_target_matches AND (doka_complete_not_null OR doka_nullability_repair_eligible))");
+            proofTable is null
+                ? null
+                : runtimePlan.NullabilityDataProbe?.MatchingRequiresSourceContractProof != true
+                    ? "doka_target_matches"
+                    : "(doka_target_matches AND (doka_complete_not_null OR doka_nullability_repair_eligible))");
 
         builder
             .Append(");\n")
@@ -581,16 +631,23 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             .Append("        RAISE EXCEPTION USING ERRCODE = 'P1001', MESSAGE = ");
 
         diagnostic.AppendMessage(builder, "doka_sm_different");
-        builder.Append(";\n    ELSIF doka_action OPERATOR(pg_catalog.=) 'reject_unsupported' THEN\n")
+        builder
+            .Append(";\n    ELSIF doka_action OPERATOR(pg_catalog.=) 'reject_unsupported' THEN\n")
             .Append("        RAISE EXCEPTION USING ERRCODE = 'P1002', MESSAGE = ");
+
         diagnostic.AppendMessage(builder, "doka_sm_unsupported", runtimePlan.UnsupportedCode);
-        builder.Append(";\n    ELSIF doka_action OPERATOR(pg_catalog.=) 'reject_data_blocked' THEN\n")
+        builder
+            .Append(";\n    ELSIF doka_action OPERATOR(pg_catalog.=) 'reject_data_blocked' THEN\n")
             .Append("        RAISE EXCEPTION USING ERRCODE = 'P1003', MESSAGE = ");
+
         diagnostic.AppendMessage(builder, "doka_sm_data_blocked");
-        builder.Append(";\n    ELSIF doka_action OPERATOR(pg_catalog.=) 'reject_prerequisite_missing' THEN\n")
+        builder
+            .Append(";\n    ELSIF doka_action OPERATOR(pg_catalog.=) 'reject_prerequisite_missing' THEN\n")
             .Append("        RAISE EXCEPTION USING ERRCODE = 'P1004', MESSAGE = ");
+
         diagnostic.AppendMessage(builder, "doka_sm_prerequisite_missing");
-        builder.Append(";\n    ELSIF doka_action OPERATOR(pg_catalog.=) 'apply' ")
+        builder
+            .Append(";\n    ELSIF doka_action OPERATOR(pg_catalog.=) 'apply' ")
             .Append("OR doka_action OPERATOR(pg_catalog.=) 'repair' THEN\n")
             .Append("        IF doka_action OPERATOR(pg_catalog.=) 'apply' THEN\n");
 
@@ -614,7 +671,8 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
                 .Append("            RAISE EXCEPTION USING ERRCODE = 'P1005', MESSAGE = ");
 
             diagnostic.AppendMessage(builder, "doka_sm_postcondition", "schema_identity_changed_during_execution");
-            builder.Append(", DETAIL = 'schema_identity_changed_during_execution';\n")
+            builder
+                .Append(", DETAIL = 'schema_identity_changed_during_execution';\n")
                 .Append("        END IF;\n");
         }
 
@@ -627,7 +685,8 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             .Append("            RAISE EXCEPTION USING ERRCODE = 'P1005', MESSAGE = ");
 
         diagnostic.AppendMessage(builder, "doka_sm_postcondition");
-        builder.Append(";\n        END IF;\n")
+        builder
+            .Append(";\n        END IF;\n")
             .Append("    END IF;\n")
             .Append("END\n");
 
@@ -640,7 +699,9 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
             return RenderEscapedAnonymousBlock(builder);
         }
 
-        builder.Append(tag).Append(';');
+        builder
+            .Append(tag)
+            .Append(';');
 
         return builder.ToString();
     }
@@ -648,64 +709,74 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
     /// <summary>Encodes one unchanged anonymous body without physical newlines or outer dollar delimiters.</summary>
     /// <param name="body">The complete PL/pgSQL body, without a surrounding DO literal.</param>
     /// <returns>A single-line DO command whose decoded body retains every original character.</returns>
-    private static string RenderEscapedAnonymousBlock(StringBuilder body)
+    private static string RenderEscapedAnonymousBlock(
+        StringBuilder body
+    )
     {
         var length = checked("DO E'".Length + body.Length + "';".Length);
         foreach (var chunk in body.GetChunks())
         {
             foreach (var character in chunk.Span)
             {
-                length = checked(length + (character switch
-                {
-                    '\\' or '\'' or '\r' or '\n' => 1,
-                    '$' => 3,
-                    _ => 0,
-                }));
+                length = checked(length
+                    + character switch
+                    {
+                        '\\' or '\'' or '\r' or '\n' => 1, '$' => 3, _ => 0,
+                    });
             }
         }
 
         // WHY: A two-pass chunk walk writes one final string without copying
         // the large body first. Doubling quotes works with backslash_quote=off;
         // octal dollars cannot terminate EF's enclosing dollar-quoted block.
-        return string.Create(length, body, static (destination, source) =>
-        {
-            "DO E'".AsSpan().CopyTo(destination);
-            var offset = "DO E'".Length;
-            foreach (var chunk in source.GetChunks())
+        return string.Create(
+            length,
+            body,
+            static (destination, source) =>
             {
-                foreach (var character in chunk.Span)
+                "DO E'"
+                    .AsSpan()
+                    .CopyTo(destination);
+
+                var offset = "DO E'".Length;
+                foreach (var chunk in source.GetChunks())
                 {
-                    switch (character)
+                    foreach (var character in chunk.Span)
                     {
-                        case '\\':
-                            destination[offset++] = '\\';
-                            destination[offset++] = '\\';
-                            break;
-                        case '\'':
-                            destination[offset++] = '\'';
-                            destination[offset++] = '\'';
-                            break;
-                        case '\r':
-                        case '\n':
-                            destination[offset++] = '\\';
-                            destination[offset++] = character == '\r' ? 'r' : 'n';
-                            break;
-                        case '$':
-                            destination[offset++] = '\\';
-                            destination[offset++] = '0';
-                            destination[offset++] = '4';
-                            destination[offset++] = '4';
-                            break;
-                        default:
-                            destination[offset++] = character;
-                            break;
+                        switch (character)
+                        {
+                            case '\\':
+                                destination[offset++] = '\\';
+                                destination[offset++] = '\\';
+                                break;
+                            case '\'':
+                                destination[offset++] = '\'';
+                                destination[offset++] = '\'';
+                                break;
+                            case '\r':
+                            case '\n':
+                                destination[offset++] = '\\';
+                                destination[offset++] = character == '\r'
+                                    ? 'r'
+                                    : 'n';
+
+                                break;
+                            case '$':
+                                destination[offset++] = '\\';
+                                destination[offset++] = '0';
+                                destination[offset++] = '4';
+                                destination[offset++] = '4';
+                                break;
+                            default:
+                                destination[offset++] = character;
+                                break;
+                        }
                     }
                 }
-            }
 
-            destination[offset++] = '\'';
-            destination[offset] = ';';
-        });
+                destination[offset++] = '\'';
+                destination[offset] = ';';
+            });
     }
 
     /// <summary>Reproves the frozen command-local owner before classification or stateful acquisition.</summary>
@@ -736,7 +807,8 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         // also expose it in bounded MessageText without evaluating its catalog
         // expression twice or enabling disclosure of unrelated error details.
         diagnostic.AppendMessage(builder, "doka_sm_unsupported", maximumLength: 1960);
-        builder.Append(" || E'; provider_code=' || pg_catalog.left(doka_identity_failure, 64), ")
+        builder
+            .Append(" || E'; provider_code=' || pg_catalog.left(doka_identity_failure, 64), ")
             .Append("DETAIL = doka_identity_failure;\n")
             .Append(indentation)
             .Append("END IF;\n");
@@ -846,7 +918,12 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < commands.Count; index++)
         {
-            AppendIndentedLines(builder, commands[index].CommandText.AsSpan().TrimEnd(), indentation);
+            AppendIndentedLines(builder,
+                commands[index]
+                    .CommandText
+                    .AsSpan()
+                    .TrimEnd(),
+                indentation);
         }
     }
 
@@ -946,9 +1023,11 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         // WHY: Try deterministic suffixes until the whole SQL scope has no tag collision.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
-        for (var suffix = 0; ; suffix++)
+        for (var suffix = 0;; suffix++)
         {
-            var tag = suffix == 0 ? "$doka_safe_migration$" : $"$doka_safe_migration_{suffix}$";
+            var tag = suffix == 0
+                ? "$doka_safe_migration$"
+                : $"$doka_safe_migration_{suffix}$";
 
             // WHY: Command separators are newlines and added semicolons;
             // neither can form a dollar tag across command boundaries.
@@ -986,7 +1065,9 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < commands.Count; index++)
         {
-            if (commands[index].CommandText.Contains(tag, StringComparison.Ordinal))
+            if (commands[index]
+                .CommandText
+                .Contains(tag, StringComparison.Ordinal))
             {
                 return true;
             }
@@ -1005,12 +1086,16 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         string indentation
     )
     {
-        if (sql.IndexOf('\n') >= 0 && sql.IndexOfAny('\'', '"', '$') >= 0)
+        if (sql.IndexOf('\n') >= 0
+            && sql.IndexOfAny('\'', '"', '$') >= 0)
         {
             // WHY: Indentation is not whitespace outside a multiline literal
             // or quoted identifier. Keep provider SQL intact rather than parse
             // it or silently change defaults, comments or authored payloads.
-            builder.Append(indentation).Append(sql);
+            builder
+                .Append(indentation)
+                .Append(sql);
+
             if (sql[^1] != ';')
             {
                 builder.Append(';');
@@ -1024,15 +1109,23 @@ public sealed partial class PostgreSqlSafeMigrationsSqlGenerator : IMigrationsSq
         var start = 0;
         while (start <= sql.Length)
         {
-            var relativeNewline = sql[start..].IndexOf('\n');
-            var newline = relativeNewline < 0 ? -1 : start + relativeNewline;
-            var length = newline < 0 ? sql.Length - start : newline - start;
+            var relativeNewline = sql[start..]
+                .IndexOf('\n');
+
+            var newline = relativeNewline < 0
+                ? -1
+                : start + relativeNewline;
+
+            var length = newline < 0
+                ? sql.Length - start
+                : newline - start;
 
             builder
                 .Append(indentation)
                 .Append(sql.Slice(start, length));
 
-            if (newline < 0 && (sql.IsEmpty || sql[^1] != ';'))
+            if (newline < 0
+                && (sql.IsEmpty || sql[^1] != ';'))
             {
                 builder.Append(';');
             }

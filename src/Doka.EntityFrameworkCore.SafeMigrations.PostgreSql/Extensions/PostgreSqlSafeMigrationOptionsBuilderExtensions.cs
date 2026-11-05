@@ -1,7 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
 /// <summary>
-/// Provides <see cref="DbContextOptionsBuilder"/> extensions for PostgreSQL
+/// Provides <see cref="DbContextOptionsBuilder" /> extensions for PostgreSQL
 /// safe migrations, baseline-generator composition, and canonical migration
 /// discovery.
 /// </summary>
@@ -14,7 +14,7 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// </summary>
     /// <param name="optionsBuilder">The EF Core options builder to configure.</param>
     /// <returns>The same options builder so additional calls can be chained.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
     public static DbContextOptionsBuilder UsePostgreSqlSafeMigrations(
         this DbContextOptionsBuilder optionsBuilder
     )
@@ -37,7 +37,7 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// <param name="configure">The SafeMigrations design-time configuration.</param>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException">
-    /// <paramref name="optionsBuilder"/> or <paramref name="configure"/> is null.
+    /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
     public static DbContextOptionsBuilder UsePostgreSqlSafeMigrations(
         this DbContextOptionsBuilder optionsBuilder,
@@ -61,7 +61,7 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// <param name="optionsBuilder">The EF Core options builder to configure.</param>
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
     public static DbContextOptionsBuilder UsePostgreSqlSafeMigrations<TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder
     )
@@ -86,7 +86,7 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException">
-    /// <paramref name="optionsBuilder"/> or <paramref name="configure"/> is null.
+    /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
     public static DbContextOptionsBuilder UsePostgreSqlSafeMigrations<TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder,
@@ -112,7 +112,7 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TBaselineGenerator">The generator used for ordinary PostgreSQL operations.</typeparam>
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
     public static DbContextOptionsBuilder UsePostgreSqlSafeMigrations<TBaselineGenerator, TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder
     )
@@ -139,7 +139,7 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException">
-    /// <paramref name="optionsBuilder"/> or <paramref name="configure"/> is null.
+    /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
     public static DbContextOptionsBuilder UsePostgreSqlSafeMigrations<TBaselineGenerator, TCanonicalMigrationContext>(
         this DbContextOptionsBuilder optionsBuilder,
@@ -166,7 +166,7 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// <param name="optionsBuilder">The EF Core options builder to configure.</param>
     /// <typeparam name="TContext">The DbContext type being configured.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
     public static DbContextOptionsBuilder<TContext> UsePostgreSqlSafeMigrations<TContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder
     )
@@ -191,7 +191,7 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TContext">The DbContext type being configured.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException">
-    /// <paramref name="optionsBuilder"/> or <paramref name="configure"/> is null.
+    /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
     public static DbContextOptionsBuilder<TContext> UsePostgreSqlSafeMigrations<TContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder,
@@ -218,7 +218,7 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TBaselineGenerator">The generator used for ordinary PostgreSQL operations.</typeparam>
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
     public static DbContextOptionsBuilder<TContext> UsePostgreSqlSafeMigrations<TContext, TBaselineGenerator,
         TCanonicalMigrationContext>(
         this DbContextOptionsBuilder<TContext> optionsBuilder
@@ -248,7 +248,7 @@ public static class PostgreSqlSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TCanonicalMigrationContext">The context that owns migration discovery and history.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException">
-    /// <paramref name="optionsBuilder"/> or <paramref name="configure"/> is null.
+    /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
     public static DbContextOptionsBuilder<TContext> UsePostgreSqlSafeMigrations<TContext, TBaselineGenerator,
         TCanonicalMigrationContext>(

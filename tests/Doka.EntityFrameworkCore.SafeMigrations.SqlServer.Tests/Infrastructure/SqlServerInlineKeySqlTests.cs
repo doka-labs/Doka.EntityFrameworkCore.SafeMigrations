@@ -26,25 +26,37 @@ public sealed class SqlServerInlineKeySqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        var definition = new ExpectedTableDefinition("inline_keys",
+        var definition = new ExpectedTableDefinition(
+            "inline_keys",
             [new ExpectedColumnDefinition("Value", typeof(string), false, $"nvarchar({length})", maxLength: length)],
-            primaryKey: primaryKey ? new ExpectedPrimaryKeyDefinition("PK_inline", "inline_keys", ["Value"]) : null,
+            primaryKey: primaryKey
+                ? new ExpectedPrimaryKeyDefinition("PK_inline", "inline_keys", ["Value"])
+                : null,
             uniqueConstraints: primaryKey
-                ? [] : [new ExpectedUniqueConstraintDefinition("UQ_inline", "inline_keys", ["Value"])]);
+                ? []
+                : [new ExpectedUniqueConstraintDefinition("UQ_inline", "inline_keys", ["Value"])]);
 
         builder.EnsureTable(definition, SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var plan = catalog.Build((SafeMigrationOperation)builder.Operations[0]);
         var exception = Record.Exception(() =>
-            context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model));
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate(builder.Operations, context.Model));
 
         // Assert
         Assert.Equal(unsupported, plan.IsStaticallyUnsupported);
-        Assert.Equal(unsupported ? "key_unproven_width" : null, plan.UnsupportedCode);
+        Assert.Equal(
+            unsupported
+                ? "key_unproven_width"
+                : null,
+            plan.UnsupportedCode);
+
         if (unsupported)
         {
             Assert.IsType<NotSupportedException>(exception);
@@ -72,26 +84,42 @@ public sealed class SqlServerInlineKeySqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        var names = Enumerable.Range(0, count).Select(static ordinal => $"Column{ordinal:D2}").ToArray();
-        var definition = new ExpectedTableDefinition("inline_keys",
+        var names = Enumerable
+            .Range(0, count)
+            .Select(static ordinal => $"Column{ordinal:D2}")
+            .ToArray();
+
+        var definition = new ExpectedTableDefinition(
+            "inline_keys",
             names.Select(static name => new ExpectedColumnDefinition(name, typeof(int), false, "int")),
-            primaryKey: primaryKey ? new ExpectedPrimaryKeyDefinition("PK_inline", "inline_keys", names) : null,
+            primaryKey: primaryKey
+                ? new ExpectedPrimaryKeyDefinition("PK_inline", "inline_keys", names)
+                : null,
             uniqueConstraints: primaryKey
-                ? [] : [new ExpectedUniqueConstraintDefinition("UQ_inline", "inline_keys", names)]);
+                ? []
+                : [new ExpectedUniqueConstraintDefinition("UQ_inline", "inline_keys", names)]);
 
         builder.EnsureTable(definition, SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var plan = catalog.Build((SafeMigrationOperation)builder.Operations[0]);
         var exception = Record.Exception(() =>
-            context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model));
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate(builder.Operations, context.Model));
 
         // Assert
         Assert.Equal(unsupported, plan.IsStaticallyUnsupported);
-        Assert.Equal(unsupported ? "key_unproven_width" : null, plan.UnsupportedCode);
+        Assert.Equal(
+            unsupported
+                ? "key_unproven_width"
+                : null,
+            plan.UnsupportedCode);
+
         if (unsupported)
         {
             Assert.IsType<NotSupportedException>(exception);

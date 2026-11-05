@@ -31,7 +31,8 @@ public sealed class PostgreSqlModelManagedDataConcurrencyIntegrationTests : Post
 
         await ExecuteSqlAsync(
             connectionString,
-            "UPDATE model_race_roles SET name = 'concurrent' WHERE id = 1;", cancellationToken: CancellationToken.None);
+            "UPDATE model_race_roles SET name = 'concurrent' WHERE id = 1;",
+            cancellationToken: CancellationToken.None);
 
         _ = await Assert.ThrowsAsync<PostgresException>(() =>
             ExecuteOperationsAsync(context, update.Operations, CancellationToken.None));
@@ -42,13 +43,17 @@ public sealed class PostgreSqlModelManagedDataConcurrencyIntegrationTests : Post
             + "CREATE FUNCTION model_race_roles_rewrite() RETURNS trigger LANGUAGE plpgsql AS $$ "
             + "BEGIN NEW.name := 'triggered'; RETURN NEW; END $$;"
             + "CREATE TRIGGER trg_model_race_roles_rewrite BEFORE UPDATE ON model_race_roles "
-            + "FOR EACH ROW EXECUTE FUNCTION model_race_roles_rewrite();", cancellationToken: CancellationToken.None);
+            + "FOR EACH ROW EXECUTE FUNCTION model_race_roles_rewrite();",
+            cancellationToken: CancellationToken.None);
 
         _ = await Assert.ThrowsAsync<PostgresException>(() =>
             ExecuteOperationsAsync(context, update.Operations, CancellationToken.None));
 
-        Assert.Equal(SafeMigrationObservedState.TransitionReady,
-            Assert.Single(preflight.Assessments).ObservedState);
+        Assert.Equal(
+            SafeMigrationObservedState.TransitionReady,
+            Assert.Single(preflight.Assessments)
+                .ObservedState);
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -95,14 +100,18 @@ public sealed class PostgreSqlModelManagedDataConcurrencyIntegrationTests : Post
         _ = await Assert.ThrowsAsync<PostgresException>(() =>
             ExecuteOperationsAsync(context, deletion.Operations, CancellationToken.None));
 
-        Assert.Equal(SafeMigrationObservedState.TransitionReady,
-            Assert.Single(preflight.Assessments).ObservedState);
+        Assert.Equal(
+            SafeMigrationObservedState.TransitionReady,
+            Assert.Single(preflight.Assessments)
+                .ObservedState);
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM model_dependency_roles WHERE id = 1;",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -122,7 +131,8 @@ public sealed class PostgreSqlModelManagedDataConcurrencyIntegrationTests : Post
             + "CREATE FUNCTION model_cancel_roles_wait() RETURNS trigger LANGUAGE plpgsql AS $$ "
             + "BEGIN PERFORM pg_sleep(10); RETURN NEW; END $$;"
             + "CREATE TRIGGER trg_model_cancel_roles_wait BEFORE UPDATE ON model_cancel_roles "
-            + "FOR EACH ROW EXECUTE FUNCTION model_cancel_roles_wait();", cancellationToken: CancellationToken.None);
+            + "FOR EACH ROW EXECUTE FUNCTION model_cancel_roles_wait();",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var update = ModelManagedNameUpdate(context.Database.ProviderName!, "model_cancel_roles");
@@ -181,5 +191,4 @@ public sealed class PostgreSqlModelManagedDataConcurrencyIntegrationTests : Post
 
         return builder;
     }
-
 }

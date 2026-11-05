@@ -20,12 +20,16 @@ public sealed class SqliteSafeMigrationRenameSourceAbsenceIntegrationTests : Sql
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-table-rename-absent-source"),
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-table-rename-absent-source"),
             cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-table-rename-absent-postflight"),
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-table-rename-absent-postflight"),
             cancellationToken: CancellationToken.None);
 
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
@@ -41,7 +45,9 @@ public sealed class SqliteSafeMigrationRenameSourceAbsenceIntegrationTests : Sql
         Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
         Assert.True(assessment.PostconditionSatisfied);
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
-        Assert.True(Assert.Single(postflight.Assessments).PostconditionSatisfied);
+        Assert.True(Assert.Single(postflight.Assessments)
+            .PostconditionSatisfied);
+
         Assert.DoesNotContain("absent_source", snapshot.Tables.Keys);
         Assert.DoesNotContain("absent_target", snapshot.Tables.Keys);
         Assert.Equal(schemaVersion, finalSchemaVersion);
@@ -66,9 +72,11 @@ public sealed class SqliteSafeMigrationRenameSourceAbsenceIntegrationTests : Sql
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         if (ownerExists)
         {
-            await ExecuteSqlAsync(connection,
+            await ExecuteSqlAsync(
+                connection,
                 "CREATE TABLE absent_member_owner (Id INTEGER NOT NULL); "
-                + "INSERT INTO absent_member_owner (Id) VALUES (1);", cancellationToken: CancellationToken.None);
+                + "INSERT INTO absent_member_owner (Id) VALUES (1);",
+                cancellationToken: CancellationToken.None);
         }
 
         await using var context = CreateContext(connection);
@@ -90,12 +98,16 @@ public sealed class SqliteSafeMigrationRenameSourceAbsenceIntegrationTests : Sql
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-member-rename-absent-source"),
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-member-rename-absent-source"),
             cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var postflight = await runner.VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-member-rename-absent-postflight"),
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-member-rename-absent-postflight"),
             cancellationToken: CancellationToken.None);
 
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
@@ -118,9 +130,16 @@ public sealed class SqliteSafeMigrationRenameSourceAbsenceIntegrationTests : Sql
         Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
         Assert.True(assessment.PostconditionSatisfied);
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
-        Assert.True(Assert.Single(postflight.Assessments).PostconditionSatisfied);
+        Assert.True(Assert.Single(postflight.Assessments)
+            .PostconditionSatisfied);
+
         Assert.Equal(ownerExists, snapshot.Tables.ContainsKey("absent_member_owner"));
-        Assert.Equal(ownerExists ? 1 : 0, remainingRows);
+        Assert.Equal(
+            ownerExists
+                ? 1
+                : 0,
+            remainingRows);
+
         Assert.Equal(schemaVersion, finalSchemaVersion);
     }
 }

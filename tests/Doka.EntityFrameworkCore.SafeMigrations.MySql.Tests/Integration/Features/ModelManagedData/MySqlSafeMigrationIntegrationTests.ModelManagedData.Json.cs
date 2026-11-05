@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the ModelManagedDataJson migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlModelManagedDataJsonIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlModelManagedDataJsonIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlModelManagedDataJsonIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     [Theory]
     [InlineData(SafeMigrationScaffoldingMode.Strict, DokaMySqlGuidFormat.Char36)]
@@ -20,7 +22,10 @@ public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSaf
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var storeType = GuidStoreType(guidFormat);
-        var maximumLength = guidFormat == DokaMySqlGuidFormat.Binary16 ? 16 : 36;
+        var maximumLength = guidFormat == DokaMySqlGuidFormat.Binary16
+            ? 16
+            : 36;
+
         var identifier = Guid.Parse("1458f03f-9acb-4902-bca8-280b613a7c92");
 
         // WHY: EF and Doka convert every supported JSON CLR seed shape to its
@@ -112,6 +117,7 @@ public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSaf
                 json_like_text = table.Column<string>(type: "varchar(128)", maxLength: 128, nullable: false),
             },
             table => table.PrimaryKey("pk_json_model_rows", value => value.id));
+
         _ = ensure.EnsureModelManagedDataFromModel(
             "json_model_rows",
             ["id"],
@@ -128,7 +134,10 @@ public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSaf
             CancellationToken.None);
 
         await ExecuteOperationsAsync(context, ensure.Operations, CancellationToken.None);
-        await ApplyEquivalentInitialJsonRepresentationAsync(connectionString, identifier, guidFormat,
+        await ApplyEquivalentInitialJsonRepresentationAsync(
+            connectionString,
+            identifier,
+            guidFormat,
             cancellationToken: CancellationToken.None);
 
         var ensureReplay = await runner.AnalyzeAsync(
@@ -148,7 +157,7 @@ public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSaf
             "json_model_rows",
             ["id"],
             [storeType],
-            new object?[,] { { identifier, }, },
+            new object?[,] { { identifier } },
             valueColumns,
             valueColumnTypes,
             RemoveKeyColumn(initialValues),
@@ -162,7 +171,10 @@ public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSaf
 
         await ExecuteOperationsAsync(context, update.Operations, CancellationToken.None);
 
-        await ApplyEquivalentUpdatedJsonRepresentationAsync(connectionString, identifier, guidFormat,
+        await ApplyEquivalentUpdatedJsonRepresentationAsync(
+            connectionString,
+            identifier,
+            guidFormat,
             cancellationToken: CancellationToken.None);
 
         var updateReplay = await runner.AnalyzeAsync(
@@ -182,7 +194,7 @@ public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSaf
             "json_model_rows",
             ["id"],
             [storeType],
-            new object?[,] { { identifier, }, },
+            new object?[,] { { identifier } },
             ensureColumns,
             ensureColumnTypes,
             AddKeyColumn(identifier, updatedValues));
@@ -212,16 +224,34 @@ public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSaf
         Assert.All(ensurePostflight.Assessments, assessment => Assert.True(assessment.PostconditionSatisfied));
         Assert.Equal(
             SafeMigrationObservedState.TransitionReady,
-            Assert.Single(updatePreflight.Assessments).ObservedState);
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(updateReplay.Assessments).ObservedState);
-        Assert.True(Assert.Single(updatePostflight.Assessments).PostconditionSatisfied);
+            Assert.Single(updatePreflight.Assessments)
+                .ObservedState);
+
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(updateReplay.Assessments)
+                .ObservedState);
+
+        Assert.True(Assert.Single(updatePostflight.Assessments)
+            .PostconditionSatisfied);
+
         Assert.Equal(
             SafeMigrationObservedState.TransitionReady,
-            Assert.Single(deletePreflight.Assessments).ObservedState);
-        Assert.Equal(SafeMigrationObservedState.Missing, Assert.Single(deleteReplay.Assessments).ObservedState);
-        Assert.True(Assert.Single(deletePostflight.Assessments).PostconditionSatisfied);
-        Assert.Equal(0, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `json_model_rows`;",
-            cancellationToken: CancellationToken.None));
+            Assert.Single(deletePreflight.Assessments)
+                .ObservedState);
+
+        Assert.Equal(SafeMigrationObservedState.Missing,
+            Assert.Single(deleteReplay.Assessments)
+                .ObservedState);
+
+        Assert.True(Assert.Single(deletePostflight.Assessments)
+            .PostconditionSatisfied);
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `json_model_rows`;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -250,7 +280,8 @@ public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSaf
             VALUES
                 (1, '1', '{ "b": 2, "a": 1 }', '[ 1, 2 ]', '[ 1, 1 ]', 'null', NULL,
                  '{"a":1,"b":2}');
-            """, cancellationToken: CancellationToken.None);
+            """,
+            cancellationToken: CancellationToken.None);
 
         var ensure = new MigrationBuilder(context.Database.ProviderName!);
         _ = ensure.EnsureModelManagedDataFromModel(
@@ -270,7 +301,16 @@ public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSaf
             ["int", "json", "json", "json", "json", "json", "json", "varchar(128)"],
             new object?[,]
             {
-                { 1, "1", "{\"a\":1,\"b\":2}", "[1,2]", "[1,1]", "null", null, "{\"a\":1,\"b\":2}" },
+                {
+                    1,
+                    "1",
+                    "{\"a\":1,\"b\":2}",
+                    "[1,2]",
+                    "[1,1]",
+                    "null",
+                    null,
+                    "{\"a\":1,\"b\":2}",
+                },
             });
 
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -319,7 +359,8 @@ public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSaf
 
             Assert.Equal(
                 SafeMigrationObservedState.Different,
-                Assert.Single(different.Assessments).ObservedState);
+                Assert.Single(different.Assessments)
+                    .ObservedState);
 
             await ExecuteSqlAsync(
                 connectionString,
@@ -327,7 +368,9 @@ public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSaf
                 cancellationToken: CancellationToken.None);
         }
 
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(matching.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(matching.Assessments)
+                .ObservedState);
     }
 
     private static object?[,] RemoveKeyColumn(
@@ -377,15 +420,16 @@ public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSaf
     ) => ExecuteSqlAsync(
         connectionString,
         $$"""
-        UPDATE `json_model_rows`
-        SET `json_text` = '{ "verified": true, "source": "HasData" }',
-            `json_element` = '{ "value": 1, "kind": "element" }',
-            `json_document` = '{ "value": 1, "kind": "document" }',
-            `json_node` = '{ "value": 1, "kind": "node" }',
-            `json_object` = '{ "value": 1, "kind": "object" }',
-            `json_array` = '[ "array", 5, true ]'
-        WHERE `id` = {{GuidLiteral(guidFormat, identifier.ToString())}};
-        """, cancellationToken: cancellationToken);
+          UPDATE `json_model_rows`
+          SET `json_text` = '{ "verified": true, "source": "HasData" }',
+              `json_element` = '{ "value": 1, "kind": "element" }',
+              `json_document` = '{ "value": 1, "kind": "document" }',
+              `json_node` = '{ "value": 1, "kind": "node" }',
+              `json_object` = '{ "value": 1, "kind": "object" }',
+              `json_array` = '[ "array", 5, true ]'
+          WHERE `id` = {{GuidLiteral(guidFormat, identifier.ToString())}};
+          """,
+        cancellationToken: cancellationToken);
 
     /// <summary>Applies the equivalent updated JSON representation with explicit cancellation.</summary>
     /// <param name="connectionString">The connection string for this operation.</param>
@@ -400,13 +444,14 @@ public sealed partial class MySqlModelManagedDataJsonIntegrationTests : MySqlSaf
     ) => ExecuteSqlAsync(
         connectionString,
         $$"""
-        UPDATE `json_model_rows`
-        SET `json_text` = '{ "verified": false, "source": "HasData" }',
-            `json_element` = '{ "value": 2, "kind": "element" }',
-            `json_document` = '{ "value": 2, "kind": "document" }',
-            `json_node` = '{ "value": 2, "kind": "node" }',
-            `json_object` = '{ "value": 2, "kind": "object" }',
-            `json_array` = '[ "array", 6, false ]'
-        WHERE `id` = {{GuidLiteral(guidFormat, identifier.ToString())}};
-        """, cancellationToken: cancellationToken);
+          UPDATE `json_model_rows`
+          SET `json_text` = '{ "verified": false, "source": "HasData" }',
+              `json_element` = '{ "value": 2, "kind": "element" }',
+              `json_document` = '{ "value": 2, "kind": "document" }',
+              `json_node` = '{ "value": 2, "kind": "node" }',
+              `json_object` = '{ "value": 2, "kind": "object" }',
+              `json_array` = '[ "array", 6, false ]'
+          WHERE `id` = {{GuidLiteral(guidFormat, identifier.ToString())}};
+          """,
+        cancellationToken: cancellationToken);
 }

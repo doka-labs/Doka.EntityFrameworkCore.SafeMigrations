@@ -16,11 +16,14 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         string table,
         string? schema
     )
-        => Bit("NOT EXISTS (SELECT 1 FROM sys.tables physical "
+        => Bit(
+            "NOT EXISTS (SELECT 1 FROM sys.tables physical "
             + $"WHERE physical.object_id = {TableId(table, schema)} "
             + $"AND ({UnsupportedPhysicalTablePredicate}))");
 
-    private string? BuildPhysicalTableSupportExpression(SafeMigrationIntent intent)
+    private string? BuildPhysicalTableSupportExpression(
+        SafeMigrationIntent intent
+    )
     {
         // WHY: Most operations touch one table. Reusing its scalar proof
         // avoids a temporary identity array, set, list, and nested CASE copies
@@ -43,7 +46,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             DropUniqueConstraintIntent value => (value.Table, value.Schema),
             EnsureCheckConstraintIntent value => (value.Definition.Table, value.Definition.Schema),
             DropCheckConstraintIntent value => (value.Table, value.Schema),
-            DeleteModelManagedDataIntent { ForeignKeys.Count: > 0 } => ((string, string?)?)null,
+            DeleteModelManagedDataIntent { ForeignKeys.Count: > 0 } => null,
             ModelManagedDataIntent value => (value.Table, value.Schema),
             _ => ((string, string?)?)null,
         };
@@ -102,19 +105,25 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             _ => [],
         };
 
-        var predicates = identities.Distinct().Select(identity =>
-            $"({BuildPhysicalTableSupportExpression(identity.Table, identity.Schema)}) = 1").ToList();
+        var predicates = identities
+            .Distinct()
+            .Select(identity =>
+                $"({BuildPhysicalTableSupportExpression(identity.Table, identity.Schema)}) = 1")
+            .ToList();
 
         if (intent is DropForeignKeyIntent dropForeignKey)
         {
             // WHY: Drop captures only the dependent identity. The current
             // catalog still supplies its principal's engine contract.
-            predicates.Add("NOT EXISTS (SELECT 1 FROM sys.foreign_keys fk "
+            predicates.Add(
+                "NOT EXISTS (SELECT 1 FROM sys.foreign_keys fk "
                 + "JOIN sys.tables physical ON physical.object_id = fk.referenced_object_id "
                 + $"WHERE fk.parent_object_id = {TableId(dropForeignKey.Table, dropForeignKey.Schema)} "
                 + $"AND fk.name = {Literal(dropForeignKey.Name)} AND ({UnsupportedPhysicalTablePredicate}))");
         }
 
-        return predicates.Count == 0 ? null : Bit(string.Join(" AND ", predicates));
+        return predicates.Count == 0
+            ? null
+            : Bit(string.Join(" AND ", predicates));
     }
 }

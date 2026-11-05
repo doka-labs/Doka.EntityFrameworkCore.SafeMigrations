@@ -5,15 +5,18 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 /// </summary>
 internal sealed class PostgreSqlSafeMigrationRuntimeDiagnostic
 {
-    private readonly SafeMigrationOperation _operation;
     private readonly SafeMigrationOperationIdentity _identity;
+    private readonly SafeMigrationOperation _operation;
     private readonly int? _ordinal;
     private readonly StringBuilder _scratch = new(256);
 
     /// <summary>Captures only immutable authored identifiers, never row values or SQL payloads.</summary>
     /// <param name="operation">The exact authored operation guarded by this SQL batch.</param>
     /// <param name="ordinal">The known stream ordinal, or null when unavailable.</param>
-    internal PostgreSqlSafeMigrationRuntimeDiagnostic(SafeMigrationOperation operation, int? ordinal)
+    internal PostgreSqlSafeMigrationRuntimeDiagnostic(
+        SafeMigrationOperation operation,
+        int? ordinal
+    )
     {
         _operation = operation;
         _identity = SafeMigrationOperationIdentity.Create(operation.Intent);
@@ -34,19 +37,31 @@ internal sealed class PostgreSqlSafeMigrationRuntimeDiagnostic
     /// <exception cref="ArgumentOutOfRangeException">
     /// The budget cannot accommodate an explicit truncation marker.
     /// </exception>
-    internal void AppendMessage(StringBuilder destination, string guardCode, string? reasonCode = null,
-        int maximumLength = 2048)
+    internal void AppendMessage(
+        StringBuilder destination,
+        string guardCode,
+        string? reasonCode = null,
+        int maximumLength = 2048
+    )
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(maximumLength, 3);
         _scratch.Clear();
-        SafeMigrationDiagnosticMessages.AppendRuntime(_scratch, _operation, _identity, guardCode, _ordinal,
+        SafeMigrationDiagnosticMessages.AppendRuntime(
+            _scratch,
+            _operation,
+            _identity,
+            guardCode,
+            _ordinal,
             reasonCode);
 
         // WHY: Escape-string syntax is independent of standard_conforming_strings.
         // Both diagnostic escape sequences and authored apostrophes remain data.
         destination.Append("E'");
         var truncate = _scratch.Length > maximumLength;
-        var prefixLength = truncate ? maximumLength - 3 : _scratch.Length;
+        var prefixLength = truncate
+            ? maximumLength - 3
+            : _scratch.Length;
+
         var remaining = SafeMigrationDiagnosticMessages.GetDisplayPrefixLength(_scratch, 0, prefixLength);
 
         // WHY: A reserved native suffix must not turn a complete Core display
@@ -69,7 +84,6 @@ internal sealed class PostgreSqlSafeMigrationRuntimeDiagnostic
             {
                 break;
             }
-
         }
 
         if (truncate)

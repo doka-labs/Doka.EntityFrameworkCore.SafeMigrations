@@ -1,3 +1,5 @@
+using System.Data;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
@@ -19,7 +21,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         }
 
         var connection = context.Database.GetDbConnection();
-        var openedHere = connection.State != System.Data.ConnectionState.Open;
+        var openedHere = connection.State != ConnectionState.Open;
         if (openedHere)
         {
             await connection.OpenAsync(cancellationToken);
@@ -29,7 +31,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         {
             var transaction = context.Database.CurrentTransaction?.GetDbTransaction();
             var currentSession = HasCurrentAnalysisSession(context, connection, transaction);
-            var preamble = currentSession ? _catalogPreamble : null;
+            var preamble = currentSession
+                ? _catalogPreamble
+                : null;
 
             // WHY: EXECUTE AS, permission changes and database collation changes can occur
             // without replacing the connection or transaction. Recheck this cheap stamp before
@@ -126,7 +130,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     )
     {
         var findings = new List<SafeMigrationUnexpectedObject>();
-        var temporaryTable = "#doka_sm_inventory_" + Guid.NewGuid().ToString("N");
+        var temporaryTable = "#doka_sm_inventory_"
+            + Guid
+                .NewGuid()
+                .ToString("N");
+
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         ApplyCommandTimeout(command, commandTimeout);
@@ -154,13 +162,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             // names. The inventory must not turn a proven spelling alias into
             // an unexpected object through ordinal client-side comparisons.
             foreach (var rows in InventoryRows(expected)
-                         .Chunk(SafeMigrationCatalogQueryLimits.MaximumInventoryValues))
+                .Chunk(SafeMigrationCatalogQueryLimits.MaximumInventoryValues))
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
                 command.Parameters.Clear();
                 var values = new string[rows.Length];
                 var valueBytes = 0;
+
                 // WHY: Use the same row ordinal for parameter names and their VALUES entry.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery
@@ -184,6 +193,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                         + ", "
                         + nameParameter
                         + ")";
+
                     valueBytes += Encoding.UTF8.GetByteCount(row.Schema)
                         + Encoding.UTF8.GetByteCount(row.Table)
                         + Encoding.UTF8.GetByteCount(row.Name);
@@ -244,13 +254,18 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 commandTimeout,
                 (statement, slot) =>
                 {
-                    statement.CommandText = slot == 0 ? tableInventorySql : childInventorySql;
+                    statement.CommandText = slot == 0
+                        ? tableInventorySql
+                        : childInventorySql;
 
                     return new SafeMigrationCatalogProbeStatement(1, 0, slot);
                 },
                 async (reader, slot, _, token) =>
                 {
-                    if (reader.FieldCount != (slot == 0 ? 3 : 5))
+                    if (reader.FieldCount
+                        != (slot == 0
+                            ? 3
+                            : 5))
                     {
                         throw new InvalidOperationException("SQL Server returned an unowned inventory result set.");
                     }
@@ -347,7 +362,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     {
         var parameter = command.CreateParameter();
         parameter.ParameterName = name;
-        parameter.DbType = System.Data.DbType.String;
+        parameter.DbType = DbType.String;
         parameter.Size = 128;
         parameter.Value = value;
         command.Parameters.Add(parameter);

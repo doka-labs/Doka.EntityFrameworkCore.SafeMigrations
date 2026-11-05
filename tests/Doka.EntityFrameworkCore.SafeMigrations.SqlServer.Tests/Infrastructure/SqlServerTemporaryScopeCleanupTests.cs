@@ -8,6 +8,7 @@ public sealed class SqlServerTemporaryScopeCleanupTests
     private const string ConnectionString =
         "Server=127.0.0.1,1433;Database=cleanup;"
         + "User ID=sa;Password=unused;TrustServerCertificate=True";
+
     private const string RecoveryStatusKey = "Doka.SafeMigrations.SqlServer.RecoveryStatus";
     private const string TemporarySuffix = "00000000000000000000000000000001";
 
@@ -78,8 +79,12 @@ public sealed class SqlServerTemporaryScopeCleanupTests
         await using var connection = new CleanupConnection
         {
             CleanupFailure = new InvalidOperationException("Injected cleanup SQL failure."),
-            CloseFailuresRemaining = closeFails ? 1 : 0,
-            DisposeFailuresRemaining = disposeFails ? 1 : 0,
+            CloseFailuresRemaining = closeFails
+                ? 1
+                : 0,
+            DisposeFailuresRemaining = disposeFails
+                ? 1
+                : 0,
         };
 
         await using var transaction = new CleanupTransaction(connection);
@@ -96,8 +101,12 @@ public sealed class SqlServerTemporaryScopeCleanupTests
             }
             finally
             {
-                await analyzer.CleanupTemporaryScopeAsync(connection, transaction,
-                    "#doka_sm_inventory_" + TemporarySuffix, null, original);
+                await analyzer.CleanupTemporaryScopeAsync(
+                    connection,
+                    transaction,
+                    "#doka_sm_inventory_" + TemporarySuffix,
+                    null,
+                    original);
             }
         });
 
@@ -107,11 +116,19 @@ public sealed class SqlServerTemporaryScopeCleanupTests
         Assert.Same(original, observed);
         Assert.Equal(expectedRecoveryStatus, original.Data[RecoveryStatusKey]);
         Assert.Equal(1, connection.CloseCount);
-        Assert.Equal(closeFails ? 1 : 0, connection.DisposeCount);
+        Assert.Equal(
+            closeFails
+                ? 1
+                : 0,
+            connection.DisposeCount);
+
         Assert.Equal(0, transaction.RollbackCount);
         Assert.Equal(0, transaction.CommitCount);
         Assert.Equal(0, transaction.DisposeCount);
-        Assert.Contains("requires a new context", Assert.IsType<InvalidOperationException>(quarantineFailure).Message,
+        Assert.Contains(
+            "requires a new context",
+            Assert.IsType<InvalidOperationException>(quarantineFailure)
+                .Message,
             StringComparison.Ordinal);
     }
 
@@ -135,24 +152,39 @@ public sealed class SqlServerTemporaryScopeCleanupTests
         await using var connection = new CleanupConnection
         {
             CleanupFailure = cleanupFailure,
-            CloseFailuresRemaining = closeFails ? 1 : 0,
-            DisposeFailuresRemaining = disposeFails ? 1 : 0,
+            CloseFailuresRemaining = closeFails
+                ? 1
+                : 0,
+            DisposeFailuresRemaining = disposeFails
+                ? 1
+                : 0,
         };
 
         // Act
         var observed = await Record.ExceptionAsync(() => analyzer.CleanupTemporaryScopeAsync(
-            connection, null, "#doka_sm_identifiers_" + TemporarySuffix, null, null));
+            connection,
+            null,
+            "#doka_sm_identifiers_" + TemporarySuffix,
+            null,
+            null));
 
         // Assert
         var failure = Assert.IsType<InvalidOperationException>(observed);
         Assert.Same(cleanupFailure, failure.InnerException);
         Assert.Equal(expectedRecoveryStatus, failure.Data[RecoveryStatusKey]);
-        Assert.Contains("temporary-scope cleanup failed; recreate the context",
-            failure.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "temporary-scope cleanup failed; recreate the context",
+            failure.Message,
+            StringComparison.Ordinal);
+
         Assert.DoesNotContain("Sensitive SQL", failure.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(TemporarySuffix, failure.Message, StringComparison.Ordinal);
         Assert.Equal(1, connection.CloseCount);
-        Assert.Equal(closeFails ? 1 : 0, connection.DisposeCount);
+        Assert.Equal(
+            closeFails
+                ? 1
+                : 0,
+            connection.DisposeCount);
     }
 
     /// <summary>
@@ -164,7 +196,9 @@ public sealed class SqlServerTemporaryScopeCleanupTests
     [InlineData("#doka_sm_identifiers")]
     [InlineData("#doka_sm_inventory_not_a_guid")]
     [InlineData("#doka_sm_identifiers_00000000000000000000000000000001;DROP TABLE dbo.items")]
-    public async Task Cleanup_NonOwnedNameIsRejectedBeforeCommand(string temporaryTable)
+    public async Task Cleanup_NonOwnedNameIsRejectedBeforeCommand(
+        string temporaryTable
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
@@ -178,7 +212,10 @@ public sealed class SqlServerTemporaryScopeCleanupTests
         var validationFailure = Record.Exception(() => analyzer.ValidateContext(context));
 
         // Assert
-        Assert.Equal("temporaryTable", Assert.IsType<ArgumentException>(observed).ParamName);
+        Assert.Equal("temporaryTable",
+            Assert.IsType<ArgumentException>(observed)
+                .ParamName);
+
         Assert.Empty(connection.Executions);
         Assert.Equal(0, connection.CommandCount);
         Assert.Equal(0, connection.CloseCount);
@@ -205,26 +242,43 @@ public sealed class SqlServerTemporaryScopeCleanupTests
         var original = new OperationCanceledException("Injected cancellation.");
 
         // Act
-        await analyzer.CleanupTemporaryScopeAsync(connection, null,
-            "#doka_sm_inventory_" + TemporarySuffix, null, original);
+        await analyzer.CleanupTemporaryScopeAsync(
+            connection,
+            null,
+            "#doka_sm_inventory_" + TemporarySuffix,
+            null,
+            original);
+
         var failures = new[]
         {
             Record.Exception(() => analyzer.ValidateContext(context)),
-            await Record.ExceptionAsync(() => analyzer.GetEnvironmentAsync(context,
+            await Record.ExceptionAsync(() => analyzer.GetEnvironmentAsync(
+                context,
                 cancellationToken: CancellationToken.None)),
-            await Record.ExceptionAsync(() => analyzer.AnalyzeAsync(context, [],
+            await Record.ExceptionAsync(() => analyzer.AnalyzeAsync(
+                context,
+                [],
                 cancellationToken: CancellationToken.None)),
-            await Record.ExceptionAsync(() => analyzer.FindUnexpectedObjectsAsync(context, [],
+            await Record.ExceptionAsync(() => analyzer.FindUnexpectedObjectsAsync(
+                context,
+                [],
                 cancellationToken: CancellationToken.None)),
-            await Record.ExceptionAsync(() => analyzer.AcquireAnalysisScopeAsync(context,
+            await Record.ExceptionAsync(() => analyzer.AcquireAnalysisScopeAsync(
+                context,
                 cancellationToken: CancellationToken.None)),
         };
 
         var replacementFailure = Record.Exception(() => replacement.ValidateContext(replacementContext));
 
         // Assert
-        Assert.All(failures, failure => Assert.Contains("requires a new context",
-            Assert.IsType<InvalidOperationException>(failure).Message, StringComparison.Ordinal));
+        Assert.All(
+            failures,
+            failure => Assert.Contains(
+                "requires a new context",
+                Assert.IsType<InvalidOperationException>(failure)
+                    .Message,
+                StringComparison.Ordinal));
+
         Assert.Single(connection.Executions);
         Assert.Equal(1, connection.CloseCount);
         Assert.Null(replacementFailure);
@@ -236,7 +290,9 @@ public sealed class SqlServerTemporaryScopeCleanupTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task AnalyzeAndScopeDisposal_QuarantineDoesNotMaskOriginalFailure(bool callerOwnsTransaction)
+    public async Task AnalyzeAndScopeDisposal_QuarantineDoesNotMaskOriginalFailure(
+        bool callerOwnsTransaction
+    )
     {
         // Arrange
         using var callerCancellation = new CancellationTokenSource();
@@ -251,7 +307,9 @@ public sealed class SqlServerTemporaryScopeCleanupTests
 
         await using var transaction = new CleanupTransaction(connection)
         {
-            DisposeFailuresRemaining = callerOwnsTransaction ? 0 : 1,
+            DisposeFailuresRemaining = callerOwnsTransaction
+                ? 0
+                : 1,
         };
 
         connection.Transaction = transaction;
@@ -265,19 +323,29 @@ public sealed class SqlServerTemporaryScopeCleanupTests
 
         var analyzer = CreateAnalyzer(context);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureColumn("cleanup_items", new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
+        builder.EnsureColumn(
+            "cleanup_items",
+            new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
             SafeMigrationPolicy.ThrowIfDifferent);
-        builder.EnsureColumn("cleanup_items",
+
+        builder.EnsureColumn(
+            "cleanup_items",
             new ExpectedColumnDefinition("Caption", typeof(string), true, "nvarchar(80)"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var observed = await Record.ExceptionAsync(async () =>
         {
-            await using var scope = await analyzer.AcquireAnalysisScopeAsync(context,
+            await using var scope = await analyzer.AcquireAnalysisScopeAsync(
+                context,
                 cancellationToken: callerCancellation.Token);
 
-            await analyzer.AnalyzeAsync(context, builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
+            await analyzer.AnalyzeAsync(
+                context,
+                builder
+                    .Operations
+                    .Cast<SafeMigrationOperation>()
+                    .ToArray(),
                 callerCancellation.Token);
         });
 
@@ -287,33 +355,43 @@ public sealed class SqlServerTemporaryScopeCleanupTests
         Assert.Equal("connection_disposed", original.Data[RecoveryStatusKey]);
         Assert.Equal(1, connection.CloseCount);
         Assert.Equal(1, connection.DisposeCount);
-        Assert.Equal(callerOwnsTransaction ? 0 : 1, transaction.DisposeCount);
+        Assert.Equal(
+            callerOwnsTransaction
+                ? 0
+                : 1,
+            transaction.DisposeCount);
+
         Assert.Equal(0, transaction.RollbackCount);
-        Assert.DoesNotContain(connection.Executions,
+        Assert.DoesNotContain(
+            connection.Executions,
             static command => command.Sql.Contains("sp_releaseapplock", StringComparison.Ordinal));
-        var cleanup = Assert.Single(connection.Executions,
+
+        var cleanup = Assert.Single(
+            connection.Executions,
             static command => command.Sql.Contains("DROP TABLE", StringComparison.Ordinal));
 
         Assert.False(cleanup.CancellationWasRequested);
         Assert.NotEqual(callerCancellation.Token, cleanup.CancellationToken);
     }
 
-    private static SqlServerSafeMigrationProviderAnalyzer CreateAnalyzer(DbContext context)
+    private static SqlServerSafeMigrationProviderAnalyzer CreateAnalyzer(
+        DbContext context
+    )
         => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     private sealed record CommandExecution(
         string Sql,
         int Timeout,
-        System.Data.Common.DbTransaction? Transaction,
+        DbTransaction? Transaction,
         bool CancellationWasRequested,
         CancellationToken CancellationToken
     );
 
-    private sealed class CleanupConnection : System.Data.Common.DbConnection
+    private sealed class CleanupConnection : DbConnection
     {
         private ConnectionState _state = ConnectionState.Closed;
 
-        [System.Diagnostics.CodeAnalysis.AllowNull]
+        [AllowNull]
         public override string ConnectionString { get; set; } = SqlServerTemporaryScopeCleanupTests.ConnectionString;
 
         public override string Database => "cleanup";
@@ -331,11 +409,15 @@ public sealed class SqlServerTemporaryScopeCleanupTests
         public int CloseCount { get; private set; }
         public int DisposeCount { get; private set; }
 
-        public override void ChangeDatabase(string databaseName) => throw new NotSupportedException();
+        public override void ChangeDatabase(
+            string databaseName
+        ) => throw new NotSupportedException();
 
         public override void Open() => _state = ConnectionState.Open;
 
-        public override Task OpenAsync(CancellationToken cancellationToken)
+        public override Task OpenAsync(
+            CancellationToken cancellationToken
+        )
         {
             cancellationToken.ThrowIfCancellationRequested();
             Open();
@@ -382,10 +464,12 @@ public sealed class SqlServerTemporaryScopeCleanupTests
             _state = ConnectionState.Closed;
         }
 
-        protected override System.Data.Common.DbTransaction BeginDbTransaction(IsolationLevel isolationLevel)
+        protected override DbTransaction BeginDbTransaction(
+            IsolationLevel isolationLevel
+        )
             => Transaction ?? throw new InvalidOperationException("The test did not provide a transaction.");
 
-        protected override System.Data.Common.DbCommand CreateDbCommand()
+        protected override DbCommand CreateDbCommand()
         {
             CommandCount++;
 
@@ -396,40 +480,51 @@ public sealed class SqlServerTemporaryScopeCleanupTests
             CleanupCommand command,
             CancellationToken cancellationToken
         )
-            => Executions.Add(new CommandExecution(command.CommandText, command.CommandTimeout,
-                command.Transaction, cancellationToken.IsCancellationRequested, cancellationToken));
+            => Executions.Add(
+                new CommandExecution(
+                    command.CommandText,
+                    command.CommandTimeout,
+                    command.Transaction,
+                    cancellationToken.IsCancellationRequested,
+                    cancellationToken));
     }
 
-    private sealed class CleanupCommand : System.Data.Common.DbCommand
+    private sealed class CleanupCommand : DbCommand
     {
         private readonly CleanupConnection _connection;
         private readonly SqlCommand _parameterHost = new();
         private DataTable? _environment;
 
-        public CleanupCommand(CleanupConnection connection)
+        public CleanupCommand(
+            CleanupConnection connection
+        )
         {
             _connection = connection;
             DbConnection = connection;
         }
 
-        [System.Diagnostics.CodeAnalysis.AllowNull]
+        [AllowNull]
         public override string CommandText { get; set; } = string.Empty;
 
         public override int CommandTimeout { get; set; }
         public override CommandType CommandType { get; set; }
         public override bool DesignTimeVisible { get; set; }
         public override UpdateRowSource UpdatedRowSource { get; set; }
-        protected override System.Data.Common.DbConnection? DbConnection { get; set; }
-        protected override System.Data.Common.DbTransaction? DbTransaction { get; set; }
-        protected override System.Data.Common.DbParameterCollection DbParameterCollection => _parameterHost.Parameters;
+        protected override DbConnection? DbConnection { get; set; }
+        protected override DbTransaction? DbTransaction { get; set; }
+        protected override DbParameterCollection DbParameterCollection => _parameterHost.Parameters;
 
         public override void Cancel() => throw new NotSupportedException();
         public override void Prepare() => throw new NotSupportedException();
-        protected override System.Data.Common.DbParameter CreateDbParameter() => new SqlParameter();
+        protected override DbParameter CreateDbParameter() => new SqlParameter();
 
-        public override int ExecuteNonQuery() => ExecuteNonQueryAsync(CancellationToken.None).GetAwaiter().GetResult();
+        public override int ExecuteNonQuery() => ExecuteNonQueryAsync(CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
 
-        public override Task<int> ExecuteNonQueryAsync(CancellationToken cancellationToken)
+        public override Task<int> ExecuteNonQueryAsync(
+            CancellationToken cancellationToken
+        )
         {
             _connection.Record(this, cancellationToken);
             if (CommandText.Contains("DROP TABLE", StringComparison.Ordinal)
@@ -449,18 +544,25 @@ public sealed class SqlServerTemporaryScopeCleanupTests
             return Task.FromResult(0);
         }
 
-        public override object? ExecuteScalar() => ExecuteScalarAsync(CancellationToken.None).GetAwaiter().GetResult();
+        public override object? ExecuteScalar() => ExecuteScalarAsync(CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
 
-        public override Task<object?> ExecuteScalarAsync(CancellationToken cancellationToken)
+        public override Task<object?> ExecuteScalarAsync(
+            CancellationToken cancellationToken
+        )
         {
             _connection.Record(this, cancellationToken);
 
-            return Task.FromResult<object?>(CommandText.StartsWith("SELECT OBJECT_ID", StringComparison.Ordinal)
-                ? DBNull.Value
-                : 1);
+            return Task.FromResult<object?>(
+                CommandText.StartsWith("SELECT OBJECT_ID", StringComparison.Ordinal)
+                    ? DBNull.Value
+                    : 1);
         }
 
-        protected override System.Data.Common.DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
+        protected override DbDataReader ExecuteDbDataReader(
+            CommandBehavior behavior
+        )
         {
             _connection.Record(this, CancellationToken.None);
             if (!CommandText.StartsWith("SELECT SCHEMA_NAME()", StringComparison.Ordinal))
@@ -478,12 +580,21 @@ public sealed class SqlServerTemporaryScopeCleanupTests
             _environment.Columns.Add("ddl_row_effects_unproven", typeof(int));
             _environment.Columns.Add("expression_dependencies_readable", typeof(int));
             _environment.Columns.Add("enabled_dml_triggers", typeof(int));
-            _environment.Rows.Add("dbo", "Latin1_General_100_CI_AS", 1, 1, 1, "0x01", 0, 1, 0);
+            _environment.Rows.Add(
+                "dbo",
+                "Latin1_General_100_CI_AS",
+                1,
+                1,
+                1,
+                "0x01",
+                0,
+                1,
+                0);
 
             return _environment.CreateDataReader();
         }
 
-        protected override Task<System.Data.Common.DbDataReader> ExecuteDbDataReaderAsync(
+        protected override Task<DbDataReader> ExecuteDbDataReaderAsync(
             CommandBehavior behavior,
             CancellationToken cancellationToken
         )
@@ -493,7 +604,9 @@ public sealed class SqlServerTemporaryScopeCleanupTests
             return Task.FromResult(ExecuteDbDataReader(behavior));
         }
 
-        protected override void Dispose(bool disposing)
+        protected override void Dispose(
+            bool disposing
+        )
         {
             if (disposing)
             {
@@ -505,14 +618,19 @@ public sealed class SqlServerTemporaryScopeCleanupTests
         }
     }
 
-    private sealed class CleanupTransaction : System.Data.Common.DbTransaction
+    private sealed class CleanupTransaction : DbTransaction
     {
         private readonly CleanupConnection _connection;
 
-        public CleanupTransaction(CleanupConnection connection) => _connection = connection;
+        public CleanupTransaction(
+            CleanupConnection connection
+        )
+        {
+            _connection = connection;
+        }
 
         public override IsolationLevel IsolationLevel => IsolationLevel.ReadCommitted;
-        protected override System.Data.Common.DbConnection DbConnection => _connection;
+        protected override DbConnection DbConnection => _connection;
         public int CommitCount { get; private set; }
         public int RollbackCount { get; private set; }
         public int DisposeCount { get; private set; }

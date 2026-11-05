@@ -12,7 +12,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         MySqlMigrationOperationContext context
     )
     {
-        if (runtimePlan.RequiredColumnAddPlan is not { } protocol || runtimePlan.IsStaticallyUnsupported)
+        if (runtimePlan.RequiredColumnAddPlan is not { } protocol
+            || runtimePlan.IsStaticallyUnsupported)
         {
             return null;
         }
@@ -23,7 +24,11 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         }
 
         var nullableAdd = (AddColumnOperation)SafeMigrationStandardOperationFactory.Create(
-            intent, _expressionRenderer.Render, static collation => collation.Schema is null ? collation.Name : null);
+            intent,
+            _expressionRenderer.Render,
+            static collation => collation.Schema is null
+                ? collation.Name
+                : null);
 
         // WHY: Keep provider metadata, including its backfill marker, intact.
         // Nullable native ADD passes validation without inventing replacement
@@ -31,15 +36,27 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         nullableAdd.IsNullable = true;
         var apply = GetBaselineBatch(RenderNativeOperation(context, nullableAdd, intent));
         var requiredModify = SafeMigrationStandardOperationFactory.CreateFullDefinitionRepair(
-            intent, _expressionRenderer.Render, static collation => collation.Schema is null ? collation.Name : null,
+            intent,
+            _expressionRenderer.Render,
+            static collation => collation.Schema is null
+                ? collation.Name
+                : null,
             MySqlSafeMigrationColumnMetadata.CanSafelyConverge);
 
         var finish = GetBaselineBatch(RenderNativeOperation(context, requiredModify, intent));
-        if (apply.Commands.Count != 1 || finish.Commands.Count != 1
+        if (apply.Commands.Count != 1
+            || finish.Commands.Count != 1
             || apply.TransactionSuppressed != finish.TransactionSuppressed
-            || !apply.Commands[0].SetupCommands.SequenceEqual(finish.Commands[0].SetupCommands, StringComparer.Ordinal)
-            || !apply.Commands[0].CleanupCommands.SequenceEqual(finish.Commands[0].CleanupCommands,
-                StringComparer.Ordinal))
+            || !apply
+                .Commands[0]
+                .SetupCommands
+                .SequenceEqual(finish.Commands[0].SetupCommands, StringComparer.Ordinal)
+            || !apply
+                .Commands[0]
+                .CleanupCommands
+                .SequenceEqual(
+                    finish.Commands[0].CleanupCommands,
+                    StringComparer.Ordinal))
         {
             throw new InvalidOperationException("Atomic required-column stages require one equivalent native scope.");
         }
@@ -53,15 +70,27 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
             throw new InvalidOperationException("A backslash-escape certificate cannot cross a native setup scope.");
         }
 
-        var addBody = ValidateRequiredColumnAddNativeBody(apply.Commands[0].BodyCommand, intent,
-            isModify: false, backslashEscapes: protocol.BackslashEscapes);
+        var addBody = ValidateRequiredColumnAddNativeBody(
+            apply.Commands[0].BodyCommand,
+            intent,
+            isModify: false,
+            backslashEscapes: protocol.BackslashEscapes);
 
-        var modifyBody = ValidateRequiredColumnAddNativeBody(finish.Commands[0].BodyCommand, intent,
-            isModify: true, backslashEscapes: protocol.BackslashEscapes);
+        var modifyBody = ValidateRequiredColumnAddNativeBody(
+            finish.Commands[0].BodyCommand,
+            intent,
+            isModify: true,
+            backslashEscapes: protocol.BackslashEscapes);
+
         var guard = _sqlGenerationHelper.DelimitIdentifier(protocol.GuardName);
         var column = _sqlGenerationHelper.DelimitIdentifier(intent.Definition.Name);
         var stageOne = addBody + ", ADD CONSTRAINT " + guard + " CHECK (" + column + " IS NOT NULL)";
-        var stageTwo = modifyBody + (protocol.IsMariaDb ? ", DROP CONSTRAINT " : ", DROP CHECK ") + guard;
+        var stageTwo = modifyBody
+            + (protocol.IsMariaDb
+                ? ", DROP CONSTRAINT "
+                : ", DROP CHECK ")
+            + guard;
+
         var repairBody = operation.Policy == SafeMigrationPolicy.RepairIfSafe
             && runtimePlan.RepairCapability == SafeMigrationRepairCapability.Safe
                 ? modifyBody
@@ -107,25 +136,29 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         // WHY: This path previously materialized two hex assignments and the
         // postcondition, copied them into a growing builder, then copied the
         // complete body. Retained parts write the same bytes once at final size.
-        return MySqlSafeMigrationSetupFragment.Compose(
-            "SET @doka_sm_sql = CASE WHEN @doka_sm_action = 'apply' "
-            + "AND NOT @doka_sm_required_add_resume THEN CONVERT(0x",
-            MySqlSafeMigrationSetupFragment.Part.Hex(baseline.StageOneBody),
-            PreparedSqlAssignmentSuffix,
-            Environment.NewLine,
-            EvaluatePreparedStatementSql,
-            Environment.NewLine,
-            PreparedApplySqlPrefix,
-            MySqlSafeMigrationSetupFragment.Part.Hex(baseline.StageTwoBody),
-            baseline.RepairBody is null ? string.Empty : PreparedRepairSqlPrefix,
-            MySqlSafeMigrationSetupFragment.Part.Hex(baseline.RepairBody ?? string.Empty),
-            PreparedSqlAssignmentSuffix,
-            Environment.NewLine,
-            EvaluatePreparedStatementSql,
-            Environment.NewLine,
-            PostconditionBodyPrefix,
-            runtimePlan.RenderPreparedExecutionPostcondition(renderedParameterValues),
-            postconditionSuffix).ToSql();
+        return MySqlSafeMigrationSetupFragment
+            .Compose(
+                "SET @doka_sm_sql = CASE WHEN @doka_sm_action = 'apply' "
+                + "AND NOT @doka_sm_required_add_resume THEN CONVERT(0x",
+                MySqlSafeMigrationSetupFragment.Part.Hex(baseline.StageOneBody),
+                PreparedSqlAssignmentSuffix,
+                Environment.NewLine,
+                EvaluatePreparedStatementSql,
+                Environment.NewLine,
+                PreparedApplySqlPrefix,
+                MySqlSafeMigrationSetupFragment.Part.Hex(baseline.StageTwoBody),
+                baseline.RepairBody is null
+                    ? string.Empty
+                    : PreparedRepairSqlPrefix,
+                MySqlSafeMigrationSetupFragment.Part.Hex(baseline.RepairBody ?? string.Empty),
+                PreparedSqlAssignmentSuffix,
+                Environment.NewLine,
+                EvaluatePreparedStatementSql,
+                Environment.NewLine,
+                PostconditionBodyPrefix,
+                runtimePlan.RenderPreparedExecutionPostcondition(renderedParameterValues),
+                postconditionSuffix)
+            .ToSql();
     }
 
     /// <summary>Admits only a native single-column ALTER before appending one owned atomic CHECK clause.</summary>
@@ -142,7 +175,12 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
     {
         var table = _sqlGenerationHelper.DelimitIdentifier(intent.Table, intent.Schema);
         var column = _sqlGenerationHelper.DelimitIdentifier(intent.Definition.Name);
-        var prefix = "ALTER TABLE " + table + (isModify ? " MODIFY COLUMN " : " ADD ");
+        var prefix = "ALTER TABLE "
+            + table
+            + (isModify
+                ? " MODIFY COLUMN "
+                : " ADD ");
+
         if (!body.StartsWith(prefix + column + " ", StringComparison.Ordinal)
             && (isModify || !body.StartsWith(prefix + "COLUMN " + column + " ", StringComparison.Ordinal)))
         {
@@ -154,6 +192,7 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         // never replace text or split literals to attach the owned clause.
         var quote = '\0';
         var depth = 0;
+
         // WHY: Advance exact UTF-16 offsets across quoted tokens so escapes cannot expose a false SQL boundary.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -162,7 +201,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
             var token = body[index];
             if (quote != '\0')
             {
-                if (backslashEscapes && quote != '`' && token == '\\')
+                if (backslashEscapes
+                    && quote != '`'
+                    && token == '\\')
                 {
                     // WHY: Only a mode-qualified string consumes its next
                     // character; native backtick identifiers still use the
@@ -174,7 +215,8 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
 
                 if (token == quote)
                 {
-                    if (index + 1 < body.Length && body[index + 1] == quote)
+                    if (index + 1 < body.Length
+                        && body[index + 1] == quote)
                     {
                         index++;
                     }
@@ -203,15 +245,20 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
                 depth--;
             }
 
-            if (depth < 0 || token == ';' || token == ',' && depth == 0 || token == '#'
-                || index + 1 < body.Length && (token == '-' && body[index + 1] == '-'
-                    || token == '/' && body[index + 1] == '*'))
+            if (depth < 0
+                || token == ';'
+                || (token == ',' && depth == 0)
+                || token == '#'
+                || (index + 1 < body.Length
+                    && ((token == '-' && body[index + 1] == '-')
+                        || (token == '/' && body[index + 1] == '*'))))
             {
                 throw new InvalidOperationException("Atomic required-column stages require one native ALTER clause.");
             }
         }
 
-        if (quote != '\0' || depth != 0)
+        if (quote != '\0'
+            || depth != 0)
         {
             throw new InvalidOperationException("The native required-column ALTER has unbalanced quoted boundaries.");
         }

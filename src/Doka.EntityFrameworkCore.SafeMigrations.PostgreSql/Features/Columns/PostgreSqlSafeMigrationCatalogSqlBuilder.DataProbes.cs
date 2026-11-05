@@ -8,7 +8,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     /// <returns>The full plan's complete data-probe record, or null when no probe is authorized.</returns>
     internal PostgreSqlSafeMigrationDataProbe? BuildDataProbe(
         SafeMigrationOperation operation,
-        bool includeTransitionEvidence = false)
+        bool includeTransitionEvidence = false
+    )
     {
         ArgumentNullException.ThrowIfNull(operation);
 
@@ -17,11 +18,15 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             // WHY: Source and generated-expression binders can replace a full
             // plan with Unsupported after initial capability checks. They own
             // that authority; do not duplicate or bypass it in this fast path.
-            return Build(operation, includeTransitionEvidence: includeTransitionEvidence).DataProbe;
+            return Build(operation, includeTransitionEvidence: includeTransitionEvidence)
+                .DataProbe;
         }
 
         var intent = SafeMigrationCapturedExpressionNormalization.NormalizeIntent(operation.Intent, true);
-        if (operation.GetAnnotations().Any() || GetUnsupportedNativeFeature(intent) is not null)
+        if (operation
+                .GetAnnotations()
+                .Any()
+            || GetUnsupportedNativeFeature(intent) is not null)
         {
             return null;
         }
@@ -33,32 +38,45 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         // also feed the final full plan, preserving its eligibility authority.
         return intent switch
         {
-            EnsureColumnIntent value => BuildEnsureColumnRepairTransition(value,
-                EnsureColumnRepairCapability(value, repairRequested), includeTransitionEvidence).DataProbe,
-            AlterColumnIntent value => BuildAlterColumnRepairTransition(value, repairRequested,
-                IsSameTypeAlterRepair(value, repairRequested), includeTransitionEvidence).DataProbe,
+            EnsureColumnIntent value => BuildEnsureColumnRepairTransition(
+                    value,
+                    EnsureColumnRepairCapability(value, repairRequested),
+                    includeTransitionEvidence)
+                .DataProbe,
+            AlterColumnIntent value => BuildAlterColumnRepairTransition(
+                    value,
+                    repairRequested,
+                    IsSameTypeAlterRepair(value, repairRequested),
+                    includeTransitionEvidence)
+                .DataProbe,
             _ => null,
         };
     }
 
     /// <summary>Leaves every computed or captured old/target contract on its existing complete binding path.</summary>
-    private static bool RequiresFullDataProbePlan(SafeMigrationIntent intent) => intent switch
+    private static bool RequiresFullDataProbePlan(
+        SafeMigrationIntent intent
+    ) => intent switch
     {
         EnsureColumnIntent value => HasComputedDataProbeSource(value.Definition),
         AlterColumnIntent value => HasComputedDataProbeSource(value.Definition)
-            || value.OldDefinition is { } old && HasComputedDataProbeSource(old),
+            || (value.OldDefinition is { } old && HasComputedDataProbeSource(old)),
         _ => false,
     };
 
     /// <summary>Recognizes source-bearing forms before normalization without parsing or rendering them twice.</summary>
-    private static bool HasComputedDataProbeSource(ExpectedColumnDefinition definition) =>
-        definition.ComputedColumnSql is not null || definition.ComputedExpression is not null
+    private static bool HasComputedDataProbeSource(
+        ExpectedColumnDefinition definition
+    ) =>
+        definition.ComputedColumnSql is not null
+        || definition.ComputedExpression is not null
         || definition.CapturedComputedSql is not null;
 
     /// <summary>Shares the complete provider capability gate used by final EnsureColumn classification.</summary>
     private static SafeMigrationRepairCapability EnsureColumnRepairCapability(
         EnsureColumnIntent intent,
-        bool repairRequested) => repairRequested
+        bool repairRequested
+    ) => repairRequested
         && PostgreSqlSafeMigrationColumnMetadata.CanSafelyConverge(intent.Definition)
             ? SafeMigrationRepairCapability.Safe
             : SafeMigrationRepairCapability.None;
@@ -67,12 +85,16 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     private PostgreSqlColumnRepairTransition BuildEnsureColumnRepairTransition(
         EnsureColumnIntent intent,
         SafeMigrationRepairCapability repairCapability,
-        bool includeTransitionEvidence) => repairCapability == SafeMigrationRepairCapability.Safe
-            ? BuildColumnRepairTransition(intent.Table, intent.Schema, intent.Definition, includeTransitionEvidence)
-            : PostgreSqlColumnRepairTransition.None;
+        bool includeTransitionEvidence
+    ) => repairCapability == SafeMigrationRepairCapability.Safe
+        ? BuildColumnRepairTransition(intent.Table, intent.Schema, intent.Definition, includeTransitionEvidence)
+        : PostgreSqlColumnRepairTransition.None;
 
     /// <summary>Shares the original intrinsic contract check used by final AlterColumn classification.</summary>
-    private static bool IsSameTypeAlterRepair(AlterColumnIntent intent, bool repairRequested) => repairRequested
+    private static bool IsSameTypeAlterRepair(
+        AlterColumnIntent intent,
+        bool repairRequested
+    ) => repairRequested
         && intent.OldDefinition is not null
         && SafeMigrationColumnRepairHelper.CanSafelyAlterColumn(intent.OldDefinition, intent.Definition);
 
@@ -81,11 +103,16 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         AlterColumnIntent intent,
         bool repairRequested,
         bool sameTypeRepair,
-        bool includeTransitionEvidence) => repairRequested
+        bool includeTransitionEvidence
+    ) => repairRequested
         && !sameTypeRepair
         && intent.OldDefinition is not null
         && CanAlterVarcharLength(intent.OldDefinition, intent.Definition)
-            ? BuildColumnRepairTransition(intent.Table, intent.Schema, intent.Definition,
-                includeTransitionEvidence, intent.OldDefinition)
+            ? BuildColumnRepairTransition(
+                intent.Table,
+                intent.Schema,
+                intent.Definition,
+                includeTransitionEvidence,
+                intent.OldDefinition)
             : PostgreSqlColumnRepairTransition.None;
 }

@@ -11,7 +11,9 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
 
     /// <summary>Reuses provider services while every test owns its database and catalog.</summary>
     /// <param name="services">The class-owned SQLite services.</param>
-    public SqliteGeneratedColumnDropTests(SqliteConstraintShapeServiceFixture services)
+    public SqliteGeneratedColumnDropTests(
+        SqliteConstraintShapeServiceFixture services
+    )
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -47,12 +49,17 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-drop"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-generated-drop"),
+                cancellationToken: CancellationToken.None);
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND source = 3 AND extra = 7;",
             cancellationToken: CancellationToken.None);
 
@@ -70,7 +77,9 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task NativeGeneratedDependencyBlocksRuntimeAndPreservesSchemaAndRows(bool synchronous)
+    public async Task NativeGeneratedDependencyBlocksRuntimeAndPreservesSchemaAndRows(
+        bool synchronous
+    )
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
@@ -83,11 +92,14 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         // Act
         var exception = synchronous
             ? Record.Exception(() => ExecuteOperations(context, builder.Operations))
-            : await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            : await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+                context,
+                builder.Operations,
                 cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND source = 3 AND derived = 4;",
             cancellationToken: CancellationToken.None);
 
@@ -105,7 +117,9 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     [InlineData("generated")]
     [InlineData("dependent_first")]
     [InlineData("missing")]
-    public async Task IndependentAndExplicitDependentFirstDropsExecuteAndReplay(string scenario)
+    public async Task IndependentAndExplicitDependentFirstDropsExecuteAndReplay(
+        string scenario
+    )
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
@@ -126,23 +140,28 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
 
         var column = scenario switch
         {
-            "unrelated" => "extra",
-            "generated" => "derived",
-            "dependent_first" => "source",
-            _ => "missing",
+            "unrelated" => "extra", "generated" => "derived", "dependent_first" => "source", _ => "missing",
         };
 
         builder.DropColumnIfExists(column, "drop_nodes");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-drop-order"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-generated-drop-order"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
-        var replayException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var replayException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var retainedRows = await ScalarIntAsync(
@@ -150,7 +169,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1;",
             cancellationToken: CancellationToken.None);
 
-        var remainingColumns = await ScalarIntAsync(connection,
+        var remainingColumns = await ScalarIntAsync(
+            connection,
             $"SELECT COUNT(*) FROM pragma_table_xinfo('drop_nodes') WHERE name = '{column}';",
             cancellationToken: CancellationToken.None);
 
@@ -176,15 +196,22 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         builder.DropColumnIfExists("source", "drop_nodes");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-opaque-dependent-first-drop"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-opaque-dependent-first-drop"),
+                cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
-        var retainedRows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND extra = 7;", cancellationToken: CancellationToken.None);
+        var retainedRows = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND extra = 7;",
+            cancellationToken: CancellationToken.None);
 
-        var removedColumns = await ScalarIntAsync(connection,
+        var removedColumns = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('drop_nodes') WHERE name IN ('source', 'derived');",
             cancellationToken: CancellationToken.None);
 
@@ -202,7 +229,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connection,
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY KEY, "
             + "source INTEGER NOT NULL, extra INTEGER NOT NULL); "
             + "INSERT INTO drop_nodes (id, source, extra) VALUES (1, 3, 7);",
@@ -211,22 +239,33 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         await using var context = new DropContext(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExistsFromModel(operation => operation.AddColumn<int>(
-            "derived", "drop_nodes", type: "INTEGER", nullable: true,
-            computedColumnSql: "source + 1", stored: false));
+            "derived",
+            "drop_nodes",
+            type: "INTEGER",
+            nullable: true,
+            computedColumnSql: "source + 1",
+            stored: false));
 
         builder.DropColumnIfExists("source", "drop_nodes");
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-added-generated-source-drop"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-added-generated-source-drop"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND source = 3 AND extra = 7 AND derived = 4;",
             cancellationToken: CancellationToken.None);
 
@@ -250,7 +289,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         await CreateNativeTableAsync(connection, "source + 1", cancellationToken: CancellationToken.None);
         await using var context = new DropContext(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureColumn("drop_nodes",
+        builder.EnsureColumn(
+            "drop_nodes",
             new ExpectedColumnDefinition("source", typeof(int), false, storeType: "INTEGER"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
@@ -259,15 +299,22 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-expired-generated-drop"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-expired-generated-drop"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND source = 3 AND derived = 4;",
             cancellationToken: CancellationToken.None);
 
@@ -298,15 +345,22 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
-        var proposalReport = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, proposal.Operations, new SafeMigrationRunOptions("sqlite-unexecuted-drop-proposal"),
-            cancellationToken: CancellationToken.None);
+        var proposalReport = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                proposal.Operations,
+                new SafeMigrationRunOptions("sqlite-unexecuted-drop-proposal"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, actual.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            actual.Operations,
             cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND source = 3 AND derived = 4;",
             cancellationToken: CancellationToken.None);
 
@@ -328,27 +382,36 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         await using var context = new DependentFirstDropContext(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropTableIfExists("drop_nodes");
-        builder.CreateTableIfNotExists("drop_nodes", table => new
-        {
-            id = table.Column<int>(type: "INTEGER", nullable: false),
-            source = table.Column<int>(type: "INTEGER", nullable: false),
-            extra = table.Column<int>(type: "INTEGER", nullable: false),
-        }, constraints: table => table.PrimaryKey("pk_drop_nodes", value => value.id),
+        builder.CreateTableIfNotExists(
+            "drop_nodes",
+            table => new
+            {
+                id = table.Column<int>(type: "INTEGER", nullable: false),
+                source = table.Column<int>(type: "INTEGER", nullable: false),
+                extra = table.Column<int>(type: "INTEGER", nullable: false),
+            },
+            constraints: table => table.PrimaryKey("pk_drop_nodes", value => value.id),
             mode: SafeMigrationTableMode.ConvergenceContainer);
 
         builder.DropColumnIfExists("source", "drop_nodes");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-recreated-generated-owner"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-recreated-generated-owner"),
+                cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
-        var remainingColumns = await ScalarIntAsync(connection,
+        var remainingColumns = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('drop_nodes') WHERE name IN ('id', 'extra');",
             cancellationToken: CancellationToken.None);
 
-        var removedColumns = await ScalarIntAsync(connection,
+        var removedColumns = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('drop_nodes') WHERE name IN ('source', 'derived');",
             cancellationToken: CancellationToken.None);
 
@@ -372,18 +435,26 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-missing-drop"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-generated-missing-drop"),
+                cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND source = 3 AND derived = 6;",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(report.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(report.Assessments)
+                .Action);
+
         Assert.Equal(schemaBefore, schemaAfter);
         Assert.Equal(1, retainedRows);
     }
@@ -395,10 +466,12 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateNativeTableAsync(connection, "source << 1", cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connection,
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE native_control (source INTEGER, extra INTEGER, "
             + "derived INTEGER GENERATED ALWAYS AS (source << 1) VIRTUAL); "
-            + "INSERT INTO native_control (source, extra) VALUES (3, 7);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO native_control (source, extra) VALUES (3, 7);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = new OpaqueExtraDropContext(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -409,38 +482,60 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
             connection,
             "ALTER TABLE native_control DROP COLUMN extra;",
             cancellationToken: CancellationToken.None);
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-exact-opaque-unrelated-drop"),
-            cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-exact-opaque-unrelated-drop"),
+                cancellationToken: CancellationToken.None);
+
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
-        var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-exact-opaque-unrelated-replay"),
-            cancellationToken: CancellationToken.None);
+        var replay = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-exact-opaque-unrelated-replay"),
+                cancellationToken: CancellationToken.None);
 
-        var replayException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var replayException = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
-        var removedColumns = await ScalarIntAsync(connection,
+        var removedColumns = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('drop_nodes') WHERE name = 'extra';",
             cancellationToken: CancellationToken.None);
 
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND source = 3 AND derived = 6;",
             cancellationToken: CancellationToken.None);
 
-        var nativeRows = await ScalarIntAsync(connection,
+        var nativeRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM native_control WHERE source = 3 AND derived = 6;",
             cancellationToken: CancellationToken.None);
 
         // Assert
         var diagnostic = Encoding.UTF8.GetString(SafeMigrationReportJson.SerializeToUtf8Bytes(report));
         Assert.True(report.Status == SafeMigrationReportStatus.Ready, diagnostic);
-        Assert.Equal(SafeMigrationAction.Apply, Assert.Single(report.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.Apply,
+            Assert.Single(report.Assessments)
+                .Action);
+
         Assert.Null(exception);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(replay.Assessments)
+                .Action);
+
         Assert.Null(replayException);
         Assert.Equal(0, removedColumns);
         Assert.Equal(1, retainedRows);
@@ -452,7 +547,9 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ExactOpaqueSurvivorRuntimeDoesNotRequirePreflight(bool synchronous)
+    public async Task ExactOpaqueSurvivorRuntimeDoesNotRequirePreflight(
+        bool synchronous
+    )
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
@@ -464,14 +561,18 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         // Act
         var exception = synchronous
             ? Record.Exception(() => ExecuteOperations(context, builder.Operations))
-            : await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            : await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+                context,
+                builder.Operations,
                 cancellationToken: CancellationToken.None));
 
-        var removedColumns = await ScalarIntAsync(connection,
+        var removedColumns = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('drop_nodes') WHERE name = 'extra';",
             cancellationToken: CancellationToken.None);
 
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND source = 3 AND derived = 6;",
             cancellationToken: CancellationToken.None);
 
@@ -491,23 +592,32 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
             connection,
             "source << length('extra')",
             cancellationToken: CancellationToken.None);
+
         await using var context = new OpaqueLiteralDropContext(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("extra", "drop_nodes");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-opaque-nonidentifier-drop"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-opaque-nonidentifier-drop"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
-        var removedColumns = await ScalarIntAsync(connection,
+        var removedColumns = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('drop_nodes') WHERE name = 'extra';",
             cancellationToken: CancellationToken.None);
 
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND source = 3 AND derived = 96;",
             cancellationToken: CancellationToken.None);
 
@@ -531,20 +641,28 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         builder.DropColumnIfExists("extra", "drop_nodes");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-opaque-drop-before-dependent"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-opaque-drop-before-dependent"),
+                cancellationToken: CancellationToken.None);
 
-        await ExecuteSqlAsync(connection,
+        await ExecuteSqlAsync(
+            connection,
             "ALTER TABLE drop_nodes ADD later_derived INTEGER GENERATED ALWAYS AS (extra << 1) VIRTUAL;",
             cancellationToken: CancellationToken.None);
 
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND extra = 7 AND derived = 6 AND later_derived = 14;",
             cancellationToken: CancellationToken.None);
 
@@ -564,7 +682,9 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     [InlineData("ex]tra")]
     [InlineData("source_suffix")]
     [InlineData("\u20AC_extra")]
-    public async Task OpaqueSurvivorAllowsEscapedUnrelatedPhysicalIdentity(string name)
+    public async Task OpaqueSurvivorAllowsEscapedUnrelatedPhysicalIdentity(
+        string name
+    )
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
@@ -574,16 +694,23 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
             connection,
             $"ALTER TABLE drop_nodes RENAME COLUMN extra TO {quotedName};",
             cancellationToken: CancellationToken.None);
+
         await using var context = new OpaqueExtraDropContext(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists(name, "drop_nodes");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-opaque-escaped-unrelated-drop"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-opaque-escaped-unrelated-drop"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var columns = await ScalarIntAsync(
@@ -591,7 +718,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
             "SELECT COUNT(*) FROM pragma_table_xinfo('drop_nodes');",
             cancellationToken: CancellationToken.None);
 
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND source = 3 AND derived = 6;",
             cancellationToken: CancellationToken.None);
 
@@ -610,7 +738,9 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     [InlineData("so`urce")]
     [InlineData("so]urce")]
     [InlineData("\u20AC_source")]
-    public async Task OpaqueSurvivorRejectsEscapedPhysicalSourceIdentity(string name)
+    public async Task OpaqueSurvivorRejectsEscapedPhysicalSourceIdentity(
+        string name
+    )
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
@@ -620,26 +750,37 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
             connection,
             $"ALTER TABLE drop_nodes RENAME COLUMN source TO {quotedName};",
             cancellationToken: CancellationToken.None);
+
         await using var context = new DropContext(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists(name, "drop_nodes");
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-opaque-escaped-source-drop"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-opaque-escaped-source-drop"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             $"SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND {quotedName} = 3 AND derived = 6;",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal("generated_column_drop_unproven", Assert.Single(report.Assessments).AnalysisCode);
+        Assert.Equal("generated_column_drop_unproven",
+            Assert.Single(report.Assessments)
+                .AnalysisCode);
+
         Assert.IsType<InvalidOperationException>(exception);
         Assert.Contains("generated_column_drop_unproven", exception.Message, StringComparison.Ordinal);
         Assert.Equal(schemaBefore, schemaAfter);
@@ -652,7 +793,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connection,
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY KEY, "
             + "source INTEGER NOT NULL, \"so\"\"urce\" INTEGER NOT NULL, "
             + $"derived INTEGER GENERATED ALWAYS AS ({AdjacentQuotedSourceExpression}) VIRTUAL); "
@@ -671,21 +813,31 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
                 "ALTER TABLE drop_nodes DROP COLUMN \"so\"\"urce\";",
                 cancellationToken: CancellationToken.None));
 
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-opaque-adjacent-quoted-source-drop"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-opaque-adjacent-quoted-source-drop"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND \"so\"\"urce\" = 7 AND derived = 14;",
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.IsType<SqliteException>(nativeException);
-        Assert.Equal("generated_column_drop_unproven", Assert.Single(report.Assessments).AnalysisCode);
+        Assert.Equal("generated_column_drop_unproven",
+            Assert.Single(report.Assessments)
+                .AnalysisCode);
+
         Assert.IsType<InvalidOperationException>(exception);
         Assert.Contains("generated_column_drop_unproven", exception.Message, StringComparison.Ordinal);
         Assert.Equal(schemaBefore, schemaAfter);
@@ -698,7 +850,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connection,
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY KEY, "
             + "source INTEGER NOT NULL, \"so\"\"urce\" INTEGER NOT NULL, extra INTEGER NOT NULL, "
             + $"derived INTEGER GENERATED ALWAYS AS ({AdjacentQuotedSourceExpression}) VIRTUAL); "
@@ -710,18 +863,26 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         builder.DropColumnIfExists("extra", "drop_nodes");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-adjacent-quoted-unrelated-drop"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-adjacent-quoted-unrelated-drop"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
-        var removedColumns = await ScalarIntAsync(connection,
+        var removedColumns = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('drop_nodes') WHERE name = 'extra';",
             cancellationToken: CancellationToken.None);
 
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND \"so\"\"urce\" = 7 AND derived = 14;",
             cancellationToken: CancellationToken.None);
 
@@ -741,12 +902,23 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     [InlineData(true, true)]
     [InlineData(false, false)]
     [InlineData(true, false)]
-    public async Task OpaqueSurvivorRetainsUnicodeWhitespacePrefixedSourceIdentity(bool atStart, bool opaque)
+    public async Task OpaqueSurvivorRetainsUnicodeWhitespacePrefixedSourceIdentity(
+        bool atStart,
+        bool opaque
+    )
     {
         // Arrange
-        var expression = (atStart ? string.Empty : "source + ") + "\u00A0operand" + (opaque ? " << 1" : " + 1");
+        var expression = (atStart
+                ? string.Empty
+                : "source + ")
+            + "\u00A0operand"
+            + (opaque
+                ? " << 1"
+                : " + 1");
+
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connection,
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY KEY, "
             + "source INTEGER NOT NULL, \"\u00A0operand\" INTEGER NOT NULL, "
             + $"derived INTEGER GENERATED ALWAYS AS ({expression}) VIRTUAL); "
@@ -772,22 +944,39 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
                 "ALTER TABLE drop_nodes DROP COLUMN \"\u00A0operand\";",
                 cancellationToken: CancellationToken.None));
 
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-opaque-unicode-whitespace-source"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-opaque-unicode-whitespace-source"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var expectedValue = opaque ? (atStart ? 14 : 20) : (atStart ? 8 : 11);
-        var retainedRows = await ScalarIntAsync(connection,
+        var expectedValue = opaque
+            ? atStart
+                ? 14
+                : 20
+            : atStart
+                ? 8
+                : 11;
+
+        var retainedRows = await ScalarIntAsync(
+            connection,
             $"SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND \"\u00A0operand\" = 7 AND derived = {expectedValue};",
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.IsType<SqliteException>(nativeException);
-        Assert.Equal("generated_column_drop_unproven", Assert.Single(report.Assessments).AnalysisCode);
+        Assert.Equal("generated_column_drop_unproven",
+            Assert.Single(report.Assessments)
+                .AnalysisCode);
+
         Assert.IsType<InvalidOperationException>(exception);
         Assert.Contains("generated_column_drop_unproven", exception.Message, StringComparison.Ordinal);
         Assert.Equal(schemaBefore, schemaAfter);
@@ -801,12 +990,18 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task UnicodeWhitespaceOperandStillAllowsUnrelatedDrop(bool opaque)
+    public async Task UnicodeWhitespaceOperandStillAllowsUnrelatedDrop(
+        bool opaque
+    )
     {
         // Arrange
-        var expression = opaque ? UnicodeWhitespaceSourceExpression : "source + \u00A0operand + 1";
+        var expression = opaque
+            ? UnicodeWhitespaceSourceExpression
+            : "source + \u00A0operand + 1";
+
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connection,
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY KEY, "
             + "source INTEGER NOT NULL, \"\u00A0operand\" INTEGER NOT NULL, extra INTEGER NOT NULL, "
             + $"derived INTEGER GENERATED ALWAYS AS ({expression}) VIRTUAL); "
@@ -821,19 +1016,30 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         builder.DropColumnIfExists("extra", "drop_nodes");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-unicode-whitespace-unrelated-drop"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-unicode-whitespace-unrelated-drop"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
-        var removedColumns = await ScalarIntAsync(connection,
+        var removedColumns = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('drop_nodes') WHERE name = 'extra';",
             cancellationToken: CancellationToken.None);
 
-        var expectedValue = opaque ? 20 : 11;
-        var retainedRows = await ScalarIntAsync(connection,
+        var expectedValue = opaque
+            ? 20
+            : 11;
+
+        var retainedRows = await ScalarIntAsync(
+            connection,
             $"SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND \"\u00A0operand\" = 7 AND derived = {expectedValue};",
             cancellationToken: CancellationToken.None);
 
@@ -853,7 +1059,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connection,
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY KEY, "
             + "source INTEGER NOT NULL, \"\u00A0operand\" INTEGER NOT NULL, extra INTEGER NOT NULL, "
             + "derived INTEGER GENERATED ALWAYS AS (source + \u00A0operand + 1) VIRTUAL); "
@@ -866,20 +1073,30 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-unicode-whitespace-expression-drift"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-unicode-whitespace-expression-drift"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND extra = 11 AND derived = 11;",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal("table_rebuild_column_drift", Assert.Single(report.Assessments).AnalysisCode);
+        Assert.Equal("table_rebuild_column_drift",
+            Assert.Single(report.Assessments)
+                .AnalysisCode);
+
         Assert.IsType<InvalidOperationException>(exception);
         Assert.Contains("table_rebuild_column_drift", exception.Message, StringComparison.Ordinal);
         Assert.Equal(schemaBefore, schemaAfter);
@@ -891,7 +1108,9 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task NativeBomTokenPreservesDropDependencyIdentity(bool dependent)
+    public async Task NativeBomTokenPreservesDropDependencyIdentity(
+        bool dependent
+    )
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
@@ -900,7 +1119,10 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
             ? (DropContext)new BomSourceDropContext(connection, _internalServices)
             : new BomUnrelatedDropContext(connection, _internalServices);
 
-        var name = dependent ? "source" : "extra";
+        var name = dependent
+            ? "source"
+            : "extra";
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists(name, "drop_nodes");
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
@@ -912,19 +1134,27 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
                 "ALTER TABLE drop_nodes DROP COLUMN source;",
                 cancellationToken: CancellationToken.None));
 
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-native-bom-drop"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-native-bom-drop"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var columns = await ScalarIntAsync(connection,
+        var columns = await ScalarIntAsync(
+            connection,
             $"SELECT COUNT(*) FROM pragma_table_xinfo('drop_nodes') WHERE name = '{name}';",
             cancellationToken: CancellationToken.None);
 
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND source = 3 AND derived = 8;",
             cancellationToken: CancellationToken.None);
 
@@ -933,7 +1163,10 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         Assert.Equal(1, retainedRows);
         if (dependent)
         {
-            Assert.Equal("generated_column_drop_unproven", Assert.Single(report.Assessments).AnalysisCode);
+            Assert.Equal("generated_column_drop_unproven",
+                Assert.Single(report.Assessments)
+                    .AnalysisCode);
+
             Assert.IsType<InvalidOperationException>(exception);
             Assert.Contains("generated_column_drop_unproven", exception.Message, StringComparison.Ordinal);
             Assert.Equal(schemaBefore, schemaAfter);
@@ -959,14 +1192,18 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
 
         // Act
         var exception = Record.Exception(() => snapshot = SqliteSafeMigrationCatalog.Read(connection, null));
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND source = 3 AND derived = 8;",
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Null(exception);
         var captured = Assert.IsType<SqliteCatalogSnapshot>(snapshot);
-        var expression = Assert.IsType<string>(captured.Tables["drop_nodes"].Columns["derived"].GeneratedSql);
+        var expression = Assert.IsType<string>(captured
+            .Tables["drop_nodes"]
+            .Columns["derived"].GeneratedSql);
+
         Assert.True(SqliteSqlIdentifierScanner.ReferencesIdentifier(expression, "source"));
         Assert.Equal(1, retainedRows);
     }
@@ -976,7 +1213,9 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task OpaqueRetainedExpressionCannotAuthorizeAnUnrelatedDrop(bool opaqueTarget)
+    public async Task OpaqueRetainedExpressionCannotAuthorizeAnUnrelatedDrop(
+        bool opaqueTarget
+    )
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
@@ -990,20 +1229,30 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-opaque-unrelated-drop"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-opaque-unrelated-drop"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND extra = 7 AND derived = 6;",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal("table_rebuild_column_drift", Assert.Single(report.Assessments).AnalysisCode);
+        Assert.Equal("table_rebuild_column_drift",
+            Assert.Single(report.Assessments)
+                .AnalysisCode);
+
         Assert.IsType<InvalidOperationException>(exception);
         Assert.Contains("table_rebuild_column_drift", exception.Message, StringComparison.Ordinal);
         Assert.Equal(schemaBefore, schemaAfter);
@@ -1016,11 +1265,14 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     [InlineData("STORED")]
     [InlineData("VIRTUAL NOT NULL")]
     [InlineData("VIRTUAL COLLATE NOCASE")]
-    public async Task ExactOpaqueSurvivorStillRejectsNativeFacetDrift(string facets)
+    public async Task ExactOpaqueSurvivorStillRejectsNativeFacetDrift(
+        string facets
+    )
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connection,
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY KEY, "
             + "source INTEGER NOT NULL, extra INTEGER NOT NULL, "
             + $"derived INTEGER GENERATED ALWAYS AS (source << 1) {facets}); "
@@ -1033,20 +1285,30 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-opaque-facet-drift-drop"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-opaque-facet-drift-drop"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND extra = 7 AND derived = 6;",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal("table_rebuild_column_drift", Assert.Single(report.Assessments).AnalysisCode);
+        Assert.Equal("table_rebuild_column_drift",
+            Assert.Single(report.Assessments)
+                .AnalysisCode);
+
         Assert.IsType<InvalidOperationException>(exception);
         Assert.Contains("table_rebuild_column_drift", exception.Message, StringComparison.Ordinal);
         Assert.Equal(schemaBefore, schemaAfter);
@@ -1060,7 +1322,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateNativeTableAsync(connection, "source + 1", cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connection,
+        await ExecuteSqlAsync(
+            connection,
             "ALTER TABLE drop_nodes ADD extra_derived INTEGER GENERATED ALWAYS AS (extra + 1) VIRTUAL;",
             cancellationToken: CancellationToken.None);
 
@@ -1070,20 +1333,30 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-unmapped-generated-drop"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-unmapped-generated-drop"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND extra = 7 AND extra_derived = 8;",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal("generated_column_drop_dependency", Assert.Single(report.Assessments).AnalysisCode);
+        Assert.Equal("generated_column_drop_dependency",
+            Assert.Single(report.Assessments)
+                .AnalysisCode);
+
         Assert.IsType<InvalidOperationException>(exception);
         Assert.Contains("generated_column_drop_dependency", exception.Message, StringComparison.Ordinal);
         Assert.Equal(schemaBefore, schemaAfter);
@@ -1097,7 +1370,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateNativeTableAsync(connection, "source + 1", cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connection,
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TRIGGER retained_trigger AFTER UPDATE ON drop_nodes BEGIN SELECT 1; END;",
             cancellationToken: CancellationToken.None);
 
@@ -1108,19 +1382,27 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-rejected-dependent-drop"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-rejected-dependent-drop"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND source = 3 AND derived = 4;",
             cancellationToken: CancellationToken.None);
 
-        var triggers = await ScalarIntAsync(connection,
+        var triggers = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'trigger' AND name = 'retained_trigger';",
             cancellationToken: CancellationToken.None);
 
@@ -1142,25 +1424,33 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateNativeTableAsync(connection, "source + 1", cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connection,
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE other_nodes (extra INTEGER, derived INTEGER GENERATED ALWAYS AS (extra + 1)); "
-            + "INSERT INTO other_nodes (extra) VALUES (11);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO other_nodes (extra) VALUES (11);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = new ExtraDropContext(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("extra", "drop_nodes");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-other-owner"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-generated-other-owner"),
+                cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND source = 3 AND derived = 4;",
             cancellationToken: CancellationToken.None);
 
-        var otherRows = await ScalarIntAsync(connection,
+        var otherRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM other_nodes WHERE extra = 11 AND derived = 12;",
             cancellationToken: CancellationToken.None);
 
@@ -1175,10 +1465,15 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task NonColumnTokenRolesDoNotInventGeneratedDependencies(bool cast)
+    public async Task NonColumnTokenRolesDoNotInventGeneratedDependencies(
+        bool cast
+    )
     {
         // Arrange
-        var expression = cast ? "CAST(source AS extra)" : "length('extra') + source";
+        var expression = cast
+            ? "CAST(source AS extra)"
+            : "length('extra') + source";
+
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateNativeTableAsync(connection, expression, cancellationToken: CancellationToken.None);
         await using var context = cast
@@ -1189,16 +1484,22 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         builder.DropColumnIfExists("extra", "drop_nodes");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-generated-drop-token-role"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-generated-drop-token-role"),
+                cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             $"SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND source = 3 AND derived = {(cast ? 3 : 8)};",
             cancellationToken: CancellationToken.None);
 
-        var removedColumns = await ScalarIntAsync(connection,
+        var removedColumns = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('drop_nodes') WHERE name = 'extra';",
             cancellationToken: CancellationToken.None);
 
@@ -1239,26 +1540,36 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-direct-drop-index"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-direct-drop-index"),
+                cancellationToken: CancellationToken.None);
 
         var exception = synchronous
             ? Record.Exception(() => ExecuteOperations(context, builder.Operations))
-            : await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            : await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+                context,
+                builder.Operations,
                 cancellationToken: CancellationToken.None));
 
         var replayException = synchronous
             ? Record.Exception(() => ExecuteOperations(context, builder.Operations))
-            : await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            : await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+                context,
+                builder.Operations,
                 cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM drop_nodes WHERE id = 1 AND source = 3 AND derived = 4;",
             cancellationToken: CancellationToken.None);
 
-        var indexes = await ScalarIntAsync(connection,
+        var indexes = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM pragma_index_list('drop_nodes') WHERE name = 'ix_drop_source';",
             cancellationToken: CancellationToken.None);
 
@@ -1292,16 +1603,22 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     private static Task CreateNativeTableAsync(
         SqliteConnection connection,
         string expression,
-        CancellationToken cancellationToken) =>
-        ExecuteSqlAsync(connection,
+        CancellationToken cancellationToken
+    ) =>
+        ExecuteSqlAsync(
+            connection,
             "CREATE TABLE drop_nodes (id INTEGER NOT NULL CONSTRAINT pk_drop_nodes PRIMARY KEY, "
             + "source INTEGER NOT NULL, extra INTEGER NOT NULL, "
             + $"derived INTEGER GENERATED ALWAYS AS ({expression}) VIRTUAL); "
-            + "INSERT INTO drop_nodes (id, source, extra) VALUES (1, 3, 7);", cancellationToken: cancellationToken);
+            + "INSERT INTO drop_nodes (id, source, extra) VALUES (1, 3, 7);",
+            cancellationToken: cancellationToken);
 
     /// <summary>Captures the complete native table SQL so refusal cannot silently rebuild the owner.</summary>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
-    private static async Task<string> ReadSchemaAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    private static async Task<string> ReadSchemaAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -1312,9 +1629,15 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Exercises the synchronous execution boundary without synchronously blocking an async method.</summary>
-    private static void ExecuteOperations(DbContext context, IReadOnlyList<MigrationOperation> operations)
+    private static void ExecuteOperations(
+        DbContext context,
+        IReadOnlyList<MigrationOperation> operations
+    )
     {
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(operations, context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(operations, context.Model);
+
         var connection = context.GetService<IRelationalConnection>();
         foreach (var command in commands)
         {
@@ -1323,7 +1646,10 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Supplies exact rebuild ownership without treating the model as dependency evidence.</summary>
-    private class DropContext(DbConnection connection, IServiceProvider internalServices) : DbContext
+    private class DropContext(
+        DbConnection connection,
+        IServiceProvider internalServices
+    ) : DbContext
     {
         /// <summary>Gets the target-model members deliberately removed by this fixture's migration.</summary>
         protected virtual int RemovedColumns => 0;
@@ -1338,7 +1664,9 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         protected virtual bool IncludeSourceIndex => false;
 
         /// <inheritdoc />
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        protected override void OnConfiguring(
+            DbContextOptionsBuilder optionsBuilder
+        )
         {
             optionsBuilder.UseSqlite(connection);
             optionsBuilder.UseSqliteSafeMigrations();
@@ -1346,20 +1674,31 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
         }
 
         /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        )
         {
             modelBuilder.Entity<Node>(entity =>
             {
                 entity.ToTable("drop_nodes");
-                entity.HasKey(value => value.Id).HasName("pk_drop_nodes");
-                entity.Property(value => value.Id).HasColumnName("id").ValueGeneratedNever();
+                entity
+                    .HasKey(value => value.Id)
+                    .HasName("pk_drop_nodes");
+
+                entity
+                    .Property(value => value.Id)
+                    .HasColumnName("id")
+                    .ValueGeneratedNever();
+
                 if ((RemovedColumns & 1) != 0)
                 {
                     entity.Ignore(value => value.Extra);
                 }
                 else
                 {
-                    entity.Property(value => value.Extra).HasColumnName(ExtraColumnName);
+                    entity
+                        .Property(value => value.Extra)
+                        .HasColumnName(ExtraColumnName);
                 }
 
                 if ((RemovedColumns & 2) != 0)
@@ -1368,7 +1707,9 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
                 }
                 else
                 {
-                    entity.Property(value => value.Derived).HasColumnName("derived")
+                    entity
+                        .Property(value => value.Derived)
+                        .HasColumnName("derived")
                         .HasComputedColumnSql(GeneratedSql, stored: false);
                 }
 
@@ -1378,12 +1719,16 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
                 }
                 else
                 {
-                    entity.Property(value => value.Source).HasColumnName("source");
+                    entity
+                        .Property(value => value.Source)
+                        .HasColumnName("source");
                 }
 
                 if (IncludeSourceIndex)
                 {
-                    entity.HasIndex(value => value.Source).HasDatabaseName("ix_drop_source");
+                    entity
+                        .HasIndex(value => value.Source)
+                        .HasDatabaseName("ix_drop_source");
                 }
             });
         }
@@ -1401,7 +1746,10 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Models the real target after an unrelated member is removed.</summary>
-    private sealed class ExtraDropContext(DbConnection connection, IServiceProvider internalServices)
+    private sealed class ExtraDropContext(
+        DbConnection connection,
+        IServiceProvider internalServices
+    )
         : DropContext(connection, internalServices)
     {
         /// <inheritdoc />
@@ -1409,7 +1757,10 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Preserves the exact native opaque generated expression while removing an unrelated member.</summary>
-    private sealed class OpaqueExtraDropContext(DbConnection connection, IServiceProvider internalServices)
+    private sealed class OpaqueExtraDropContext(
+        DbConnection connection,
+        IServiceProvider internalServices
+    )
         : DropContext(connection, internalServices)
     {
         /// <inheritdoc />
@@ -1420,7 +1771,10 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Retains opaque native SQL whose string literal contains the dropped member's spelling.</summary>
-    private sealed class OpaqueLiteralDropContext(DbConnection connection, IServiceProvider internalServices)
+    private sealed class OpaqueLiteralDropContext(
+        DbConnection connection,
+        IServiceProvider internalServices
+    )
         : DropContext(connection, internalServices)
     {
         /// <inheritdoc />
@@ -1431,7 +1785,10 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Declares a different opaque expression that no independent DROP may silently substitute.</summary>
-    private sealed class OpaqueDifferentExtraDropContext(DbConnection connection, IServiceProvider internalServices)
+    private sealed class OpaqueDifferentExtraDropContext(
+        DbConnection connection,
+        IServiceProvider internalServices
+    )
         : DropContext(connection, internalServices)
     {
         /// <inheritdoc />
@@ -1442,7 +1799,10 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Preserves the exact opaque source while removing its escaped, keyword-adjacent operand.</summary>
-    private sealed class AdjacentQuotedSourceDropContext(DbConnection connection, IServiceProvider internalServices)
+    private sealed class AdjacentQuotedSourceDropContext(
+        DbConnection connection,
+        IServiceProvider internalServices
+    )
         : DropContext(connection, internalServices)
     {
         /// <inheritdoc />
@@ -1453,7 +1813,10 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Retains both true operands while removing a different native member.</summary>
-    private sealed class AdjacentQuotedUnrelatedDropContext(DbConnection connection, IServiceProvider internalServices)
+    private sealed class AdjacentQuotedUnrelatedDropContext(
+        DbConnection connection,
+        IServiceProvider internalServices
+    )
         : DropContext(connection, internalServices)
     {
         /// <inheritdoc />
@@ -1464,7 +1827,10 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Preserves exact native source with an unquoted high-byte operand that resembles whitespace.</summary>
-    private class UnicodeWhitespaceSourceDropContext(DbConnection connection, IServiceProvider internalServices)
+    private class UnicodeWhitespaceSourceDropContext(
+        DbConnection connection,
+        IServiceProvider internalServices
+    )
         : DropContext(connection, internalServices)
     {
         /// <inheritdoc />
@@ -1476,7 +1842,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
 
     /// <summary>Starts an opaque native expression with a high-byte source identifier.</summary>
     private sealed class LeadingUnicodeWhitespaceSourceDropContext(
-        DbConnection connection, IServiceProvider internalServices
+        DbConnection connection,
+        IServiceProvider internalServices
     ) : UnicodeWhitespaceSourceDropContext(connection, internalServices)
     {
         /// <inheritdoc />
@@ -1485,7 +1852,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
 
     /// <summary>Retains a middle high-byte operand in otherwise bounded native arithmetic.</summary>
     private sealed class ParsedUnicodeWhitespaceSourceDropContext(
-        DbConnection connection, IServiceProvider internalServices
+        DbConnection connection,
+        IServiceProvider internalServices
     ) : UnicodeWhitespaceSourceDropContext(connection, internalServices)
     {
         /// <inheritdoc />
@@ -1494,7 +1862,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
 
     /// <summary>Starts bounded native arithmetic with a high-byte source identifier.</summary>
     private sealed class LeadingParsedUnicodeWhitespaceSourceDropContext(
-        DbConnection connection, IServiceProvider internalServices
+        DbConnection connection,
+        IServiceProvider internalServices
     ) : UnicodeWhitespaceSourceDropContext(connection, internalServices)
     {
         /// <inheritdoc />
@@ -1502,7 +1871,10 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Retains the high-byte source while removing a distinct native ordinary member.</summary>
-    private class UnicodeWhitespaceUnrelatedDropContext(DbConnection connection, IServiceProvider internalServices)
+    private class UnicodeWhitespaceUnrelatedDropContext(
+        DbConnection connection,
+        IServiceProvider internalServices
+    )
         : DropContext(connection, internalServices)
     {
         /// <inheritdoc />
@@ -1516,7 +1888,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     /// Retains native high-byte arithmetic in the bounded operator family without rebinding its operand.
     /// </summary>
     private sealed class ParsedUnicodeWhitespaceUnrelatedDropContext(
-        DbConnection connection, IServiceProvider internalServices
+        DbConnection connection,
+        IServiceProvider internalServices
     ) : UnicodeWhitespaceUnrelatedDropContext(connection, internalServices)
     {
         /// <inheritdoc />
@@ -1525,7 +1898,8 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
 
     /// <summary>Models an incorrectly rebound operand with the high-byte physical identity removed.</summary>
     private sealed class UnicodeWhitespaceDriftDropContext(
-        DbConnection connection, IServiceProvider internalServices
+        DbConnection connection,
+        IServiceProvider internalServices
     ) : UnicodeWhitespaceUnrelatedDropContext(connection, internalServices)
     {
         /// <inheritdoc />
@@ -1533,7 +1907,10 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Preserves a native BOM token before the operand the proposed target removes.</summary>
-    private sealed class BomSourceDropContext(DbConnection connection, IServiceProvider internalServices)
+    private sealed class BomSourceDropContext(
+        DbConnection connection,
+        IServiceProvider internalServices
+    )
         : DropContext(connection, internalServices)
     {
         /// <inheritdoc />
@@ -1544,7 +1921,10 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Preserves the native BOM token and its real operand while removing an independent member.</summary>
-    private sealed class BomUnrelatedDropContext(DbConnection connection, IServiceProvider internalServices)
+    private sealed class BomUnrelatedDropContext(
+        DbConnection connection,
+        IServiceProvider internalServices
+    )
         : DropContext(connection, internalServices)
     {
         /// <inheritdoc />
@@ -1555,7 +1935,10 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Models the real target after the generated member itself is removed.</summary>
-    private sealed class DerivedDropContext(DbConnection connection, IServiceProvider internalServices)
+    private sealed class DerivedDropContext(
+        DbConnection connection,
+        IServiceProvider internalServices
+    )
         : DropContext(connection, internalServices)
     {
         /// <inheritdoc />
@@ -1563,7 +1946,10 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Models the real target after explicit dependent-first source removal.</summary>
-    private sealed class DependentFirstDropContext(DbConnection connection, IServiceProvider internalServices)
+    private sealed class DependentFirstDropContext(
+        DbConnection connection,
+        IServiceProvider internalServices
+    )
         : DropContext(connection, internalServices)
     {
         /// <inheritdoc />
@@ -1571,7 +1957,10 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Retains a literal containing the dropped member's spelling.</summary>
-    private sealed class LiteralRoleDropContext(DbConnection connection, IServiceProvider internalServices)
+    private sealed class LiteralRoleDropContext(
+        DbConnection connection,
+        IServiceProvider internalServices
+    )
         : DropContext(connection, internalServices)
     {
         /// <inheritdoc />
@@ -1582,7 +1971,10 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Retains a CAST whose type spelling is also the dropped member's name.</summary>
-    private sealed class CastRoleDropContext(DbConnection connection, IServiceProvider internalServices)
+    private sealed class CastRoleDropContext(
+        DbConnection connection,
+        IServiceProvider internalServices
+    )
         : DropContext(connection, internalServices)
     {
         /// <inheritdoc />
@@ -1593,7 +1985,10 @@ public sealed class SqliteGeneratedColumnDropTests : SqliteIntegrationTestBase,
     }
 
     /// <summary>Models both operations in the direct DROP/index structural window.</summary>
-    private sealed class ExtraDropIndexContext(DbConnection connection, IServiceProvider internalServices)
+    private sealed class ExtraDropIndexContext(
+        DbConnection connection,
+        IServiceProvider internalServices
+    )
         : DropContext(connection, internalServices)
     {
         /// <inheritdoc />

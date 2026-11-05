@@ -17,7 +17,9 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
             connection,
             "CREATE TABLE constraint_data (id INTEGER NULL, code TEXT NULL, quantity INTEGER NOT NULL); "
             + "INSERT INTO constraint_data (id, code, quantity) VALUES "
-            + "(NULL, 'duplicate', -1), (1, 'duplicate', 1);", cancellationToken: CancellationToken.None);
+            + "(NULL, 'duplicate', -1), (1, 'duplicate', 1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
 
@@ -34,6 +36,7 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
                     "ck_constraint_data_quantity",
                     "constraint_data",
                     "quantity >= 0");
+
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(operationKind));
@@ -44,14 +47,20 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-constraint-data-block"), cancellationToken: CancellationToken.None);
+                new SafeMigrationRunOptions("sqlite-constraint-data-block"),
+                cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(expectedAnalysisCode, Assert.Single(report.Assessments).AnalysisCode);
-        Assert.Equal(2, await ScalarIntAsync(
-            connection,
-            "SELECT COUNT(*) FROM constraint_data;",
-            cancellationToken: CancellationToken.None));
+        Assert.Equal(expectedAnalysisCode,
+            Assert.Single(report.Assessments)
+                .AnalysisCode);
+
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM constraint_data;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -67,12 +76,14 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
             + "INSERT INTO constraint_parents (Id) VALUES (1); "
             + "INSERT INTO constraint_children (Id, ParentId) VALUES (11, 1);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexIfNotExists(
             "ix_constraint_children_parent_id",
             "constraint_children",
             ["ParentId"]);
+
         builder.AddForeignKeyIfNotExists(
             "fk_constraint_children_parent",
             "constraint_children",
@@ -80,12 +91,14 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
             "constraint_parents",
             ["Id"],
             onDelete: ReferentialAction.Cascade);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-foreign-key-apply"), cancellationToken: CancellationToken.None);
+            new SafeMigrationRunOptions("sqlite-foreign-key-apply"),
+            cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
@@ -93,7 +106,8 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
         var replay = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-foreign-key-replay"), cancellationToken: CancellationToken.None);
+            new SafeMigrationRunOptions("sqlite-foreign-key-replay"),
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.All(preflight.Assessments, assessment => Assert.Equal(SafeMigrationAction.Apply, assessment.Action));
@@ -105,7 +119,9 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
                 connection,
                 "SELECT COUNT(*) FROM pragma_foreign_key_list('constraint_children') "
                 + "WHERE \"table\" = 'constraint_parents' AND \"from\" = 'ParentId' "
-                + "AND \"to\" = 'Id' AND on_delete = 'CASCADE';", cancellationToken: CancellationToken.None));
+                + "AND \"to\" = 'Id' AND on_delete = 'CASCADE';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -126,6 +142,7 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
             + "CONSTRAINT pk_constraint_children PRIMARY KEY (Id)); "
             + "INSERT INTO constraint_children (Id, ParentId) VALUES (11, 999);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddForeignKeyIfNotExists(
@@ -141,7 +158,8 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-foreign-key-orphan"), cancellationToken: CancellationToken.None);
+                new SafeMigrationRunOptions("sqlite-foreign-key-orphan"),
+                cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.DataBlocked, assessment.ObservedState);
@@ -170,6 +188,7 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
             + "INSERT INTO constraint_parents (Id) VALUES (1); "
             + "INSERT INTO constraint_children (Id, ParentId, Legacy) VALUES (11, 1, 'preserve');",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("Legacy", "constraint_children");
@@ -184,6 +203,7 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
                 connection,
                 "SELECT COUNT(*) FROM pragma_foreign_key_list('constraint_children') WHERE on_delete = 'NO ACTION';",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -209,6 +229,7 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
             + "INSERT INTO drop_parents (Id) VALUES (1); "
             + "INSERT INTO drop_entities (Id, Code, ParentId) VALUES (11, 'existing', 1);",
             cancellationToken: CancellationToken.None);
+
         await using var context = new SqliteConstraintDropTestContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropUniqueConstraintIfExists("uq_drop_entities_code", "drop_entities");
@@ -222,7 +243,8 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
         var replay = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlite-constraint-drops-replay"), cancellationToken: CancellationToken.None);
+            new SafeMigrationRunOptions("sqlite-constraint-drops-replay"),
+            cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
         Assert.All(replay.Assessments, assessment => Assert.Equal(SafeMigrationAction.NoOp, assessment.Action));
@@ -232,12 +254,14 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
                 connection,
                 "SELECT COUNT(*) FROM pragma_index_list('drop_entities') WHERE origin = 'u';",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connection,
                 "SELECT COUNT(*) FROM pragma_foreign_key_list('drop_entities');",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -260,10 +284,13 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
             .AnalyzeAsync(
                 context,
                 builder.Operations,
-                new SafeMigrationRunOptions("sqlite-column-check-name"), cancellationToken: CancellationToken.None);
+                new SafeMigrationRunOptions("sqlite-column-check-name"),
+                cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Equal(SafeMigrationAction.Apply, Assert.Single(report.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.Apply,
+            Assert.Single(report.Assessments)
+                .Action);
     }
 
     [Fact]
@@ -281,10 +308,12 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
         var table = Assert.IsType<SqliteTableSnapshot>(snapshot.Tables["drop_entities"]);
 
         Assert.Empty(table.Checks);
-        Assert.Equal(1, await ScalarIntAsync(
-            connection,
-            "SELECT COUNT(*) FROM drop_entities;",
-            cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM drop_entities;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -297,6 +326,7 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
             + "CONSTRAINT pk_primary_key_drop_entities PRIMARY KEY (Id)); "
             + "INSERT INTO primary_key_drop_entities (Id, Value) VALUES (1, 'existing');",
             cancellationToken: CancellationToken.None);
+
         await using var context = new SqlitePrimaryKeyDropTestContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropPrimaryKeyIfExists("pk_primary_key_drop_entities", "primary_key_drop_entities");
@@ -320,6 +350,7 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
                 connection,
                 "SELECT COUNT(*) FROM pragma_table_xinfo('primary_key_drop_entities') WHERE pk > 0;",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -352,6 +383,7 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
             + "INSERT INTO set_default_children (Id, ParentId) VALUES (13, 1); "
             + "INSERT INTO restrict_children (Id, ParentId) VALUES (14, 1);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists(
@@ -361,14 +393,20 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
-        Assert.Equal(1, await ScalarIntAsync(
-            connection,
-            "PRAGMA foreign_keys;",
-            cancellationToken: CancellationToken.None));
-        Assert.Equal(1, await ScalarIntAsync(
-            connection,
-            "SELECT COUNT(*) FROM constraint_parents WHERE Id = 1;",
-            cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connection,
+                "PRAGMA foreign_keys;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM constraint_parents WHERE Id = 1;",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             4,
             await ScalarIntAsync(
@@ -378,10 +416,13 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
                 + "+ (SELECT COUNT(*) FROM set_default_children WHERE ParentId = 1) "
                 + "+ (SELECT COUNT(*) FROM restrict_children WHERE ParentId = 1);",
                 cancellationToken: CancellationToken.None));
-        Assert.Equal(0, await ScalarIntAsync(
-            connection,
-            "SELECT COUNT(*) FROM pragma_foreign_key_check;",
-            cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM pragma_foreign_key_check;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -398,6 +439,7 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
             + "ON self_reference_entities (ParentId); "
             + "INSERT INTO self_reference_entities (Id, ParentId) VALUES (1, NULL), (2, 1), (3, 2);",
             cancellationToken: CancellationToken.None);
+
         await using var context = new SqliteSelfReferenceRebuildTestContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists(
@@ -407,20 +449,26 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
-        Assert.Equal(3, await ScalarIntAsync(
-            connection,
-            "SELECT COUNT(*) FROM self_reference_entities;",
-            cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            3,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM self_reference_entities;",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connection,
                 "SELECT COUNT(*) FROM self_reference_entities WHERE Id = 3 AND ParentId = 2;",
                 cancellationToken: CancellationToken.None));
-        Assert.Equal(0, await ScalarIntAsync(
-            connection,
-            "SELECT COUNT(*) FROM pragma_foreign_key_check;",
-            cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM pragma_foreign_key_check;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -432,7 +480,9 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
             "CREATE TABLE constraint_parents (Id INTEGER NOT NULL, "
             + "CONSTRAINT pk_constraint_parents PRIMARY KEY (Id)); "
             + "INSERT INTO constraint_parents (Id) VALUES (1); "
-            + "PRAGMA foreign_keys = OFF;", cancellationToken: CancellationToken.None);
+            + "PRAGMA foreign_keys = OFF;",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists(
@@ -442,18 +492,26 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
-        Assert.Equal(0, await ScalarIntAsync(
-            connection,
-            "PRAGMA foreign_keys;",
-            cancellationToken: CancellationToken.None));
-        Assert.Equal(1, await ScalarIntAsync(
-            connection,
-            "SELECT COUNT(*) FROM constraint_parents WHERE Id = 1;",
-            cancellationToken: CancellationToken.None));
-        Assert.Equal(0, await ScalarIntAsync(
-            connection,
-            "SELECT COUNT(*) FROM pragma_foreign_key_check;",
-            cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connection,
+                "PRAGMA foreign_keys;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM constraint_parents WHERE Id = 1;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM pragma_foreign_key_check;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -469,7 +527,9 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
             + "INSERT INTO unrelated_children (Id, ParentId) VALUES (1, 999); "
             + "CREATE TABLE constraint_parents (Id INTEGER NOT NULL, "
             + "CONSTRAINT pk_constraint_parents PRIMARY KEY (Id)); "
-            + "INSERT INTO constraint_parents (Id) VALUES (1);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO constraint_parents (Id) VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists(
@@ -479,18 +539,26 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
-        Assert.Equal(0, await ScalarIntAsync(
-            connection,
-            "PRAGMA foreign_keys;",
-            cancellationToken: CancellationToken.None));
-        Assert.Equal(1, await ScalarIntAsync(
-            connection,
-            "SELECT COUNT(*) FROM unrelated_children;",
-            cancellationToken: CancellationToken.None));
-        Assert.Equal(1, await ScalarIntAsync(
-            connection,
-            "SELECT COUNT(*) FROM constraint_parents;",
-            cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connection,
+                "PRAGMA foreign_keys;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM unrelated_children;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM constraint_parents;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -507,7 +575,9 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
             + "PRAGMA foreign_keys = ON; "
             + "CREATE TABLE constraint_parents (Id INTEGER NOT NULL, "
             + "CONSTRAINT pk_constraint_parents PRIMARY KEY (Id)); "
-            + "INSERT INTO constraint_parents (Id) VALUES (1);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO constraint_parents (Id) VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists(
@@ -517,14 +587,20 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
-        Assert.Equal(1, await ScalarIntAsync(
-            connection,
-            "PRAGMA foreign_keys;",
-            cancellationToken: CancellationToken.None));
-        Assert.Equal(1, await ScalarIntAsync(
-            connection,
-            "SELECT COUNT(*) FROM unrelated_children;",
-            cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connection,
+                "PRAGMA foreign_keys;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM unrelated_children;",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -548,7 +624,9 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
             + "REFERENCES constraint_parents (Id) ON DELETE CASCADE); "
             + "PRAGMA foreign_keys = OFF; "
             + "INSERT INTO constraint_children (Id, ParentId) VALUES (11, 999); "
-            + "PRAGMA foreign_keys = ON;", cancellationToken: CancellationToken.None);
+            + "PRAGMA foreign_keys = ON;",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists(
@@ -560,14 +638,20 @@ public sealed class SqliteSafeMigrationConstraintMatrixIntegrationTests : Sqlite
             ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None));
 
         Assert.Contains("foreign-key validation failed", exception.Message, StringComparison.Ordinal);
-        Assert.Equal(1, await ScalarIntAsync(
-            connection,
-            "PRAGMA foreign_keys;",
-            cancellationToken: CancellationToken.None));
-        Assert.Equal(1, await ScalarIntAsync(
-            connection,
-            "SELECT COUNT(*) FROM constraint_children;",
-            cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connection,
+                "PRAGMA foreign_keys;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM constraint_children;",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             0,
             await ScalarIntAsync(

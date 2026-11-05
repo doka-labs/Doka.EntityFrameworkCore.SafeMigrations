@@ -33,24 +33,36 @@ public sealed class SqlServerSafeMigrationDefaultsAndChecksIntegrationTests : Sq
             _ => throw new ArgumentOutOfRangeException(nameof(defaultKind)),
         };
 
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.default_absence (Id int NOT NULL, Caption varchar(80) NULL); " + defaultSql,
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AddColumnIfNotExists<string>("Caption", "default_absence", type: "varchar(80)",
+        builder.AddColumnIfNotExists<string>(
+            "Caption",
+            "default_absence",
+            type: "varchar(80)",
             nullable: true);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context,
-            builder.Operations, new SafeMigrationRunOptions("sqlserver-default-absence"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-default-absence"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(expectedState, assessment.ObservedState);
-        Assert.Equal(expectedState == SafeMigrationObservedState.Matching
-            ? SafeMigrationAction.NoOp : SafeMigrationAction.RejectDifferent, assessment.Action);
+        Assert.Equal(
+            expectedState == SafeMigrationObservedState.Matching
+                ? SafeMigrationAction.NoOp
+                : SafeMigrationAction.RejectDifferent,
+            assessment.Action);
     }
 
     /// <summary>
@@ -65,6 +77,7 @@ public sealed class SqlServerSafeMigrationDefaultsAndChecksIntegrationTests : Sq
             connectionString,
             "CREATE TABLE dbo.checked_orders (Id int NOT NULL, Amount int NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists(
@@ -98,7 +111,9 @@ public sealed class SqlServerSafeMigrationDefaultsAndChecksIntegrationTests : Sq
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.default_orders (Id int NOT NULL); "
-            + "INSERT INTO dbo.default_orders (Id) VALUES (1);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO dbo.default_orders (Id) VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<string>(
@@ -121,7 +136,8 @@ public sealed class SqlServerSafeMigrationDefaultsAndChecksIntegrationTests : Sq
         var defaultCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.default_constraints WHERE parent_object_id = "
-            + "OBJECT_ID(N'dbo.default_orders', N'U');", cancellationToken: CancellationToken.None);
+            + "OBJECT_ID(N'dbo.default_orders', N'U');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, matchingRows);
@@ -140,7 +156,9 @@ public sealed class SqlServerSafeMigrationDefaultsAndChecksIntegrationTests : Sq
             connectionString,
             "CREATE TABLE dbo.unstamped_checks (Amount int NOT NULL); "
             + "ALTER TABLE dbo.unstamped_checks ADD CONSTRAINT CK_unstamped_checks_Amount "
-            + "CHECK ([Amount] >= 0);", cancellationToken: CancellationToken.None);
+            + "CHECK ([Amount] >= 0);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddCheckConstraintIfNotExists(
@@ -149,14 +167,19 @@ public sealed class SqlServerSafeMigrationDefaultsAndChecksIntegrationTests : Sq
             "[Amount] >= 0");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-unstamped-check"), cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-unstamped-check"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Different,
+            Assert.Single(report.Assessments)
+                .ObservedState);
     }
 
     /// <summary>
@@ -173,6 +196,7 @@ public sealed class SqlServerSafeMigrationDefaultsAndChecksIntegrationTests : Sq
             + "(Id int NOT NULL, Caption nvarchar(80) NOT NULL "
             + "CONSTRAINT DF_unstamped_defaults_Caption DEFAULT (N'ready'));",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<string>(
@@ -184,13 +208,18 @@ public sealed class SqlServerSafeMigrationDefaultsAndChecksIntegrationTests : Sq
             defaultValue: "ready");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-unstamped-default"), cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-unstamped-default"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Different,
+            Assert.Single(report.Assessments)
+                .ObservedState);
     }
 }

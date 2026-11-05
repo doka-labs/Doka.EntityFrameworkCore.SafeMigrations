@@ -1,18 +1,23 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the ColumnsDriftMatrix migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlColumnsDriftMatrixIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlColumnsDriftMatrixIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlColumnsDriftMatrixIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlColumnsDriftMatrixIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     [Fact]
     public async Task ObservableColumnFacetDrift_IsRejectedOneFieldAtATime()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `column_facets` (`a` int NOT NULL, `b` int NOT NULL);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `column_facets` (`a` int NOT NULL, `b` int NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var canonical = new[]
         {
@@ -60,8 +65,11 @@ public sealed partial class MySqlColumnsDriftMatrixIntegrationTests : MySqlSafeM
 
         var canonicalReport = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, create.Operations, new SafeMigrationRunOptions("column-facets-canonical"),
-                          CancellationToken.None);
+            .AnalyzeAsync(
+                context,
+                create.Operations,
+                new SafeMigrationRunOptions("column-facets-canonical"),
+                CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, canonicalReport.Status);
         Assert.All(
@@ -169,8 +177,11 @@ public sealed partial class MySqlColumnsDriftMatrixIntegrationTests : MySqlSafeM
 
             var report = await context
                 .GetService<ISafeMigrationRunner>()
-                .AnalyzeAsync(context, drift.Operations, new SafeMigrationRunOptions($"column-drift-{variant.Name}"),
-                              CancellationToken.None);
+                .AnalyzeAsync(
+                    context,
+                    drift.Operations,
+                    new SafeMigrationRunOptions($"column-drift-{variant.Name}"),
+                    CancellationToken.None);
 
             var assessment = Assert.Single(report.Assessments);
 

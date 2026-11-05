@@ -31,6 +31,7 @@ public sealed class SqliteServiceCompositionTests
         var historySql = context
             .GetService<IHistoryRepository>()
             .GetCreateIfNotExistsScript();
+
         var relationalConnection = context.GetService<IRelationalConnection>();
         await using var historyTableQuery = connection.CreateCommand();
         historyTableQuery.CommandText = "SELECT COUNT(*) FROM main.sqlite_schema "

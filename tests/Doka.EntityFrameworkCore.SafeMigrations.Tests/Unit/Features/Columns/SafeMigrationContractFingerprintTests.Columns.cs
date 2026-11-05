@@ -5,7 +5,7 @@ public sealed partial class SafeMigrationContractFingerprintTests
     [Fact]
     public void Fingerprint_IsDeterministicAndSnapshotsMutableLiteralInput()
     {
-        var bytes = new byte[] { 1, 2, 3, };
+        var bytes = new byte[] { 1, 2, 3 };
 
         var operations = Operations(
             new EnsureColumnIntent(
@@ -21,7 +21,7 @@ public sealed partial class SafeMigrationContractFingerprintTests
 
         Assert.Equal(first, second);
         Assert.Equal(64, first.Length);
-        Assert.All(first, static value => Assert.True(value is (>= '0' and <= '9') or (>= 'a' and <= 'f')));
+        Assert.All(first, static value => Assert.True(value is >= '0' and <= '9' or >= 'a' and <= 'f'));
     }
 
     [Fact]
@@ -30,7 +30,8 @@ public sealed partial class SafeMigrationContractFingerprintTests
         var baseline = Fingerprint(new EnsureColumnIntent("items", Column()));
         var variants = new SafeMigrationIntent[]
         {
-            new EnsureColumnIntent("other", Column()), new EnsureColumnIntent("items", Column(name: "other")),
+            new EnsureColumnIntent("other", Column()),
+            new EnsureColumnIntent("items", Column(name: "other")),
             new EnsureColumnIntent("items", Column(clrType: typeof(int))),
             new EnsureColumnIntent("items", Column(isNullable: false)),
             new EnsureColumnIntent("items", Column(storeType: "varchar(41)")),

@@ -28,7 +28,10 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
     [InlineData("current-timestamp", "CURRENT_TIMESTAMP")]
     [InlineData("provider-fragment", "CURRENT_USER")]
     [InlineData("opaque", "value + 1")]
-    public void Render_ProducesDeterministicSqlForStructuredNode(string caseId, string expectedSql)
+    public void Render_ProducesDeterministicSqlForStructuredNode(
+        string caseId,
+        string expectedSql
+    )
     {
         // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
@@ -50,14 +53,19 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
     /// <param name="expectedSql">The exact SQL for the two integer operands.</param>
     [Theory]
     [MemberData(nameof(BinaryOperatorCases))]
-    public void Render_ProducesBinaryOperator(SafeMigrationSqlBinaryOperator operation, string expectedSql)
+    public void Render_ProducesBinaryOperator(
+        SafeMigrationSqlBinaryOperator operation,
+        string expectedSql
+    )
     {
         // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
         using var context = new SqliteSafeMigrationTestContext(connection, registerSafeMigrations: false);
         var renderer = CreateRenderer(context);
         var expression = SafeMigrationSql.Binary(
-            SafeMigrationSql.Literal(1), operation, SafeMigrationSql.Literal(2));
+            SafeMigrationSql.Literal(1),
+            operation,
+            SafeMigrationSql.Literal(2));
 
         // Act
         var sql = renderer.Render(expression);
@@ -74,7 +82,9 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
         var declared = Enum.GetValues<SafeMigrationSqlBinaryOperator>();
 
         // Act
-        var covered = BinaryOperatorCases().Select(row => (SafeMigrationSqlBinaryOperator)row[0]).ToArray();
+        var covered = BinaryOperatorCases()
+            .Select(row => (SafeMigrationSqlBinaryOperator)row[0])
+            .ToArray();
 
         // Assert
         Assert.Equal(declared, covered);
@@ -90,7 +100,10 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
     [InlineData("qualified-collation", "schema_qualified_expression_collation")]
     [InlineData("precise-current-value", "current_value_precision")]
     [InlineData("foreign-fragment", "provider_fragment_mismatch")]
-    public void GetUnsupportedFeature_ClassifiesProviderBoundary(string caseId, string expectedFeature)
+    public void GetUnsupportedFeature_ClassifiesProviderBoundary(
+        string caseId,
+        string expectedFeature
+    )
     {
         // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
@@ -130,7 +143,9 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
     [InlineData("qualified-collation")]
     [InlineData("precise-current-value")]
     [InlineData("foreign-fragment")]
-    public void Render_RejectsUnrenderableProviderBoundary(string caseId)
+    public void Render_RejectsUnrenderableProviderBoundary(
+        string caseId
+    )
     {
         // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
@@ -168,7 +183,9 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
     [InlineData("VARCHAR(32)")]
     [InlineData("DECIMAL(18, 4)")]
     [InlineData("DOUBLE PRECISION")]
-    public void Render_AcceptsBoundedSQLiteStoreTypes(string storeType)
+    public void Render_AcceptsBoundedSQLiteStoreTypes(
+        string storeType
+    )
     {
         // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");
@@ -193,7 +210,9 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
     [InlineData("VARCHAR(-1)")]
     [InlineData("VARCHAR(1, 2, 3)")]
     [InlineData("\"TEXT\"")]
-    public void Render_RejectsStoreTypesOutsideTheBoundedGrammar(string storeType)
+    public void Render_RejectsStoreTypesOutsideTheBoundedGrammar(
+        string storeType
+    )
     {
         // Arrange
         using var connection = new SqliteConnection("Data Source=:memory:");

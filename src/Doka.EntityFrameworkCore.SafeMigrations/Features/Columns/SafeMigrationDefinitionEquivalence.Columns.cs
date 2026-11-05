@@ -59,7 +59,10 @@ internal static partial class SafeMigrationDefinitionEquivalence
         && ColumnIntrinsicFields(left, right, nameComparer, compareCapturedSource: false)
         && ProviderAnnotations(left.ProviderAnnotations, right.ProviderAnnotations)
         && SafeMigrationSqlExpressionParser.SourcesDifferOnlyByNativeColumnQuotes(
-            left.CapturedComputedSql, right.CapturedComputedSql, delimiter, foldUnquotedIdentifiers);
+            left.CapturedComputedSql,
+            right.CapturedComputedSql,
+            delimiter,
+            foldUnquotedIdentifiers);
 
     private static bool ColumnIntrinsicFields(
         ExpectedColumnDefinition left,

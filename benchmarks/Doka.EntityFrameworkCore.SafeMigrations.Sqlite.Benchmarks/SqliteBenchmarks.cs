@@ -1,3 +1,5 @@
+using System.Threading.Tasks;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Benchmarks;
 
 /// <summary>Measures SQLite column SQL generation at the retained operation counts.</summary>
@@ -10,6 +12,13 @@ public class SqliteGenerationBenchmarks : IDisposable
     /// <summary>Gets or sets the number of column operations generated per invocation.</summary>
     [Params(1, 100, 1000)]
     public int OperationCount { get; set; }
+
+    /// <summary>Releases the owned benchmark context.</summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
 
     /// <summary>Creates the native provider services, model and operations outside the measurement.</summary>
     [GlobalSetup]
@@ -31,13 +40,6 @@ public class SqliteGenerationBenchmarks : IDisposable
     [GlobalCleanup]
     public void Cleanup() => Dispose();
 
-    /// <summary>Releases the owned benchmark context.</summary>
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
-
     /// <summary>Releases managed resources owned by this benchmark fixture.</summary>
     /// <param name="disposing">Whether managed resources should be released.</param>
     protected virtual void Dispose(
@@ -56,8 +58,15 @@ public class SqliteMigrationBenchmarks : IDisposable
 {
     private SqliteGenerationContext _context = null!;
     private IMigrationsSqlGenerator _generator = null!;
-    private IReadOnlyList<MigrationOperation> _repairOperations = null!;
     private IReadOnlyList<MigrationOperation> _modelManagedOperations = null!;
+    private IReadOnlyList<MigrationOperation> _repairOperations = null!;
+
+    /// <summary>Releases the owned benchmark context.</summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
 
     /// <summary>Creates the native provider services, model and fixed workloads outside the measurement.</summary>
     [GlobalSetup]
@@ -90,18 +99,12 @@ public class SqliteMigrationBenchmarks : IDisposable
     /// <summary>Generates SQL for 384 model-managed-data transitions.</summary>
     /// <returns>The generated command count.</returns>
     [Benchmark]
-    public int GenerateModelManagedData() => _generator.Generate(_modelManagedOperations, _context.Model).Count;
+    public int GenerateModelManagedData() => _generator.Generate(_modelManagedOperations, _context.Model)
+        .Count;
 
     /// <summary>Disposes the native provider context after measurement.</summary>
     [GlobalCleanup]
     public void Cleanup() => Dispose();
-
-    /// <summary>Releases the owned benchmark context.</summary>
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
 
     /// <summary>Releases managed resources owned by this benchmark fixture.</summary>
     /// <param name="disposing">Whether managed resources should be released.</param>
@@ -121,13 +124,20 @@ public class SqliteModelManagedDataAnalysisBenchmarks : IDisposable
 {
     private SqliteConnection _connection = null!;
     private SqliteGenerationContext _context = null!;
-    private ISafeMigrationRunner _runner = null!;
-    private IReadOnlyList<MigrationOperation> _operations = null!;
     private string _instanceId = null!;
+    private IReadOnlyList<MigrationOperation> _operations = null!;
+    private ISafeMigrationRunner _runner = null!;
 
     /// <summary>Gets or sets the catalog table count; the 1000-table case includes indexes and foreign keys.</summary>
     [Params(200, 1000)]
     public int TableCount { get; set; }
+
+    /// <summary>Releases the owned native context and catalog connection.</summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
 
     /// <summary>Creates the native in-memory catalog and model-managed-data workload outside the measurement.</summary>
     [GlobalSetup]
@@ -152,7 +162,7 @@ public class SqliteModelManagedDataAnalysisBenchmarks : IDisposable
     /// <summary>Analyzes 384 model-managed-data transitions against the configured native catalog.</summary>
     /// <returns>The completed assessment count.</returns>
     [Benchmark]
-    public async System.Threading.Tasks.Task<int> AnalyzeModelManagedData()
+    public async Task<int> AnalyzeModelManagedData()
     {
         var report = await _runner
             .AnalyzeAsync(_context, _operations, new SafeMigrationRunOptions(_instanceId), CancellationToken.None)
@@ -164,13 +174,6 @@ public class SqliteModelManagedDataAnalysisBenchmarks : IDisposable
     /// <summary>Disposes the native context before closing its in-memory catalog connection.</summary>
     [GlobalCleanup]
     public void Cleanup() => Dispose();
-
-    /// <summary>Releases the owned native context and catalog connection.</summary>
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
 
     /// <summary>Releases managed resources owned by this benchmark fixture.</summary>
     /// <param name="disposing">Whether managed resources should be released.</param>
@@ -212,12 +215,14 @@ public class SqliteModelManagedDataAnalysisBenchmarks : IDisposable
                 + "id INTEGER NOT NULL PRIMARY KEY, parent_id INTEGER NULL, "
                 + "FOREIGN KEY (parent_id) REFERENCES benchmark_model_data(id));"
                 : $"CREATE TABLE benchmark_catalog_{index} (id INTEGER NOT NULL PRIMARY KEY);";
+
             _ = command.ExecuteNonQuery();
 
             if (includeRelationalObjects)
             {
                 command.CommandText = $"CREATE INDEX ix_benchmark_catalog_{index}_parent "
                     + $"ON benchmark_catalog_{index}(parent_id);";
+
                 _ = command.ExecuteNonQuery();
             }
         }

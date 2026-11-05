@@ -19,8 +19,11 @@ public sealed class PostgreSqlRuntimeDiagnosticsIntegrationTests : PostgreSqlSaf
     [InlineData("data_blocked", "P1003", "doka_sm_data_blocked")]
     [InlineData("prerequisite_missing", "P1004", "doka_sm_prerequisite_missing")]
     [InlineData("missing", "P1005", "doka_sm_postcondition")]
-    public async Task NativeRuntimeDiagnosticSurvivesClientDetailRedaction(string state, string sqlState,
-        string guardCode)
+    public async Task NativeRuntimeDiagnosticSurvivesClientDetailRedaction(
+        string state,
+        string sqlState,
+        string guardCode
+    )
     {
         // Arrange
         var rawConnectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -29,15 +32,24 @@ public sealed class PostgreSqlRuntimeDiagnosticsIntegrationTests : PostgreSqlSaf
             IncludeErrorDetail = false,
         }.ConnectionString;
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("diagnostic_owner",
-            new ExpectedColumnDefinition("RequiredId", typeof(int), false, "integer")),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "diagnostic_owner",
+                new ExpectedColumnDefinition("RequiredId", typeof(int), false, "integer")),
             SafeMigrationPolicy.ThrowIfDifferent);
-        var plan = new PostgreSqlSafeMigrationRuntimePlan("'" + state + "'", "FALSE",
-            SafeMigrationRepairCapability.None, "FALSE");
+
+        var plan = new PostgreSqlSafeMigrationRuntimePlan(
+            "'" + state + "'",
+            "FALSE",
+            SafeMigrationRepairCapability.None,
+            "FALSE");
+
         var sql = PostgreSqlRuntimeDiagnosticTests.Render(operation, plan);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, sql,
+        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(
+            connectionString,
+            sql,
             cancellationToken: CancellationToken.None));
 
         // Assert
@@ -62,10 +74,15 @@ public sealed class PostgreSqlRuntimeDiagnosticsIntegrationTests : PostgreSqlSaf
             IncludeErrorDetail = false,
         }.ConnectionString;
 
-        var operation = new SafeMigrationOperation(new DropTableIntent("guarded_owner"),
+        var operation = new SafeMigrationOperation(
+            new DropTableIntent("guarded_owner"),
             SafeMigrationPolicy.ThrowIfDifferent);
-        var plan = new PostgreSqlSafeMigrationRuntimePlan("'matching'", "TRUE",
-            SafeMigrationRepairCapability.None, "FALSE")
+
+        var plan = new PostgreSqlSafeMigrationRuntimePlan(
+            "'matching'",
+            "TRUE",
+            SafeMigrationRepairCapability.None,
+            "FALSE")
         {
             ObjectIdentityGuardExpression = "FALSE",
             ObjectIdentityGuardFailureCodeExpression = "'schema_search_path_mismatch'",
@@ -74,7 +91,9 @@ public sealed class PostgreSqlRuntimeDiagnosticsIntegrationTests : PostgreSqlSaf
         var sql = PostgreSqlRuntimeDiagnosticTests.Render(operation, plan);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, sql,
+        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(
+            connectionString,
+            sql,
             cancellationToken: CancellationToken.None));
 
         // Assert
@@ -90,23 +109,33 @@ public sealed class PostgreSqlRuntimeDiagnosticsIntegrationTests : PostgreSqlSaf
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var operation = new SafeMigrationOperation(new DropTableIntent("owner'\\n$other$\n\u20AC"),
+        var operation = new SafeMigrationOperation(
+            new DropTableIntent("owner'\\n$other$\n\u20AC"),
             SafeMigrationPolicy.ThrowIfDifferent);
-        var plan = new PostgreSqlSafeMigrationRuntimePlan("'different'", "FALSE",
-            SafeMigrationRepairCapability.None, "FALSE");
+
+        var plan = new PostgreSqlSafeMigrationRuntimePlan(
+            "'different'",
+            "FALSE",
+            SafeMigrationRepairCapability.None,
+            "FALSE");
+
         var sql = "SET standard_conforming_strings = off; " + PostgreSqlRuntimeDiagnosticTests.Render(operation, plan);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, sql,
+        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(
+            connectionString,
+            sql,
             cancellationToken: CancellationToken.None));
 
         // Assert
         var native = Assert.IsType<PostgresException>(failure);
         Assert.Equal("P1001", native.SqlState);
-        Assert.Equal(SafeMigrationDiagnosticMessages.FormatRuntime(operation, "doka_sm_different"),
+        Assert.Equal(
+            SafeMigrationDiagnosticMessages.FormatRuntime(operation, "doka_sm_different"),
             native.MessageText);
+
         Assert.Contains("owner'", native.MessageText, StringComparison.Ordinal);
-        Assert.All(native.MessageText, static character => Assert.InRange((int)character, 32, 126));
+        Assert.All(native.MessageText, static character => Assert.InRange(character, 32, 126));
     }
 
     /// <summary>Hostile identity endpoints cannot terminate the anonymous block before the owned guard executes.</summary>
@@ -117,17 +146,25 @@ public sealed class PostgreSqlRuntimeDiagnosticsIntegrationTests : PostgreSqlSaf
     [InlineData("foreign_key_principal")]
     [InlineData("rename_column_target")]
     [InlineData("rename_table_target")]
-    public async Task NativeDelimiterCounterprobeRetainsOwnedSqlState(string placement)
+    public async Task NativeDelimiterCounterprobeRetainsOwnedSqlState(
+        string placement
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var operation = PostgreSqlRuntimeDiagnosticTests.HostileDelimiterOperation(placement);
-        var plan = new PostgreSqlSafeMigrationRuntimePlan("'different'", "TRUE",
-            SafeMigrationRepairCapability.None, "FALSE");
+        var plan = new PostgreSqlSafeMigrationRuntimePlan(
+            "'different'",
+            "TRUE",
+            SafeMigrationRepairCapability.None,
+            "FALSE");
+
         var sql = PostgreSqlRuntimeDiagnosticTests.Render(operation, plan);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString, sql,
+        var failure = await Record.ExceptionAsync(() => ExecuteSqlAsync(
+            connectionString,
+            sql,
             cancellationToken: CancellationToken.None));
 
         // Assert
@@ -144,14 +181,20 @@ public sealed class PostgreSqlRuntimeDiagnosticsIntegrationTests : PostgreSqlSaf
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE native_error (id integer PRIMARY KEY); "
-            + "INSERT INTO native_error VALUES (1);", cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE native_error (id integer PRIMARY KEY); "
+            + "INSERT INTO native_error VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.Sql("INSERT INTO native_error VALUES (1);");
 
         // Act
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
         // Assert
@@ -166,22 +209,30 @@ public sealed class PostgreSqlRuntimeDiagnosticsIntegrationTests : PostgreSqlSaf
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE diagnostic_tags (id integer PRIMARY KEY); "
-            + "INSERT INTO diagnostic_tags VALUES (1);", cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE diagnostic_tags (id integer PRIMARY KEY); "
+            + "INSERT INTO diagnostic_tags VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AddColumnIfNotExists<bool>("IsActive", "diagnostic_tags", type: "boolean", nullable: false,
+        builder.AddColumnIfNotExists<bool>(
+            "IsActive",
+            "diagnostic_tags",
+            type: "boolean",
+            nullable: false,
             defaultValue: true);
 
         // Act
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var activeRows = await ScalarIntAsync(connectionString,
+        var activeRows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM diagnostic_tags WHERE \"IsActive\" = TRUE;",
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, activeRows);
     }
-
 }

@@ -28,7 +28,9 @@ public sealed class PostgreSqlModelManagedDeleteFenceSqlTests
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
 
         // Assert
         var command = Assert.Single(commands);
@@ -37,17 +39,26 @@ public sealed class PostgreSqlModelManagedDeleteFenceSqlTests
         Assert.True(fence > 0);
         Assert.True(mutation > fence);
         Assert.Contains("FOR doka_evaluation_pass IN 1..2 LOOP", command.CommandText, StringComparison.Ordinal);
-        Assert.Contains("EXIT WHEN doka_action OPERATOR(pg_catalog.<>) 'apply' "
-            + "OR doka_evaluation_pass OPERATOR(pg_catalog.=) 2;", command.CommandText,
+        Assert.Contains(
+            "EXIT WHEN doka_action OPERATOR(pg_catalog.<>) 'apply' "
+            + "OR doka_evaluation_pass OPERATOR(pg_catalog.=) 2;",
+            command.CommandText,
             StringComparison.Ordinal);
+
         Assert.DoesNotContain("LOCK TABLE app.users", command.CommandText, StringComparison.Ordinal);
         Assert.DoesNotContain("FOR UPDATE", command.CommandText, StringComparison.Ordinal);
         Assert.DoesNotContain("SET TRANSACTION", command.CommandText, StringComparison.Ordinal);
         Assert.DoesNotContain("COMMIT", command.CommandText, StringComparison.Ordinal);
-        Assert.Contains("pg_catalog.to_jsonb(constraint_row)->>'conenforced'", command.CommandText,
+        Assert.Contains(
+            "pg_catalog.to_jsonb(constraint_row)->>'conenforced'",
+            command.CommandText,
             StringComparison.Ordinal);
-        Assert.Contains("pg_catalog.current_setting('server_version_num')::integer < 180000", command.CommandText,
+
+        Assert.Contains(
+            "pg_catalog.current_setting('server_version_num')::integer < 180000",
+            command.CommandText,
             StringComparison.Ordinal);
+
         Assert.DoesNotContain("constraint_row.conenforced", command.CommandText, StringComparison.Ordinal);
     }
 
@@ -64,16 +75,32 @@ public sealed class PostgreSqlModelManagedDeleteFenceSqlTests
         using var context = CreateDeleteFenceSqlContext();
         ModelManagedDataIntent intent = update
             ? new UpdateModelManagedDataIntent(
-                "roles", ["id"], ["integer"], new object?[,] { { 1 } },
-                ["name"], ["text"], new object?[,] { { "source" } }, new object?[,] { { "target" } },
-                schema: "app", uniqueKeys: null)
+                "roles",
+                ["id"],
+                ["integer"],
+                new object?[,] { { 1 } },
+                ["name"],
+                ["text"],
+                new object?[,] { { "source" } },
+                new object?[,] { { "target" } },
+                schema: "app",
+                uniqueKeys: null)
             : new EnsureModelManagedDataIntent(
-                "roles", ["id"], ["integer"], ["id", "name"], ["integer", "text"],
-                new object?[,] { { 1, "target" } }, schema: "app", uniqueKeys: null);
+                "roles",
+                ["id"],
+                ["integer"],
+                ["id", "name"],
+                ["integer", "text"],
+                new object?[,] { { 1, "target" } },
+                schema: "app",
+                uniqueKeys: null);
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(
-            [new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent)], context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(
+                [new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent)],
+                context.Model);
 
         // Assert
         var command = Assert.Single(commands);
@@ -90,13 +117,23 @@ public sealed class PostgreSqlModelManagedDeleteFenceSqlTests
         using var context = CreateDeleteFenceSqlContext();
         var operation = new SafeMigrationOperation(
             new DeleteModelManagedDataIntent(
-                "roles", ["id"], ["integer"], new object?[,] { { 1 } },
-                ["id"], ["integer"], new object?[,] { { 1 } }, schema: "app", foreignKeys: null),
+                "roles",
+                ["id"],
+                ["integer"],
+                new object?[,] { { 1 } },
+                ["id"],
+                ["integer"],
+                new object?[,] { { 1 } },
+                schema: "app",
+                foreignKeys: null),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         operation.AddAnnotation("unsupported:delete-fixture", true);
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
 
         // Assert
         var command = Assert.Single(commands);

@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the ColumnsScaffolding migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlColumnsScaffoldingIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlColumnsScaffoldingIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     [Fact]
     public async Task AnnotatedColumns_RepairDefaultsAndCommentsWithoutLosingRows()
@@ -83,15 +85,21 @@ public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeM
             "INSERT INTO `annotated_column_repair` "
             + "(`id`, `is_active`, `display_name`, `external_id`, `occurred_at`) VALUES "
             + "(2, 0, 'inserted', '33333333-3333-3333-3333-333333333333', "
-            + "'2026-08-31 13:00:00.000000');", cancellationToken: CancellationToken.None);
+            + "'2026-08-31 13:00:00.000000');",
+            cancellationToken: CancellationToken.None);
 
         var postflight = await runner.VerifyAsync(context, builder.Operations, options, CancellationToken.None);
 
         Assert.Contains(preflight.Assessments, static assessment => assessment.Action == SafeMigrationAction.Repair);
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
-        Assert.Equal(2, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `annotated_column_repair`;",
-            cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `annotated_column_repair`;",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             4,
             await ScalarIntAsync(
@@ -133,11 +141,15 @@ public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeM
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("annotated-nullable-blocked"),
-                          CancellationToken.None);
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("annotated-nullable-blocked"),
+                CancellationToken.None);
 
-        var exception = await AssertOwnedGuardFailureAsync(operationToken =>
-            ExecuteOperationsAsync(context, builder.Operations, operationToken),
+        var exception = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
         var assessment = Assert.Single(
@@ -185,11 +197,15 @@ public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeM
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("identity-mismatch"),
-                          CancellationToken.None);
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("identity-mismatch"),
+                CancellationToken.None);
 
-        var exception = await AssertOwnedGuardFailureAsync(operationToken =>
-            ExecuteOperationsAsync(context, builder.Operations, operationToken),
+        var exception = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
         Assert.Contains(
@@ -200,6 +216,7 @@ public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeM
                 ObservedState: SafeMigrationObservedState.Different,
                 Action: SafeMigrationAction.RejectDifferent,
             });
+
         Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(
             string.Empty,
@@ -207,7 +224,8 @@ public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeM
                 connectionString,
                 "SELECT EXTRA FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'annotated_identity_mismatch' "
-                + "AND COLUMN_NAME = 'id';", cancellationToken: CancellationToken.None));
+                + "AND COLUMN_NAME = 'id';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -227,20 +245,32 @@ public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeM
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("scaffolded-identity"),
-                          CancellationToken.None);
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("scaffolded-identity"),
+                CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
         Assert.Equal(
             "auto_increment",
             await ScalarStringAsync(
                 connectionString,
                 "SELECT LOWER(EXTRA) FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'scaffolded_identity' "
-                + "AND COLUMN_NAME = 'id';", cancellationToken: CancellationToken.None));
-        Assert.Equal(1, await ScalarIntAsync(connectionString, "SELECT `id` FROM `scaffolded_identity`;",
-            cancellationToken: CancellationToken.None));
+                + "AND COLUMN_NAME = 'id';",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT `id` FROM `scaffolded_identity`;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -259,15 +289,22 @@ public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeM
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("scaffolded-identity-drift"),
-                          CancellationToken.None);
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("scaffolded-identity-drift"),
+                CancellationToken.None);
 
-        var exception = await AssertOwnedGuardFailureAsync(operationToken =>
-            ExecuteOperationsAsync(context, builder.Operations, operationToken),
+        var exception = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Different,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
         Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(
             string.Empty,
@@ -275,7 +312,8 @@ public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeM
                 connectionString,
                 "SELECT EXTRA FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'scaffolded_identity_drift' "
-                + "AND COLUMN_NAME = 'id';", cancellationToken: CancellationToken.None));
+                + "AND COLUMN_NAME = 'id';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -289,15 +327,22 @@ public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeM
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("unsupported-operation-facet"),
-                          CancellationToken.None);
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("unsupported-operation-facet"),
+                CancellationToken.None);
 
-        var exception = await AssertOwnedGuardFailureAsync(operationToken =>
-            ExecuteOperationsAsync(context, builder.Operations, operationToken),
+        var exception = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Unsupported, Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Unsupported,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
         Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(
             0,
@@ -368,21 +413,29 @@ public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeM
 
         var preflight = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("client-guid-relationship"),
-                          CancellationToken.None);
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("client-guid-relationship"),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteSqlAsync(
             connectionString,
             "INSERT INTO `client_guid_roots` (`id`) VALUES ('9ca407b5-d320-442f-9b52-a41448759585');"
             + "INSERT INTO `client_guid_leaves` (`root_id`) "
-            + "VALUES ('9ca407b5-d320-442f-9b52-a41448759585');", cancellationToken: CancellationToken.None);
+            + "VALUES ('9ca407b5-d320-442f-9b52-a41448759585');",
+            cancellationToken: CancellationToken.None);
+
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var postflight = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("client-guid-relationship"),
-                          CancellationToken.None);
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("client-guid-relationship"),
+                CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.All(
@@ -390,14 +443,25 @@ public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeM
             assessment => Assert.True(
                 assessment.Action is SafeMigrationAction.Apply or SafeMigrationAction.NoOp,
                 $"Unexpected preflight action: {assessment.Action}."));
+
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.All(
             postflight.Assessments,
             assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
-        Assert.Equal(1, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `client_guid_roots`;",
-            cancellationToken: CancellationToken.None));
-        Assert.Equal(1, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `client_guid_leaves`;",
-            cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `client_guid_roots`;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `client_guid_leaves`;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Theory]
@@ -422,7 +486,9 @@ public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeM
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var storeType = GuidStoreType(guidFormat);
-        var maxLength = guidFormat == DokaMySqlGuidFormat.Binary16 ? 16 : 36;
+        var maxLength = guidFormat == DokaMySqlGuidFormat.Binary16
+            ? 16
+            : 36;
 
         // Owned table splitting shares the owner's table and key operation.
         // The owned facet below keeps that generated shape in this full graph.
@@ -480,7 +546,11 @@ public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeM
             },
             constraints: table => table.PrimaryKey(
                 "pk_native_guid_composites",
-                value => new { value.tenant_id, value.id }));
+                value => new
+                {
+                    value.tenant_id,
+                    value.id,
+                }));
 
         _ = AddScaffoldedTable(
             builder,
@@ -540,20 +610,27 @@ public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeM
                     "native_guid_roots",
                     "id",
                     onDelete: ReferentialAction.Cascade);
+
                 table.ForeignKey(
                     "fk_native_guid_leaves_nullable_roots",
                     value => value.nullable_root_id,
                     "native_guid_roots",
                     "id");
+
                 table.ForeignKey(
                     "fk_native_guid_leaves_alternate_roots",
                     value => value.root_alternate_id,
                     "native_guid_roots",
                     "alternate_id",
                     onDelete: ReferentialAction.Cascade);
+
                 table.ForeignKey(
                     "fk_native_guid_leaves_composites",
-                    value => new { value.composite_tenant_id, value.composite_id },
+                    value => new
+                    {
+                        value.composite_tenant_id,
+                        value.composite_id,
+                    },
                     "native_guid_composites",
                     ["tenant_id", "id"],
                     onDelete: ReferentialAction.Cascade);
@@ -563,14 +640,17 @@ public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeM
             "ix_native_guid_leaves_root_id",
             "native_guid_leaves",
             "root_id");
+
         _ = builder.CreateIndexIfNotExistsFromModel(
             "ix_native_guid_leaves_nullable_root_id",
             "native_guid_leaves",
             "nullable_root_id");
+
         _ = builder.CreateIndexIfNotExistsFromModel(
             "ix_native_guid_leaves_root_alternate_id",
             "native_guid_leaves",
             "root_alternate_id");
+
         _ = builder.CreateCompositeIndexIfNotExistsFromModel(
             "ix_native_guid_leaves_composite",
             "native_guid_leaves",
@@ -600,6 +680,7 @@ public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeM
             + "`composite_tenant_id`, `composite_id`) "
             + $"VALUES ({leafId}, {rootId}, NULL, {alternateId}, {tenantId}, {compositeId});",
             cancellationToken: CancellationToken.None);
+
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         var replay = await runner.AnalyzeAsync(context, builder.Operations, options, CancellationToken.None);
@@ -608,6 +689,7 @@ public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeM
         Assert.DoesNotContain(
             preflight.Assessments,
             static assessment => assessment.ObservedState == SafeMigrationObservedState.Unsupported);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.All(postflight.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
@@ -619,13 +701,29 @@ public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeM
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() "
                 + "AND TABLE_NAME IN ('native_guid_roots', 'native_guid_composites', 'native_guid_leaves') "
-                + $"AND LOWER(COLUMN_TYPE) = '{storeType}';", cancellationToken: CancellationToken.None));
-        Assert.Equal(1, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `native_guid_roots`;",
-            cancellationToken: CancellationToken.None));
-        Assert.Equal(1, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `native_guid_composites`;",
-            cancellationToken: CancellationToken.None));
-        Assert.Equal(1, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `native_guid_leaves`;",
-            cancellationToken: CancellationToken.None));
+                + $"AND LOWER(COLUMN_TYPE) = '{storeType}';",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `native_guid_roots`;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `native_guid_composites`;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `native_guid_leaves`;",
+                cancellationToken: CancellationToken.None));
     }
 
     [Theory]
@@ -673,15 +771,22 @@ public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeM
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions($"invalid-{testCase}"),
-                          CancellationToken.None);
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions($"invalid-{testCase}"),
+                CancellationToken.None);
 
-        var exception = await AssertOwnedGuardFailureAsync(operationToken =>
-            ExecuteOperationsAsync(context, builder.Operations, operationToken),
+        var exception = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Unsupported, Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Unsupported,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
         Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(
             0,
@@ -702,7 +807,9 @@ public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeM
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        var tableName = useUnknownAnnotation ? "unsupported_unknown" : "unsupported_hilo";
+        var tableName = useUnknownAnnotation
+            ? "unsupported_unknown"
+            : "unsupported_hilo";
 
         _ = builder.CreateTableIfNotExists(
             name: tableName,
@@ -724,12 +831,16 @@ public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeM
             .GetService<ISafeMigrationRunner>()
             .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions(tableName), CancellationToken.None);
 
-        var exception = await AssertOwnedGuardFailureAsync(operationToken =>
-            ExecuteOperationsAsync(context, builder.Operations, operationToken),
+        var exception = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Unsupported, Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Unsupported,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
         Assert.Contains("doka_sm_unsupported", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(
             0,
@@ -764,7 +875,6 @@ public sealed partial class MySqlColumnsScaffoldingIntegrationTests : MySqlSafeM
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-
     protected static OperationBuilder<SafeMigrationOperation> AddScaffoldedTable<TColumns>(
         MigrationBuilder builder,
         SafeMigrationScaffoldingMode mode,
@@ -796,7 +906,6 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-
     private protected static string GuidLiteral(
         DokaMySqlGuidFormat format,
         string value
@@ -810,7 +919,6 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-
     public enum UnsupportedGuidAnnotationCase
     {
         UndefinedValue,

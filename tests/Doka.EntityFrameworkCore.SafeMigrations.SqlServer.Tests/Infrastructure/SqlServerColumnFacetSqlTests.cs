@@ -13,12 +13,54 @@ public sealed class SqlServerColumnFacetSqlTests
     /// Resolves length, Unicode, fixed-length, precision, and scale without an explicit store type.
     /// </summary>
     [Theory]
-    [InlineData(typeof(string), "varchar(80)", false, 80, false, null, null)]
-    [InlineData(typeof(string), "nchar(80)", true, 80, true, null, null)]
-    [InlineData(typeof(string), "nvarchar(80)", true, 80, false, null, null)]
-    [InlineData(typeof(byte[]), "varbinary(80)", null, 80, false, null, null)]
-    [InlineData(typeof(decimal), "decimal(12,3)", null, null, null, 12, 3)]
-    [InlineData(typeof(DateTime), "datetime2(3)", null, null, null, 3, null)]
+    [InlineData(
+        typeof(string),
+        "varchar(80)",
+        false,
+        80,
+        false,
+        null,
+        null)]
+    [InlineData(
+        typeof(string),
+        "nchar(80)",
+        true,
+        80,
+        true,
+        null,
+        null)]
+    [InlineData(
+        typeof(string),
+        "nvarchar(80)",
+        true,
+        80,
+        false,
+        null,
+        null)]
+    [InlineData(
+        typeof(byte[]),
+        "varbinary(80)",
+        null,
+        80,
+        false,
+        null,
+        null)]
+    [InlineData(
+        typeof(decimal),
+        "decimal(12,3)",
+        null,
+        null,
+        null,
+        12,
+        3)]
+    [InlineData(
+        typeof(DateTime),
+        "datetime2(3)",
+        null,
+        null,
+        null,
+        3,
+        null)]
     public void InferredFacets_ProduceTheExplicitStoreTypeCatalogPredicate(
         Type clrType,
         string storeType,
@@ -32,23 +74,40 @@ public sealed class SqlServerColumnFacetSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalTypeMappingSource>(),
-            context.GetService<Microsoft.EntityFrameworkCore.Storage.ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         var inferred = new ExpectedColumnDefinition(
-            "Value", clrType, true, isUnicode: unicode, maxLength: length,
-            isFixedLength: fixedLength, precision: precision, scale: scale);
+            "Value",
+            clrType,
+            true,
+            isUnicode: unicode,
+            maxLength: length,
+            isFixedLength: fixedLength,
+            precision: precision,
+            scale: scale);
 
         var explicitType = new ExpectedColumnDefinition(
-            "Value", clrType, true, storeType, unicode, length, fixedLength,
-            precision: precision, scale: scale);
+            "Value",
+            clrType,
+            true,
+            storeType,
+            unicode,
+            length,
+            fixedLength,
+            precision: precision,
+            scale: scale);
 
         // Act
-        var inferredPlan = catalog.Build(new SafeMigrationOperation(
-            new EnsureColumnIntent("facet_items", inferred), SafeMigrationPolicy.ThrowIfDifferent));
+        var inferredPlan = catalog.Build(
+            new SafeMigrationOperation(
+                new EnsureColumnIntent("facet_items", inferred),
+                SafeMigrationPolicy.ThrowIfDifferent));
 
-        var explicitPlan = catalog.Build(new SafeMigrationOperation(
-            new EnsureColumnIntent("facet_items", explicitType), SafeMigrationPolicy.ThrowIfDifferent));
+        var explicitPlan = catalog.Build(
+            new SafeMigrationOperation(
+                new EnsureColumnIntent("facet_items", explicitType),
+                SafeMigrationPolicy.ThrowIfDifferent));
 
         // Assert
         Assert.False(inferredPlan.IsStaticallyUnsupported);
@@ -65,8 +124,8 @@ public sealed class SqlServerColumnFacetSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalTypeMappingSource>(),
-            context.GetService<Microsoft.EntityFrameworkCore.Storage.ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         var operation = new SafeMigrationOperation(
             new EnsureColumnIntent("facet_items", new ExpectedColumnDefinition("Value", typeof(int), true, "int")),
@@ -93,20 +152,26 @@ public sealed class SqlServerColumnFacetSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalTypeMappingSource>(),
-            context.GetService<Microsoft.EntityFrameworkCore.Storage.ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureTable(new ExpectedTableDefinition("nullable_key",
-            [new ExpectedColumnDefinition("Id", typeof(int), true, "int")],
-            primaryKey: new ExpectedPrimaryKeyDefinition("PK_nullable_key", "nullable_key", ["Id"])),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "nullable_key",
+                [new ExpectedColumnDefinition("Id", typeof(int), true, "int")],
+                primaryKey: new ExpectedPrimaryKeyDefinition("PK_nullable_key", "nullable_key", ["Id"])),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
         var operation = (SafeMigrationOperation)builder.Operations[0];
 
         // Act
         var plan = catalog.Build(operation);
         var exception = Record.Exception(() =>
-            context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model));
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate(builder.Operations, context.Model));
 
         // Assert
         Assert.True(plan.IsStaticallyUnsupported);
@@ -131,14 +196,22 @@ public sealed class SqlServerColumnFacetSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var collation = new SafeMigrationCollationIdentifier(
-            "Latin1_General_100_CI_AS", qualified ? "application" : null);
+            "Latin1_General_100_CI_AS",
+            qualified
+                ? "application"
+                : null);
 
         var definition = new ExpectedColumnDefinition(
-            "Value", typeof(string), true, "varchar(80)", collation: collation);
+            "Value",
+            typeof(string),
+            true,
+            "varchar(80)",
+            collation: collation);
 
         switch (operationKind)
         {
@@ -146,19 +219,27 @@ public sealed class SqlServerColumnFacetSqlTests
                 builder.EnsureColumn("collation_items", definition, SafeMigrationPolicy.ThrowIfDifferent);
                 break;
             case "table":
-                builder.EnsureTable(new ExpectedTableDefinition("collation_items", [definition]),
-                    SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+                builder.EnsureTable(
+                    new ExpectedTableDefinition("collation_items", [definition]),
+                    SafeMigrationTableMode.StrictDefinition,
+                    SafeMigrationPolicy.ThrowIfDifferent);
+
                 break;
             case "alter-old":
-                builder.AlterColumnIfDifferent("collation_items",
+                builder.AlterColumnIfDifferent(
+                    "collation_items",
                     new ExpectedColumnDefinition("Value", typeof(string), true, "varchar(80)"),
                     new ExpectedColumnDefinition("Value", typeof(string), true, "varchar(40)", collation: collation),
                     SafeMigrationPolicy.RepairIfSafe);
+
                 break;
             case "alter-new":
-                builder.AlterColumnIfDifferent("collation_items", definition,
+                builder.AlterColumnIfDifferent(
+                    "collation_items",
+                    definition,
                     new ExpectedColumnDefinition("Value", typeof(string), true, "varchar(40)"),
                     SafeMigrationPolicy.RepairIfSafe);
+
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(operationKind));
@@ -167,11 +248,18 @@ public sealed class SqlServerColumnFacetSqlTests
         // Act
         var plan = catalog.Build((SafeMigrationOperation)builder.Operations[0]);
         var exception = Record.Exception(() =>
-            context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model));
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate(builder.Operations, context.Model));
 
         // Assert
         Assert.Equal(qualified, plan.IsStaticallyUnsupported);
-        Assert.Equal(qualified ? "column_collation_unproven" : null, plan.UnsupportedCode);
+        Assert.Equal(
+            qualified
+                ? "column_collation_unproven"
+                : null,
+            plan.UnsupportedCode);
+
         if (qualified)
         {
             Assert.IsType<NotSupportedException>(exception);

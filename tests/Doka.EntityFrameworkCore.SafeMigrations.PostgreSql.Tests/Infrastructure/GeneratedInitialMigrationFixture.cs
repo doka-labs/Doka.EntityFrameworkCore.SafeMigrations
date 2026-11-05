@@ -3,8 +3,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 /// <summary>Applies each externally provisioned tooling schema once without imposing test-method order.</summary>
 public sealed class GeneratedInitialMigrationFixture
 {
-    private readonly Lazy<Task<GeneratedInitialMigrationObservation>> _strict;
     private readonly Lazy<Task<GeneratedInitialMigrationObservation>> _legacy;
+    private readonly Lazy<Task<GeneratedInitialMigrationObservation>> _strict;
 
     /// <summary>
     /// Creates once-only initializers owned by the shared fixture rather than any one observing fact.
@@ -53,7 +53,9 @@ public sealed class GeneratedInitialMigrationFixture
 
         // WHY: The first selected fact owns setup, not a particular method order. Lazy also
         // retains a fault instead of retrying a partially applied schema behind another fact.
-        var initialization = (legacy ? _legacy : _strict).Value;
+        var initialization = (legacy
+            ? _legacy
+            : _strict).Value;
 
         // WHY: Cancel only this observer; the retained initialization still owns schema mutation
         // and must finish independently so another fact cannot race a second setup or cleanup.
@@ -113,7 +115,11 @@ public sealed class GeneratedInitialMigrationFixture
             cancellationToken: cancellationToken);
 
         return new GeneratedInitialMigrationObservation(
-            preflight, replay, postflight, seedCount, () => createContext(connectionString));
+            preflight,
+            replay,
+            postflight,
+            seedCount,
+            () => createContext(connectionString));
     }
 
     /// <summary>Finds the real freshly scaffolded migration for the selected tooling profile.</summary>
@@ -135,14 +141,17 @@ public sealed class GeneratedInitialMigrationFixture
     }
 
     /// <summary>Reports every blocking operation instead of hiding setup failure behind a dependent query.</summary>
-    internal static void AssertReady(SafeMigrationRunReport report)
+    internal static void AssertReady(
+        SafeMigrationRunReport report
+    )
     {
         if (report.Status == SafeMigrationReportStatus.Ready)
         {
             return;
         }
 
-        var blockers = report.Assessments
+        var blockers = report
+            .Assessments
             .Where(static assessment => assessment.Action is
                 SafeMigrationAction.RejectDifferent
                 or SafeMigrationAction.RejectUnsupported
@@ -188,12 +197,16 @@ public sealed class GeneratedInitialMigrationFixture
     /// <param name="sql">The source-controlled fixture SQL.</param>
     /// <param name="cancellationToken">Cancels the owned operation before and during asynchronous work.</param>
     /// <returns>The asynchronous fixture operation or observation.</returns>
-    private static async Task<int> ScalarIntAsync(DbContext context, string sql, CancellationToken cancellationToken)
+    private static async Task<int> ScalarIntAsync(
+        DbContext context,
+        string sql,
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         var connection = context.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open)
+        if (connection.State != ConnectionState.Open)
         {
             await connection.OpenAsync(cancellationToken);
         }

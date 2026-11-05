@@ -6,7 +6,9 @@ internal static class SqlServerSqlStringLiteral
     /// <summary>Renders exact string data without allowing native backslash-newline continuation.</summary>
     /// <param name="value">The original Unicode text, not executable SQL.</param>
     /// <returns>A Unicode literal, or a MAX-first concatenation when a native literal would change the value.</returns>
-    internal static string Render(string value)
+    internal static string Render(
+        string value
+    )
     {
         ArgumentNullException.ThrowIfNull(value);
 
@@ -25,7 +27,11 @@ internal static class SqlServerSqlStringLiteral
         while ((newline = remaining.IndexOfAny('\r', '\n')) >= 0)
         {
             AppendEscaped(builder, remaining.Slice(0, newline));
-            builder.Append(remaining[newline] == '\r' ? "' + NCHAR(13) + N'" : "' + NCHAR(10) + N'");
+            builder.Append(
+                remaining[newline] == '\r'
+                    ? "' + NCHAR(13) + N'"
+                    : "' + NCHAR(10) + N'");
+
             remaining = remaining.Slice(newline + 1);
         }
 
@@ -38,7 +44,9 @@ internal static class SqlServerSqlStringLiteral
     /// <summary>Identifies the only native quoted-string continuation forms without allocating.</summary>
     /// <param name="value">The original string content.</param>
     /// <returns>Whether the string requires an expression rather than one native quoted literal.</returns>
-    internal static bool RequiresExpression(ReadOnlySpan<char> value)
+    internal static bool RequiresExpression(
+        ReadOnlySpan<char> value
+    )
         => value.IndexOf("\\\n") >= 0 || value.IndexOf("\\\r") >= 0;
 
     /// <summary>Binds a statement expression when sp_executesql cannot receive a quoted literal.</summary>
@@ -94,7 +102,10 @@ internal static class SqlServerSqlStringLiteral
         int apostrophe;
         while ((apostrophe = value.IndexOf('\'')) >= 0)
         {
-            builder.Append(value.Slice(0, apostrophe)).Append("''");
+            builder
+                .Append(value.Slice(0, apostrophe))
+                .Append("''");
+
             value = value.Slice(apostrophe + 1);
         }
 

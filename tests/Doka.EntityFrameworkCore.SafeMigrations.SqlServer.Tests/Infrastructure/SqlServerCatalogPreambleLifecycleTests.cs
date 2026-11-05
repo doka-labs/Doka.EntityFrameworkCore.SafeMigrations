@@ -16,9 +16,14 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         await analyzer.AnalyzeAsync(context, AnalysisOperations(), cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Contains("HAS_PERMS_BY_NAME(NULL,NULL,N'VIEW ANY DEFINITION')", connection.EnvironmentCommand,
+        Assert.Contains(
+            "HAS_PERMS_BY_NAME(NULL,NULL,N'VIEW ANY DEFINITION')",
+            connection.EnvironmentCommand,
             StringComparison.Ordinal);
-        Assert.DoesNotContain("HAS_PERMS_BY_NAME(NULL,N'SERVER'", connection.EnvironmentCommand,
+
+        Assert.DoesNotContain(
+            "HAS_PERMS_BY_NAME(NULL,N'SERVER'",
+            connection.EnvironmentCommand,
             StringComparison.Ordinal);
     }
 
@@ -27,7 +32,9 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ActiveScope_InventoryRechecksCurrentEnvironment(bool borrowed)
+    public async Task ActiveScope_InventoryRechecksCurrentEnvironment(
+        bool borrowed
+    )
     {
         // Arrange
         await using var connection = new PreambleConnection();
@@ -38,13 +45,16 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         }
 
         var analyzer = Analyzer(context);
-        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context,
+        await using var scope = await analyzer.AcquireAnalysisScopeAsync(
+            context,
             cancellationToken: CancellationToken.None);
 
         await analyzer.AnalyzeAsync(context, AnalysisOperations(), cancellationToken: CancellationToken.None);
 
         // Act
-        var inventory = await analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+        var inventory = await analyzer.FindUnexpectedObjectsAsync(
+            context,
+            InventoryOperations(),
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -58,7 +68,9 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task NoAnalysisScope_InventoryRequiresFreshEnvironment(bool alreadyOpen)
+    public async Task NoAnalysisScope_InventoryRequiresFreshEnvironment(
+        bool alreadyOpen
+    )
     {
         // Arrange
         await using var connection = new PreambleConnection();
@@ -74,7 +86,9 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
 
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+            analyzer.FindUnexpectedObjectsAsync(
+                context,
+                InventoryOperations(),
                 cancellationToken: CancellationToken.None));
 
         // Assert
@@ -87,7 +101,9 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task DisposedScope_InventoryRequiresFreshEnvironment(bool borrowed)
+    public async Task DisposedScope_InventoryRequiresFreshEnvironment(
+        bool borrowed
+    )
     {
         // Arrange
         await using var connection = new PreambleConnection();
@@ -105,13 +121,19 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
 
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+            analyzer.FindUnexpectedObjectsAsync(
+                context,
+                InventoryOperations(),
                 cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Contains("requires database metadata visibility", failure.Message, StringComparison.Ordinal);
         Assert.Equal(2, connection.EnvironmentReads);
-        Assert.Equal(borrowed ? 1 : 0, connection.ScopeReleases);
+        Assert.Equal(
+            borrowed
+                ? 1
+                : 0,
+            connection.ScopeReleases);
     }
 
     /// <summary>Changing the physical session or database cannot retain earlier scope evidence.</summary>
@@ -119,13 +141,16 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ChangedSession_InventoryRequiresFreshEnvironment(bool changeDatabase)
+    public async Task ChangedSession_InventoryRequiresFreshEnvironment(
+        bool changeDatabase
+    )
     {
         // Arrange
         await using var connection = new PreambleConnection();
         await using var context = Context(connection);
         var analyzer = Analyzer(context);
-        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context,
+        await using var scope = await analyzer.AcquireAnalysisScopeAsync(
+            context,
             cancellationToken: CancellationToken.None);
 
         await analyzer.AnalyzeAsync(context, AnalysisOperations(), cancellationToken: CancellationToken.None);
@@ -143,7 +168,9 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
 
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+            analyzer.FindUnexpectedObjectsAsync(
+                context,
+                InventoryOperations(),
                 cancellationToken: CancellationToken.None));
 
         // Assert
@@ -156,27 +183,34 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task FailedAnalysis_InventoryRequiresFreshEnvironment(bool cancelled)
+    public async Task FailedAnalysis_InventoryRequiresFreshEnvironment(
+        bool cancelled
+    )
     {
         // Arrange
         await using var connection = new PreambleConnection();
         await using var context = Context(connection);
         var analyzer = Analyzer(context);
-        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context,
+        await using var scope = await analyzer.AcquireAnalysisScopeAsync(
+            context,
             cancellationToken: CancellationToken.None);
 
         connection.ClassificationFailure = cancelled
             ? new OperationCanceledException("Injected classification cancellation.")
             : new InvalidOperationException("Injected classification failure.");
 
-        var analysisFailure = await Record.ExceptionAsync(() => analyzer.AnalyzeAsync(context, AnalysisOperations(),
+        var analysisFailure = await Record.ExceptionAsync(() => analyzer.AnalyzeAsync(
+            context,
+            AnalysisOperations(),
             cancellationToken: CancellationToken.None));
 
         connection.MetadataVisible = false;
 
         // Act
         var inventoryFailure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+            analyzer.FindUnexpectedObjectsAsync(
+                context,
+                InventoryOperations(),
                 cancellationToken: CancellationToken.None));
 
         // Assert
@@ -194,18 +228,25 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         await using var context = Context(connection);
         var analyzer = Analyzer(context);
         var scope = await analyzer.AcquireAnalysisScopeAsync(context, cancellationToken: CancellationToken.None);
-        var analyses = await analyzer.AnalyzeAsync(context, AnalysisOperations(),
+        var analyses = await analyzer.AnalyzeAsync(
+            context,
+            AnalysisOperations(),
             cancellationToken: CancellationToken.None);
 
         await scope.DisposeAsync();
 
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+            analyzer.FindUnexpectedObjectsAsync(
+                context,
+                InventoryOperations(),
                 cancellationToken: CancellationToken.None));
 
         // Assert
-        Assert.Equal(SafeMigrationObservedState.Unsupported, Assert.Single(analyses).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Unsupported,
+            Assert.Single(analyses)
+                .ObservedState);
+
         Assert.Contains("requires database metadata visibility", failure.Message, StringComparison.Ordinal);
     }
 
@@ -217,18 +258,26 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         await using var connection = new PreambleConnection { MetadataVisible = false };
         await using var context = Context(connection);
         var analyzer = Analyzer(context);
-        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context,
+        await using var scope = await analyzer.AcquireAnalysisScopeAsync(
+            context,
             cancellationToken: CancellationToken.None);
 
-        var analyses = await analyzer.AnalyzeAsync(context, AnalysisOperations(),
+        var analyses = await analyzer.AnalyzeAsync(
+            context,
+            AnalysisOperations(),
             cancellationToken: CancellationToken.None);
 
         // Act
-        var inventory = await analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+        var inventory = await analyzer.FindUnexpectedObjectsAsync(
+            context,
+            InventoryOperations(),
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationObservedState.Unsupported, Assert.Single(analyses).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Unsupported,
+            Assert.Single(analyses)
+                .ObservedState);
+
         Assert.Empty(inventory);
     }
 
@@ -240,7 +289,8 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         await using var connection = new PreambleConnection();
         await using var context = Context(connection);
         var analyzer = Analyzer(context);
-        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context,
+        await using var scope = await analyzer.AcquireAnalysisScopeAsync(
+            context,
             cancellationToken: CancellationToken.None);
 
         await analyzer.AnalyzeAsync(context, AnalysisOperations(), cancellationToken: CancellationToken.None);
@@ -250,7 +300,9 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
 
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+            analyzer.FindUnexpectedObjectsAsync(
+                context,
+                InventoryOperations(),
                 cancellationToken: CancellationToken.None));
 
         // Assert
@@ -263,7 +315,9 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task RepeatedDisposal_ReleasesBorrowedScopeExactlyOnce(bool disposeAnalyzer)
+    public async Task RepeatedDisposal_ReleasesBorrowedScopeExactlyOnce(
+        bool disposeAnalyzer
+    )
     {
         // Arrange
         await using var connection = new PreambleConnection();
@@ -287,12 +341,18 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         await analyzer.DisposeAsync();
         connection.MetadataVisible = false;
         var failure = await Record.ExceptionAsync(() =>
-            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+            analyzer.FindUnexpectedObjectsAsync(
+                context,
+                InventoryOperations(),
                 cancellationToken: CancellationToken.None));
 
         // Assert
-        Assert.Contains("requires database metadata visibility",
-            Assert.IsType<InvalidOperationException>(failure).Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "requires database metadata visibility",
+            Assert.IsType<InvalidOperationException>(failure)
+                .Message,
+            StringComparison.Ordinal);
+
         Assert.Equal(1, connection.ScopeReleases);
         Assert.Equal(2, connection.EnvironmentReads);
     }
@@ -305,21 +365,29 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         await using var connection = new PreambleConnection();
         await using var context = Context(connection);
         var analyzer = Analyzer(context);
-        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context,
+        await using var scope = await analyzer.AcquireAnalysisScopeAsync(
+            context,
             cancellationToken: CancellationToken.None);
 
         await analyzer.AnalyzeAsync(context, AnalysisOperations(), cancellationToken: CancellationToken.None);
 
         // Act
-        var failure = await Record.ExceptionAsync(() => analyzer.AcquireAnalysisScopeAsync(context,
+        var failure = await Record.ExceptionAsync(() => analyzer.AcquireAnalysisScopeAsync(
+            context,
             cancellationToken: CancellationToken.None));
 
-        var inventory = await analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+        var inventory = await analyzer.FindUnexpectedObjectsAsync(
+            context,
+            InventoryOperations(),
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Contains("already owns an active analysis scope",
-            Assert.IsType<InvalidOperationException>(failure).Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "already owns an active analysis scope",
+            Assert.IsType<InvalidOperationException>(failure)
+                .Message,
+            StringComparison.Ordinal);
+
         Assert.Empty(inventory);
         Assert.Equal(2, connection.EnvironmentReads);
     }
@@ -329,7 +397,9 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task SynchronousAnalyzerDisposal_ReleasesScopeAndInvalidatesProof(bool borrowed)
+    public async Task SynchronousAnalyzerDisposal_ReleasesScopeAndInvalidatesProof(
+        bool borrowed
+    )
     {
         // Arrange
         await using var connection = new PreambleConnection();
@@ -348,13 +418,24 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         await scope.DisposeAsync();
         connection.MetadataVisible = false;
         var failure = await Record.ExceptionAsync(() =>
-            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+            analyzer.FindUnexpectedObjectsAsync(
+                context,
+                InventoryOperations(),
                 cancellationToken: CancellationToken.None));
 
         // Assert
-        Assert.Contains("requires database metadata visibility",
-            Assert.IsType<InvalidOperationException>(failure).Message, StringComparison.Ordinal);
-        Assert.Equal(borrowed ? 1 : 0, connection.ScopeReleases);
+        Assert.Contains(
+            "requires database metadata visibility",
+            Assert.IsType<InvalidOperationException>(failure)
+                .Message,
+            StringComparison.Ordinal);
+
+        Assert.Equal(
+            borrowed
+                ? 1
+                : 0,
+            connection.ScopeReleases);
+
         Assert.Equal(2, connection.EnvironmentReads);
     }
 
@@ -367,18 +448,26 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
     [InlineData("collation")]
     [InlineData("unproven")]
     [InlineData("dml_triggers")]
-    public async Task FreshEnvironment_GatesActualIdentifierProbeReuse(string change)
+    public async Task FreshEnvironment_GatesActualIdentifierProbeReuse(
+        string change
+    )
     {
         // Arrange
         await using var connection = new PreambleConnection();
         await using var context = Context(connection);
         var analyzer = Analyzer(context);
-        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context,
+        await using var scope = await analyzer.AcquireAnalysisScopeAsync(
+            context,
             cancellationToken: CancellationToken.None);
 
         var operations = InventoryOperations();
-        await analyzer.AnalyzeAsync(context, operations.Cast<SafeMigrationOperation>().ToArray(),
+        await analyzer.AnalyzeAsync(
+            context,
+            operations
+                .Cast<SafeMigrationOperation>()
+                .ToArray(),
             cancellationToken: CancellationToken.None);
+
         switch (change)
         {
             case "principal":
@@ -401,20 +490,30 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         connection.IdentifierSafe = false;
 
         // Act
-        var failure = await Record.ExceptionAsync(() => analyzer.FindUnexpectedObjectsAsync(context, operations,
+        var failure = await Record.ExceptionAsync(() => analyzer.FindUnexpectedObjectsAsync(
+            context,
+            operations,
             cancellationToken: CancellationToken.None));
 
         // Assert
         Assert.Equal(2, connection.EnvironmentReads);
-        Assert.Equal(change == "unchanged" ? 1 : 2, connection.IdentifierReads);
+        Assert.Equal(
+            change == "unchanged"
+                ? 1
+                : 2,
+            connection.IdentifierReads);
+
         if (change == "unchanged")
         {
             Assert.Null(failure);
         }
         else
         {
-            Assert.Contains("could not prove object identity",
-                Assert.IsType<InvalidOperationException>(failure).Message, StringComparison.Ordinal);
+            Assert.Contains(
+                "could not prove object identity",
+                Assert.IsType<InvalidOperationException>(failure)
+                    .Message,
+                StringComparison.Ordinal);
         }
     }
 
@@ -426,7 +525,8 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         await using var connection = new PreambleConnection { MetadataVisible = false };
         await using var context = Context(connection);
         var analyzer = Analyzer(context);
-        await using var scope = await analyzer.AcquireAnalysisScopeAsync(context,
+        await using var scope = await analyzer.AcquireAnalysisScopeAsync(
+            context,
             cancellationToken: CancellationToken.None);
 
         await analyzer.AnalyzeAsync(context, AnalysisOperations(), cancellationToken: CancellationToken.None);
@@ -434,12 +534,18 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
 
         // Act
         var failure = await Record.ExceptionAsync(() =>
-            analyzer.FindUnexpectedObjectsAsync(context, InventoryOperations(),
+            analyzer.FindUnexpectedObjectsAsync(
+                context,
+                InventoryOperations(),
                 cancellationToken: CancellationToken.None));
 
         // Assert
-        Assert.Contains("requires database metadata visibility",
-            Assert.IsType<InvalidOperationException>(failure).Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "requires database metadata visibility",
+            Assert.IsType<InvalidOperationException>(failure)
+                .Message,
+            StringComparison.Ordinal);
+
         Assert.Equal(2, connection.EnvironmentReads);
     }
 
@@ -448,7 +554,9 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task EndedBorrowedTransaction_DoesNotExecuteAnotherLockRelease(bool asynchronous)
+    public async Task EndedBorrowedTransaction_DoesNotExecuteAnotherLockRelease(
+        bool asynchronous
+    )
     {
         // Arrange
         await using var connection = new PreambleConnection();
@@ -513,13 +621,23 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         Assert.Null(failure);
         Assert.Null(repeatedScopeFailure);
         Assert.Equal(ConnectionState.Closed, connection.State);
-        Assert.InRange(connection.ScopeReleases, 0, borrowed ? 1 : 0);
+        Assert.InRange(
+            connection.ScopeReleases,
+            0,
+            borrowed
+                ? 1
+                : 0);
     }
 
-    private static SafeMigrationDbContext Context(PreambleConnection connection)
-        => new(new DbContextOptionsBuilder<SafeMigrationDbContext>().UseSqlServer(connection).Options);
+    private static SafeMigrationDbContext Context(
+        PreambleConnection connection
+    )
+        => new(new DbContextOptionsBuilder<SafeMigrationDbContext>().UseSqlServer(connection)
+            .Options);
 
-    private static SqlServerSafeMigrationProviderAnalyzer Analyzer(DbContext context)
+    private static SqlServerSafeMigrationProviderAnalyzer Analyzer(
+        DbContext context
+    )
         => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     private static SafeMigrationOperation[] AnalysisOperations()
@@ -527,7 +645,10 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.SqlServer");
         builder.EnsureSchemaExists("application");
 
-        return builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+        return builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
     }
 
     private static MigrationOperation[] InventoryOperations()
@@ -535,19 +656,22 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.SqlServer");
         builder.EnsureTable(
             new ExpectedTableDefinition("items", [new ExpectedColumnDefinition("Id", typeof(int), true, "int")]),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         return builder.Operations.ToArray();
     }
 
     /// <summary>Returns only the protocol rows needed by the real scope, schema classifier and inventory.</summary>
-    private sealed class PreambleConnection : System.Data.Common.DbConnection
+    private sealed class PreambleConnection : DbConnection
     {
-        private ConnectionState _state;
         private string _database = "preamble";
+        private ConnectionState _state;
 
         [AllowNull]
-        public override string ConnectionString { get; set; } = "Server=localhost;Database=preamble;Integrated Security=true;";
+        public override string ConnectionString { get; set; } =
+            "Server=localhost;Database=preamble;Integrated Security=true;";
+
         public override string Database => _database;
         public override string DataSource => "preamble";
         public override string ServerVersion => "16.0.0";
@@ -555,10 +679,12 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         public bool MetadataVisible { get; set; } = true;
         public int? PrincipalId { get; set; } = 1;
         public string? LoginSid { get; set; } = "01";
+
         /// <summary>Gets or sets the invocation-local DML-trigger presence returned by the environment probe.</summary>
         public bool HasEnabledDmlTriggers { get; set; }
+
         public string Collation { get; set; } = "Latin1_General_100_CI_AS";
-        public string DefaultSchema { get; set; } = "dbo";
+        public string DefaultSchema { get; } = "dbo";
         public bool IdentifierSafe { get; set; } = true;
         public int IdentifierReads { get; set; }
         public Exception? ClassificationFailure { get; set; }
@@ -569,12 +695,21 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
 
         public override void Open() => ChangeState(ConnectionState.Open);
         public override void Close() => ChangeState(ConnectionState.Closed);
-        public override void ChangeDatabase(string databaseName) => _database = databaseName;
-        protected override System.Data.Common.DbTransaction BeginDbTransaction(IsolationLevel isolationLevel)
-            => new PreambleTransaction(this);
-        protected override System.Data.Common.DbCommand CreateDbCommand() => new PreambleCommand(this);
 
-        private void ChangeState(ConnectionState state)
+        public override void ChangeDatabase(
+            string databaseName
+        ) => _database = databaseName;
+
+        protected override DbTransaction BeginDbTransaction(
+            IsolationLevel isolationLevel
+        )
+            => new PreambleTransaction(this);
+
+        protected override DbCommand CreateDbCommand() => new PreambleCommand(this);
+
+        private void ChangeState(
+            ConnectionState state
+        )
         {
             var original = _state;
             _state = state;
@@ -582,39 +717,46 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
         }
     }
 
-    private sealed class PreambleTransaction(PreambleConnection connection) : System.Data.Common.DbTransaction
+    private sealed class PreambleTransaction(PreambleConnection connection) : DbTransaction
     {
         private bool _disposed;
 
         public override IsolationLevel IsolationLevel => IsolationLevel.ReadCommitted;
-        protected override System.Data.Common.DbConnection? DbConnection => _disposed ? null : connection;
+
+        protected override DbConnection? DbConnection => _disposed
+            ? null
+            : connection;
+
         public override void Commit() { }
         public override void Rollback() { }
 
-        protected override void Dispose(bool disposing)
+        protected override void Dispose(
+            bool disposing
+        )
         {
             _disposed = true;
             base.Dispose(disposing);
         }
     }
 
-    private sealed class PreambleCommand(PreambleConnection connection) : System.Data.Common.DbCommand
+    private sealed class PreambleCommand(PreambleConnection connection) : DbCommand
     {
         private readonly SqlCommand _parameterHost = new();
         private DataTable? _result;
 
         [AllowNull]
         public override string CommandText { get; set; } = string.Empty;
+
         public override int CommandTimeout { get; set; }
         public override CommandType CommandType { get; set; }
         public override bool DesignTimeVisible { get; set; }
         public override UpdateRowSource UpdatedRowSource { get; set; }
-        protected override System.Data.Common.DbConnection? DbConnection { get; set; } = connection;
-        protected override System.Data.Common.DbTransaction? DbTransaction { get; set; }
-        protected override System.Data.Common.DbParameterCollection DbParameterCollection => _parameterHost.Parameters;
+        protected override DbConnection? DbConnection { get; set; } = connection;
+        protected override DbTransaction? DbTransaction { get; set; }
+        protected override DbParameterCollection DbParameterCollection => _parameterHost.Parameters;
         public override void Cancel() => throw new NotSupportedException();
         public override void Prepare() => throw new NotSupportedException();
-        protected override System.Data.Common.DbParameter CreateDbParameter() => new SqlParameter();
+        protected override DbParameter CreateDbParameter() => new SqlParameter();
         public override int ExecuteNonQuery() => 0;
 
         public override object ExecuteScalar()
@@ -628,13 +770,19 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
             {
                 connection.IdentifierReads++;
 
-                return connection.IdentifierSafe ? 1 : 0;
+                return connection.IdentifierSafe
+                    ? 1
+                    : 0;
             }
 
-            return CommandText.StartsWith("SELECT OBJECT_ID", StringComparison.Ordinal) ? DBNull.Value : 1;
+            return CommandText.StartsWith("SELECT OBJECT_ID", StringComparison.Ordinal)
+                ? DBNull.Value
+                : 1;
         }
 
-        protected override System.Data.Common.DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
+        protected override DbDataReader ExecuteDbDataReader(
+            CommandBehavior behavior
+        )
         {
             _result = new DataTable { Locale = CultureInfo.InvariantCulture };
             if (CommandText.StartsWith("SELECT SCHEMA_NAME()", StringComparison.Ordinal))
@@ -650,11 +798,26 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
                 _result.Columns.Add("ddl_row_effects_unproven", typeof(int));
                 _result.Columns.Add("expression_dependencies_readable", typeof(int));
                 _result.Columns.Add("enabled_dml_triggers", typeof(int));
-                _result.Rows.Add(connection.DefaultSchema, connection.Collation, connection.MetadataVisible ? 1 : 0,
-                    connection.DefaultSchema == "dbo" ? 1 : 0,
-                    connection.PrincipalId is { } principal ? principal : DBNull.Value,
-                    connection.LoginSid is { } sid ? sid : DBNull.Value, 0, 1,
-                    connection.HasEnabledDmlTriggers ? 1 : 0);
+                _result.Rows.Add(
+                    connection.DefaultSchema,
+                    connection.Collation,
+                    connection.MetadataVisible
+                        ? 1
+                        : 0,
+                    connection.DefaultSchema == "dbo"
+                        ? 1
+                        : 0,
+                    connection.PrincipalId is { } principal
+                        ? principal
+                        : DBNull.Value,
+                    connection.LoginSid is { } sid
+                        ? sid
+                        : DBNull.Value,
+                    0,
+                    1,
+                    connection.HasEnabledDmlTriggers
+                        ? 1
+                        : 0);
             }
             else if (CommandText.StartsWith("SELECT requested.ordinal,", StringComparison.Ordinal))
             {
@@ -663,7 +826,7 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
                 _result.Rows.Add(0, 1);
             }
             else if (CommandText.StartsWith("SELECT 0, (", StringComparison.Ordinal)
-                     || CommandText.StartsWith("EXEC sys.sp_executesql", StringComparison.Ordinal))
+                || CommandText.StartsWith("EXEC sys.sp_executesql", StringComparison.Ordinal))
             {
                 connection.ClassificationReads++;
                 if (connection.ClassificationFailure is { } failure)
@@ -673,14 +836,30 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
 
                 for (var index = 0; index < 9; index++)
                 {
-                    _result.Columns.Add("value" + index, index is 0 or 2 or 3 ? typeof(int) : typeof(string));
+                    _result.Columns.Add(
+                        "value" + index,
+                        index is 0 or 2 or 3
+                            ? typeof(int)
+                            : typeof(string));
                 }
 
-                _result.Rows.Add(0, "matching", 1, 0, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value);
+                _result.Rows.Add(
+                    0,
+                    "matching",
+                    1,
+                    0,
+                    DBNull.Value,
+                    DBNull.Value,
+                    DBNull.Value,
+                    DBNull.Value,
+                    DBNull.Value);
             }
             else
             {
-                var fieldCount = CommandText.StartsWith("SELECT 0,", StringComparison.Ordinal) ? 3 : 5;
+                var fieldCount = CommandText.StartsWith("SELECT 0,", StringComparison.Ordinal)
+                    ? 3
+                    : 5;
+
                 for (var index = 0; index < fieldCount; index++)
                 {
                     _result.Columns.Add("value" + index);
@@ -690,7 +869,9 @@ public sealed class SqlServerCatalogPreambleLifecycleTests
             return _result.CreateDataReader();
         }
 
-        protected override void Dispose(bool disposing)
+        protected override void Dispose(
+            bool disposing
+        )
         {
             if (disposing)
             {

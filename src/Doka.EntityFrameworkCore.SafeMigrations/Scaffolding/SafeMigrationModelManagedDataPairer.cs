@@ -100,6 +100,7 @@ internal static partial class SafeMigrationModelManagedDataPairer
         if (inverseRows.HasDeleteRows(operation.Table, operation.Schema))
         {
             var matches = new DataRow[operation.Values.GetLength(0)];
+
             // WHY: Store each inverse insert match at the corresponding authored row ordinal.
             // ReSharper disable once ForCanBeConvertedToForeach
             // ReSharper disable once LoopCanBeConvertedToQuery
@@ -190,6 +191,7 @@ internal static partial class SafeMigrationModelManagedDataPairer
 
         var inverseOrdinals = ColumnOrdinals(firstInverse.Columns);
         var oldValues = new object?[matches.Length, operation.Columns.Length];
+
         // WHY: Keep authored column types aligned while resolving inverse-operation column ordinals.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -199,8 +201,8 @@ internal static partial class SafeMigrationModelManagedDataPairer
             if (inverseOrdinals.TryGetValue(columnName, out var inverseOrdinal))
             {
                 if (!StringComparer.OrdinalIgnoreCase.Equals(
-                        inverseColumnTypes[inverseOrdinal],
-                        columnTypes[column]))
+                    inverseColumnTypes[inverseOrdinal],
+                    columnTypes[column]))
                 {
                     throw new InvalidOperationException(
                         $"Inverse update column '{SafeMigrationDiagnosticMessages.BoundForDisplay(columnName)}' "
@@ -266,7 +268,7 @@ internal static partial class SafeMigrationModelManagedDataPairer
         AddBatches(
             result,
             operation.KeyValues.GetLength(0),
-            operation.KeyColumns.Length + (operation.Columns.Length * 2),
+            operation.KeyColumns.Length + operation.Columns.Length * 2,
             (offset, count) => new UpdateModelManagedDataScaffoldingOperation(
                 new UpdateModelManagedDataIntent(
                     operation.Table,
@@ -353,6 +355,7 @@ internal static partial class SafeMigrationModelManagedDataPairer
         }
 
         var batchSize = Math.Min(SafeMigrationModelManagedDataLimits.MaximumRowsPerOperation, cellBound);
+
         // WHY: Advance by bounded batch windows while retaining the final partial batch.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -439,12 +442,14 @@ internal static partial class SafeMigrationModelManagedDataPairer
     )
     {
         var result = new object?[rows.Count, columnCount];
+
         // WHY: Place each selected source row into its exact destination row coordinate.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var row = 0; row < rows.Count; row++)
         {
             var values = getValues(rows[row]);
+
             // WHY: Copy matching column coordinates while resolving the selected source row separately.
             // ReSharper disable once ForCanBeConvertedToForeach
             // ReSharper disable once LoopCanBeConvertedToQuery
@@ -464,6 +469,7 @@ internal static partial class SafeMigrationModelManagedDataPairer
     )
     {
         var result = new object?[count, values.GetLength(1)];
+
         // WHY: Map each batch-local row back to the original matrix through its source offset.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -486,6 +492,7 @@ internal static partial class SafeMigrationModelManagedDataPairer
     )
     {
         var result = new Dictionary<string, int>(columns.Length, StringComparer.Ordinal);
+
         // WHY: Record the authored column ordinal needed to interpret inverse update matrices.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -527,7 +534,10 @@ internal static partial class SafeMigrationModelManagedDataPairer
         if (values is null
             || values.Length == 0
             || values.Any(string.IsNullOrWhiteSpace)
-            || values.Distinct(StringComparer.Ordinal).Count() != values.Length)
+            || values
+                .Distinct(StringComparer.Ordinal)
+                .Count()
+            != values.Length)
         {
             throw new InvalidOperationException(
                 $"The {context} metadata does not contain a non-empty, unique identifier vector.");
@@ -554,7 +564,9 @@ internal static partial class SafeMigrationModelManagedDataPairer
         int rowCount
     )
     {
-        if (operation.GetAnnotations().Any())
+        if (operation
+            .GetAnnotations()
+            .Any())
         {
             throw new InvalidOperationException(
                 "SafeMigrations cannot source-freeze an annotated model-managed-data operation.");

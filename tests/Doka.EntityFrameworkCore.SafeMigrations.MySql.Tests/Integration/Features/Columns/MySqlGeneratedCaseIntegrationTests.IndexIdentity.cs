@@ -7,39 +7,64 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task GeneratedIndexRetainsExactNameCollision(bool acceptedPrefix)
+    public async Task GeneratedIndexRetainsExactNameCollision(
+        bool acceptedPrefix
+    )
     {
         // Arrange
         const string name = "ix_generated_namespace_collision";
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, "
+        await ExecuteSqlAsync(
+            connectionString,
+            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, "
             + "left_bound bigint NOT NULL, right_bound bigint NOT NULL, unrelated int NULL);",
             cancellationToken: CancellationToken.None);
+
         if (!acceptedPrefix)
         {
-            await ExecuteSqlAsync(connectionString, $"CREATE INDEX `{name}` ON `{Table}` (left_bound);",
+            await ExecuteSqlAsync(
+                connectionString,
+                $"CREATE INDEX `{name}` ON `{Table}` (left_bound);",
                 cancellationToken: CancellationToken.None);
         }
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (acceptedPrefix)
         {
-            builder.EnsureIndex(new ExpectedIndexDefinition(name, Table,
-                [new ExpectedIndexKeyDefinition("left_bound")]), SafeMigrationPolicy.ThrowIfDifferent);
+            builder.EnsureIndex(
+                new ExpectedIndexDefinition(
+                    name,
+                    Table,
+                    [new ExpectedIndexKeyDefinition("left_bound")]),
+                SafeMigrationPolicy.ThrowIfDifferent);
         }
 
         builder.DropColumnIfExists("unrelated", Table);
         builder.EnsureColumn(Table, CaseColumn(stored: false), SafeMigrationPolicy.ThrowIfDifferent);
-        builder.EnsureIndex(new ExpectedIndexDefinition(name, Table,
-            [new ExpectedIndexKeyDefinition("has_descendants")]), SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                name,
+                Table,
+                [new ExpectedIndexKeyDefinition("has_descendants")]),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-index-name-collision"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-index-name-collision"),
+                CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.Apply, report.Assessments[acceptedPrefix ? 1 : 0].Action);
+        Assert.Equal(
+            SafeMigrationAction.Apply,
+            report.Assessments[acceptedPrefix
+                ? 1
+                : 0].Action);
+
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[^2].Action);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[^1].Action);
@@ -52,21 +77,38 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, "
+        await ExecuteSqlAsync(
+            connectionString,
+            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, "
             + "left_bound bigint NOT NULL, right_bound bigint NOT NULL, unrelated int NULL);",
             cancellationToken: CancellationToken.None);
+
         await SeedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("unrelated", Table);
         builder.EnsureColumn(Table, CaseColumn(stored: false), SafeMigrationPolicy.ThrowIfDifferent);
-        builder.EnsureIndex(new ExpectedIndexDefinition("ix_generated_physical", Table,
-            [new ExpectedIndexKeyDefinition("has_descendants")]), SafeMigrationPolicy.ThrowIfDifferent);
-        builder.EnsureIndex(new ExpectedIndexDefinition("ix_generated_requested", Table,
-            [new ExpectedIndexKeyDefinition("has_descendants")]), SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                "ix_generated_physical",
+                Table,
+                [new ExpectedIndexKeyDefinition("has_descendants")]),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                "ix_generated_requested",
+                Table,
+                [new ExpectedIndexKeyDefinition("has_descendants")]),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-index-accepted-alias"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-index-accepted-alias"),
+                CancellationToken.None);
 
         var failure = await Record.ExceptionAsync(async () =>
         {
@@ -74,14 +116,23 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         });
 
-        var postflight = await context.GetService<ISafeMigrationRunner>().VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-index-accepted-alias-verify"), CancellationToken.None);
+        var postflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-index-accepted-alias-verify"),
+                CancellationToken.None);
 
-        var physical = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
+        var physical = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
             + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND INDEX_NAME = 'ix_generated_physical';",
             cancellationToken: CancellationToken.None);
 
-        var requested = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
+        var requested = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
             + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND INDEX_NAME = 'ix_generated_requested';",
             cancellationToken: CancellationToken.None);
 
@@ -101,27 +152,43 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [GeneratedMariaDbTheory]
     [InlineData("left_bound")]
     [InlineData("right_bound")]
-    public async Task GeneratedIndexCannotBorrowWeakenedSourceGuarantees(string sourceName)
+    public async Task GeneratedIndexCannotBorrowWeakenedSourceGuarantees(
+        string sourceName
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, "
+        await ExecuteSqlAsync(
+            connectionString,
+            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, "
             + "left_bound bigint NOT NULL, right_bound bigint NOT NULL, unrelated int NULL);",
             cancellationToken: CancellationToken.None);
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AlterColumnIfDifferent(Table,
+        builder.AlterColumnIfDifferent(
+            Table,
             new ExpectedColumnDefinition(sourceName, typeof(long), true, "bigint"),
             new ExpectedColumnDefinition(sourceName, typeof(long), false, "bigint"),
             SafeMigrationPolicy.RepairIfSafe);
+
         builder.DropColumnIfExists("unrelated", Table);
         builder.EnsureColumn(Table, CaseColumn(stored: false), SafeMigrationPolicy.ThrowIfDifferent);
-        builder.EnsureIndex(new ExpectedIndexDefinition("ix_weakened_generated_source", Table,
-            [new ExpectedIndexKeyDefinition("has_descendants")]), SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                "ix_weakened_generated_source",
+                Table,
+                [new ExpectedIndexKeyDefinition("has_descendants")]),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-index-weakened-source"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-index-weakened-source"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Repair, report.Assessments[0].Action);
@@ -138,19 +205,31 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, "
+        await ExecuteSqlAsync(
+            connectionString,
+            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, "
             + "left_bound bigint NOT NULL, right_bound bigint NOT NULL, unrelated int NULL);",
             cancellationToken: CancellationToken.None);
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("unrelated", Table);
         builder.EnsureColumn(Table, CaseColumn(stored: false), SafeMigrationPolicy.ThrowIfDifferent);
         builder.Sql("DO 0;");
-        builder.EnsureIndex(new ExpectedIndexDefinition("ix_opaque_generated_source", Table,
-            [new ExpectedIndexKeyDefinition("has_descendants")]), SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                "ix_opaque_generated_source",
+                Table,
+                [new ExpectedIndexKeyDefinition("has_descendants")]),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-index-opaque-boundary"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-index-opaque-boundary"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
@@ -164,48 +243,82 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [Theory]
     [InlineData(null)]
     [InlineData(100)]
-    public async Task GeneratedIndexRetainsPhysicalPrefixLimits(int? prefix)
+    public async Task GeneratedIndexRetainsPhysicalPrefixLimits(
+        int? prefix
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, "
+        await ExecuteSqlAsync(
+            connectionString,
+            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, "
             + "left_bound bigint NOT NULL, right_bound bigint NOT NULL, unrelated int NULL, "
             + "payload varchar(1000) CHARACTER SET utf8mb4 NULL) ENGINE=InnoDB ROW_FORMAT=DYNAMIC;",
             cancellationToken: CancellationToken.None);
+
         await SeedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("unrelated", Table);
         builder.EnsureColumn(Table, CaseColumn(stored: false), SafeMigrationPolicy.ThrowIfDifferent);
-        builder.EnsureIndex(new ExpectedIndexDefinition("ix_generated_key_width", Table,
-            [new ExpectedIndexKeyDefinition("has_descendants"),
-                new ExpectedIndexKeyDefinition("payload", prefixLength: prefix)]),
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                "ix_generated_key_width",
+                Table,
+                [
+                    new ExpectedIndexKeyDefinition("has_descendants"),
+                    new ExpectedIndexKeyDefinition("payload", prefixLength: prefix),
+                ]),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-index-key-width"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-index-key-width"),
+                CancellationToken.None);
 
-        var failure = prefix is null ? null : await Record.ExceptionAsync(async () =>
-        {
-            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        });
+        var failure = prefix is null
+            ? null
+            : await Record.ExceptionAsync(async () =>
+            {
+                await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+                await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+            });
 
-        var postflight = prefix is null ? null
-            : await context.GetService<ISafeMigrationRunner>().VerifyAsync(context, builder.Operations,
-                new SafeMigrationRunOptions("generated-index-key-width-verify"), CancellationToken.None);
+        var postflight = prefix is null
+            ? null
+            : await context
+                .GetService<ISafeMigrationRunner>()
+                .VerifyAsync(
+                    context,
+                    builder.Operations,
+                    new SafeMigrationRunOptions("generated-index-key-width-verify"),
+                    CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[1].Action);
-        Assert.Equal(prefix is null ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready,
+        Assert.Equal(
+            prefix is null
+                ? SafeMigrationReportStatus.Blocked
+                : SafeMigrationReportStatus.Ready,
             report.Status);
-        Assert.Equal(prefix is null ? SafeMigrationAction.RejectUnsupported : SafeMigrationAction.Apply,
+
+        Assert.Equal(
+            prefix is null
+                ? SafeMigrationAction.RejectUnsupported
+                : SafeMigrationAction.Apply,
             report.Assessments[^1].Action);
+
         Assert.Null(failure);
-        Assert.True(postflight is null || postflight.Status == SafeMigrationReportStatus.Ready,
-            postflight is null ? null : DescribeGeneratedReport(postflight));
+        Assert.True(
+            postflight is null || postflight.Status == SafeMigrationReportStatus.Ready,
+            postflight is null
+                ? null
+                : DescribeGeneratedReport(postflight));
     }
 
     /// <summary>A column DROP can expose a new semantic alias by shrinking an existing composite index.</summary>
@@ -216,31 +329,52 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var initial = new MigrationBuilder(context.Database.ProviderName!);
-        initial.EnsureTable(CaseTable(stored: false), SafeMigrationTableMode.StrictDefinition,
+        initial.EnsureTable(
+            CaseTable(stored: false),
+            SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         await ExecuteOperationsAsync(context, initial.Operations, CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, $"ALTER TABLE `{Table}` ADD unrelated int NULL; "
+        await ExecuteSqlAsync(
+            connectionString,
+            $"ALTER TABLE `{Table}` ADD unrelated int NULL; "
             + $"CREATE INDEX ix_generated_shrink ON `{Table}` (has_descendants, unrelated);",
             cancellationToken: CancellationToken.None);
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
+
         // WHY: The DROP needs an already accepted exact generated contract;
         // the later reassertion is not evidence available before that DROP.
         builder.EnsureColumn(Table, CaseColumn(stored: false), SafeMigrationPolicy.ThrowIfDifferent);
         builder.DropColumnIfExists("unrelated", Table);
         builder.EnsureColumn(Table, CaseColumn(stored: false), SafeMigrationPolicy.ThrowIfDifferent);
-        builder.EnsureIndex(new ExpectedIndexDefinition("ix_generated_shrink_requested", Table,
-            [new ExpectedIndexKeyDefinition("has_descendants")]), SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                "ix_generated_shrink_requested",
+                Table,
+                [new ExpectedIndexKeyDefinition("has_descendants")]),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-index-shrunken-alias"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-index-shrunken-alias"),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var requested = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
+        var requested = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
             + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' "
-            + "AND INDEX_NAME = 'ix_generated_shrink_requested';", cancellationToken: CancellationToken.None);
+            + "AND INDEX_NAME = 'ix_generated_shrink_requested';",
+            cancellationToken: CancellationToken.None);
 
-        var alias = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
+        var alias = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
             + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND INDEX_NAME = 'ix_generated_shrink';",
             cancellationToken: CancellationToken.None);
 
@@ -260,31 +394,53 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task GeneratedIndexRetainsObservedNativeMatch(bool alias)
+    public async Task GeneratedIndexRetainsObservedNativeMatch(
+        bool alias
+    )
     {
         // Arrange
         const string requested = "ix_generated_existing_requested";
-        var actual = alias ? "ix_generated_existing_actual" : requested;
+        var actual = alias
+            ? "ix_generated_existing_actual"
+            : requested;
+
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var initial = new MigrationBuilder(context.Database.ProviderName!);
-        initial.EnsureTable(CaseTable(stored: false), SafeMigrationTableMode.StrictDefinition,
+        initial.EnsureTable(
+            CaseTable(stored: false),
+            SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         await ExecuteOperationsAsync(context, initial.Operations, CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, $"ALTER TABLE `{Table}` ADD unrelated int NULL; "
-            + $"CREATE INDEX `{actual}` ON `{Table}` (has_descendants);", cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            $"ALTER TABLE `{Table}` ADD unrelated int NULL; "
+            + $"CREATE INDEX `{actual}` ON `{Table}` (has_descendants);",
+            cancellationToken: CancellationToken.None);
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
+
         // WHY: Native index matching cannot authorize an unrelated DROP by
         // borrowing a generated-column contract from a later operation.
         builder.EnsureColumn(Table, CaseColumn(stored: false), SafeMigrationPolicy.ThrowIfDifferent);
         builder.DropColumnIfExists("unrelated", Table);
         builder.EnsureColumn(Table, CaseColumn(stored: false), SafeMigrationPolicy.ThrowIfDifferent);
-        builder.EnsureIndex(new ExpectedIndexDefinition(requested, Table,
-            [new ExpectedIndexKeyDefinition("has_descendants")]), SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                requested,
+                Table,
+                [new ExpectedIndexKeyDefinition("has_descendants")]),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-index-native-match"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-index-native-match"),
+                CancellationToken.None);
 
         var failure = await Record.ExceptionAsync(async () =>
         {
@@ -292,8 +448,13 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         });
 
-        var postflight = await context.GetService<ISafeMigrationRunner>().VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-index-native-match-verify"), CancellationToken.None);
+        var postflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-index-native-match-verify"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Matching, preflight.Assessments[0].ObservedState);
@@ -311,19 +472,27 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task GeneratedIndexCannotReuseNativeMatchAfterMemberRecreation(bool explicitDrop)
+    public async Task GeneratedIndexCannotReuseNativeMatchAfterMemberRecreation(
+        bool explicitDrop
+    )
     {
         // Arrange
         const string name = "ix_generated_native_lifetime";
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var initial = new MigrationBuilder(context.Database.ProviderName!);
-        initial.EnsureTable(CaseTable(stored: false), SafeMigrationTableMode.StrictDefinition,
+        initial.EnsureTable(
+            CaseTable(stored: false),
+            SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         await ExecuteOperationsAsync(context, initial.Operations, CancellationToken.None);
         await SeedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, $"CREATE INDEX `{name}` ON `{Table}` (has_descendants);",
+        await ExecuteSqlAsync(
+            connectionString,
+            $"CREATE INDEX `{name}` ON `{Table}` (has_descendants);",
             cancellationToken: CancellationToken.None);
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (explicitDrop)
         {
@@ -332,29 +501,58 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         builder.DropColumnIfExists("has_descendants", Table);
         builder.EnsureColumn(Table, CaseColumn(stored: false), SafeMigrationPolicy.ThrowIfDifferent);
-        builder.EnsureIndex(new ExpectedIndexDefinition(name, Table,
-            [new ExpectedIndexKeyDefinition("has_descendants")]), SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                name,
+                Table,
+                [new ExpectedIndexKeyDefinition("has_descendants")]),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-index-native-lifetime"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-index-native-lifetime"),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await context.GetService<ISafeMigrationRunner>().VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-index-native-lifetime-verify"), CancellationToken.None);
+        var postflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-index-native-lifetime-verify"),
+                CancellationToken.None);
 
-        var physical = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
+        var physical = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
             + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND INDEX_NAME = '{name}';",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[explicitDrop ? 1 : 0].Action);
+        Assert.Equal(
+            SafeMigrationAction.Apply,
+            preflight.Assessments[explicitDrop
+                ? 1
+                : 0].Action);
+
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[^2].Action);
-        Assert.Equal(explicitDrop ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+        Assert.Equal(
+            explicitDrop
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
             preflight.Status);
-        Assert.Equal(explicitDrop ? SafeMigrationAction.Apply : SafeMigrationAction.RejectPrerequisiteMissing,
+
+        Assert.Equal(
+            explicitDrop
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectPrerequisiteMissing,
             preflight.Assessments[^1].Action);
+
         Assert.True(postflight.Status == SafeMigrationReportStatus.Ready, DescribeGeneratedReport(postflight));
         Assert.Equal(1, physical);
     }
@@ -364,17 +562,24 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task GeneratedIndexDoesNotSurviveDroppedAndRecreatedMember(bool explicitDrop)
+    public async Task GeneratedIndexDoesNotSurviveDroppedAndRecreatedMember(
+        bool explicitDrop
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var initial = new MigrationBuilder(context.Database.ProviderName!);
-        initial.EnsureTable(CaseTable(stored: false), SafeMigrationTableMode.StrictDefinition,
+        initial.EnsureTable(
+            CaseTable(stored: false),
+            SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         await ExecuteOperationsAsync(context, initial.Operations, CancellationToken.None);
         await SeedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
-        var definition = new ExpectedIndexDefinition("ix_generated_member_lifetime", Table,
+        var definition = new ExpectedIndexDefinition(
+            "ix_generated_member_lifetime",
+            Table,
             [new ExpectedIndexKeyDefinition("has_descendants")]);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -391,22 +596,38 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         // Act
         var preflightFailure = await Record.ExceptionAsync(async () => preflight =
-            await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-                new SafeMigrationRunOptions("generated-index-recreated-member"), CancellationToken.None));
+            await context
+                .GetService<ISafeMigrationRunner>()
+                .AnalyzeAsync(
+                    context,
+                    builder.Operations,
+                    new SafeMigrationRunOptions("generated-index-recreated-member"),
+                    CancellationToken.None));
 
-        var failure = explicitDrop ? await Record.ExceptionAsync(async () =>
-        {
-            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        }) : null;
+        var failure = explicitDrop
+            ? await Record.ExceptionAsync(async () =>
+            {
+                await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+                await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+            })
+            : null;
 
         var postflight = explicitDrop
-            ? await context.GetService<ISafeMigrationRunner>().VerifyAsync(context, builder.Operations,
-                new SafeMigrationRunOptions("generated-index-recreated-member-verify"), CancellationToken.None) : null;
+            ? await context
+                .GetService<ISafeMigrationRunner>()
+                .VerifyAsync(
+                    context,
+                    builder.Operations,
+                    new SafeMigrationRunOptions("generated-index-recreated-member-verify"),
+                    CancellationToken.None)
+            : null;
 
-        var index = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
+        var index = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
             + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' "
-            + "AND INDEX_NAME = 'ix_generated_member_lifetime';", cancellationToken: CancellationToken.None);
+            + "AND INDEX_NAME = 'ix_generated_member_lifetime';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         if (explicitDrop)
@@ -414,20 +635,30 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             Assert.Null(preflightFailure);
             Assert.NotNull(preflight);
             Assert.True(preflight.Status == SafeMigrationReportStatus.Ready, DescribeGeneratedReport(preflight));
-            Assert.All(preflight.Assessments,
+            Assert.All(
+                preflight.Assessments,
                 static assessment => Assert.Equal(SafeMigrationAction.Apply, assessment.Action));
+
             Assert.NotNull(postflight);
             Assert.True(postflight.Status == SafeMigrationReportStatus.Ready, DescribeGeneratedReport(postflight));
         }
         else
         {
-            Assert.Contains("Drop the index explicitly",
-                Assert.IsType<InvalidOperationException>(preflightFailure).Message, StringComparison.Ordinal);
+            Assert.Contains(
+                "Drop the index explicitly",
+                Assert.IsType<InvalidOperationException>(preflightFailure)
+                    .Message,
+                StringComparison.Ordinal);
+
             Assert.Null(preflight);
         }
 
         Assert.Null(failure);
-        Assert.Equal(explicitDrop ? 1 : 0, index);
+        Assert.Equal(
+            explicitDrop
+                ? 1
+                : 0,
+            index);
     }
 
     /// <summary>A live index alias cannot outlive the exact-name precedence of a new native supporting index.</summary>
@@ -435,50 +666,90 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task GeneratedIndexCannotReuseNativeAliasAfterImplicitForeignKeyIndexCreation(bool acceptedAlias)
+    public async Task GeneratedIndexCannotReuseNativeAliasAfterImplicitForeignKeyIndexCreation(
+        bool acceptedAlias
+    )
     {
         // Arrange
         const string name = "ix_generated_matching_implicit";
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var initial = new MigrationBuilder(context.Database.ProviderName!);
-        initial.EnsureTable(CaseTable(stored: false), SafeMigrationTableMode.StrictDefinition,
+        initial.EnsureTable(
+            CaseTable(stored: false),
+            SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         await ExecuteOperationsAsync(context, initial.Operations, CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE generated_matching_parent(id int NOT NULL PRIMARY KEY); "
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE generated_matching_parent(id int NOT NULL PRIMARY KEY); "
             + $"ALTER TABLE `{Table}` ADD parent_id int NULL, ADD unrelated int NULL; "
             + $"CREATE INDEX ix_generated_original_alias ON `{Table}` (has_descendants);",
             cancellationToken: CancellationToken.None);
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (acceptedAlias)
         {
             builder.EnsureColumn(Table, CaseColumn(stored: false), SafeMigrationPolicy.ThrowIfDifferent);
-            builder.EnsureIndex(new ExpectedIndexDefinition(name, Table,
-                [new ExpectedIndexKeyDefinition("has_descendants")]), SafeMigrationPolicy.ThrowIfDifferent);
+            builder.EnsureIndex(
+                new ExpectedIndexDefinition(
+                    name,
+                    Table,
+                    [new ExpectedIndexKeyDefinition("has_descendants")]),
+                SafeMigrationPolicy.ThrowIfDifferent);
         }
         else
         {
             builder.DropIndexIfExists("ix_generated_original_alias", Table);
         }
 
-        builder.AddForeignKeyIfNotExists(name, Table, ["parent_id"], "generated_matching_parent", ["id"],
+        builder.AddForeignKeyIfNotExists(
+            name,
+            Table,
+            ["parent_id"],
+            "generated_matching_parent",
+            ["id"],
             policy: SafeMigrationPolicy.ThrowIfDifferent);
-        builder.DropColumnIfExists(acceptedAlias ? "unrelated" : "has_descendants", Table);
+
+        builder.DropColumnIfExists(
+            acceptedAlias
+                ? "unrelated"
+                : "has_descendants",
+            Table);
+
         builder.EnsureColumn(Table, CaseColumn(stored: false), SafeMigrationPolicy.ThrowIfDifferent);
-        builder.EnsureIndex(new ExpectedIndexDefinition(name, Table,
-            [new ExpectedIndexKeyDefinition("has_descendants")]), SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                name,
+                Table,
+                [new ExpectedIndexKeyDefinition("has_descendants")]),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-index-matching-implicit-change"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-index-matching-implicit-change"),
+                CancellationToken.None);
 
         var prefixFailure = await Record.ExceptionAsync(() =>
-            ExecuteOperationsAsync(context, builder.Operations.Take(builder.Operations.Count - 1).ToArray(),
+            ExecuteOperationsAsync(
+                context,
+                builder
+                    .Operations
+                    .Take(builder.Operations.Count - 1)
+                    .ToArray(),
                 CancellationToken.None));
 
-        var supporting = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
+        var supporting = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
             + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND INDEX_NAME = '{name}' "
-            + "AND COLUMN_NAME = 'parent_id';", cancellationToken: CancellationToken.None);
+            + "AND COLUMN_NAME = 'parent_id';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         if (acceptedAlias)
@@ -491,7 +762,8 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         }
         else
         {
-            Assert.All(report.Assessments.Take(4),
+            Assert.All(
+                report.Assessments.Take(4),
                 static assessment => Assert.Equal(SafeMigrationAction.Apply, assessment.Action));
         }
 
@@ -506,46 +778,80 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task GeneratedIndexCannotReuseTombstoneBeforeImplicitForeignKeyIndexCreation(bool existingIndex)
+    public async Task GeneratedIndexCannotReuseTombstoneBeforeImplicitForeignKeyIndexCreation(
+        bool existingIndex
+    )
     {
         // Arrange
         const string name = "ix_generated_implicit_collision";
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE generated_index_parent(id int NOT NULL PRIMARY KEY); "
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE generated_index_parent(id int NOT NULL PRIMARY KEY); "
             + $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, left_bound bigint NOT NULL, "
             + "right_bound bigint NOT NULL, parent_id int NULL, unrelated int NULL);",
             cancellationToken: CancellationToken.None);
+
         if (existingIndex)
         {
-            await ExecuteSqlAsync(connectionString, $"CREATE INDEX `{name}` ON `{Table}` (parent_id);",
+            await ExecuteSqlAsync(
+                connectionString,
+                $"CREATE INDEX `{name}` ON `{Table}` (parent_id);",
                 cancellationToken: CancellationToken.None);
         }
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropIndexIfExists(name, Table);
-        builder.AddForeignKeyIfNotExists(name, Table, ["parent_id"], "generated_index_parent", ["id"],
+        builder.AddForeignKeyIfNotExists(
+            name,
+            Table,
+            ["parent_id"],
+            "generated_index_parent",
+            ["id"],
             policy: SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.DropColumnIfExists("unrelated", Table);
         builder.EnsureColumn(Table, CaseColumn(stored: false), SafeMigrationPolicy.ThrowIfDifferent);
-        builder.EnsureIndex(new ExpectedIndexDefinition(name, Table,
-            [new ExpectedIndexKeyDefinition("has_descendants")]), SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                name,
+                Table,
+                [new ExpectedIndexKeyDefinition("has_descendants")]),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-index-implicit-namespace-change"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-index-implicit-namespace-change"),
+                CancellationToken.None);
 
         var prefixFailure = await Record.ExceptionAsync(() =>
-            ExecuteOperationsAsync(context, builder.Operations.Take(builder.Operations.Count - 1).ToArray(),
+            ExecuteOperationsAsync(
+                context,
+                builder
+                    .Operations
+                    .Take(builder.Operations.Count - 1)
+                    .ToArray(),
                 CancellationToken.None));
 
-        var supporting = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
+        var supporting = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS "
             + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND INDEX_NAME = '{name}' "
-            + "AND COLUMN_NAME = 'parent_id';", cancellationToken: CancellationToken.None);
+            + "AND COLUMN_NAME = 'parent_id';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(existingIndex ? SafeMigrationAction.Apply : SafeMigrationAction.NoOp,
+        Assert.Equal(
+            existingIndex
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.NoOp,
             report.Assessments[0].Action);
+
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[1].Action);
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[2].Action);
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);

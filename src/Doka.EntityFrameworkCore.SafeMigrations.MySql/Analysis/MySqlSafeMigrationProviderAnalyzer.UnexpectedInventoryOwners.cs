@@ -23,9 +23,17 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             return expected;
         }
 
-        var authored = expected.Keys.Select(static (owner, ordinal) => (Owner: owner, Ordinal: ordinal)).ToArray();
+        var authored = expected
+            .Keys
+            .Select(static (owner, ordinal) => (Owner: owner, Ordinal: ordinal))
+            .ToArray();
+
         var bindings = await ReadNativeInventoryOwnersAsync(
-            connection, authored, maximumPayloadBytes, commandTimeout, cancellationToken);
+            connection,
+            authored,
+            maximumPayloadBytes,
+            commandTimeout,
+            cancellationToken);
 
         return BindUnexpectedInventoryOwners(expected, bindings);
     }
@@ -46,7 +54,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         ArgumentNullException.ThrowIfNull(bindings);
 
         var result = new Dictionary<string, SafeMigrationExpectedTableInventory>(
-            expected.Count, StringComparer.Ordinal);
+            expected.Count,
+            StringComparer.Ordinal);
 
         foreach (var (authored, definition) in expected)
         {

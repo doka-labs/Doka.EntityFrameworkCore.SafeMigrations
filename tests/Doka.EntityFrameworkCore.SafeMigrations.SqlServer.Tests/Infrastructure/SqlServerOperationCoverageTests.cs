@@ -34,9 +34,11 @@ public sealed class SqlServerOperationCoverageTests
         // Assert
         Assert.Equal(Enum.GetValues<SafeMigrationOperationKind>(), actualKinds);
         Assert.All(generated, commands => Assert.NotEmpty(commands));
-        Assert.All(generated, commands => Assert.All(
-            commands,
-            command => Assert.False(string.IsNullOrWhiteSpace(command.CommandText))));
+        Assert.All(
+            generated,
+            commands => Assert.All(
+                commands,
+                command => Assert.False(string.IsNullOrWhiteSpace(command.CommandText))));
     }
 
     private static List<MigrationOperation> CreateOperationMatrix(
@@ -49,6 +51,7 @@ public sealed class SqlServerOperationCoverageTests
         builder.CreateTableIfNotExists(
             "matrix_table",
             table => new { Id = table.Column<int>(type: "int", nullable: false) });
+
         builder.DropTableIfExists("matrix_table");
         builder.RenameTableIfExists("matrix_table", "renamed_table");
         builder.AddColumnIfNotExists<int>("Amount", "matrix_table", type: "int", nullable: true);
@@ -63,6 +66,7 @@ public sealed class SqlServerOperationCoverageTests
                 oldClrType: typeof(int),
                 oldType: "int"),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.CreateIndexIfNotExists("IX_matrix_table_Amount", "matrix_table", ["Amount"]);
         builder.DropIndexIfExists("IX_matrix_table_Amount", "matrix_table");
         builder.RenameIndexIfExists("IX_matrix_table_Amount", "matrix_table", "IX_matrix_table_NewAmount");
@@ -78,6 +82,7 @@ public sealed class SqlServerOperationCoverageTests
             ["ParentId"],
             "parent_table",
             ["Id"]);
+
         builder.DropForeignKeyIfExists("FK_matrix_table_parent", "matrix_table");
         builder.EnsureModelManagedDataFromModel(
             "matrix_table",
@@ -86,6 +91,7 @@ public sealed class SqlServerOperationCoverageTests
             ["Id", "Amount"],
             ["int", "int"],
             new object?[,] { { 1, 10 } });
+
         builder.UpdateModelManagedDataFromModel(
             "matrix_table",
             ["Id"],
@@ -95,6 +101,7 @@ public sealed class SqlServerOperationCoverageTests
             ["int"],
             new object?[,] { { 10 } },
             new object?[,] { { 11 } });
+
         builder.DeleteModelManagedDataFromModel(
             "matrix_table",
             ["Id"],

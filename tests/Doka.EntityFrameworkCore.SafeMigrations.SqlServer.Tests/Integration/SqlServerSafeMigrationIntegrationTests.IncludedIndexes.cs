@@ -20,7 +20,9 @@ public sealed class SqlServerSafeMigrationIncludedIndexesIntegrationTests : SqlS
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.covering_users (Id int NOT NULL, Email nvarchar(320) NOT NULL, "
-            + "DisplayName nvarchar(120) NOT NULL);", cancellationToken: CancellationToken.None);
+            + "DisplayName nvarchar(120) NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexWithIncludesIfNotExistsFromModel(
@@ -40,12 +42,14 @@ public sealed class SqlServerSafeMigrationIncludedIndexesIntegrationTests : SqlS
             + "JOIN sys.columns AS c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
             + "WHERE i.object_id = OBJECT_ID(N'dbo.covering_users', N'U') "
             + "AND i.name = N'IX_covering_users_Email' "
-            + "AND ic.is_included_column = 1 AND c.name = N'DisplayName';", cancellationToken: CancellationToken.None);
+            + "AND ic.is_included_column = 1 AND c.name = N'DisplayName';",
+            cancellationToken: CancellationToken.None);
 
         var indexCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.covering_users', N'U') "
-            + "AND name = N'IX_covering_users_Email';", cancellationToken: CancellationToken.None);
+            + "AND name = N'IX_covering_users_Email';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, includedColumnCount);
@@ -66,6 +70,7 @@ public sealed class SqlServerSafeMigrationIncludedIndexesIntegrationTests : SqlS
             + "DisplayName nvarchar(120) NOT NULL); "
             + "CREATE INDEX IX_covering_users_Email ON dbo.covering_users (Email);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexWithIncludesIfNotExistsFromModel(
@@ -75,10 +80,13 @@ public sealed class SqlServerSafeMigrationIncludedIndexesIntegrationTests : SqlS
             ["DisplayName"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-included-index-drift"), cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-included-index-drift"),
+                cancellationToken: CancellationToken.None);
 
         var includedColumnCount = await ScalarIntAsync(
             connectionString,

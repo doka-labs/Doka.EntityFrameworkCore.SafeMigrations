@@ -42,7 +42,9 @@ public static partial class SafeMigrationModelFingerprint
             return;
         }
 
-        writer.Add(value.GetType().FullName);
+        writer.Add(value.GetType()
+            .FullName);
+
         switch (value)
         {
             case DBNull:
@@ -52,22 +54,22 @@ public static partial class SafeMigrationModelFingerprint
                 writer.Add(text);
                 break;
             case char character:
-                writer.Add((int)character);
+                writer.Add(character);
                 break;
             case bool boolean:
                 writer.Add(boolean);
                 break;
             case byte number:
-                writer.Add((int)number);
+                writer.Add(number);
                 break;
             case sbyte number:
-                writer.Add((int)number);
+                writer.Add(number);
                 break;
             case short number:
-                writer.Add((int)number);
+                writer.Add(number);
                 break;
             case ushort number:
-                writer.Add((int)number);
+                writer.Add(number);
                 break;
             case int number:
                 writer.Add(number);
@@ -180,6 +182,7 @@ public static partial class SafeMigrationModelFingerprint
         var values = sequence
             .Cast<object?>()
             .ToArray();
+
         writer.Add(values.Length);
         foreach (var value in values)
         {
@@ -196,10 +199,12 @@ public static partial class SafeMigrationModelFingerprint
         string text => "string:" + text,
         Type type => "type:" + type.FullName,
         Enum enumeration => "enum:"
-            + enumeration.GetType().FullName
+            + enumeration.GetType()
+                .FullName
             + ":"
             + Convert.ToString(enumeration, CultureInfo.InvariantCulture),
-        IFormattable formattable => formattable.GetType().FullName
+        IFormattable formattable => formattable.GetType()
+                .FullName
             + ":"
             + formattable.ToString(null, CultureInfo.InvariantCulture),
         _ => throw new NotSupportedException(
@@ -211,5 +216,8 @@ public static partial class SafeMigrationModelFingerprint
     /// <summary>Formats type metadata without invoking an annotation object's string conversion.</summary>
     private static string DisplayAnnotationType(
         object value
-    ) => SafeMigrationDiagnosticMessages.BoundForDisplay(value.GetType().FullName ?? value.GetType().Name);
+    ) => SafeMigrationDiagnosticMessages.BoundForDisplay(value.GetType()
+            .FullName
+        ?? value.GetType()
+            .Name);
 }

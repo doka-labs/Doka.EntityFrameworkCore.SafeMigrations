@@ -27,18 +27,6 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
     }
 
     /// <inheritdoc />
-    public string ProviderId => SqliteSafeMigrationSqlExpressionRenderer.ProviderId;
-
-    /// <inheritdoc />
-    public StringComparer IdentifierComparer => s_identifierComparer;
-
-    /// <inheritdoc />
-    public char? CapturedSqlIdentifierDelimiter => '"';
-
-    /// <inheritdoc />
-    public bool IndexUsesSchemaScopedIdentity => true;
-
-    /// <inheritdoc />
     public SafeMigrationProviderAnalysis ValidateProjectedAlterColumn(
         AlterColumnIntent intent,
         ExpectedColumnDefinition source,
@@ -61,6 +49,9 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
                     differences: projectedAnalysis.Differences)
                 : projectedAnalysis;
     }
+
+    /// <inheritdoc />
+    public string ProviderId => SqliteSafeMigrationSqlExpressionRenderer.ProviderId;
 
     /// <inheritdoc />
     public void ValidateContext(
@@ -142,7 +133,9 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(operations);
 
-        var targetModel = context.GetService<IDesignTimeModel>().Model;
+        var targetModel = context.GetService<IDesignTimeModel>()
+            .Model;
+
         var targetModels = Enumerable
             .Repeat<IModel?>(targetModel, operations.Count)
             .ToArray();
@@ -152,6 +145,75 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
             .ToArray();
 
         return AnalyzeAsync(context, migrationOperations, targetModels, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public StringComparer IdentifierComparer => s_identifierComparer;
+
+    /// <inheritdoc />
+    public char? CapturedSqlIdentifierDelimiter => '"';
+
+    /// <inheritdoc />
+    public bool IndexUsesSchemaScopedIdentity => true;
+
+    /// <inheritdoc />
+    public string? NormalizeSchema(
+        string? schema
+    ) => schema is null || s_identifierComparer.Equals(schema, "main")
+        ? null
+        : schema;
+
+    /// <inheritdoc />
+    public string NormalizeIdentifier(
+        string identifier
+    ) => SqliteIdentifierComparer.Normalize(identifier);
+
+    /// <inheritdoc />
+    public bool IsObjectIdentityMismatch(
+        SafeMigrationProviderAnalysis analysis
+    )
+    {
+        ArgumentNullException.ThrowIfNull(analysis);
+
+        return StringComparer.Ordinal.Equals(analysis.Code, "database_qualifier_mismatch");
+    }
+
+    /// <inheritdoc />
+    public bool PreservesExistingTableState(
+        MigrationOperation operation
+    )
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        // WHY: SQLite executes arbitrary SQL as a provider command and
+        // invalidates its runtime catalog cache afterward. Read-only preflight
+        // cannot claim that the same SQL preserves earlier catalog evidence.
+        return false;
+    }
+
+    /// <inheritdoc />
+    public bool PreservesUnrelatedColumnAbsence(
+        RenameColumnIntent operation
+    )
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        // WHY: SQLite rewrites dependent schema text during RENAME COLUMN, but
+        // it cannot create a third, unrelated column in the renamed table.
+        return true;
+    }
+
+    /// <inheritdoc />
+    public bool IsSequenceAwareAnalysis(
+        SafeMigrationOperation operation,
+        SafeMigrationProviderAnalysis analysis
+    )
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        ArgumentNullException.ThrowIfNull(analysis);
+
+        return operation.Intent is DropTableIntent
+            && StringComparer.Ordinal.Equals(analysis.Code, "table_drop_foreign_key_dependency");
     }
 
     /// <inheritdoc />
@@ -202,7 +264,9 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
 
         var connection = context.Database.GetDbConnection();
         var transaction = context.Database.CurrentTransaction?.GetDbTransaction();
-        var fallbackModel = context.GetService<IDesignTimeModel>().Model;
+        var fallbackModel = context.GetService<IDesignTimeModel>()
+            .Model;
+
         var runtimeInitializer = context.GetService<IModelRuntimeInitializer>();
         var initializedModels = new Dictionary<IModel, IModel>(ReferenceEqualityComparer.Instance);
         Dictionary<IModel, SqliteRebuildArtifactContract>? modelArtifacts = null;
@@ -216,8 +280,8 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
         // case needs neither a model-sharing map nor an empty base contract.
         var lastStructuralIndex = operations.Count - 1;
         while (lastStructuralIndex >= 0
-               && !SqliteSafeMigrationOperationClassifier.CanParticipateInStructuralBatch(
-                   operations[lastStructuralIndex]))
+            && !SqliteSafeMigrationOperationClassifier.CanParticipateInStructuralBatch(
+                operations[lastStructuralIndex]))
         {
             lastStructuralIndex--;
         }
@@ -238,14 +302,15 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
             {
                 var segmentStart = index;
                 while (index < operations.Count
-                       && ReferenceEquals(GetTargetModel(index), targetModel)
-                       && SqliteSafeMigrationOperationClassifier.CanParticipateInStructuralBatch(operations[index]))
+                    && ReferenceEquals(GetTargetModel(index), targetModel)
+                    && SqliteSafeMigrationOperationClassifier.CanParticipateInStructuralBatch(operations[index]))
                 {
                     cumulativeOperations.Add(operations[index]);
                     index++;
                 }
 
                 var segment = new MigrationOperation[index - segmentStart];
+
                 // WHY: Keep structural window boundaries and per-operation contract/result slots aligned.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery
@@ -255,10 +320,13 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
                 }
 
                 SqliteRebuildArtifactContract contract;
-                if (modelArtifacts is null && index > lastStructuralIndex)
+                if (modelArtifacts is null
+                    && index > lastStructuralIndex)
                 {
                     contract = SqliteRebuildArtifactContract.FromModel(
-                        initializedModel, cumulativeOperations, segment);
+                        initializedModel,
+                        cumulativeOperations,
+                        segment);
                 }
                 else
                 {
@@ -324,64 +392,6 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
         IModel GetTargetModel(
             int index
         ) => targetModels?[index] ?? fallbackModel;
-    }
-
-    /// <inheritdoc />
-    public string? NormalizeSchema(
-        string? schema
-    ) => schema is null || s_identifierComparer.Equals(schema, "main") ? null : schema;
-
-    /// <inheritdoc />
-    public string NormalizeIdentifier(
-        string identifier
-    ) => SqliteIdentifierComparer.Normalize(identifier);
-
-    /// <inheritdoc />
-    public bool IsObjectIdentityMismatch(
-        SafeMigrationProviderAnalysis analysis
-    )
-    {
-        ArgumentNullException.ThrowIfNull(analysis);
-
-        return StringComparer.Ordinal.Equals(analysis.Code, "database_qualifier_mismatch");
-    }
-
-    /// <inheritdoc />
-    public bool PreservesExistingTableState(
-        MigrationOperation operation
-    )
-    {
-        ArgumentNullException.ThrowIfNull(operation);
-
-        // WHY: SQLite executes arbitrary SQL as a provider command and
-        // invalidates its runtime catalog cache afterward. Read-only preflight
-        // cannot claim that the same SQL preserves earlier catalog evidence.
-        return false;
-    }
-
-    /// <inheritdoc />
-    public bool PreservesUnrelatedColumnAbsence(
-        RenameColumnIntent operation
-    )
-    {
-        ArgumentNullException.ThrowIfNull(operation);
-
-        // WHY: SQLite rewrites dependent schema text during RENAME COLUMN, but
-        // it cannot create a third, unrelated column in the renamed table.
-        return true;
-    }
-
-    /// <inheritdoc />
-    public bool IsSequenceAwareAnalysis(
-        SafeMigrationOperation operation,
-        SafeMigrationProviderAnalysis analysis
-    )
-    {
-        ArgumentNullException.ThrowIfNull(operation);
-        ArgumentNullException.ThrowIfNull(analysis);
-
-        return operation.Intent is DropTableIntent
-            && StringComparer.Ordinal.Equals(analysis.Code, "table_drop_foreign_key_dependency");
     }
 
     /// <summary>Dispatches one operation using the invocation's catalog, connection and rebuild certificate.</summary>
@@ -467,11 +477,16 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
             analysis.RepairCapability);
 
         var rebuildTable = SqliteSafeMigrationOperationClassifier.RequiresTableRebuild(operation.Intent)
-            ? tableName : null;
+            ? tableName
+            : null;
 
         var unsupportedRebuild = rebuildTable is not null
             ? rebuildArtifacts.GetUnsupportedRebuildFeature(
-                snapshot, rebuildTable, ModelColumnMatches, ModelIndexMatches, ModelExpressionMatches)
+                snapshot,
+                rebuildTable,
+                ModelColumnMatches,
+                ModelIndexMatches,
+                ModelExpressionMatches)
             : null;
 
         if (unsupportedRebuild is not null)
@@ -490,13 +505,21 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
             return generatedDropBlocker ?? Unsupported(unsupportedRebuild);
         }
 
-        if (rebuildTable is not null && unsupportedRebuild is null && snapshot.ForeignKeysEnabled
-            && (nativeRebuild || (operation.Intent is DropColumnIntent drop
-                && analysis.ObservedState == SafeMigrationObservedState.Missing
-                && snapshot.Tables.ContainsKey(drop.Table)
-                && rebuildArtifacts.MayRebuildMissingColumn(operation)))
+        if (rebuildTable is not null
+            && unsupportedRebuild is null
+            && snapshot.ForeignKeysEnabled
+            && (nativeRebuild
+                || (operation.Intent is DropColumnIntent drop
+                    && analysis.ObservedState == SafeMigrationObservedState.Missing
+                    && snapshot.Tables.ContainsKey(drop.Table)
+                    && rebuildArtifacts.MayRebuildMissingColumn(operation)))
             && HasRetainedRebuildForeignKeyViolation(
-                snapshot, connection, transaction, rebuildTable, operation, rebuildArtifacts))
+                snapshot,
+                connection,
+                transaction,
+                rebuildTable,
+                operation,
+                rebuildArtifacts))
         {
             var rowBlocker = DataBlocked("table_rebuild_foreign_key_violation");
 
@@ -532,7 +555,9 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
         EnsureTableIntent value => TableUnsupportedFeature(value.Definition),
         EnsureColumnIntent value => ColumnUnsupportedFeature(value.Definition),
         AlterColumnIntent value => ColumnUnsupportedFeature(value.Definition)
-            ?? (value.OldDefinition is null ? null : ColumnUnsupportedFeature(value.OldDefinition)),
+            ?? (value.OldDefinition is null
+                ? null
+                : ColumnUnsupportedFeature(value.OldDefinition)),
         EnsureIndexIntent value => IndexUnsupportedFeature(value.Definition),
         EnsureCheckConstraintIntent value when RenderCheck(value.Definition) is null => "check_expression",
         _ => null,
@@ -570,7 +595,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
         return !IsMain(qualifier)
             || (intent is EnsureTableIntent table
                 && table.Definition.ForeignKeys.Any(foreignKey => !IsMain(foreignKey.PrincipalSchema)))
-            || intent is EnsureForeignKeyIntent foreignKey && !IsMain(foreignKey.Definition.PrincipalSchema)
+            || (intent is EnsureForeignKeyIntent foreignKey && !IsMain(foreignKey.Definition.PrincipalSchema))
             || (intent is DeleteModelManagedDataIntent deletion
                 && deletion.ForeignKeys.Any(foreignKey => !IsMain(foreignKey.Schema)));
     }
@@ -614,7 +639,9 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
 
     private static string Display(
         string value
-    ) => value.Length == 0 ? "<none>" : Bound(value);
+    ) => value.Length == 0
+        ? "<none>"
+        : Bound(value);
 
     private static SafeMigrationProviderAnalysis Missing(
         bool postconditionSatisfied
@@ -711,8 +738,8 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer : ISafeMigrati
 
     private sealed class TransactionAnalysisScope : IAsyncDisposable
     {
-        private readonly IDbContextTransaction _transaction;
         private readonly SqliteTransaction _providerTransaction;
+        private readonly IDbContextTransaction _transaction;
 
         public TransactionAnalysisScope(
             IDbContextTransaction transaction,

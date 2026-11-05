@@ -42,7 +42,9 @@ public sealed partial class SafeMigrationContractFingerprintTests
         isRowVersion,
         precision,
         scale,
-        collation is null ? null : new SafeMigrationCollationIdentifier(collation),
+        collation is null
+            ? null
+            : new SafeMigrationCollationIdentifier(collation),
         comment,
         defaultValue
         ?? ((clrType ?? typeof(string)) == typeof(string)

@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the ForeignKeysReplacementProofs migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlForeignKeysReplacementProofsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlForeignKeysReplacementProofsIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlForeignKeysReplacementProofsIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>Replacement certificates preserve exact ENUM and SET member domains without reading rows.</summary>
     /// <param name="useSetStorage">Whether the endpoint storage uses SET rather than ENUM.</param>
@@ -22,23 +24,40 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var keyword = useSetStorage ? "set" : "enum";
+        var keyword = useSetStorage
+            ? "set"
+            : "enum";
+
         var principalType = keyword + "('Alpha','Beta')";
-        var dependentType = keyword + (matchingDomain ? "('Alpha','Beta')" : "('alpha','Beta')");
-        await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE `fk_enum_principal` (`id` " + principalType + " NOT NULL, "
+        var dependentType = keyword
+            + (matchingDomain
+                ? "('Alpha','Beta')"
+                : "('alpha','Beta')");
+
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `fk_enum_principal` (`id` "
+            + principalType
+            + " NOT NULL, "
             + "UNIQUE KEY `uq_enum_principal_id` (`id`)) ENGINE=InnoDB "
             + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin; "
             + "CREATE TABLE `fk_enum_dependent` (`key` int NOT NULL PRIMARY KEY, `owner_id` "
-            + dependentType + " NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;",
+            + dependentType
+            + " NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;",
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var catalog = new MySqlSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
-        var definition = new ExpectedForeignKeyDefinition("fk_enum_certificate", "fk_enum_dependent", ["owner_id"],
-            "fk_enum_principal", ["id"], onDelete: ReferentialAction.SetNull);
+        var definition = new ExpectedForeignKeyDefinition(
+            "fk_enum_certificate",
+            "fk_enum_dependent",
+            ["owner_id"],
+            "fk_enum_principal",
+            ["id"],
+            onDelete: ReferentialAction.SetNull);
 
         // WHY: This certifies exact replacement storage, not every FK shape
         // the engine may permit. No FK or application rows are created, and
@@ -47,13 +66,23 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
 
         // Act
         await context.Database.OpenConnectionAsync(CancellationToken.None);
-        await using var command = context.Database.GetDbConnection().CreateCommand();
+        await using var command = context
+            .Database
+            .GetDbConnection()
+            .CreateCommand();
+
         command.CommandText = sql;
         await using var reader = await command.ExecuteReaderAsync(CancellationToken.None);
         var hasRow = await reader.ReadAsync(CancellationToken.None);
         var eligible = hasRow && reader.GetBoolean(0);
-        var nullableMask = hasRow ? Convert.ToInt64(reader.GetValue(1), CultureInfo.InvariantCulture) : 0;
-        var aliasName = hasRow && !reader.IsDBNull(2) ? reader.GetString(2) : null;
+        var nullableMask = hasRow
+            ? Convert.ToInt64(reader.GetValue(1), CultureInfo.InvariantCulture)
+            : 0;
+
+        var aliasName = hasRow && !reader.IsDBNull(2)
+            ? reader.GetString(2)
+            : null;
+
         var extraRow = await reader.ReadAsync(CancellationToken.None);
 
         // Assert
@@ -71,34 +100,59 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ForeignKeyReplacementProofPreservesNullableActionChanges(bool updateAction)
+    public async Task ForeignKeyReplacementProofPreservesNullableActionChanges(
+        bool updateAction
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: true),
+        await ExecuteSqlAsync(
+            connectionString,
+            ForeignKeyNullabilityFixture(alreadyNullable: true),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_proof_child_parent", "proof_child");
-        builder.AddForeignKeyIfNotExists("fk_proof_child_parent", "proof_child", ["owner_id"],
-            "proof_parent", ["id"],
-            onUpdate: updateAction ? ReferentialAction.SetNull : ReferentialAction.NoAction,
-            onDelete: updateAction ? ReferentialAction.NoAction : ReferentialAction.SetNull);
+        builder.AddForeignKeyIfNotExists(
+            "fk_proof_child_parent",
+            "proof_child",
+            ["owner_id"],
+            "proof_parent",
+            ["id"],
+            onUpdate: updateAction
+                ? ReferentialAction.SetNull
+                : ReferentialAction.NoAction,
+            onDelete: updateAction
+                ? ReferentialAction.NoAction
+                : ReferentialAction.SetNull);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-action"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-action"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-action-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-action-final"),
+            CancellationToken.None);
 
-        await ExecuteSqlAsync(connectionString, updateAction
-            ? "UPDATE `proof_parent` SET `id` = '00000000-0000-0000-0000-000000000002';"
-            : "DELETE FROM `proof_parent`;", cancellationToken: CancellationToken.None);
-        var nullRows = await ScalarIntAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
+            updateAction
+                ? "UPDATE `proof_parent` SET `id` = '00000000-0000-0000-0000-000000000002';"
+                : "DELETE FROM `proof_parent`;",
+            cancellationToken: CancellationToken.None);
+
+        var nullRows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `proof_child` WHERE `id` = 1 AND `owner_id` IS NULL;",
             cancellationToken: CancellationToken.None);
 
@@ -117,25 +171,36 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ForeignKeyAlternateColumnFixture(orphan: true),
+        await ExecuteSqlAsync(
+            connectionString,
+            ForeignKeyAlternateColumnFixture(orphan: true),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var operations = AlternateColumnForeignKeyReplacement(context);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, operations,
-            new SafeMigrationRunOptions("fk-replacement-orphan"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                operations,
+                new SafeMigrationRunOptions("fk-replacement-orphan"),
+                CancellationToken.None);
 
-        var exception = await AssertOwnedGuardFailureAsync(operationToken =>
-            ExecuteOperationsAsync(context, operations, operationToken),
+        var exception = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, operations, operationToken),
             cancellationToken: CancellationToken.None);
 
-        var remaining = await ScalarIntAsync(connectionString,
+        var remaining = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `proof_child` WHERE `id` = 1 "
             + "AND `alternate_owner_id` = '00000000-0000-0000-0000-000000000999';",
             cancellationToken: CancellationToken.None);
 
-        var foreignKeys = await ReplacementForeignKeyCountAsync(connectionString,
+        var foreignKeys = await ReplacementForeignKeyCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -154,25 +219,37 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ForeignKeyAlternateColumnFixture(orphan: false),
+        await ExecuteSqlAsync(
+            connectionString,
+            ForeignKeyAlternateColumnFixture(orphan: false),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var operations = AlternateColumnForeignKeyReplacement(context);
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, operations,
-            new SafeMigrationRunOptions("fk-replacement-fresh-rows"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                operations,
+                new SafeMigrationRunOptions("fk-replacement-fresh-rows"),
+                CancellationToken.None);
 
         // WHY: The existing FK protects owner_id, not alternate_owner_id. This
         // models a legal intervening write without disabling FK enforcement.
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "UPDATE `proof_child` SET `alternate_owner_id` = '00000000-0000-0000-0000-000000000999';",
             cancellationToken: CancellationToken.None);
-        var exception = await AssertOwnedGuardFailureAsync(operationToken =>
-            ExecuteOperationsAsync(context, operations, operationToken),
+
+        var exception = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, operations, operationToken),
             cancellationToken: CancellationToken.None);
 
-        var foreignKeys = await ReplacementForeignKeyCountAsync(connectionString,
+        var foreignKeys = await ReplacementForeignKeyCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -187,7 +264,9 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ForeignKeyReplacementProofRejectsTargetStorageDrift(bool collationDrift)
+    public async Task ForeignKeyReplacementProofRejectsTargetStorageDrift(
+        bool collationDrift
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -195,15 +274,23 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
             ? "char(36) CHARACTER SET ascii COLLATE ascii_bin"
             : "int";
 
-        await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: true)
+        await ExecuteSqlAsync(
+            connectionString,
+            ForeignKeyNullabilityFixture(alreadyNullable: true)
             + $" ALTER TABLE `proof_child` ADD `alternate_owner_id` {alternateType} NULL;",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var operations = AlternateColumnForeignKeyReplacement(context);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, operations,
-            new SafeMigrationRunOptions("fk-replacement-storage-drift"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                operations,
+                new SafeMigrationRunOptions("fk-replacement-storage-drift"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -220,24 +307,46 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     [InlineData("local-column")]
     [InlineData("principal-column")]
     [InlineData("principal-table")]
-    public async Task ForeignKeyReplacementProofRejectsMissingTargetEndpoint(string missingEndpoint)
+    public async Task ForeignKeyReplacementProofRejectsMissingTargetEndpoint(
+        string missingEndpoint
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: true),
+        await ExecuteSqlAsync(
+            connectionString,
+            ForeignKeyNullabilityFixture(alreadyNullable: true),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_proof_child_parent", "proof_child");
-        builder.AddForeignKeyIfNotExists("fk_proof_child_parent", "proof_child",
-            [missingEndpoint == "local-column" ? "absent_owner" : "owner_id"],
-            missingEndpoint == "principal-table" ? "absent_parent" : "proof_parent",
-            [missingEndpoint == "principal-column" ? "absent_id" : "id"],
+        builder.AddForeignKeyIfNotExists(
+            "fk_proof_child_parent",
+            "proof_child",
+            [
+                missingEndpoint == "local-column"
+                    ? "absent_owner"
+                    : "owner_id",
+            ],
+            missingEndpoint == "principal-table"
+                ? "absent_parent"
+                : "proof_parent",
+            [
+                missingEndpoint == "principal-column"
+                    ? "absent_id"
+                    : "id",
+            ],
             onDelete: ReferentialAction.SetNull);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-missing-endpoint"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("fk-replacement-missing-endpoint"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -252,23 +361,38 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: false),
+        await ExecuteSqlAsync(
+            connectionString,
+            ForeignKeyNullabilityFixture(alreadyNullable: false),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_proof_child_parent", "proof_child");
-        builder.AddForeignKeyIfNotExists("fk_proof_child_parent", "proof_child", ["owner_id"],
-            "proof_parent", ["id"], onDelete: ReferentialAction.SetNull);
+        builder.AddForeignKeyIfNotExists(
+            "fk_proof_child_parent",
+            "proof_child",
+            ["owner_id"],
+            "proof_parent",
+            ["id"],
+            onDelete: ReferentialAction.SetNull);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-required-column"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("fk-replacement-required-column"),
+                CancellationToken.None);
 
-        var exception = await AssertOwnedGuardFailureAsync(operationToken =>
-            ExecuteOperationsAsync(context, builder.Operations, operationToken),
+        var exception = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
-        var foreignKeys = await ReplacementForeignKeyCountAsync(connectionString,
+        var foreignKeys = await ReplacementForeignKeyCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -285,40 +409,64 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: true),
+        await ExecuteSqlAsync(
+            connectionString,
+            ForeignKeyNullabilityFixture(alreadyNullable: true),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_proof_child_parent", "proof_child");
         builder.AlterColumnIfDifferentFromModel(
-            operationFactory: static operations => operations.AlterColumn<Guid>(
-                    name: "OWNER_ID", table: "proof_child", type: "char(36)",
-                    fixedLength: true, maxLength: 36, nullable: false,
-                    oldClrType: typeof(Guid), oldType: "char(36)", oldFixedLength: true,
-                    oldMaxLength: 36, oldNullable: true)
+            operationFactory: static operations => operations
+                .AlterColumn<Guid>(
+                    name: "OWNER_ID",
+                    table: "proof_child",
+                    type: "char(36)",
+                    fixedLength: true,
+                    maxLength: 36,
+                    nullable: false,
+                    oldClrType: typeof(Guid),
+                    oldType: "char(36)",
+                    oldFixedLength: true,
+                    oldMaxLength: 36,
+                    oldNullable: true)
                 .Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Char36)
                 .Annotation("Doka:MySql:RequiresExplicitBackfill", true)
                 .Annotation("Doka:MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.None)
                 .OldAnnotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Char36)
                 .OldAnnotation("Doka:MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.None));
 
-        builder.AddForeignKeyIfNotExists("fk_proof_child_parent", "proof_child", ["owner_id"],
-            "proof_parent", ["id"], onDelete: ReferentialAction.SetNull);
+        builder.AddForeignKeyIfNotExists(
+            "fk_proof_child_parent",
+            "proof_child",
+            ["owner_id"],
+            "proof_parent",
+            ["id"],
+            onDelete: ReferentialAction.SetNull);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-case-required-column"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("fk-replacement-case-required-column"),
+                CancellationToken.None);
 
-        var exception = await AssertOwnedGuardFailureAsync(operationToken =>
-            ExecuteOperationsAsync(context, builder.Operations, operationToken),
+        var exception = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
-        var requiredColumns = await ScalarIntAsync(connectionString,
+        var requiredColumns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'proof_child' AND COLUMN_NAME = 'owner_id' AND IS_NULLABLE = 'NO';",
             cancellationToken: CancellationToken.None);
 
-        var foreignKeys = await ReplacementForeignKeyCountAsync(connectionString,
+        var foreignKeys = await ReplacementForeignKeyCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -336,15 +484,19 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ForeignKeyReplacementProofRejectsRemovedPrincipalKey(bool uniqueConstraint)
+    public async Task ForeignKeyReplacementProofRejectsRemovedPrincipalKey(
+        bool uniqueConstraint
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var fixture = ForeignKeyNullabilityFixture(alreadyNullable: true);
         if (uniqueConstraint)
         {
-            fixture = fixture.Replace("`id` char(36) NOT NULL PRIMARY KEY",
-                "`id` char(36) NOT NULL, UNIQUE KEY `uq_proof_parent` (`id`)", StringComparison.Ordinal);
+            fixture = fixture.Replace(
+                "`id` char(36) NOT NULL PRIMARY KEY",
+                "`id` char(36) NOT NULL, UNIQUE KEY `uq_proof_parent` (`id`)",
+                StringComparison.Ordinal);
         }
 
         await ExecuteSqlAsync(connectionString, fixture, cancellationToken: CancellationToken.None);
@@ -360,12 +512,22 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
             builder.DropPrimaryKeyIfExists("pk_proof_parent", "proof_parent");
         }
 
-        builder.AddForeignKeyIfNotExists("fk_proof_child_parent", "proof_child", ["owner_id"],
-            "proof_parent", ["id"], onDelete: ReferentialAction.SetNull);
+        builder.AddForeignKeyIfNotExists(
+            "fk_proof_child_parent",
+            "proof_child",
+            ["owner_id"],
+            "proof_parent",
+            ["id"],
+            onDelete: ReferentialAction.SetNull);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-removed-key"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("fk-replacement-removed-key"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -381,20 +543,30 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     [InlineData("ordinary")]
     [InlineData("managed")]
     [InlineData("opaque")]
-    public async Task ForeignKeyReplacementProofExpiresAfterAcceptedWrite(string writeKind)
+    public async Task ForeignKeyReplacementProofExpiresAfterAcceptedWrite(
+        string writeKind
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: true)
+        await ExecuteSqlAsync(
+            connectionString,
+            ForeignKeyNullabilityFixture(alreadyNullable: true)
             + " CREATE TABLE `proof_mutations` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_proof_child_parent", "proof_child");
         if (writeKind == "managed")
         {
-            _ = builder.EnsureModelManagedDataFromModel("proof_mutations", ["id"], ["int"],
-                ["id"], ["int"], new object?[,] { { 7 } });
+            _ = builder.EnsureModelManagedDataFromModel(
+                "proof_mutations",
+                ["id"],
+                ["int"],
+                ["id"],
+                ["int"],
+                new object?[,] { { 7 } });
         }
         else if (writeKind == "ordinary")
         {
@@ -405,12 +577,22 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
             builder.Sql("INSERT INTO `proof_mutations` (`id`) VALUES (7);");
         }
 
-        builder.AddForeignKeyIfNotExists("fk_proof_child_parent", "proof_child", ["owner_id"],
-            "proof_parent", ["id"], onDelete: ReferentialAction.SetNull);
+        builder.AddForeignKeyIfNotExists(
+            "fk_proof_child_parent",
+            "proof_child",
+            ["owner_id"],
+            "proof_parent",
+            ["id"],
+            onDelete: ReferentialAction.SetNull);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-stale-rows"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("fk-replacement-stale-rows"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
@@ -442,27 +624,42 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, CompositeForeignKeyReplacementFixture(),
+        await ExecuteSqlAsync(
+            connectionString,
+            CompositeForeignKeyReplacementFixture(),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = CompositeForeignKeyReplacement(context, reversePrincipalOrder: false);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-composite-nulls"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-composite-nulls"),
+            CancellationToken.None);
 
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-composite-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-composite-final"),
+            CancellationToken.None);
 
-        await ExecuteSqlAsync(connectionString, "DELETE FROM `composite_parent`;",
-            cancellationToken: CancellationToken.None);
-        var retained = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `composite_child`;",
+        await ExecuteSqlAsync(
+            connectionString,
+            "DELETE FROM `composite_parent`;",
             cancellationToken: CancellationToken.None);
 
-        var affected = await ScalarIntAsync(connectionString,
+        var retained = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `composite_child`;",
+            cancellationToken: CancellationToken.None);
+
+        var affected = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `composite_child` WHERE `id` = 1 AND `first_id` IS NULL AND `second_id` IS NULL;",
             cancellationToken: CancellationToken.None);
 
@@ -480,14 +677,22 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, CompositeForeignKeyReplacementFixture(),
+        await ExecuteSqlAsync(
+            connectionString,
+            CompositeForeignKeyReplacementFixture(),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = CompositeForeignKeyReplacement(context, reversePrincipalOrder: true);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-composite-order"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("fk-replacement-composite-order"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -502,28 +707,44 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: true),
+        await ExecuteSqlAsync(
+            connectionString,
+            ForeignKeyNullabilityFixture(alreadyNullable: true),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_proof_child_parent", "proof_child");
-        builder.AddForeignKeyIfNotExists("fk_proof_child_parent", "proof_child", ["owner_id"],
-            "proof_parent", ["id"], onDelete: ReferentialAction.SetNull);
+        builder.AddForeignKeyIfNotExists(
+            "fk_proof_child_parent",
+            "proof_child",
+            ["owner_id"],
+            "proof_parent",
+            ["id"],
+            onDelete: ReferentialAction.SetNull);
+
         MigrationOperation[] operations =
             [builder.Operations[0], builder.Operations[1], builder.Operations[0], builder.Operations[1]];
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, operations,
-            new SafeMigrationRunOptions("fk-replacement-reused-operation"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(
+            context,
+            operations,
+            new SafeMigrationRunOptions("fk-replacement-reused-operation"),
+            CancellationToken.None);
 
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, operations,
-            new SafeMigrationRunOptions("fk-replacement-reused-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            operations,
+            new SafeMigrationRunOptions("fk-replacement-reused-final"),
+            CancellationToken.None);
 
-        var foreignKeys = await ReplacementForeignKeyCountAsync(connectionString,
+        var foreignKeys = await ReplacementForeignKeyCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -538,12 +759,17 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ForeignKeyReplacementProofRequiresAcceptedExactRemoval(bool missingDrop)
+    public async Task ForeignKeyReplacementProofRequiresAcceptedExactRemoval(
+        bool missingDrop
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: true),
+        await ExecuteSqlAsync(
+            connectionString,
+            ForeignKeyNullabilityFixture(alreadyNullable: true),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (missingDrop)
@@ -551,12 +777,22 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
             builder.DropForeignKeyIfExists("absent_foreign_key", "proof_child");
         }
 
-        builder.AddForeignKeyIfNotExists("fk_proof_child_parent", "proof_child", ["owner_id"],
-            "proof_parent", ["id"], onDelete: ReferentialAction.SetNull);
+        builder.AddForeignKeyIfNotExists(
+            "fk_proof_child_parent",
+            "proof_child",
+            ["owner_id"],
+            "proof_parent",
+            ["id"],
+            onDelete: ReferentialAction.SetNull);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-unaccepted-removal"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("fk-replacement-unaccepted-removal"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -575,44 +811,67 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `empty_proof_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `empty_proof_child` (`id` int NOT NULL PRIMARY KEY, "
             + "`owner_id` int NULL, `alternate_owner_id` int NULL, "
             + "CONSTRAINT `fk_empty_proof` FOREIGN KEY (`owner_id`) REFERENCES `empty_proof_parent` (`id`) "
             + "ON DELETE CASCADE) ENGINE=InnoDB; "
             + "INSERT INTO `empty_proof_parent` VALUES (7); "
-            + "INSERT INTO `empty_proof_child` VALUES (1, 7, 999);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO `empty_proof_child` VALUES (1, 7, 999);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        _ = builder.CreateTableIfNotExists("empty_proof_parent", table => new
-        {
-            id = table.Column<int>(type: "int", nullable: false),
-        }, constraints: table => table.PrimaryKey("pk_empty_proof_parent", value => value.id));
+        _ = builder.CreateTableIfNotExists(
+            "empty_proof_parent",
+            table => new
+            {
+                id = table.Column<int>(type: "int", nullable: false),
+            },
+            constraints: table => table.PrimaryKey("pk_empty_proof_parent", value => value.id));
 
         builder.DropForeignKeyIfExists("fk_empty_proof", "empty_proof_child");
         builder.DropTableIfExists("empty_proof_child");
-        _ = builder.CreateTableIfNotExists("empty_proof_child", table => new
-        {
-            id = table.Column<int>(type: "int", nullable: false),
-            owner_id = table.Column<int>(type: "int", nullable: true),
-            alternate_owner_id = table.Column<int>(type: "int", nullable: true),
-        }, constraints: table => table.PrimaryKey("pk_empty_proof_child", value => value.id));
+        _ = builder.CreateTableIfNotExists(
+            "empty_proof_child",
+            table => new
+            {
+                id = table.Column<int>(type: "int", nullable: false),
+                owner_id = table.Column<int>(type: "int", nullable: true),
+                alternate_owner_id = table.Column<int>(type: "int", nullable: true),
+            },
+            constraints: table => table.PrimaryKey("pk_empty_proof_child", value => value.id));
 
-        builder.AddForeignKeyIfNotExists("fk_empty_proof", "empty_proof_child", ["alternate_owner_id"],
-            "empty_proof_parent", ["id"], onDelete: ReferentialAction.SetNull);
+        builder.AddForeignKeyIfNotExists(
+            "fk_empty_proof",
+            "empty_proof_child",
+            ["alternate_owner_id"],
+            "empty_proof_parent",
+            ["id"],
+            onDelete: ReferentialAction.SetNull);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-recreated-dependent"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-recreated-dependent"),
+            CancellationToken.None);
 
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-recreated-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-recreated-final"),
+            CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `empty_proof_child`;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `empty_proof_child`;",
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -628,27 +887,42 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `length_proof_parent` (`id` varchar(36) NOT NULL PRIMARY KEY) ENGINE=InnoDB "
             + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
             + "CREATE TABLE `length_proof_child` (`id` int NOT NULL PRIMARY KEY, `owner_id` varchar(64) NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
             + "INSERT INTO `length_proof_parent` VALUES ('owned'); "
-            + "INSERT INTO `length_proof_child` VALUES (1, 'owned');", cancellationToken: CancellationToken.None);
+            + "INSERT INTO `length_proof_child` VALUES (1, 'owned');",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AddForeignKeyIfNotExists("fk_length_proof", "length_proof_child", ["owner_id"],
-            "length_proof_parent", ["id"], onDelete: ReferentialAction.SetNull);
+        builder.AddForeignKeyIfNotExists(
+            "fk_length_proof",
+            "length_proof_child",
+            ["owner_id"],
+            "length_proof_parent",
+            ["id"],
+            onDelete: ReferentialAction.SetNull);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-ordinary-string-length"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-ordinary-string-length"),
+            CancellationToken.None);
 
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-ordinary-string-length-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-ordinary-string-length-final"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -662,21 +936,34 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: true)
+        await ExecuteSqlAsync(
+            connectionString,
+            ForeignKeyNullabilityFixture(alreadyNullable: true)
             + " CREATE TABLE `other_proof_child` (`id` int NOT NULL PRIMARY KEY, `owner_id` char(36) NULL, "
             + "CONSTRAINT `fk_colliding_target` FOREIGN KEY (`owner_id`) REFERENCES `proof_parent` (`id`)) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var tableScopedNames = Fixture.ServerVersion.IsMariaDb && Fixture.ServerVersion.Version >= new Version(12, 1);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_proof_child_parent", "proof_child");
-        builder.AddForeignKeyIfNotExists("fk_colliding_target", "proof_child", ["owner_id"],
-            "proof_parent", ["id"], onDelete: ReferentialAction.SetNull);
+        builder.AddForeignKeyIfNotExists(
+            "fk_colliding_target",
+            "proof_child",
+            ["owner_id"],
+            "proof_parent",
+            ["id"],
+            onDelete: ReferentialAction.SetNull);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-name-ownership"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("fk-replacement-name-ownership"),
+                CancellationToken.None);
 
         MySqlException? exception = null;
         if (tableScopedNames)
@@ -685,22 +972,33 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
         }
         else
         {
-            exception = await AssertOwnedGuardFailureAsync(operationToken =>
-                ExecuteOperationsAsync(context, builder.Operations, operationToken),
+            exception = await AssertOwnedGuardFailureAsync(
+                operationToken =>
+                    ExecuteOperationsAsync(context, builder.Operations, operationToken),
                 cancellationToken: CancellationToken.None);
         }
 
-        var otherForeignKeys = await ScalarIntAsync(connectionString,
+        var otherForeignKeys = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
             + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'other_proof_child' "
-            + "AND CONSTRAINT_NAME = 'fk_colliding_target';", cancellationToken: CancellationToken.None);
+            + "AND CONSTRAINT_NAME = 'fk_colliding_target';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
-        Assert.Equal(tableScopedNames ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+        Assert.Equal(
+            tableScopedNames
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
             report.Status);
-        Assert.Equal(tableScopedNames ? SafeMigrationAction.Apply : SafeMigrationAction.RejectDifferent,
+
+        Assert.Equal(
+            tableScopedNames
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectDifferent,
             report.Assessments[1].Action);
+
         if (!tableScopedNames)
         {
             Assert.NotNull(exception);
@@ -715,12 +1013,17 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ForeignKeyReplacementProofRetainsSurvivingSemanticAlias(bool dropFirstAlias)
+    public async Task ForeignKeyReplacementProofRetainsSurvivingSemanticAlias(
+        bool dropFirstAlias
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ForeignKeySemanticAliasFixture(includeSecondAlias: dropFirstAlias),
+        await ExecuteSqlAsync(
+            connectionString,
+            ForeignKeySemanticAliasFixture(includeSecondAlias: dropFirstAlias),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_proof_child_parent", "proof_child");
@@ -729,32 +1032,51 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
             builder.DropForeignKeyIfExists("fk_semantic_proof_1", "proof_child");
         }
 
-        builder.AddForeignKeyIfNotExists("fk_proof_child_parent", "proof_child", ["owner_id"],
-            "proof_parent", ["id"], onDelete: ReferentialAction.SetNull);
+        builder.AddForeignKeyIfNotExists(
+            "fk_proof_child_parent",
+            "proof_child",
+            ["owner_id"],
+            "proof_parent",
+            ["id"],
+            onDelete: ReferentialAction.SetNull);
+
         builder.Operations.Add(builder.Operations[^1]);
         var runner = context.GetService<ISafeMigrationRunner>();
-        var expectedPhysicalAlias = dropFirstAlias ? "fk_semantic_proof_2" : "fk_semantic_proof_1";
+        var expectedPhysicalAlias = dropFirstAlias
+            ? "fk_semantic_proof_2"
+            : "fk_semantic_proof_1";
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-surviving-alias"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-surviving-alias"),
+            CancellationToken.None);
 
-        var projected = await ProjectForeignKeyReplacementAnalysesAsync(context, builder.Operations,
+        var projected = await ProjectForeignKeyReplacementAnalysesAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None);
 
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var rerun = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-surviving-alias-rerun"), CancellationToken.None);
+        var rerun = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-surviving-alias-rerun"),
+            CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var exactForeignKeys = await ReplacementForeignKeyCountAsync(connectionString,
+        var exactForeignKeys = await ReplacementForeignKeyCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
-        var remainingAlias = await ScalarIntAsync(connectionString,
+        var remainingAlias = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
             + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'proof_child' "
-            + $"AND CONSTRAINT_NAME = '{expectedPhysicalAlias}';", cancellationToken: CancellationToken.None);
+            + $"AND CONSTRAINT_NAME = '{expectedPhysicalAlias}';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -778,36 +1100,60 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ForeignKeyReplacementProofExpiresPreviouslyAcceptedSemanticAlias(bool uppercaseAliasDrop)
+    public async Task ForeignKeyReplacementProofExpiresPreviouslyAcceptedSemanticAlias(
+        bool uppercaseAliasDrop
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ForeignKeySemanticAliasFixture(includeSecondAlias: false),
+        await ExecuteSqlAsync(
+            connectionString,
+            ForeignKeySemanticAliasFixture(includeSecondAlias: false),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_proof_child_parent", "proof_child");
-        builder.AddForeignKeyIfNotExists("fk_proof_child_parent", "proof_child", ["owner_id"],
-            "proof_parent", ["id"], onDelete: ReferentialAction.SetNull);
+        builder.AddForeignKeyIfNotExists(
+            "fk_proof_child_parent",
+            "proof_child",
+            ["owner_id"],
+            "proof_parent",
+            ["id"],
+            onDelete: ReferentialAction.SetNull);
+
         var ensure = builder.Operations[^1];
-        builder.DropForeignKeyIfExists(uppercaseAliasDrop ? "FK_SEMANTIC_PROOF_1" : "fk_semantic_proof_1",
+        builder.DropForeignKeyIfExists(
+            uppercaseAliasDrop
+                ? "FK_SEMANTIC_PROOF_1"
+                : "fk_semantic_proof_1",
             "proof_child");
+
         builder.Operations.Add(ensure);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-removed-accepted-alias"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-removed-accepted-alias"),
+            CancellationToken.None);
 
-        var projected = await ProjectForeignKeyReplacementAnalysesAsync(context, builder.Operations,
+        var projected = await ProjectForeignKeyReplacementAnalysesAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None);
 
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-removed-accepted-alias-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-removed-accepted-alias-final"),
+            CancellationToken.None);
 
-        var exactForeignKeys = await ReplacementForeignKeyCountAsync(connectionString,
+        var exactForeignKeys = await ReplacementForeignKeyCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -828,25 +1174,41 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ForeignKeyNullabilityFixture(alreadyNullable: true),
+        await ExecuteSqlAsync(
+            connectionString,
+            ForeignKeyNullabilityFixture(alreadyNullable: true),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("FK_PROOF_CHILD_PARENT", "proof_child");
-        builder.AddForeignKeyIfNotExists("fk_proof_child_parent", "proof_child", ["owner_id"],
-            "proof_parent", ["id"], onDelete: ReferentialAction.SetNull);
+        builder.AddForeignKeyIfNotExists(
+            "fk_proof_child_parent",
+            "proof_child",
+            ["owner_id"],
+            "proof_parent",
+            ["id"],
+            onDelete: ReferentialAction.SetNull);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-case-exact-removal"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-case-exact-removal"),
+            CancellationToken.None);
 
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-case-exact-removal-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-case-exact-removal-final"),
+            CancellationToken.None);
 
-        var foreignKeys = await ReplacementForeignKeyCountAsync(connectionString,
+        var foreignKeys = await ReplacementForeignKeyCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -863,25 +1225,36 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ForeignKeySemanticAliasFixture(includeSecondAlias: true),
+        await ExecuteSqlAsync(
+            connectionString,
+            ForeignKeySemanticAliasFixture(includeSecondAlias: true),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = SemanticAliasForeignKeyRemoval(context, includeSecondAlias: true);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-all-aliases-removed"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-all-aliases-removed"),
+            CancellationToken.None);
 
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-all-aliases-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-all-aliases-final"),
+            CancellationToken.None);
 
-        var exactForeignKeys = await ReplacementForeignKeyCountAsync(connectionString,
+        var exactForeignKeys = await ReplacementForeignKeyCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
-        var removedAliases = await ScalarIntAsync(connectionString,
+        var removedAliases = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
             + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'proof_child' "
             + "AND CONSTRAINT_NAME IN ('fk_semantic_proof_1', 'fk_semantic_proof_2');",
@@ -904,27 +1277,39 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ForeignKeySemanticAliasFixture(includeSecondAlias: false),
+        await ExecuteSqlAsync(
+            connectionString,
+            ForeignKeySemanticAliasFixture(includeSecondAlias: false),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = SemanticAliasForeignKeyRemoval(context, includeSecondAlias: false);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-alias-fresh-orphan"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("fk-replacement-alias-fresh-orphan"),
+                CancellationToken.None);
 
         // WHY: Removing both real protectors makes the intervening write legal.
         // Runtime must recheck rows even though preflight saw safe semantic aliases.
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "ALTER TABLE `proof_child` DROP FOREIGN KEY `fk_proof_child_parent`; "
             + "ALTER TABLE `proof_child` DROP FOREIGN KEY `fk_semantic_proof_1`; "
             + "UPDATE `proof_child` SET `owner_id` = '00000000-0000-0000-0000-000000000999';",
             cancellationToken: CancellationToken.None);
-        var exception = await AssertOwnedGuardFailureAsync(operationToken =>
-            ExecuteOperationsAsync(context, builder.Operations, operationToken),
+
+        var exception = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
-        var exactForeignKeys = await ReplacementForeignKeyCountAsync(connectionString,
+        var exactForeignKeys = await ReplacementForeignKeyCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -942,34 +1327,53 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ForeignKeySemanticAliasFixture(includeSecondAlias: false),
+        await ExecuteSqlAsync(
+            connectionString,
+            ForeignKeySemanticAliasFixture(includeSecondAlias: false),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AddForeignKeyIfNotExists("fk_proof_child_parent", "proof_child", ["owner_id"],
-            "proof_parent", ["id"], onDelete: ReferentialAction.SetNull);
+        builder.AddForeignKeyIfNotExists(
+            "fk_proof_child_parent",
+            "proof_child",
+            ["owner_id"],
+            "proof_parent",
+            ["id"],
+            onDelete: ReferentialAction.SetNull);
+
         builder.Operations.Add(builder.Operations[0]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-exact-collision-control"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("fk-replacement-exact-collision-control"),
+                CancellationToken.None);
 
-        var exception = await AssertOwnedGuardFailureAsync(operationToken =>
-            ExecuteOperationsAsync(context, builder.Operations, operationToken),
+        var exception = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, builder.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
-        var foreignKeys = await ScalarIntAsync(connectionString,
+        var foreignKeys = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
             + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'proof_child';",
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.All(report.Assessments, assessment =>
-        {
-            Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
-            Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
-        });
+        Assert.All(
+            report.Assessments,
+            assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
+            });
+
         Assert.Contains("doka_sm_different", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(2, foreignKeys);
     }
@@ -988,28 +1392,44 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("FK_SEMANTIC_PROOF_1", "proof_child");
-        builder.AddForeignKeyIfNotExists("fk_requested_proof", "proof_child", ["owner_id"],
-            "proof_parent", ["id"], onDelete: ReferentialAction.SetNull);
+        builder.AddForeignKeyIfNotExists(
+            "fk_requested_proof",
+            "proof_child",
+            ["owner_id"],
+            "proof_parent",
+            ["id"],
+            onDelete: ReferentialAction.SetNull);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-case-semantic-source"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-case-semantic-source"),
+            CancellationToken.None);
 
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-case-semantic-source-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-case-semantic-source-final"),
+            CancellationToken.None);
 
-        var requestedForeignKeys = await ScalarIntAsync(connectionString,
+        var requestedForeignKeys = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
             + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'proof_child' "
-            + "AND CONSTRAINT_NAME = 'fk_requested_proof';", cancellationToken: CancellationToken.None);
+            + "AND CONSTRAINT_NAME = 'fk_requested_proof';",
+            cancellationToken: CancellationToken.None);
 
-        var removedSources = await ScalarIntAsync(connectionString,
+        var removedSources = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
             + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'proof_child' "
-            + "AND CONSTRAINT_NAME = 'fk_semantic_proof_1';", cancellationToken: CancellationToken.None);
+            + "AND CONSTRAINT_NAME = 'fk_semantic_proof_1';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -1028,33 +1448,50 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `missing_proof_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `missing_proof_child` (`id` int NOT NULL PRIMARY KEY, `owner_id` int NULL) ENGINE=InnoDB; "
             + "INSERT INTO `missing_proof_parent` VALUES (7); "
-            + "INSERT INTO `missing_proof_child` VALUES (1, 7);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO `missing_proof_child` VALUES (1, 7);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AddForeignKeyIfNotExists("fk_missing_proof", "missing_proof_child", ["owner_id"],
-            "missing_proof_parent", ["id"], onDelete: ReferentialAction.SetNull);
+        builder.AddForeignKeyIfNotExists(
+            "fk_missing_proof",
+            "missing_proof_child",
+            ["owner_id"],
+            "missing_proof_parent",
+            ["id"],
+            onDelete: ReferentialAction.SetNull);
+
         var ensure = builder.Operations[0];
         builder.DropForeignKeyIfExists("fk_missing_proof", "missing_proof_child");
         builder.Operations.Add(ensure);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-incomplete-owner-created"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-incomplete-owner-created"),
+            CancellationToken.None);
 
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-incomplete-owner-created-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-incomplete-owner-created-final"),
+            CancellationToken.None);
 
-        var foreignKeys = await ScalarIntAsync(connectionString,
+        var foreignKeys = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
             + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'missing_proof_child' "
-            + "AND CONSTRAINT_NAME = 'fk_missing_proof';", cancellationToken: CancellationToken.None);
+            + "AND CONSTRAINT_NAME = 'fk_missing_proof';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -1074,37 +1511,55 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ForeignKeySemanticAliasFixture(includeSecondAlias: true),
+        await ExecuteSqlAsync(
+            connectionString,
+            ForeignKeySemanticAliasFixture(includeSecondAlias: true),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = RecreatedAliasForeignKeyOperations(context, recreatedAction: ReferentialAction.SetNull);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-recreated-physical-alias"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-recreated-physical-alias"),
+            CancellationToken.None);
 
-        var projected = await ProjectForeignKeyReplacementAnalysesAsync(context, builder.Operations,
+        var projected = await ProjectForeignKeyReplacementAnalysesAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None);
 
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-recreated-physical-alias-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-recreated-physical-alias-final"),
+            CancellationToken.None);
 
-        var rerun = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-recreated-physical-alias-rerun"), CancellationToken.None);
+        var rerun = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-recreated-physical-alias-rerun"),
+            CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var exactForeignKeys = await ReplacementForeignKeyCountAsync(connectionString,
+        var exactForeignKeys = await ReplacementForeignKeyCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
-        var recreatedAliases = await ScalarIntAsync(connectionString,
+        var recreatedAliases = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
             + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'proof_child' "
-            + "AND CONSTRAINT_NAME = 'fk_recreated_alias';", cancellationToken: CancellationToken.None);
+            + "AND CONSTRAINT_NAME = 'fk_recreated_alias';",
+            cancellationToken: CancellationToken.None);
 
-        var originalAliases = await ScalarIntAsync(connectionString,
+        var originalAliases = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
             + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'proof_child' "
             + "AND CONSTRAINT_NAME IN ('fk_semantic_proof_1', 'fk_semantic_proof_2');",
@@ -1112,8 +1567,10 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.All(report.Assessments.Take(4),
+        Assert.All(
+            report.Assessments.Take(4),
             assessment => Assert.Equal(SafeMigrationAction.Apply, assessment.Action));
+
         Assert.Equal(SafeMigrationObservedState.Matching, report.Assessments[4].ObservedState);
         Assert.Equal(SafeMigrationAction.NoOp, report.Assessments[4].Action);
         Assert.Equal("fk_recreated_alias", projected[4].MatchedObjectName);
@@ -1133,25 +1590,36 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ForeignKeySemanticAliasFixture(includeSecondAlias: true),
+        await ExecuteSqlAsync(
+            connectionString,
+            ForeignKeySemanticAliasFixture(includeSecondAlias: true),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = RecreatedAliasForeignKeyOperations(context, recreatedAction: ReferentialAction.Cascade);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-changed-recreated-alias"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-changed-recreated-alias"),
+            CancellationToken.None);
 
         report.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("fk-replacement-changed-recreated-alias-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("fk-replacement-changed-recreated-alias-final"),
+            CancellationToken.None);
 
-        var exactForeignKeys = await ReplacementForeignKeyCountAsync(connectionString,
+        var exactForeignKeys = await ReplacementForeignKeyCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
-        var recreatedAliases = await ScalarIntAsync(connectionString,
+        var recreatedAliases = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
             + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'proof_child' "
             + "AND CONSTRAINT_NAME = 'fk_recreated_alias' AND DELETE_RULE = 'CASCADE';",
@@ -1169,24 +1637,36 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     /// <summary>Creates one separate requested FK endpoint without changing the original FK-protected value.</summary>
     /// <param name="orphan">Whether the requested new endpoint intentionally lacks a principal row.</param>
     /// <returns>The isolated initial schema and deterministic sentinel values.</returns>
-    private static string ForeignKeyAlternateColumnFixture(bool orphan)
+    private static string ForeignKeyAlternateColumnFixture(
+        bool orphan
+    )
         => ForeignKeyNullabilityFixture(alreadyNullable: true)
             + " ALTER TABLE `proof_child` ADD `alternate_owner_id` char(36) NULL; "
+
             // WHY: These tests isolate orphan-row authorization, not the
             // retained symbol's incompatible automatic-index namespace.
             + "CREATE INDEX `ix_alternate_owner` ON `proof_child` (`alternate_owner_id`); "
             + "UPDATE `proof_child` SET `alternate_owner_id` = "
-            + (orphan ? "'00000000-0000-0000-0000-000000000999';" : "'00000000-0000-0000-0000-000000000001';");
+            + (orphan
+                ? "'00000000-0000-0000-0000-000000000999';"
+                : "'00000000-0000-0000-0000-000000000001';");
 
     /// <summary>Declares an exact physical removal followed by a distinct requested column mapping.</summary>
     /// <param name="context">The active provider context used to identify the migration dialect.</param>
     /// <returns>The two immutable safe operations in execution order.</returns>
-    private static List<MigrationOperation> AlternateColumnForeignKeyReplacement(DbContext context)
+    private static List<MigrationOperation> AlternateColumnForeignKeyReplacement(
+        DbContext context
+    )
     {
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_proof_child_parent", "proof_child");
-        builder.AddForeignKeyIfNotExists("fk_proof_child_parent", "proof_child", ["alternate_owner_id"],
-            "proof_parent", ["id"], onDelete: ReferentialAction.SetNull);
+        builder.AddForeignKeyIfNotExists(
+            "fk_proof_child_parent",
+            "proof_child",
+            ["alternate_owner_id"],
+            "proof_parent",
+            ["id"],
+            onDelete: ReferentialAction.SetNull);
 
         return builder.Operations;
     }
@@ -1207,12 +1687,21 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     /// <param name="context">The active provider context.</param>
     /// <param name="reversePrincipalOrder">Whether the target requires an absent reversed candidate key.</param>
     /// <returns>The ordered drop and replacement builder.</returns>
-    private static MigrationBuilder CompositeForeignKeyReplacement(DbContext context, bool reversePrincipalOrder)
+    private static MigrationBuilder CompositeForeignKeyReplacement(
+        DbContext context,
+        bool reversePrincipalOrder
+    )
     {
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_composite_proof", "composite_child");
-        builder.AddForeignKeyIfNotExists("fk_composite_proof", "composite_child", ["first_id", "second_id"],
-            "composite_parent", reversePrincipalOrder ? ["second_id", "first_id"] : ["first_id", "second_id"],
+        builder.AddForeignKeyIfNotExists(
+            "fk_composite_proof",
+            "composite_child",
+            ["first_id", "second_id"],
+            "composite_parent",
+            reversePrincipalOrder
+                ? ["second_id", "first_id"]
+                : ["first_id", "second_id"],
             onDelete: ReferentialAction.SetNull);
 
         return builder;
@@ -1221,13 +1710,15 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     /// <summary>Creates distinct physical target aliases alongside an exact-name FK with a different action.</summary>
     /// <param name="includeSecondAlias">Whether the initial schema contains two matching physical aliases.</param>
     /// <returns>The populated schema with all original FK checks enforced.</returns>
-    private static string ForeignKeySemanticAliasFixture(bool includeSecondAlias)
+    private static string ForeignKeySemanticAliasFixture(
+        bool includeSecondAlias
+    )
         => ForeignKeyNullabilityFixture(alreadyNullable: true)
             + " ALTER TABLE `proof_child` ADD CONSTRAINT `fk_semantic_proof_1` FOREIGN KEY (`owner_id`) "
             + "REFERENCES `proof_parent` (`id`) ON DELETE SET NULL;"
             + (includeSecondAlias
                 ? " ALTER TABLE `proof_child` ADD CONSTRAINT `fk_semantic_proof_2` FOREIGN KEY (`owner_id`) "
-                    + "REFERENCES `proof_parent` (`id`) ON DELETE SET NULL;"
+                + "REFERENCES `proof_parent` (`id`) ON DELETE SET NULL;"
                 : string.Empty);
 
     /// <summary>
@@ -1236,7 +1727,10 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     /// <param name="context">The active provider context.</param>
     /// <param name="includeSecondAlias">Whether the second matching alias must also be removed.</param>
     /// <returns>The ordered physical removals followed by one ensure.</returns>
-    private static MigrationBuilder SemanticAliasForeignKeyRemoval(DbContext context, bool includeSecondAlias)
+    private static MigrationBuilder SemanticAliasForeignKeyRemoval(
+        DbContext context,
+        bool includeSecondAlias
+    )
     {
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_proof_child_parent", "proof_child");
@@ -1246,8 +1740,13 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
             builder.DropForeignKeyIfExists("fk_semantic_proof_2", "proof_child");
         }
 
-        builder.AddForeignKeyIfNotExists("fk_proof_child_parent", "proof_child", ["owner_id"],
-            "proof_parent", ["id"], onDelete: ReferentialAction.SetNull);
+        builder.AddForeignKeyIfNotExists(
+            "fk_proof_child_parent",
+            "proof_child",
+            ["owner_id"],
+            "proof_parent",
+            ["id"],
+            onDelete: ReferentialAction.SetNull);
 
         return builder;
     }
@@ -1267,10 +1766,21 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
         builder.DropForeignKeyIfExists("fk_proof_child_parent", "proof_child");
         builder.DropForeignKeyIfExists("fk_semantic_proof_1", "proof_child");
         builder.DropForeignKeyIfExists("fk_semantic_proof_2", "proof_child");
-        builder.AddForeignKeyIfNotExists("fk_recreated_alias", "proof_child", ["owner_id"],
-            "proof_parent", ["id"], onDelete: recreatedAction);
-        builder.AddForeignKeyIfNotExists("fk_proof_child_parent", "proof_child", ["owner_id"],
-            "proof_parent", ["id"], onDelete: ReferentialAction.SetNull);
+        builder.AddForeignKeyIfNotExists(
+            "fk_recreated_alias",
+            "proof_child",
+            ["owner_id"],
+            "proof_parent",
+            ["id"],
+            onDelete: recreatedAction);
+
+        builder.AddForeignKeyIfNotExists(
+            "fk_proof_child_parent",
+            "proof_child",
+            ["owner_id"],
+            "proof_parent",
+            ["id"],
+            onDelete: ReferentialAction.SetNull);
 
         return builder;
     }
@@ -1290,7 +1800,10 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var safeOperations = operations.Cast<SafeMigrationOperation>().ToArray();
+        var safeOperations = operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
+
         var provider = context.GetService<ISafeMigrationProviderAnalyzer>();
         var live = await provider.AnalyzeAsync(context, safeOperations, cancellationToken);
         var projection = new SafeMigrationPreflightProjection(
@@ -1310,8 +1823,11 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
             var operation = safeOperations[index];
             projection.CurrentOperationOrdinal = index;
             projected[index] = projection.Project(operation, live[index]);
-            var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind,
-                projected[index].ObservedState, operation.Policy, projected[index].RepairCapability);
+            var decision = SafeMigrationDecisionPlanner.Plan(
+                operation.Intent.Kind,
+                projected[index].ObservedState,
+                operation.Policy,
+                projected[index].RepairCapability);
 
             projection.Observe(operation, live[index], projected[index], decision);
         }
@@ -1327,8 +1843,10 @@ public sealed partial class MySqlForeignKeysReplacementProofsIntegrationTests : 
         string connectionString,
         CancellationToken cancellationToken
     )
-        => ScalarIntAsync(connectionString,
+        => ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
             + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'proof_child' "
-            + "AND CONSTRAINT_NAME = 'fk_proof_child_parent';", cancellationToken: cancellationToken);
+            + "AND CONSTRAINT_NAME = 'fk_proof_child_parent';",
+            cancellationToken: cancellationToken);
 }

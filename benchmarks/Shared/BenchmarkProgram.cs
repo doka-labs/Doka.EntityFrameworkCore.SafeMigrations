@@ -82,6 +82,7 @@ internal static class BenchmarkProgram
                 benchmarkTypes,
                 [],
                 ConsoleLogger.Default);
+
             if (!validTypes)
             {
                 return 1;
@@ -143,6 +144,7 @@ internal static class BenchmarkProgram
     internal static bool IsSafeInvocation(
         CommandLineOptions options
     ) => options is { Resume: false, LogBuildOutput: false, GenerateMSBuildBinLog: false }
+
         // WHY: BDN job variables override inherited values and are displayed in reports. Keep owned
         // output paths parent-bound and the native connection out of command lines and report parameters.
         && !options.EnvironmentVariables.Any(static variable =>
@@ -204,8 +206,13 @@ internal static class BenchmarkProgram
         // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
         foreach (var benchmark in benchmarks.EnumerateArray())
         {
-            if (benchmark.GetProperty("Statistics").ValueKind != JsonValueKind.Object
-                || benchmark.GetProperty("Measurements").GetArrayLength() == 0)
+            if (benchmark.GetProperty("Statistics")
+                    .ValueKind
+                != JsonValueKind.Object
+                || benchmark
+                    .GetProperty("Measurements")
+                    .GetArrayLength()
+                == 0)
             {
                 throw new InvalidDataException("The BenchmarkDotNet full report lacks measurement evidence.");
             }

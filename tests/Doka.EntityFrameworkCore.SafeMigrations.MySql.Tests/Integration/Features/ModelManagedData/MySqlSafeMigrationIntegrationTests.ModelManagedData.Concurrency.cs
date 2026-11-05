@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the ModelManagedDataConcurrency migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlModelManagedDataConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlModelManagedDataConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlModelManagedDataConcurrencyIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlModelManagedDataConcurrencyIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     [Fact]
     public async Task ModelManagedUpdateRechecksSourceAndPostconditionAtExecution()
@@ -33,20 +35,23 @@ public sealed partial class MySqlModelManagedDataConcurrencyIntegrationTests : M
             "UPDATE `model_race_roles` SET `name` = 'concurrent' WHERE `id` = 1;",
             cancellationToken: CancellationToken.None);
 
-        _ = await AssertOwnedGuardFailureAsync(operationToken =>
-            ExecuteOperationsAsync(context, update.Operations, operationToken),
+        _ = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, update.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
         await ExecuteSqlAsync(
             connectionString,
             "UPDATE `model_race_roles` SET `name` = 'source' WHERE `id` = 1;"
             + "CREATE TRIGGER `trg_model_race_roles_rewrite` BEFORE UPDATE ON `model_race_roles` "
-            + "FOR EACH ROW SET NEW.`name` = 'triggered';", cancellationToken: CancellationToken.None);
+            + "FOR EACH ROW SET NEW.`name` = 'triggered';",
+            cancellationToken: CancellationToken.None);
 
         await using (var transaction = await context.Database.BeginTransactionAsync(CancellationToken.None))
         {
-            _ = await AssertOwnedGuardFailureAsync(operationToken =>
-                ExecuteOperationsAsync(context, update.Operations, operationToken),
+            _ = await AssertOwnedGuardFailureAsync(
+                operationToken =>
+                    ExecuteOperationsAsync(context, update.Operations, operationToken),
                 cancellationToken: CancellationToken.None);
 
             // The provider intentionally leaves transaction ownership with EF.
@@ -55,8 +60,11 @@ public sealed partial class MySqlModelManagedDataConcurrencyIntegrationTests : M
             await transaction.RollbackAsync(CancellationToken.None);
         }
 
-        Assert.Equal(SafeMigrationObservedState.TransitionReady,
-            Assert.Single(preflight.Assessments).ObservedState);
+        Assert.Equal(
+            SafeMigrationObservedState.TransitionReady,
+            Assert.Single(preflight.Assessments)
+                .ObservedState);
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -100,18 +108,23 @@ public sealed partial class MySqlModelManagedDataConcurrencyIntegrationTests : M
             "INSERT INTO `model_dependency_users` (`id`, `role_id`) VALUES (11, 1);",
             cancellationToken: CancellationToken.None);
 
-        _ = await AssertOwnedGuardFailureAsync(operationToken =>
-            ExecuteOperationsAsync(context, deletion.Operations, operationToken),
+        _ = await AssertOwnedGuardFailureAsync(
+            operationToken =>
+                ExecuteOperationsAsync(context, deletion.Operations, operationToken),
             cancellationToken: CancellationToken.None);
 
-        Assert.Equal(SafeMigrationObservedState.TransitionReady,
-            Assert.Single(preflight.Assessments).ObservedState);
+        Assert.Equal(
+            SafeMigrationObservedState.TransitionReady,
+            Assert.Single(preflight.Assessments)
+                .ObservedState);
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM `model_dependency_roles` WHERE `id` = 1;",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -130,7 +143,8 @@ public sealed partial class MySqlModelManagedDataConcurrencyIntegrationTests : M
             + "PRIMARY KEY (`id`)) ENGINE=InnoDB;"
             + "INSERT INTO `model_cancel_roles` (`id`, `name`) VALUES (1, 'source');"
             + "CREATE TRIGGER `trg_model_cancel_roles_wait` BEFORE UPDATE ON `model_cancel_roles` "
-            + "FOR EACH ROW DO SLEEP(10);", cancellationToken: CancellationToken.None);
+            + "FOR EACH ROW DO SLEEP(10);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var update = ModelManagedNameUpdate(context.Database.ProviderName!, "model_cancel_roles");

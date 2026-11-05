@@ -1,7 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
 /// <summary>Runs the ConstraintsProjectedCollationBindings PostgreSQL feature cases independently.</summary>
-public sealed class PostgreSqlConstraintsProjectedCollationBindingsIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
+public sealed class
+    PostgreSqlConstraintsProjectedCollationBindingsIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned container for this feature.</summary>
     /// <param name="fixture">The shared PostgreSQL container fixture.</param>
@@ -16,30 +17,56 @@ public sealed class PostgreSqlConstraintsProjectedCollationBindingsIntegrationTe
     [InlineData(true, true)]
     [InlineData(false, true)]
     [InlineData(true, false)]
-    public async Task EmptyMixedCheckRequiresNativeCollatableOperandAndKnownCollation(bool text, bool exists)
+    public async Task EmptyMixedCheckRequiresNativeCollatableOperandAndKnownCollation(
+        bool text,
+        bool exists
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var type = text ? "text" : "integer";
-        await ExecuteSqlAsync(connectionString, $"CREATE TABLE mixed_columns (id {type} NOT NULL);",
+        var type = text
+            ? "text"
+            : "integer";
+
+        await ExecuteSqlAsync(
+            connectionString,
+            $"CREATE TABLE mixed_columns (id {type} NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
-        var collation = exists ? "C" : "absent_collation";
+        var collation = exists
+            ? "C"
+            : "absent_collation";
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("added", "mixed_columns", type: "integer", nullable: false);
-        var comparison = text ? SafeMigrationSql.Literal(string.Empty) : SafeMigrationSql.Literal(0);
-        builder.EnsureCheckConstraint(ExpectedCheckConstraintDefinition.FromExpression("ck_collation_binding",
-            "mixed_columns", SqlBinary(SqlBinary(SafeMigrationSql.Collate(SafeMigrationSql.Identifier("id"),
-                    collation), SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, comparison),
-                SafeMigrationSqlBinaryOperator.And,
-                SqlColumnAndInt("added", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0))),
+        var comparison = text
+            ? SafeMigrationSql.Literal(string.Empty)
+            : SafeMigrationSql.Literal(0);
+
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_collation_binding",
+                "mixed_columns",
+                SqlBinary(
+                    SqlBinary(
+                        SafeMigrationSql.Collate(
+                            SafeMigrationSql.Identifier("id"),
+                            collation),
+                        SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+                        comparison),
+                    SafeMigrationSqlBinaryOperator.And,
+                    SqlColumnAndInt("added", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-check-collation-binding"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sparse-check-collation-binding"),
+            CancellationToken.None);
 
         SafeMigrationRunReport? postflight = null;
         SafeMigrationRunReport? replay = null;
@@ -48,21 +75,35 @@ public sealed class PostgreSqlConstraintsProjectedCollationBindingsIntegrationTe
         {
             report.ThrowIfBlocked();
             await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-            postflight = await runner.VerifyAsync(context, builder.Operations,
-                new SafeMigrationRunOptions("sparse-check-collation-final"), CancellationToken.None);
+            postflight = await runner.VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-check-collation-final"),
+                CancellationToken.None);
 
-            replay = await runner.AnalyzeAsync(context, builder.Operations,
-                new SafeMigrationRunOptions("sparse-check-collation-replay"), CancellationToken.None);
+            replay = await runner.AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-check-collation-replay"),
+                CancellationToken.None);
         }
         else
         {
-            nativeError = await Assert.ThrowsAsync<PostgresException>(() => ExecuteSqlAsync(connectionString,
+            nativeError = await Assert.ThrowsAsync<PostgresException>(() => ExecuteSqlAsync(
+                connectionString,
                 $"ALTER TABLE mixed_columns ADD CONSTRAINT native_probe CHECK ((id COLLATE \"{collation}\") "
-                + (text ? ">= ''" : ">= 0") + ");", cancellationToken: CancellationToken.None));
+                + (text
+                    ? ">= ''"
+                    : ">= 0")
+                + ");",
+                cancellationToken: CancellationToken.None));
         }
 
         // Assert
-        Assert.Equal(text && exists ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+        Assert.Equal(
+            text && exists
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
             report.Status);
 
         if (text && exists)
@@ -74,9 +115,13 @@ public sealed class PostgreSqlConstraintsProjectedCollationBindingsIntegrationTe
         }
         else
         {
-            Assert.Equal(text ? "42704" : "42804", nativeError!.SqlState);
+            Assert.Equal(
+                text
+                    ? "42704"
+                    : "42804",
+                nativeError!.SqlState);
+
             Assert.Equal(SafeMigrationAction.RejectUnsupported, report.Assessments[1].Action);
         }
     }
-
 }

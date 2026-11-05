@@ -23,6 +23,7 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
             "CREATE TABLE #doka_sm_identifiers (Sentinel int NOT NULL); "
             + "INSERT INTO #doka_sm_identifiers VALUES (73); "
             + "CREATE TABLE dbo.identifier_items (Id int NOT NULL, Caption nvarchar(80) NULL);");
+
         var connection = (SqlConnection)context.Database.GetDbConnection();
         var originalObjectId = await SqlServerTemporaryTableProbe.ReadObjectIdAsync(
             connection,
@@ -30,16 +31,26 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureColumn("identifier_items", new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
-            SafeMigrationPolicy.ThrowIfDifferent);
         builder.EnsureColumn(
-            "identifier_items", new ExpectedColumnDefinition("Caption", typeof(string), true, "nvarchar(80)"),
+            "identifier_items",
+            new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        builder.EnsureColumn(
+            "identifier_items",
+            new ExpectedColumnDefinition("Caption", typeof(string), true, "nvarchar(80)"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
-            context, builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
-            cancellationToken: CancellationToken.None);
+        var analyses = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                builder
+                    .Operations
+                    .Cast<SafeMigrationOperation>()
+                    .ToArray(),
+                cancellationToken: CancellationToken.None);
 
         var sentinel = await ReadContextIntAsync(
             context,
@@ -53,8 +64,10 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
 
         // Assert
         Assert.Equal(2, analyses.Count);
-        Assert.All(analyses,
+        Assert.All(
+            analyses,
             static analysis => Assert.Equal(SafeMigrationObservedState.Matching, analysis.ObservedState));
+
         Assert.Equal(73, sentinel);
         Assert.NotNull(originalObjectId);
         Assert.Equal(originalObjectId, retainedObjectId);
@@ -75,30 +88,50 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.physical_items (Value " + physicalDefinition + ");",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureColumn("physical_items", new ExpectedColumnDefinition("Value", clrType, true, storeType),
+        builder.EnsureColumn(
+            "physical_items",
+            new ExpectedColumnDefinition("Value", clrType, true, storeType),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-unmodeled-column-storage"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-unmodeled-column-storage"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
-        var physicalCount = await ScalarIntAsync(connectionString,
+        var physicalCount = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.physical_items', N'U') "
-            + "AND name = N'Value' AND " + catalogFacet + " = 1;", cancellationToken: CancellationToken.None);
+            + "AND name = N'Value' AND "
+            + catalogFacet
+            + " = 1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(report.Assessments).ObservedState);
-        Assert.Equal(51001, Assert.IsType<SqlException>(exception).Number);
+        Assert.Equal(SafeMigrationObservedState.Different,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
+        Assert.Equal(51001,
+            Assert.IsType<SqlException>(exception)
+                .Number);
+
         Assert.Equal(1, physicalCount);
     }
 
@@ -112,22 +145,36 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureTable(new ExpectedTableDefinition("inferred_items",
-            [
-                new ExpectedColumnDefinition("AnsiCaption", typeof(string), true, isUnicode: false, maxLength: 80),
-                new ExpectedColumnDefinition("FixedCaption", typeof(string), true,
-                    isUnicode: true, maxLength: 80, isFixedLength: true),
-                new ExpectedColumnDefinition("Amount", typeof(decimal), true, precision: 12, scale: 3),
-            ]), SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "inferred_items",
+                [
+                    new ExpectedColumnDefinition("AnsiCaption", typeof(string), true, isUnicode: false, maxLength: 80),
+                    new ExpectedColumnDefinition(
+                        "FixedCaption",
+                        typeof(string),
+                        true,
+                        isUnicode: true,
+                        maxLength: 80,
+                        isFixedLength: true),
+                    new ExpectedColumnDefinition("Amount", typeof(decimal), true, precision: 12, scale: 3),
+                ]),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-inferred-column-facets"), cancellationToken: CancellationToken.None);
+        var report = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlserver-inferred-column-facets"),
+            cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
-        var matchingColumns = await ScalarIntAsync(connectionString,
+        var matchingColumns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.columns c JOIN sys.types ty ON ty.user_type_id = c.user_type_id "
             + "WHERE c.object_id = OBJECT_ID(N'dbo.inferred_items', N'U') AND "
             + "((c.name = N'AnsiCaption' AND ty.name = N'varchar' AND c.max_length = 80) "
@@ -137,7 +184,10 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
         Assert.Equal(3, matchingColumns);
     }
 
@@ -155,28 +205,44 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             $"CREATE TABLE dbo.[{physicalTable}] ([{physicalColumn}] int NOT NULL); "
             + $"CREATE INDEX [{physicalIndex}] ON dbo.[{physicalTable}] ([{physicalColumn}]);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureTable(new ExpectedTableDefinition("physical_items",
-            [new ExpectedColumnDefinition("id", typeof(int), false, "int")]),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
-        builder.EnsureIndex(new ExpectedIndexDefinition("ix_physical_id", "physical_items",
-            [new ExpectedIndexKeyDefinition("id")]), SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "physical_items",
+                [new ExpectedColumnDefinition("id", typeof(int), false, "int")]),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                "ix_physical_id",
+                "physical_items",
+                [new ExpectedIndexKeyDefinition("id")]),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-physical-spelling-alias"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-physical-spelling-alias"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(2, report.Assessments.Count);
-        Assert.All(report.Assessments,
+        Assert.All(
+            report.Assessments,
             static assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
+
         Assert.Empty(report.UnexpectedObjects);
     }
 
@@ -193,32 +259,54 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.alias_items (Id int NOT NULL);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE dbo.alias_items (Id int NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureColumn("alias_items", new ExpectedColumnDefinition(first, typeof(int), true, "int"),
+        builder.EnsureColumn(
+            "alias_items",
+            new ExpectedColumnDefinition(first, typeof(int), true, "int"),
             SafeMigrationPolicy.ThrowIfDifferent);
-        builder.EnsureColumn("alias_items", new ExpectedColumnDefinition(second, typeof(int), true, "int"),
+
+        builder.EnsureColumn(
+            "alias_items",
+            new ExpectedColumnDefinition(second, typeof(int), true, "int"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
-            context, builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
-            cancellationToken: CancellationToken.None);
+        var analyses = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                builder
+                    .Operations
+                    .Cast<SafeMigrationOperation>()
+                    .ToArray(),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
-        var columnCount = await ScalarIntAsync(connectionString,
+        var columnCount = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.alias_items', N'U');",
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(2, analyses.Count);
-        Assert.All(analyses,
+        Assert.All(
+            analyses,
             static analysis => Assert.Equal(SafeMigrationObservedState.Unsupported, analysis.ObservedState));
-        Assert.Equal(51002, Assert.IsType<SqlException>(exception).Number);
+
+        Assert.Equal(51002,
+            Assert.IsType<SqlException>(exception)
+                .Number);
+
         Assert.Equal(1, columnCount);
     }
 
@@ -230,21 +318,31 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.delayed_items (Id int NOT NULL);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE dbo.delayed_items (Id int NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         for (var ordinal = 0; ordinal < 521; ordinal++)
         {
-            builder.EnsureColumn(ordinal % 3 == 0 ? "delayed_missing" : "delayed_items",
+            builder.EnsureColumn(
+                ordinal % 3 == 0
+                    ? "delayed_missing"
+                    : "delayed_items",
                 new ExpectedColumnDefinition($"required_{ordinal:D4}", typeof(int), false, "int"),
                 SafeMigrationPolicy.ThrowIfDifferent);
         }
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-delayed-multiple-batches"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-delayed-multiple-batches"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(521, report.Assessments.Count);
@@ -267,40 +365,62 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
     [SqlServerLiveTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task PrimaryKey_NullablePhysicalColumnIsUnsupportedBeforeDdl(bool hasNonNullRow)
+    public async Task PrimaryKey_NullablePhysicalColumnIsUnsupportedBeforeDdl(
+        bool hasNonNullRow
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.nullable_key (Id int NULL); "
-            + (hasNonNullRow ? "INSERT INTO dbo.nullable_key VALUES (1);" : string.Empty),
+            + (hasNonNullRow
+                ? "INSERT INTO dbo.nullable_key VALUES (1);"
+                : string.Empty),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsurePrimaryKey(new ExpectedPrimaryKeyDefinition("PK_nullable_key", "nullable_key", ["Id"]),
+        builder.EnsurePrimaryKey(
+            new ExpectedPrimaryKeyDefinition("PK_nullable_key", "nullable_key", ["Id"]),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
-            context, builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
-            cancellationToken: CancellationToken.None);
+        var analyses = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                builder
+                    .Operations
+                    .Cast<SafeMigrationOperation>()
+                    .ToArray(),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
-        var nullableColumns = await ScalarIntAsync(connectionString,
+        var nullableColumns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.nullable_key', N'U') "
-            + "AND name = N'Id' AND is_nullable = 1;", cancellationToken: CancellationToken.None);
+            + "AND name = N'Id' AND is_nullable = 1;",
+            cancellationToken: CancellationToken.None);
 
-        var primaryKeys = await ScalarIntAsync(connectionString,
+        var primaryKeys = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.key_constraints WHERE parent_object_id = OBJECT_ID(N'dbo.nullable_key', N'U') "
-            + "AND type = 'PK';", cancellationToken: CancellationToken.None);
+            + "AND type = 'PK';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);
         Assert.Equal(SafeMigrationObservedState.Unsupported, analysis.ObservedState);
         Assert.Equal("primary_key_nullable_column", analysis.Code);
-        Assert.Equal(51002, Assert.IsType<SqlException>(exception).Number);
+        Assert.Equal(51002,
+            Assert.IsType<SqlException>(exception)
+                .Number);
+
         Assert.Equal(1, nullableColumns);
         Assert.Equal(0, primaryKeys);
     }
@@ -311,45 +431,72 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
     [SqlServerLiveTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task PrimaryKey_ExistingKeyWithDifferentNameIsDifferentBeforeDdl(bool matchingName)
+    public async Task PrimaryKey_ExistingKeyWithDifferentNameIsDifferentBeforeDdl(
+        bool matchingName
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.existing_key (Id int NOT NULL CONSTRAINT PK_existing PRIMARY KEY);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsurePrimaryKey(new ExpectedPrimaryKeyDefinition(
-            matchingName ? "PK_existing" : "PK_requested", "existing_key", ["Id"]),
+        builder.EnsurePrimaryKey(
+            new ExpectedPrimaryKeyDefinition(
+                matchingName
+                    ? "PK_existing"
+                    : "PK_requested",
+                "existing_key",
+                ["Id"]),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
-            context, builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
-            cancellationToken: CancellationToken.None);
+        var analyses = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                builder
+                    .Operations
+                    .Cast<SafeMigrationOperation>()
+                    .ToArray(),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
-        var originalKeys = await ScalarIntAsync(connectionString,
+        var originalKeys = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.key_constraints WHERE parent_object_id = OBJECT_ID(N'dbo.existing_key', N'U') "
-            + "AND type = 'PK' AND name = N'PK_existing';", cancellationToken: CancellationToken.None);
+            + "AND type = 'PK' AND name = N'PK_existing';",
+            cancellationToken: CancellationToken.None);
 
-        var requestedKeys = await ScalarIntAsync(connectionString,
+        var requestedKeys = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.key_constraints WHERE name = N'PK_requested';",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(matchingName ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
-            Assert.Single(analyses).ObservedState);
+        Assert.Equal(
+            matchingName
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Different,
+            Assert.Single(analyses)
+                .ObservedState);
+
         if (matchingName)
         {
             Assert.Null(exception);
         }
         else
         {
-            Assert.Equal(51001, Assert.IsType<SqlException>(exception).Number);
+            Assert.Equal(51001,
+                Assert.IsType<SqlException>(exception)
+                    .Number);
         }
 
         Assert.Equal(1, originalKeys);
@@ -364,11 +511,17 @@ public sealed class SqlServerSafeMigrationCatalogRegressionIntegrationTests : Sq
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        await using var command = context.Database.GetDbConnection().CreateCommand();
+        await using var command = context
+            .Database
+            .GetDbConnection()
+            .CreateCommand();
+
         command.CommandText = sql;
         command.Transaction = context.Database.CurrentTransaction?.GetDbTransaction();
 
-        return Convert.ToInt32(await command.ExecuteScalarAsync(
-            cancellationToken: cancellationToken), CultureInfo.InvariantCulture);
+        return Convert.ToInt32(
+            await command.ExecuteScalarAsync(
+                cancellationToken: cancellationToken),
+            CultureInfo.InvariantCulture);
     }
 }

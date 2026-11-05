@@ -28,6 +28,7 @@ public sealed class MySqlModelManagedDataOwnershipTests
         Assert.Contains(
             operations,
             operation => operation is InsertDataOperation { Table: "core_roles" });
+
         Assert.Contains(
             operations,
             operation => operation is InsertDataOperation { Table: "custom_profiles" });
@@ -251,7 +252,8 @@ public sealed class MySqlModelManagedDataOwnershipTests
         var ownershipSql = GenerateCompiledMigrationSql(ownershipContext);
 
         Assert.NotEmpty(defaultSql);
-        Assert.Equal(defaultSql.Select(MySqlRuntimeSqlCanonicalizer.NormalizeOwnedCorrelation),
+        Assert.Equal(
+            defaultSql.Select(MySqlRuntimeSqlCanonicalizer.NormalizeOwnedCorrelation),
             ownershipSql.Select(MySqlRuntimeSqlCanonicalizer.NormalizeOwnedCorrelation));
     }
 
@@ -281,7 +283,7 @@ public sealed class MySqlModelManagedDataOwnershipTests
         Assert.Equal(50_000, filtered.Count);
         for (var ordinal = 0; ordinal < filtered.Count; ordinal++)
         {
-            Assert.Same(operations[(ordinal * 2) + 1], filtered[ordinal]);
+            Assert.Same(operations[ordinal * 2 + 1], filtered[ordinal]);
         }
     }
 
@@ -312,7 +314,10 @@ public sealed class MySqlModelManagedDataOwnershipTests
 
     private static IRelationalModel RelationalModel(
         DbContext context
-    ) => context.GetService<IDesignTimeModel>().Model.GetRelationalModel();
+    ) => context
+        .GetService<IDesignTimeModel>()
+        .Model
+        .GetRelationalModel();
 
     private static string[] GenerateCompiledMigrationSql(
         DbContext context
@@ -424,8 +429,17 @@ public sealed class MySqlModelManagedDataOwnershipTests
                 }
 
                 entity.HasKey(role => role.Id);
-                entity.Property(role => role.Name).HasMaxLength(64).IsRequired();
-                entity.HasData(new CoreRole { Id = 1, Name = "administrator" });
+                entity
+                    .Property(role => role.Name)
+                    .HasMaxLength(64)
+                    .IsRequired();
+
+                entity.HasData(
+                    new CoreRole
+                    {
+                        Id = 1,
+                        Name = "administrator",
+                    });
             });
 
             if (IncludeCustomTable)
@@ -434,8 +448,17 @@ public sealed class MySqlModelManagedDataOwnershipTests
                 {
                     entity.ToTable("custom_profiles");
                     entity.HasKey(profile => profile.Id);
-                    entity.Property(profile => profile.Name).HasMaxLength(64).IsRequired();
-                    entity.HasData(new CustomProfile { Id = 1, Name = "default" });
+                    entity
+                        .Property(profile => profile.Name)
+                        .HasMaxLength(64)
+                        .IsRequired();
+
+                    entity.HasData(
+                        new CustomProfile
+                        {
+                            Id = 1,
+                            Name = "default",
+                        });
                 });
             }
         }
@@ -546,19 +569,39 @@ public sealed class MySqlModelManagedDataOwnershipTests
         {
             builder.ToTable("core_roles", table => table.ExcludeFromMigrations());
             builder.HasKey(role => role.Id);
-            builder.Property(role => role.Name).HasMaxLength(64).IsRequired();
+            builder
+                .Property(role => role.Name)
+                .HasMaxLength(64)
+                .IsRequired();
 
-            builder.HasData(state == OwnershipSeedState.Source
-                ?
-                [
-                    new CoreRole { Id = 1, Name = "administrator" },
-                    new CoreRole { Id = 2, Name = "member" },
-                ]
-                :
-                [
-                    new CoreRole { Id = 1, Name = "owner" },
-                    new CoreRole { Id = 3, Name = "auditor" },
-                ]);
+            builder.HasData(
+                state == OwnershipSeedState.Source
+                    ?
+                    [
+                        new CoreRole
+                        {
+                            Id = 1,
+                            Name = "administrator",
+                        },
+                        new CoreRole
+                        {
+                            Id = 2,
+                            Name = "member",
+                        },
+                    ]
+                    :
+                    [
+                        new CoreRole
+                        {
+                            Id = 1,
+                            Name = "owner",
+                        },
+                        new CoreRole
+                        {
+                            Id = 3,
+                            Name = "auditor",
+                        },
+                    ]);
         }
     }
 
@@ -572,19 +615,39 @@ public sealed class MySqlModelManagedDataOwnershipTests
         {
             builder.ToTable("custom_profiles");
             builder.HasKey(profile => profile.Id);
-            builder.Property(profile => profile.Name).HasMaxLength(64).IsRequired();
+            builder
+                .Property(profile => profile.Name)
+                .HasMaxLength(64)
+                .IsRequired();
 
-            builder.HasData(state == OwnershipSeedState.Source
-                ?
-                [
-                    new CustomProfile { Id = 10, Name = "default" },
-                    new CustomProfile { Id = 11, Name = "legacy" },
-                ]
-                :
-                [
-                    new CustomProfile { Id = 10, Name = "premium" },
-                    new CustomProfile { Id = 12, Name = "audit" },
-                ]);
+            builder.HasData(
+                state == OwnershipSeedState.Source
+                    ?
+                    [
+                        new CustomProfile
+                        {
+                            Id = 10,
+                            Name = "default",
+                        },
+                        new CustomProfile
+                        {
+                            Id = 11,
+                            Name = "legacy",
+                        },
+                    ]
+                    :
+                    [
+                        new CustomProfile
+                        {
+                            Id = 10,
+                            Name = "premium",
+                        },
+                        new CustomProfile
+                        {
+                            Id = 12,
+                            Name = "audit",
+                        },
+                    ]);
         }
     }
 

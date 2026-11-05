@@ -7,7 +7,9 @@ internal sealed class SqliteTableConstraintTransitions
 
     /// <summary>Captures each strict creator's bounded initial and allowed constraint shapes.</summary>
     /// <param name="operations">The current structural segment, not the cumulative rebuild history.</param>
-    public SqliteTableConstraintTransitions(IReadOnlyList<MigrationOperation> operations)
+    public SqliteTableConstraintTransitions(
+        IReadOnlyList<MigrationOperation> operations
+    )
     {
         if (!operations.Any(static operation => operation is SafeMigrationOperation { Intent: EnsureTableIntent }))
         {
@@ -24,7 +26,9 @@ internal sealed class SqliteTableConstraintTransitions
         {
             var table = operation is SafeMigrationOperation { Intent: EnsureTableIntent ensure }
                 ? ensure.Definition.Table
-                : operation is CreateTableOperation create ? create.Name : null;
+                : operation is CreateTableOperation create
+                    ? create.Name
+                    : null;
 
             if (!SqliteSafeMigrationOperationClassifier.CanParticipateInStructuralBatch(operation)
                 || operation is DropTableOperation or RenameTableOperation
@@ -34,7 +38,8 @@ internal sealed class SqliteTableConstraintTransitions
                 continue;
             }
 
-            if (table is not null && creators.Contains(table))
+            if (table is not null
+                && creators.Contains(table))
             {
                 Flush();
             }
@@ -68,7 +73,8 @@ internal sealed class SqliteTableConstraintTransitions
             var catalog = SafeMigrationExpectedTableConstraints.FromOperations(
                 pending,
                 static schema => schema is null || SqliteIdentifierComparer.Instance.Equals(schema, "main")
-                    ? null : schema,
+                    ? null
+                    : schema,
                 SqliteIdentifierComparer.Instance,
                 capturedSqlIdentifierDelimiter: '"',
                 foldUnquotedCapturedSqlIdentifiers: false,
@@ -91,6 +97,8 @@ internal sealed class SqliteTableConstraintTransitions
     /// <summary>Gets the transition contract of this exact authored table creator.</summary>
     /// <param name="operation">The creator whose original base definition remains authoritative.</param>
     /// <returns>The bounded constraint contract, or null when no table creator was captured.</returns>
-    public SafeMigrationExpectedTableConstraints? Find(SafeMigrationOperation operation)
+    public SafeMigrationExpectedTableConstraints? Find(
+        SafeMigrationOperation operation
+    )
         => _tables?.GetValueOrDefault(operation);
 }

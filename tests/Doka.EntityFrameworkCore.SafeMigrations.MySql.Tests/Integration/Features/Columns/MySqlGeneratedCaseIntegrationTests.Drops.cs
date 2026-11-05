@@ -7,26 +7,41 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task GeneratedSourceDropCannotBypassGuardWithoutPreflight(bool script)
+    public async Task GeneratedSourceDropCannotBypassGuardWithoutPreflight(
+        bool script
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var initial = new MigrationBuilder(context.Database.ProviderName!);
-        initial.EnsureTable(CaseTable(stored: false), SafeMigrationTableMode.StrictDefinition,
+        initial.EnsureTable(
+            CaseTable(stored: false),
+            SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         await ExecuteOperationsAsync(context, initial.Operations, CancellationToken.None);
         await SeedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureTable(CaseTable(stored: false), SafeMigrationTableMode.StrictDefinition,
+        builder.EnsureTable(
+            CaseTable(stored: false),
+            SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.DropColumnIfExists("left_bound", Table);
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model,
-            script ? MigrationsSqlGenerationOptions.Script : MigrationsSqlGenerationOptions.Default);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(
+                builder.Operations,
+                context.Model,
+                script
+                    ? MigrationsSqlGenerationOptions.Script
+                    : MigrationsSqlGenerationOptions.Default);
 
         // Act
         var failure = script
-            ? await Record.ExceptionAsync(() => ExecuteMigrationScriptAsync(connectionString,
+            ? await Record.ExceptionAsync(() => ExecuteMigrationScriptAsync(
+                connectionString,
                 string.Join(Environment.NewLine, commands.Select(static command => command.CommandText)),
                 cancellationToken: CancellationToken.None))
             : Record.Exception(() =>
@@ -48,7 +63,9 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         }
         else
         {
-            Assert.Equal("doka_sm_unsupported", Assert.IsType<SafeMigrationExecutionException>(failure).GuardCode);
+            Assert.Equal("doka_sm_unsupported",
+                Assert.IsType<SafeMigrationExecutionException>(failure)
+                    .GuardCode);
         }
 
         Assert.Equal(5, rows);
@@ -61,41 +78,74 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [InlineData("opaque")]
     [InlineData("storage")]
     [InlineData("missing")]
-    public async Task GeneratedDropDoesNotBorrowDriftedModelMemberCandidate(string drift)
+    public async Task GeneratedDropDoesNotBorrowDriftedModelMemberCandidate(
+        string drift
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await using var context = new GeneratedDropModelContext(new DbContextOptionsBuilder()
-            .UseMySql(connectionString, Fixture.ServerVersion).UseMySqlSafeMigrations().Options);
+        await using var context = new GeneratedDropModelContext(
+            new DbContextOptionsBuilder()
+                .UseMySql(connectionString, Fixture.ServerVersion)
+                .UseMySqlSafeMigrations()
+                .Options);
 
-        var generated = drift == "missing" ? string.Empty
-            : ", result int GENERATED ALWAYS AS (" + (drift == "opaque" ? "IF(source > 0, 1, 0)" : "source + 1")
-                + ") " + (drift == "storage" ? "STORED" : "VIRTUAL");
+        var generated = drift == "missing"
+            ? string.Empty
+            : ", result int GENERATED ALWAYS AS ("
+            + (drift == "opaque"
+                ? "IF(source > 0, 1, 0)"
+                : "source + 1")
+            + ") "
+            + (drift == "storage"
+                ? "STORED"
+                : "VIRTUAL");
 
-        var extra = drift == "extra" ? ", extra int GENERATED ALWAYS AS (source + 2) VIRTUAL" : string.Empty;
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE generated_drop_model (id int NOT NULL PRIMARY KEY, "
-            + "source int NULL, other int NULL" + generated + extra
+        var extra = drift == "extra"
+            ? ", extra int GENERATED ALWAYS AS (source + 2) VIRTUAL"
+            : string.Empty;
+
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE generated_drop_model (id int NOT NULL PRIMARY KEY, "
+            + "source int NULL, other int NULL"
+            + generated
+            + extra
             + "); INSERT INTO generated_drop_model (id, source, other) VALUES (1, 7, 11);",
             cancellationToken: CancellationToken.None);
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("source", "generated_drop_model");
-        var targetModel = context.GetService<IDesignTimeModel>().Model;
+        var targetModel = context.GetService<IDesignTimeModel>()
+            .Model;
 
         // Act
-        var analyses = await AnalyzeGeneratedTargetAsync(context, builder.Operations, targetModel,
+        var analyses = await AnalyzeGeneratedTargetAsync(
+            context,
+            builder.Operations,
+            targetModel,
             cancellationToken: CancellationToken.None);
 
         var failure = await Record.ExceptionAsync(() =>
-            ExecuteGeneratedTargetAsync(context, builder.Operations, targetModel,
+            ExecuteGeneratedTargetAsync(
+                context,
+                builder.Operations,
+                targetModel,
                 cancellationToken: CancellationToken.None));
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM generated_drop_model;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM generated_drop_model;",
             cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);
-        Assert.Equal(drift == "missing" ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Unsupported,
+        Assert.Equal(
+            drift == "missing"
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Unsupported,
             analysis.ObservedState);
+
         if (drift == "missing")
         {
             Assert.Null(failure);
@@ -114,40 +164,72 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [GeneratedMySqlTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task GeneratedMemberRemovalPreservesIndependentRenameDestination(bool occupiedDestination)
+    public async Task GeneratedMemberRemovalPreservesIndependentRenameDestination(
+        bool occupiedDestination
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var initial = new MigrationBuilder(context.Database.ProviderName!);
-        initial.EnsureTable(CaseTable(stored: false), SafeMigrationTableMode.StrictDefinition,
+        initial.EnsureTable(
+            CaseTable(stored: false),
+            SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         await ExecuteOperationsAsync(context, initial.Operations, CancellationToken.None);
         await SeedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureTable(CaseTable(stored: false), SafeMigrationTableMode.StrictDefinition,
+        builder.EnsureTable(
+            CaseTable(stored: false),
+            SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.DropColumnIfExists("has_descendants", Table);
-        builder.RenameColumnIfExists("left_bound", Table, occupiedDestination ? "right_bound" : "renamed_left");
+        builder.RenameColumnIfExists(
+            "left_bound",
+            Table,
+            occupiedDestination
+                ? "right_bound"
+                : "renamed_left");
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-dependent-removal-before-rename"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-dependent-removal-before-rename"),
+                CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
-        var rows = await ScalarIntAsync(connectionString, $"SELECT COUNT(*) FROM `{Table}`;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            $"SELECT COUNT(*) FROM `{Table}`;",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(occupiedDestination ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready,
+        Assert.Equal(
+            occupiedDestination
+                ? SafeMigrationReportStatus.Blocked
+                : SafeMigrationReportStatus.Ready,
             preflight.Status);
-        Assert.Equal(occupiedDestination ? SafeMigrationObservedState.Different : SafeMigrationObservedState.Matching,
+
+        Assert.Equal(
+            occupiedDestination
+                ? SafeMigrationObservedState.Different
+                : SafeMigrationObservedState.Matching,
             preflight.Assessments[^1].ObservedState);
+
         if (occupiedDestination)
         {
-            Assert.Equal("doka_sm_different", Assert.IsType<SafeMigrationExecutionException>(failure).GuardCode);
+            Assert.Equal("doka_sm_different",
+                Assert.IsType<SafeMigrationExecutionException>(failure)
+                    .GuardCode);
         }
         else
         {
@@ -162,32 +244,54 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task StandaloneDropCompletenessAddsNoPrerequisiteRoundtrip(bool nativeBatch)
+    public async Task StandaloneDropCompletenessAddsNoPrerequisiteRoundtrip(
+        bool nativeBatch
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE generated_drop_plain (id int NULL, payload int NULL);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE generated_drop_plain (id int NULL, payload int NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
-        await using var connection = new CatalogClassificationCountingConnection(new MySqlConnection(connectionString),
+        await using var connection = new CatalogClassificationCountingConnection(
+            new MySqlConnection(connectionString),
             nativeBatch: nativeBatch);
 
         context.Database.SetDbConnection(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("id", "generated_drop_plain");
-        var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+        var operations = builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, operations,
-            CancellationToken.None);
+        var analyses = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                operations,
+                CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);
         Assert.Equal(SafeMigrationObservedState.Matching, analysis.ObservedState);
         Assert.True(analysis.DropLeavesNoGeneratedColumns);
         Assert.Equal(0, connection.PrerequisiteStatementCount);
-        Assert.Equal(nativeBatch ? 0 : 1, connection.ClassificationStatementCount);
-        Assert.Equal(nativeBatch ? 1 : 0, connection.NativeBatchExecutionCount);
+        Assert.Equal(
+            nativeBatch
+                ? 0
+                : 1,
+            connection.ClassificationStatementCount);
+
+        Assert.Equal(
+            nativeBatch
+                ? 1
+                : 0,
+            connection.NativeBatchExecutionCount);
     }
 
     /// <summary>Future model candidates authorize dependency reasoning only after exact native set equality.</summary>
@@ -197,40 +301,75 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [InlineData(false, false)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public async Task GeneratedDropModelCandidateRequiresFreshNativeEquality(bool dropSource, bool nativeDrift)
+    public async Task GeneratedDropModelCandidateRequiresFreshNativeEquality(
+        bool dropSource,
+        bool nativeDrift
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await using var context = new GeneratedDropModelContext(new DbContextOptionsBuilder()
-            .UseMySql(connectionString, Fixture.ServerVersion).UseMySqlSafeMigrations().Options);
+        await using var context = new GeneratedDropModelContext(
+            new DbContextOptionsBuilder()
+                .UseMySql(connectionString, Fixture.ServerVersion)
+                .UseMySqlSafeMigrations()
+                .Options);
 
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE generated_drop_model (id int NOT NULL PRIMARY KEY, "
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE generated_drop_model (id int NOT NULL PRIMARY KEY, "
             + "source int NULL, other int NULL, result int GENERATED ALWAYS AS (`source` + "
-            + (nativeDrift ? "2" : "1") + ") VIRTUAL); INSERT INTO generated_drop_model (id, source, other) "
-            + "VALUES (1, 7, 11);", cancellationToken: CancellationToken.None);
+            + (nativeDrift
+                ? "2"
+                : "1")
+            + ") VIRTUAL); INSERT INTO generated_drop_model (id, source, other) "
+            + "VALUES (1, 7, 11);",
+            cancellationToken: CancellationToken.None);
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.DropColumnIfExists(dropSource ? "source" : "other", "generated_drop_model");
-        var targetModel = context.GetService<IDesignTimeModel>().Model;
+        builder.DropColumnIfExists(
+            dropSource
+                ? "source"
+                : "other",
+            "generated_drop_model");
+
+        var targetModel = context.GetService<IDesignTimeModel>()
+            .Model;
 
         // Act
-        var analyses = await AnalyzeGeneratedTargetAsync(context, builder.Operations, targetModel,
+        var analyses = await AnalyzeGeneratedTargetAsync(
+            context,
+            builder.Operations,
+            targetModel,
             cancellationToken: CancellationToken.None);
 
         var failure = await Record.ExceptionAsync(() =>
-            ExecuteGeneratedTargetAsync(context, builder.Operations, targetModel,
+            ExecuteGeneratedTargetAsync(
+                context,
+                builder.Operations,
+                targetModel,
                 cancellationToken: CancellationToken.None));
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM generated_drop_model;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM generated_drop_model;",
             cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);
-        Assert.Equal(dropSource ? SafeMigrationObservedState.Unsupported : SafeMigrationObservedState.Matching,
+        Assert.Equal(
+            dropSource
+                ? SafeMigrationObservedState.Unsupported
+                : SafeMigrationObservedState.Matching,
             analysis.ObservedState);
+
         if (dropSource)
         {
-            Assert.Equal(nativeDrift ? "generated_column_drop_unproven" : "generated_column_drop_dependency",
+            Assert.Equal(
+                nativeDrift
+                    ? "generated_column_drop_unproven"
+                    : "generated_column_drop_dependency",
                 analysis.Code);
+
             Assert.IsType<SafeMigrationExecutionException>(failure);
         }
         else
@@ -247,20 +386,27 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [InlineData("none")]
     [InlineData("strict")]
     [InlineData("sparse")]
-    public async Task GeneratedSourceDropIsRejectedWithoutChangingSchemaOrRows(string prefix)
+    public async Task GeneratedSourceDropIsRejectedWithoutChangingSchemaOrRows(
+        string prefix
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var initial = new MigrationBuilder(context.Database.ProviderName!);
-        initial.EnsureTable(CaseTable(stored: false), SafeMigrationTableMode.StrictDefinition,
+        initial.EnsureTable(
+            CaseTable(stored: false),
+            SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         await ExecuteOperationsAsync(context, initial.Operations, CancellationToken.None);
         await SeedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (prefix == "strict")
         {
-            builder.EnsureTable(CaseTable(stored: false), SafeMigrationTableMode.StrictDefinition,
+            builder.EnsureTable(
+                CaseTable(stored: false),
+                SafeMigrationTableMode.StrictDefinition,
                 SafeMigrationPolicy.ThrowIfDifferent);
         }
         else if (prefix == "sparse")
@@ -271,13 +417,22 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         builder.DropColumnIfExists("left_bound", Table);
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-source-drop"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-source-drop"),
+                CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
-        var source = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+        var source = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
             + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'left_bound';",
             cancellationToken: CancellationToken.None);
 
@@ -286,8 +441,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationObservedState.Unsupported, preflight.Assessments[^1].ObservedState);
-        Assert.Equal(prefix == "none" ? "generated_column_drop_unproven" : "generated_column_drop_dependency",
+        Assert.Equal(
+            prefix == "none"
+                ? "generated_column_drop_unproven"
+                : "generated_column_drop_dependency",
             preflight.Assessments[^1].AnalysisCode);
+
         var diagnostic = Assert.IsType<SafeMigrationExecutionException>(failure);
         Assert.Equal("doka_sm_unsupported", diagnostic.GuardCode);
         Assert.Equal(1, source);
@@ -299,14 +458,19 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task GeneratedMemberDropAndExplicitDependentFirstRemovalRemainLegal(bool dropSource)
+    public async Task GeneratedMemberDropAndExplicitDependentFirstRemovalRemainLegal(
+        bool dropSource
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var initial = new MigrationBuilder(context.Database.ProviderName!);
-        initial.EnsureTable(CaseTable(stored: false), SafeMigrationTableMode.StrictDefinition,
+        initial.EnsureTable(
+            CaseTable(stored: false),
+            SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         await ExecuteOperationsAsync(context, initial.Operations, CancellationToken.None);
         await SeedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -317,8 +481,13 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         }
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-explicit-dependent-first"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-explicit-dependent-first"),
+                CancellationToken.None);
 
         var failure = await Record.ExceptionAsync(async () =>
         {
@@ -326,16 +495,25 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         });
 
-        var verified = await context.GetService<ISafeMigrationRunner>().VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-explicit-dependent-first-verify"), CancellationToken.None);
+        var verified = await context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-explicit-dependent-first-verify"),
+                CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, $"SELECT COUNT(*) FROM `{Table}`;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            $"SELECT COUNT(*) FROM `{Table}`;",
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.True(preflight.Status == SafeMigrationReportStatus.Ready, DescribeGeneratedReport(preflight));
-        Assert.All(preflight.Assessments,
+        Assert.All(
+            preflight.Assessments,
             static assessment => Assert.Equal(SafeMigrationAction.Apply, assessment.Action));
+
         Assert.Null(failure);
         Assert.True(verified.Status == SafeMigrationReportStatus.Ready, DescribeGeneratedReport(verified));
         Assert.Equal(5, rows);
@@ -349,7 +527,8 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var original = CaseTable(stored: false);
-        var expected = new ExpectedTableDefinition(Table,
+        var expected = new ExpectedTableDefinition(
+            Table,
             original.Columns.Append(new ExpectedColumnDefinition("unrelated", typeof(int), true, "int")),
             primaryKey: original.PrimaryKey);
 
@@ -362,21 +541,37 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         builder.DropColumnIfExists("unrelated", Table);
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-unrelated-member-drop"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-unrelated-member-drop"),
+                CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
         var replay = new MigrationBuilder(context.Database.ProviderName!);
         replay.DropColumnIfExists("unrelated", Table);
-        var replayReport = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, replay.Operations,
-            new SafeMigrationRunOptions("generated-unrelated-member-drop-replay"), CancellationToken.None);
+        var replayReport = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                replay.Operations,
+                new SafeMigrationRunOptions("generated-unrelated-member-drop-replay"),
+                CancellationToken.None);
 
-        var replayFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, replay.Operations,
+        var replayFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            replay.Operations,
             CancellationToken.None));
 
-        var unrelated = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
+        var unrelated = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
             + $"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'unrelated';",
             cancellationToken: CancellationToken.None);
 
@@ -386,7 +581,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         Assert.True(preflight.Status == SafeMigrationReportStatus.Ready, DescribeGeneratedReport(preflight));
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[^1].Action);
         Assert.Null(failure);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replayReport.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(replayReport.Assessments)
+                .Action);
+
         Assert.Null(replayFailure);
         Assert.Equal(0, unrelated);
         Assert.Equal(5, rows);
@@ -401,7 +599,12 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         CancellationToken cancellationToken
     ) =>
         ((ISafeMigrationProviderTargetModelAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>()).AnalyzeAsync(
-            context, operations, Enumerable.Repeat<IModel?>(model, operations.Count).ToArray(), cancellationToken);
+            context,
+            operations,
+            Enumerable
+                .Repeat<IModel?>(model, operations.Count)
+                .ToArray(),
+            cancellationToken);
 
     /// <summary>Exercises ordinary generated commands with the exact complete model passed by a migration.</summary>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
@@ -414,7 +617,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(operations, model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(operations, model);
+
         var connection = context.GetService<IRelationalConnection>();
         foreach (var command in commands)
         {
@@ -426,17 +632,26 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     private sealed class GeneratedDropModelContext(DbContextOptions options) : DbContext(options)
     {
         /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        )
         {
-            modelBuilder.Entity("generated_drop_model", entity =>
-            {
-                entity.ToTable("generated_drop_model");
-                entity.Property<int>("id").ValueGeneratedNever();
-                entity.HasKey("id");
-                entity.Property<int?>("source");
-                entity.Property<int?>("other");
-                entity.Property<int?>("result").HasComputedColumnSql("`source` + 1", stored: false);
-            });
+            modelBuilder.Entity(
+                "generated_drop_model",
+                entity =>
+                {
+                    entity.ToTable("generated_drop_model");
+                    entity
+                        .Property<int>("id")
+                        .ValueGeneratedNever();
+
+                    entity.HasKey("id");
+                    entity.Property<int?>("source");
+                    entity.Property<int?>("other");
+                    entity
+                        .Property<int?>("result")
+                        .HasComputedColumnSql("`source` + 1", stored: false);
+                });
         }
     }
 }

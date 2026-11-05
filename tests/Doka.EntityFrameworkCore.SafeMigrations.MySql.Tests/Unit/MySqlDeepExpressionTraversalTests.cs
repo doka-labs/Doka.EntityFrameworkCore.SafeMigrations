@@ -20,7 +20,9 @@ public sealed class MySqlDeepExpressionTraversalTests
     [InlineData("between")]
     [InlineData("cast")]
     [InlineData("collate")]
-    public void DeepTreesPreserveExactOrdinaryAndDefaultSql(string shape)
+    public void DeepTreesPreserveExactOrdinaryAndDefaultSql(
+        string shape
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -53,7 +55,9 @@ public sealed class MySqlDeepExpressionTraversalTests
     [InlineData("between")]
     [InlineData("cast")]
     [InlineData("collate")]
-    public void DeepGeneratedTreesPreserveLocalSourceAndCapabilityChecks(string shape)
+    public void DeepGeneratedTreesPreserveLocalSourceAndCapabilityChecks(
+        string shape
+    )
     {
         // Arrange
         var expression = Build(shape, SafeMigrationSql.Identifier("source"));
@@ -79,7 +83,9 @@ public sealed class MySqlDeepExpressionTraversalTests
     [InlineData("function")]
     [InlineData("case")]
     [InlineData("in")]
-    public void DeepTreesRetainNegativeBindingAndCapabilityResults(string shape)
+    public void DeepTreesRetainNegativeBindingAndCapabilityResults(
+        string shape
+    )
     {
         // Arrange
         var nonLocal = Build(shape, SafeMigrationSql.Identifier("other", "source"));
@@ -104,11 +110,13 @@ public sealed class MySqlDeepExpressionTraversalTests
         // Arrange
         using var context = CreateContext();
         var expression = SafeMigrationSql.Binary(
-            SafeMigrationSql.ProviderFragment("other", "ignored"), SafeMigrationSqlBinaryOperator.Add,
+            SafeMigrationSql.ProviderFragment("other", "ignored"),
+            SafeMigrationSqlBinaryOperator.Add,
             new UnknownExpression());
 
         // Act
-        var result = Renderer(context).GetUnsupportedFeature(expression);
+        var result = Renderer(context)
+            .GetUnsupportedFeature(expression);
 
         // Assert
         Assert.Equal("provider_fragment_mismatch", result);
@@ -123,7 +131,8 @@ public sealed class MySqlDeepExpressionTraversalTests
         var expression = SafeMigrationSql.Cast(SafeMigrationSql.ProviderFragment("other", "ignored"), "invalid");
 
         // Act
-        var error = Assert.Throws<NotSupportedException>(() => Renderer(context).Render(expression));
+        var error = Assert.Throws<NotSupportedException>(() => Renderer(context)
+            .Render(expression));
 
         // Assert
         Assert.Contains("SQL fragment provider 'other'", error.Message, StringComparison.Ordinal);
@@ -152,7 +161,9 @@ public sealed class MySqlDeepExpressionTraversalTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void DeepNegationPreservesNativeDisplay(bool isMariaDb)
+    public void DeepNegationPreservesNativeDisplay(
+        bool isMariaDb
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -166,7 +177,11 @@ public sealed class MySqlDeepExpressionTraversalTests
         var result = MySqlGeneratedExpressionDisplay.Render(expression, Renderer(context), isMariaDb);
 
         // Assert
-        Assert.Equal(isMariaDb ? "`source` <> 0" : "(0 <> `source`)", result);
+        Assert.Equal(
+            isMariaDb
+                ? "`source` <> 0"
+                : "(0 <> `source`)",
+            result);
     }
 
     /// <summary>Deep right grouping and CASE display retain independently constructed native spellings.</summary>
@@ -179,24 +194,47 @@ public sealed class MySqlDeepExpressionTraversalTests
     [InlineData("left", false)]
     [InlineData("right", false)]
     [InlineData("case", false)]
-    public void DeepNativeDisplayPreservesGrouping(string shape, bool isMariaDb)
+    public void DeepNativeDisplayPreservesGrouping(
+        string shape,
+        bool isMariaDb
+    )
     {
         // Arrange
         using var context = CreateContext();
         var expression = Build(shape, SafeMigrationSql.Literal(1));
-        var prefix = shape == "case" ? "case when 1 then " : shape == "right" ? "1 + " : "";
-        var suffix = shape == "case" ? " else 1 end" : shape == "left" ? " + 1" : "";
+        var prefix = shape == "case"
+            ? "case when 1 then "
+            : shape == "right"
+                ? "1 + "
+                : "";
+
+        var suffix = shape == "case"
+            ? " else 1 end"
+            : shape == "left"
+                ? " + 1"
+                : "";
+
         var grouping = !isMariaDb || shape == "right";
         var expected = new StringBuilder();
         for (var index = 0; index < Depth; index++)
         {
-            expected.Append(grouping && (index > 0 || !isMariaDb) ? "(" : "").Append(prefix);
+            expected
+                .Append(
+                    grouping && (index > 0 || !isMariaDb)
+                        ? "("
+                        : "")
+                .Append(prefix);
         }
 
         expected.Append('1');
         for (var index = Depth - 1; index >= 0; index--)
         {
-            expected.Append(suffix).Append(grouping && (index > 0 || !isMariaDb) ? ")" : "");
+            expected
+                .Append(suffix)
+                .Append(
+                    grouping && (index > 0 || !isMariaDb)
+                        ? ")"
+                        : "");
         }
 
         // Act
@@ -211,16 +249,25 @@ public sealed class MySqlDeepExpressionTraversalTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void TraversalPreservesEveryOrderedOccurrence(bool caseElseFirst)
+    public void TraversalPreservesEveryOrderedOccurrence(
+        bool caseElseFirst
+    )
     {
         // Arrange
         var shared = SafeMigrationSql.Identifier("shared");
         var expression = SafeMigrationSql.Case(
-        [
-            new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.In(SafeMigrationSql.Identifier("operand"),
-                [SafeMigrationSql.Identifier("first"), shared]), SafeMigrationSql.Function("COALESCE", shared,
-                SafeMigrationSql.Identifier("second"))),
-        ], SafeMigrationSql.Identifier("else"));
+            [
+                new SafeMigrationSqlCaseWhenClause(
+                    SafeMigrationSql.In(
+                        SafeMigrationSql.Identifier("operand"),
+                        [SafeMigrationSql.Identifier("first"), shared]),
+                    SafeMigrationSql.Function(
+                        "COALESCE",
+                        shared,
+                        SafeMigrationSql.Identifier("second"))),
+            ],
+            SafeMigrationSql.Identifier("else"));
+
         var traversal = new MySqlExpressionTraversal(expression, caseElseFirst);
         var identifiers = new List<string>();
 
@@ -241,7 +288,11 @@ public sealed class MySqlDeepExpressionTraversalTests
         }
 
         // Assert
-        Assert.Equal(caseElseFirst ? s_elseFirstOrder : s_caseOrder, identifiers);
+        Assert.Equal(
+            caseElseFirst
+                ? s_elseFirstOrder
+                : s_caseOrder,
+            identifiers);
     }
 
     /// <summary>Unknown subclasses keep each validator's existing policy without a new global rejection.</summary>
@@ -257,7 +308,8 @@ public sealed class MySqlDeepExpressionTraversalTests
         var capability = MySqlGeneratedColumnExpressionCapability.GetUnsupportedFeature(expression);
         var captured = MySqlCapturedExpressionContract.GetUnsupportedFeature("1", expression, isMariaDb: true);
         var stable = MySqlCapturedExpressionContract.RequiresStableStrings(expression);
-        var rendererError = Record.Exception(() => Renderer(context).GetUnsupportedFeature(expression));
+        var rendererError = Record.Exception(() => Renderer(context)
+            .GetUnsupportedFeature(expression));
 
         // Assert
         Assert.True(local);
@@ -281,7 +333,9 @@ public sealed class MySqlDeepExpressionTraversalTests
         var expected = "coalesce(" + string.Join(", ", Enumerable.Repeat("1", Depth)) + ")";
 
         // Act
-        var sql = Renderer(context).Render(expression);
+        var sql = Renderer(context)
+            .Render(expression);
+
         var local = MySqlGeneratedColumnDependencies.ReferencesOnlyLocalColumns(nonLocal);
 
         // Assert
@@ -297,7 +351,10 @@ public sealed class MySqlDeepExpressionTraversalTests
     [InlineData(63, true)]
     [InlineData(64, false)]
     [InlineData(Depth, false)]
-    public void ExistingBoundedMariaProofRetainsItsEligibilityBoundary(int depth, bool expected)
+    public void ExistingBoundedMariaProofRetainsItsEligibilityBoundary(
+        int depth,
+        bool expected
+    )
     {
         // Arrange
         var expression = (SafeMigrationSqlExpression)SafeMigrationSql.Literal(1);
@@ -306,7 +363,11 @@ public sealed class MySqlDeepExpressionTraversalTests
             expression = SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Negate, expression);
         }
 
-        var definition = new ExpectedColumnDefinition("generated", typeof(long), false, "bigint",
+        var definition = new ExpectedColumnDefinition(
+            "generated",
+            typeof(long),
+            false,
+            "bigint",
             computedExpression: expression);
 
         // Act
@@ -327,27 +388,35 @@ public sealed class MySqlDeepExpressionTraversalTests
         var expression = Build("left", SafeMigrationSql.Identifier("source"));
         var expected = Expected("left", defaultContext: false);
         expected = expected[..Depth] + "`source`" + expected[(Depth + 1)..];
-        var rejected = SafeMigrationSql.Binary(SafeMigrationSql.ProviderFragment("other", "ignored"),
-            SafeMigrationSqlBinaryOperator.Add, expression);
+        var rejected = SafeMigrationSql.Binary(
+            SafeMigrationSql.ProviderFragment("other", "ignored"),
+            SafeMigrationSqlBinaryOperator.Add,
+            expression);
+
         var outputs = new (string Sql, bool Local, Exception? Error)[16];
 
         // Act
-        Parallel.For(0, outputs.Length, index =>
-        {
-            using var context = CreateContext();
-            var renderer = Renderer(context);
-            var error = Record.Exception(() => renderer.Render(rejected));
-            outputs[index] = (renderer.Render(expression),
-                MySqlGeneratedColumnDependencies.ReferencesOnlyLocalColumns(expression), error);
-        });
+        Parallel.For(
+            0,
+            outputs.Length,
+            index =>
+            {
+                using var context = CreateContext();
+                var renderer = Renderer(context);
+                var error = Record.Exception(() => renderer.Render(rejected));
+                outputs[index] = (renderer.Render(expression),
+                    MySqlGeneratedColumnDependencies.ReferencesOnlyLocalColumns(expression), error);
+            });
 
         // Assert
-        Assert.All(outputs, output =>
-        {
-            Assert.Equal(expected, output.Sql);
-            Assert.True(output.Local);
-            Assert.IsType<NotSupportedException>(output.Error);
-        });
+        Assert.All(
+            outputs,
+            output =>
+            {
+                Assert.Equal(expected, output.Sql);
+                Assert.True(output.Local);
+                Assert.IsType<NotSupportedException>(output.Error);
+            });
     }
 
     /// <summary>Native-candidate discovery proves unchanged deep spelling without rendering extra candidates.</summary>
@@ -359,14 +428,18 @@ public sealed class MySqlDeepExpressionTraversalTests
     [InlineData("cast")]
     [InlineData("collate")]
     [InlineData("function")]
-    public void DeepNativeDisplayDiscoveryRetainsEmptyFastPath(string shape)
+    public void DeepNativeDisplayDiscoveryRetainsEmptyFastPath(
+        string shape
+    )
     {
         // Arrange
         using var context = CreateContext();
         var expression = Build(shape, SafeMigrationSql.Literal(1));
 
         // Act
-        var candidates = MySqlGeneratedExpressionDisplay.AdditionalNativeCandidates(expression, Renderer(context),
+        var candidates = MySqlGeneratedExpressionDisplay.AdditionalNativeCandidates(
+            expression,
+            Renderer(context),
             isMariaDb: false);
 
         // Assert
@@ -386,14 +459,22 @@ public sealed class MySqlDeepExpressionTraversalTests
     [InlineData(1, false, "((`a` <> 1) or (`b` is not null))")]
     [InlineData(2, false, "((`a` = 1) and (`b` is null))")]
     [InlineData(3, false, "((`a` <> 1) or (`b` is not null))")]
-    public void NativeNegationPreservesShallowBranchSemantics(int count, bool isMariaDb, string expected)
+    public void NativeNegationPreservesShallowBranchSemantics(
+        int count,
+        bool isMariaDb,
+        string expected
+    )
     {
         // Arrange
         using var context = CreateContext();
         var expression = (SafeMigrationSqlExpression)SafeMigrationSql.Binary(
-            SafeMigrationSql.Binary(SafeMigrationSql.Identifier("a"), SafeMigrationSqlBinaryOperator.Equal,
-                SafeMigrationSql.Literal(1)), SafeMigrationSqlBinaryOperator.And,
+            SafeMigrationSql.Binary(
+                SafeMigrationSql.Identifier("a"),
+                SafeMigrationSqlBinaryOperator.Equal,
+                SafeMigrationSql.Literal(1)),
+            SafeMigrationSqlBinaryOperator.And,
             SafeMigrationSql.IsNull(SafeMigrationSql.Identifier("b")));
+
         for (var index = 0; index < count; index++)
         {
             expression = SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Not, expression);
@@ -407,7 +488,10 @@ public sealed class MySqlDeepExpressionTraversalTests
     }
 
     /// <summary>Constructs public expression nodes without invoking a parser or adding an admission limit.</summary>
-    private static SafeMigrationSqlExpression Build(string shape, SafeMigrationSqlExpression leaf)
+    private static SafeMigrationSqlExpression Build(
+        string shape,
+        SafeMigrationSqlExpression leaf
+    )
     {
         var one = SafeMigrationSql.Literal(1);
         var expression = leaf;
@@ -433,7 +517,10 @@ public sealed class MySqlDeepExpressionTraversalTests
     }
 
     /// <summary>Builds the expected output independently from the production traversal.</summary>
-    private static string Expected(string shape, bool defaultContext)
+    private static string Expected(
+        string shape,
+        bool defaultContext
+    )
     {
         var (prefix, suffix) = shape switch
         {
@@ -441,14 +528,19 @@ public sealed class MySqlDeepExpressionTraversalTests
             "right" => ("(1 + ", ")"),
             "unary" => ("(-", ")"),
             "null-test" => ("(", " IS NULL)"),
-            "function" => ("coalesce(", defaultContext ? ",1)" : ", 1)"),
+            "function" => ("coalesce(", defaultContext
+                ? ",1)"
+                : ", 1)"),
             "case" => ("CASE WHEN 1 THEN ", " ELSE 1 END"),
-            "in" => ("(1 IN (", defaultContext ? ",1))" : ", 1))"),
+            "in" => ("(1 IN (", defaultContext
+                ? ",1))"
+                : ", 1))"),
             "between" => ("(1 BETWEEN ", " AND 1)"),
             "cast" => ("CAST(", " AS SIGNED)"),
             "collate" => ("(", " COLLATE `utf8mb4_bin`)"),
             _ => throw new ArgumentOutOfRangeException(nameof(shape)),
         };
+
         var builder = new StringBuilder();
         for (var index = 0; index < Depth; index++)
         {
@@ -465,13 +557,20 @@ public sealed class MySqlDeepExpressionTraversalTests
     }
 
     /// <summary>Uses the real native literal mappings without a database connection.</summary>
-    private static MySqlSafeMigrationSqlExpressionRenderer Renderer(DbContext context) => new(
-        context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+    private static MySqlSafeMigrationSqlExpressionRenderer Renderer(
+        DbContext context
+    ) => new(
+        context.GetService<IRelationalTypeMappingSource>(),
+        context.GetService<ISqlGenerationHelper>());
 
     /// <summary>Creates a managed-only renderer scope.</summary>
-    private static DbContext CreateContext() => new(new DbContextOptionsBuilder()
-        .UseMySql("Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test",
-            MySqlServerVersion.MySql(new Version(8, 4, 11))).UseMySqlSafeMigrations().Options);
+    private static DbContext CreateContext() => new(
+        new DbContextOptionsBuilder()
+            .UseMySql(
+                "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test",
+                MySqlServerVersion.MySql(new Version(8, 4, 11)))
+            .UseMySqlSafeMigrations()
+            .Options);
 
     /// <summary>Proves that validation still short-circuits before an unreachable unknown node.</summary>
     private sealed class UnknownExpression : SafeMigrationSqlExpression;

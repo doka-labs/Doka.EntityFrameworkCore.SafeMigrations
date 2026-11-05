@@ -100,7 +100,9 @@ public sealed class SafeMigrationExecutionExceptionTests
     [InlineData("doka_sm_data_blocked")]
     [InlineData("doka_sm_prerequisite_missing")]
     [InlineData("doka_sm_postcondition")]
-    public void CapturedContextPreservesPublicDiagnosticContract(string guardCode)
+    public void CapturedContextPreservesPublicDiagnosticContract(
+        string guardCode
+    )
     {
         // Arrange
         var operation = CreateOperation();
@@ -129,8 +131,11 @@ public sealed class SafeMigrationExecutionExceptionTests
 
         // Act
         var exception = Assert.Throws<ArgumentException>(() =>
-            new SafeMigrationExecutionException(default(SafeMigrationRuntimeDiagnosticContext),
-                "doka_sm_data_blocked", 0, nativeFailure));
+            new SafeMigrationExecutionException(
+                default(SafeMigrationRuntimeDiagnosticContext),
+                "doka_sm_data_blocked",
+                0,
+                nativeFailure));
 
         // Assert
         Assert.Equal("context", exception.ParamName);
@@ -139,10 +144,17 @@ public sealed class SafeMigrationExecutionExceptionTests
     /// <summary>Creates a synthetic required column whose private comment must not enter diagnostics.</summary>
     private static SafeMigrationOperation CreateOperation()
     {
-        var column = new ExpectedColumnDefinition("Id", typeof(Guid), isNullable: false,
-            storeType: "char(36)", maxLength: 36, isFixedLength: true, comment: "private-comment");
+        var column = new ExpectedColumnDefinition(
+            "Id",
+            typeof(Guid),
+            isNullable: false,
+            storeType: "char(36)",
+            maxLength: 36,
+            isFixedLength: true,
+            comment: "private-comment");
 
-        return new SafeMigrationOperation(new EnsureColumnIntent("ExampleAnswers", column),
+        return new SafeMigrationOperation(
+            new EnsureColumnIntent("ExampleAnswers", column),
             SafeMigrationPolicy.ThrowIfDifferent);
     }
 }

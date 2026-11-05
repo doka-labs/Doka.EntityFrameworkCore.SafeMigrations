@@ -7,7 +7,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void AlterAfterSiblingDropsRequiresProviderCertificate(bool certified)
+    public void AlterAfterSiblingDropsRequiresProviderCertificate(
+        bool certified
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
@@ -20,8 +22,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var result = projection.Project(operation, live);
 
         // Assert
-        Assert.Equal(certified ? SafeMigrationRepairCapability.Safe : SafeMigrationRepairCapability.None,
+        Assert.Equal(
+            certified
+                ? SafeMigrationRepairCapability.Safe
+                : SafeMigrationRepairCapability.None,
             result.RepairCapability);
+
         if (certified)
         {
             Assert.Same(live, result);
@@ -44,7 +50,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("live-blocked")]
     [InlineData("recreate")]
     [InlineData("incoming-foreign-key")]
-    public void AlterAfterSiblingDropsRejectsInvalidatedCertificate(string mutation)
+    public void AlterAfterSiblingDropsRejectsInvalidatedCertificate(
+        string mutation
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
@@ -55,8 +63,15 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         if (mutation == "incoming-foreign-key")
         {
-            Apply(projection, new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition(
-                "fk_child", "child", ["value"], "items", ["value"])));
+            Apply(
+                projection,
+                new EnsureForeignKeyIntent(
+                    new ExpectedForeignKeyDefinition(
+                        "fk_child",
+                        "child",
+                        ["value"],
+                        "items",
+                        ["value"])));
         }
 
         if (mutation == "other-index")
@@ -71,59 +86,84 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         switch (mutation)
         {
             case "ordinary-drop":
-                projection.ObserveProviderPostcondition(new DropColumnOperation { Table = "items", Name = "other" });
+                projection.ObserveProviderPostcondition(
+                    new DropColumnOperation
+                    {
+                        Table = "items",
+                        Name = "other",
+                    });
+
                 break;
             case "ordinary-alter-table":
                 projection.ObserveProviderPostcondition(new AlterTableOperation { Name = "items" });
                 break;
             case "target-drop":
-                ObserveAccepted(projection, new DropColumnIntent("value", "items"),
+                ObserveAccepted(
+                    projection,
+                    new DropColumnIntent("value", "items"),
                     SafeMigrationObservedState.Matching);
+
                 break;
             case "target-alter":
-                projection.ObserveProviderPostcondition(new AlterColumnOperation
-                {
-                    Table = "items",
-                    Name = "value",
-                    ClrType = typeof(int),
-                    ColumnType = "int",
-                    IsNullable = true,
-                });
+                projection.ObserveProviderPostcondition(
+                    new AlterColumnOperation
+                    {
+                        Table = "items",
+                        Name = "value",
+                        ClrType = typeof(int),
+                        ColumnType = "int",
+                        IsNullable = true,
+                    });
+
                 break;
             case "target-rename":
-                projection.ObserveProviderPostcondition(new RenameColumnOperation
-                {
-                    Table = "items",
-                    Name = "value",
-                    NewName = "renamed",
-                });
+                projection.ObserveProviderPostcondition(
+                    new RenameColumnOperation
+                    {
+                        Table = "items",
+                        Name = "value",
+                        NewName = "renamed",
+                    });
+
                 break;
             case "data":
-                projection.ObserveProviderPostcondition(new InsertDataOperation
-                {
-                    Table = "other",
-                    Columns = ["value"],
-                    Values = new object?[,] { { 1 } },
-                });
+                projection.ObserveProviderPostcondition(
+                    new InsertDataOperation
+                    {
+                        Table = "other",
+                        Columns = ["value"],
+                        Values = new object?[,] { { 1 } },
+                    });
+
                 break;
             case "opaque":
                 projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1" });
                 break;
             case "type-transition":
                 operation = new SafeMigrationOperation(
-                    new AlterColumnIntent("items", Column("value"),
+                    new AlterColumnIntent(
+                        "items",
+                        Column("value"),
                         new ExpectedColumnDefinition("value", typeof(string), true, "TEXT")),
                     SafeMigrationPolicy.RepairIfSafe);
+
                 break;
             case "live-blocked":
                 live = Live(SafeMigrationObservedState.DataBlocked);
                 break;
             case "recreate":
                 ObserveAccepted(projection, new DropTableIntent("items"), SafeMigrationObservedState.Matching);
-                Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("items", [Column("other")]),
-                    SafeMigrationTableMode.StrictDefinition));
-                ObserveAccepted(projection, new DropColumnIntent("other", "items"),
+                Apply(
+                    projection,
+                    new EnsureTableIntent(
+                        new ExpectedTableDefinition("items", [Column("other")]),
+                        SafeMigrationTableMode.StrictDefinition));
+
+                ObserveAccepted(
+                    projection,
+                    new DropColumnIntent("other", "items"),
                     SafeMigrationObservedState.Matching);
+
                 break;
         }
 
@@ -136,7 +176,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
     /// <summary>Creates the exact same-shape nullability transition used by the reuse controls.</summary>
     private static SafeMigrationOperation UnchangedColumnAlter() => new(
-        new AlterColumnIntent("items", Column("value"),
+        new AlterColumnIntent(
+            "items",
+            Column("value"),
             new ExpectedColumnDefinition("value", typeof(int), isNullable: true, storeType: "int")),
         SafeMigrationPolicy.RepairIfSafe);
 
@@ -144,7 +186,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     private static SafeMigrationProviderAnalysis SiblingDropAlterProof(
         bool certified
     ) => new(
-        SafeMigrationObservedState.Different, SafeMigrationRepairCapability.Safe, false,
+        SafeMigrationObservedState.Different,
+        SafeMigrationRepairCapability.Safe,
+        false,
         "classified_different_repairable")
     {
         CanReuseAfterUnrelatedColumnDrops = certified,

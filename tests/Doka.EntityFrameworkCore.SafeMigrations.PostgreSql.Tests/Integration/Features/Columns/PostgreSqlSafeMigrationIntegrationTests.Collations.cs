@@ -22,6 +22,7 @@ public sealed class PostgreSqlCollationsIntegrationTests : PostgreSqlSafeMigrati
             + "CREATE DOMAIN collation_a.domain_text AS text COLLATE collation_a.shared; "
             + "CREATE TABLE collation_identity (id integer NOT NULL, domain_value collation_a.domain_text NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var definitions = new[]
         {
@@ -46,6 +47,7 @@ public sealed class PostgreSqlCollationsIntegrationTests : PostgreSqlSafeMigrati
             new ExpectedColumnDefinition("noncollatable", typeof(int), true, "integer"),
             new ExpectedColumnDefinition("domain_value", typeof(string), true, "collation_a.domain_text"),
         };
+
         var indexes = new[]
         {
             new ExpectedIndexDefinition(
@@ -54,7 +56,7 @@ public sealed class PostgreSqlCollationsIntegrationTests : PostgreSqlSafeMigrati
                 [
                     new ExpectedIndexKeyDefinition(
                         column: "from_a",
-                        collation: new SafeMigrationCollationIdentifier("shared", "collation_a"))
+                        collation: new SafeMigrationCollationIdentifier("shared", "collation_a")),
                 ]),
             new ExpectedIndexDefinition(
                 "ix_collation_dotted",
@@ -62,9 +64,10 @@ public sealed class PostgreSqlCollationsIntegrationTests : PostgreSqlSafeMigrati
                 [
                     new ExpectedIndexKeyDefinition(
                         column: "dotted",
-                        collation: new SafeMigrationCollationIdentifier("name.with.dot", "collation_a"))
+                        collation: new SafeMigrationCollationIdentifier("name.with.dot", "collation_a")),
                 ]),
         };
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(
             new ExpectedTableDefinition(
@@ -94,13 +97,17 @@ public sealed class PostgreSqlCollationsIntegrationTests : PostgreSqlSafeMigrati
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("structured-collations"),
-            CancellationToken.None);
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("structured-collations"),
+                CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.All(
             report.Assessments,
             assessment => Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -112,6 +119,7 @@ public sealed class PostgreSqlCollationsIntegrationTests : PostgreSqlSafeMigrati
                 + "WHERE c.relname = 'collation_identity' AND a.attname = 'dotted' "
                 + "AND ns.nspname = 'collation_a' AND coll.collname = 'name.with.dot';",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -134,10 +142,14 @@ public sealed class PostgreSqlCollationsIntegrationTests : PostgreSqlSafeMigrati
                 "text",
                 collation: new SafeMigrationCollationIdentifier("shared", "collation_b")),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var driftReport = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, drift.Operations, new SafeMigrationRunOptions("structured-collation-drift"),
-            CancellationToken.None);
+            .AnalyzeAsync(
+                context,
+                drift.Operations,
+                new SafeMigrationRunOptions("structured-collation-drift"),
+                CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, driftReport.Status);
         Assert.Equal(
@@ -145,5 +157,4 @@ public sealed class PostgreSqlCollationsIntegrationTests : PostgreSqlSafeMigrati
             Assert.Single(driftReport.Assessments)
                 .ObservedState);
     }
-
 }

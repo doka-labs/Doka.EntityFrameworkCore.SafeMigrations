@@ -17,38 +17,60 @@ public sealed class SqlServerSafeMigrationRenameOccupancyIntegrationTests : SqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA rename_target;",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE SCHEMA rename_target;",
             cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.rename_source (Id int NOT NULL); INSERT INTO dbo.rename_source VALUES (11); "
             + "CREATE TABLE dbo.rename_destination (Id int NOT NULL); INSERT INTO dbo.rename_destination VALUES (29);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("rename_source", "rename_destination", "dbo", "rename_target");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-rename-intermediate-occupied"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-rename-intermediate-occupied"),
+                cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
-        var sourceRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.rename_source WHERE Id = 11;", cancellationToken: CancellationToken.None);
+        var sourceRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.rename_source WHERE Id = 11;",
+            cancellationToken: CancellationToken.None);
 
-        var intermediateRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.rename_destination WHERE Id = 29;", cancellationToken: CancellationToken.None);
+        var intermediateRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.rename_destination WHERE Id = 29;",
+            cancellationToken: CancellationToken.None);
 
-        var targetCount = await ScalarIntAsync(connectionString,
+        var targetCount = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'rename_target.rename_destination', N'U');",
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationAction.RejectDifferent, Assert.Single(report.Assessments).Action);
-        Assert.Equal(51001, Assert.IsType<SqlException>(failure).Number);
+        Assert.Equal(SafeMigrationAction.RejectDifferent,
+            Assert.Single(report.Assessments)
+                .Action);
+
+        Assert.Equal(51001,
+            Assert.IsType<SqlException>(failure)
+                .Number);
+
         Assert.Equal(1, sourceRows);
         Assert.Equal(1, intermediateRows);
         Assert.Equal(0, targetCount);
@@ -60,32 +82,47 @@ public sealed class SqlServerSafeMigrationRenameOccupancyIntegrationTests : SqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA rename_target;",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE SCHEMA rename_target;",
             cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.rename_source (Id int NOT NULL); INSERT INTO dbo.rename_source VALUES (11);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("rename_source", "rename_destination", "dbo", "rename_target");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-rename-intermediate-free"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-rename-intermediate-free"),
+                cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
-        var targetRows = await ScalarIntAsync(connectionString,
+        var targetRows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM rename_target.rename_destination WHERE Id = 11;",
             cancellationToken: CancellationToken.None);
 
-        var sourceCount = await ScalarIntAsync(connectionString,
+        var sourceCount = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.tables WHERE schema_id = SCHEMA_ID(N'dbo') "
-            + "AND name IN (N'rename_source', N'rename_destination');", cancellationToken: CancellationToken.None);
+            + "AND name IN (N'rename_source', N'rename_destination');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Equal(SafeMigrationAction.Apply, Assert.Single(report.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.Apply,
+            Assert.Single(report.Assessments)
+                .Action);
+
         Assert.Equal(1, targetRows);
         Assert.Equal(0, sourceCount);
     }
@@ -98,33 +135,48 @@ public sealed class SqlServerSafeMigrationRenameOccupancyIntegrationTests : SqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA rename_target;",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE SCHEMA rename_target;",
             cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE rename_target.rename_destination (Id int NOT NULL); "
             + "INSERT INTO rename_target.rename_destination VALUES (11); "
             + "CREATE TABLE dbo.rename_destination (Id int NOT NULL); INSERT INTO dbo.rename_destination VALUES (29);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("rename_source", "rename_destination", "dbo", "rename_target");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-rename-intermediate-replay"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-rename-intermediate-replay"),
+                cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
-        var targetRows = await ScalarIntAsync(connectionString,
+        var targetRows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM rename_target.rename_destination WHERE Id = 11;",
             cancellationToken: CancellationToken.None);
 
-        var intermediateRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.rename_destination WHERE Id = 29;", cancellationToken: CancellationToken.None);
+        var intermediateRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.rename_destination WHERE Id = 29;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(report.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(report.Assessments)
+                .Action);
+
         Assert.Equal(1, targetRows);
         Assert.Equal(1, intermediateRows);
     }

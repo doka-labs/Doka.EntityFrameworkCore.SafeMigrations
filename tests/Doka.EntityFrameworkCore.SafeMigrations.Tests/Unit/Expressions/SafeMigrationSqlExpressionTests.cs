@@ -66,16 +66,19 @@ public sealed class SafeMigrationSqlExpressionTests
         Assert.Throws<ArgumentOutOfRangeException>(() => SafeMigrationSql.Unary(
             (SafeMigrationSqlUnaryOperator)99,
             SafeMigrationSql.Literal(1)));
+
         Assert.Throws<ArgumentOutOfRangeException>(() => SafeMigrationSql.Binary(
             SafeMigrationSql.Literal(1),
             (SafeMigrationSqlBinaryOperator)99,
             SafeMigrationSql.Literal(2)));
+
         Assert.Throws<ArgumentException>(() => SafeMigrationSql.In(SafeMigrationSql.Identifier("value"), []));
         Assert.Throws<ArgumentException>(() => SafeMigrationSql.Function("bad-name"));
         Assert.Throws<ArgumentOutOfRangeException>(() => SafeMigrationSql.Current((SafeMigrationSqlCurrentValue)99));
         Assert.Throws<ArgumentOutOfRangeException>(() => SafeMigrationSql.Current(
             SafeMigrationSqlCurrentValue.Timestamp,
             precision: 7));
+
         Assert.Throws<ArgumentOutOfRangeException>(() => SafeMigrationSql.Current(
             SafeMigrationSqlCurrentValue.Date,
             precision: 0));
@@ -246,7 +249,8 @@ public sealed class SafeMigrationSqlExpressionTests
         var identifier = SafeMigrationSql.Identifier("value");
         var changes = new (SafeMigrationSqlExpression Left, SafeMigrationSqlExpression Right)[]
         {
-            (identifier, SafeMigrationSql.Identifier("other")), (identifier, SafeMigrationSql.Literal("value")),
+            (identifier, SafeMigrationSql.Identifier("other")),
+            (identifier, SafeMigrationSql.Literal("value")),
             (SafeMigrationSql.Literal(1, "integer"), SafeMigrationSql.Literal(1, "bigint")),
             (SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Not, identifier),
                 SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Negate, identifier)),
@@ -281,13 +285,16 @@ public sealed class SafeMigrationSqlExpressionTests
         var source = SafeMigrationSql.Identifier("source");
         var expressions = new SafeMigrationSqlExpression[]
         {
-            source, SafeMigrationSql.Literal("source"),
+            source,
+            SafeMigrationSql.Literal("source"),
             SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Not, source),
             SafeMigrationSql.Binary(source, SafeMigrationSqlBinaryOperator.Equal, SafeMigrationSql.Literal(1)),
             SafeMigrationSql.IsNotNull(source),
             SafeMigrationSql.Between(source, SafeMigrationSql.Literal(1), SafeMigrationSql.Literal(2)),
-            SafeMigrationSql.In(source, [SafeMigrationSql.Literal(1)]), SafeMigrationSql.Function("lower", source),
-            SafeMigrationSql.Cast(source, "text"), SafeMigrationSql.Collate(source, "C"),
+            SafeMigrationSql.In(source, [SafeMigrationSql.Literal(1)]),
+            SafeMigrationSql.Function("lower", source),
+            SafeMigrationSql.Cast(source, "text"),
+            SafeMigrationSql.Collate(source, "C"),
             SafeMigrationSql.Current(SafeMigrationSqlCurrentValue.Timestamp),
         };
 

@@ -9,7 +9,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         // facts while invalidating every data-dependent proof that existed
         // before this operation. The epoch invalidates generic table proofs in
         // O(1); exact rows are cleared only at these unconfined boundaries.
-        _providerDataMutationVersion++;
+        DataMutationVersion++;
         _certifiedColumnDropOrigins?.Clear();
         InvalidateModelManagedDataProjection();
     }
@@ -22,7 +22,7 @@ internal sealed partial class SafeMigrationPreflightProjection
         _renamedTableSources.Remove(key);
         var prerequisites = new ProjectedPrerequisites(
             newlyCreated: true,
-            dataMutationVersion: _providerDataMutationVersion,
+            dataMutationVersion: DataMutationVersion,
             objectIdentityNormalizer: _objectIdentityNormalizer,
             sharesUniqueIndexIdentity: SharesUniqueConstraintAndIndexIdentity);
 
@@ -33,7 +33,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             definition = SafeMigrationExpectedDefinitionFactory.From(operation);
             var table = new ProjectedTable(
                 definition,
-                dataMutationVersion: _providerDataMutationVersion,
+                dataMutationVersion: DataMutationVersion,
                 objectIdentityNormalizer: _objectIdentityNormalizer,
                 sharesUniqueIndexIdentity: SharesUniqueConstraintAndIndexIdentity)
             {
@@ -186,6 +186,7 @@ internal sealed partial class SafeMigrationPreflightProjection
                 operation.Schema,
                 operation.Name,
                 operation.NewName);
+
             table.RenameColumn(operation.Name, operation.NewName);
 
             foreach (var projection in _tables.Values)
@@ -245,10 +246,15 @@ internal sealed partial class SafeMigrationPreflightProjection
     }
 
     /// <summary>Removes only the precisely bound CHECK after ordinary EF DDL without erasing source columns.</summary>
-    private void ObserveProviderPostcondition(DropCheckConstraintOperation operation)
+    private void ObserveProviderPostcondition(
+        DropCheckConstraintOperation operation
+    )
     {
-        if (string.IsNullOrWhiteSpace(operation.Table) || string.IsNullOrWhiteSpace(operation.Name)
-            || operation.GetAnnotations().Any())
+        if (string.IsNullOrWhiteSpace(operation.Table)
+            || string.IsNullOrWhiteSpace(operation.Name)
+            || operation
+                .GetAnnotations()
+                .Any())
         {
             // WHY: Unknown owner identity or opaque provider annotations can
             // broaden a typed operation's effects. Do not infer a local proof
@@ -358,12 +364,14 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         prerequisites = new ProjectedPrerequisites(
             newlyCreated: false,
+
             // WHY: The table already existed when this prerequisite was first
             // observed. A preceding data operation may therefore have changed
             // its rows, even when the structural provider operation is newer.
             dataMutationVersion: 0,
             objectIdentityNormalizer: _objectIdentityNormalizer,
             sharesUniqueIndexIdentity: SharesUniqueConstraintAndIndexIdentity);
+
         _prerequisites.Add(key, prerequisites);
 
         return prerequisites;
@@ -405,6 +413,7 @@ internal sealed partial class SafeMigrationPreflightProjection
     {
         var key = new TableKey(table, schema);
         var candidateKeyInvalidated = false;
+
         // WHY: A provider can keep table owners case-sensitive while folding
         // column members. Retire every spelling of the changed member without
         // transferring that invalidation to a distinct physical owner.
@@ -413,8 +422,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         if (_prerequisites.TryGetValue(key, out var prerequisites))
         {
             if (prerequisites.Indexes.RemoveWhere(index => index.Keys.Any(indexKey =>
-                    indexKey.Column is not null
-                    && columnComparer.Equals(indexKey.Column, column))))
+                indexKey.Column is not null
+                && columnComparer.Equals(indexKey.Column, column))))
             {
                 _projectedUnknownPhysicalKeys.Add(key);
             }
@@ -423,6 +432,7 @@ internal sealed partial class SafeMigrationPreflightProjection
             {
                 candidateKeyInvalidated = prerequisites.UniqueConstraints.RemoveWhere(constraint =>
                     constraint.Columns.Any(candidate => columnComparer.Equals(candidate, column)));
+
                 if (candidateKeyInvalidated)
                 {
                     _projectedUnknownPhysicalKeys.Add(key);
@@ -466,7 +476,9 @@ internal sealed partial class SafeMigrationPreflightProjection
         ColumnOperation operation
     )
     {
-        if (operation.GetAnnotations().Any()
+        if (operation
+                .GetAnnotations()
+                .Any()
             && _prerequisites.TryGetValue(new TableKey(table, schema), out var prerequisites))
         {
             // WHY: Generic capture can retain typed columns, but cannot prove

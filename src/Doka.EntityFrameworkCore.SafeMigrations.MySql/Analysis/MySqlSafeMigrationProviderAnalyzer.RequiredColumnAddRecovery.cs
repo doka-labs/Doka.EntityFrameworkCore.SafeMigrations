@@ -22,8 +22,12 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     )
     {
         var canonicalOwners = await ResolveRequiredColumnAddRecoveryOwnersAsync(
-            context.Database.GetDbConnection(), operations, findings, maximumPayloadBytes,
-            commandTimeout, cancellationToken);
+            context.Database.GetDbConnection(),
+            operations,
+            findings,
+            maximumPayloadBytes,
+            commandTimeout,
+            cancellationToken);
 
         if (canonicalOwners is null)
         {
@@ -31,28 +35,43 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         }
 
         var candidates = FindRequiredColumnAddRecoveryCandidates(
-            operations, findings, _currentDatabase, canonicalOwners);
+            operations,
+            findings,
+            _currentDatabase,
+            canonicalOwners);
 
         if (candidates.Count == 0)
         {
             return findings;
         }
 
-        var candidateOperations = candidates.Select(static candidate => candidate.Operation).ToArray();
+        var candidateOperations = candidates
+            .Select(static candidate => candidate.Operation)
+            .ToArray();
+
         var expectedUniqueIndexes = MySqlSafeMigrationPlanCapture.CreateExpectedUniqueIndexes(
-            candidateOperations, _currentDatabase, TableIdentifierComparer);
+            candidateOperations,
+            _currentDatabase,
+            TableIdentifierComparer);
 
         var expectedTableConstraints = SafeMigrationExpectedTableConstraints.FromOperations(
-            candidateOperations, schema => MySqlTableIdentity.NormalizeDatabase(schema, _currentDatabase),
-            TableIdentifierComparer, '`', false, StringComparer.OrdinalIgnoreCase);
+            candidateOperations,
+            schema => MySqlTableIdentity.NormalizeDatabase(schema, _currentDatabase),
+            TableIdentifierComparer,
+            '`',
+            false,
+            StringComparer.OrdinalIgnoreCase);
 
-        var backfillConstraints = MySqlBackfillConstraintCatalog.Create(candidateOperations, _currentDatabase,
+        var backfillConstraints = MySqlBackfillConstraintCatalog.Create(
+            candidateOperations,
+            _currentDatabase,
             TableIdentifierComparer);
+
         HashSet<int>? recovered = null;
         var offset = 0;
 
         foreach (var operationWindow in candidateOperations.Chunk(
-                     SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture))
+            SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -60,10 +79,15 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             // cross-operation catalogs use the verified physical database.
             // Capture the ordinary provider plan rather than a weaker second
             // definition of column/check ownership in the inventory path.
-            var plans = CapturePlans(operationWindow, context.Model,
-                expectedUniqueIndexes, expectedTableConstraints, backfillConstraints);
+            var plans = CapturePlans(
+                operationWindow,
+                context.Model,
+                expectedUniqueIndexes,
+                expectedTableConstraints,
+                backfillConstraints);
 
             List<(MySqlSafeMigrationRuntimePlan Plan, int FindingIndex)>? probes = null;
+
             // WHY: Keep recovery probes and findings tied to their original ordinal slots.
             // ReSharper disable once ForCanBeConvertedToForeach
             // ReSharper disable once LoopCanBeConvertedToQuery
@@ -86,11 +110,16 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             }
 
             await SafeMigrationCatalogProbeBatch.ReadAsync(
-                context.Database.GetDbConnection(), probes.Count, maximumPayloadBytes, commandTimeout,
+                context.Database.GetDbConnection(),
+                probes.Count,
+                maximumPayloadBytes,
+                commandTimeout,
                 (command, ordinal) =>
                 {
                     var parameters = new MySqlCatalogQueryParameterizer(command, _typeMappingSource);
-                    var resume = probes[ordinal].Plan.RenderRequiredColumnAddResumeExpression(parameters.Add);
+                    var resume = probes[ordinal]
+                        .Plan
+                        .RenderRequiredColumnAddResumeExpression(parameters.Add);
 
                     command.CommandText = $"SELECT COALESCE(({resume}), FALSE);";
 
@@ -126,6 +155,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         }
 
         var result = new List<SafeMigrationUnexpectedObject>(findings.Count - recovered.Count);
+
         // WHY: Keep recovery probes and findings tied to their original ordinal slots.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -159,6 +189,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
         Dictionary<(string? Schema, string Table, string Name), int>? checks = null;
         HashSet<(string? Schema, string Table)>? owners = null;
+
         // WHY: Keep recovery probes and findings tied to their original ordinal slots.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -185,7 +216,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             (owners ??= []).Add((schema, finding.Table));
         }
 
-        if (checks is null || owners is null)
+        if (checks is null
+            || owners is null)
         {
             return [];
         }
@@ -193,6 +225,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         HashSet<(string? Schema, string Table, string Column)>? targets = null;
         Dictionary<(string? Schema, string Table, string Column),
             (SafeMigrationOperation Operation, int FindingIndex)>? candidates = null;
+
         foreach (var operation in operations)
         {
             if (operation is not SafeMigrationOperation { Intent: EnsureColumnIntent ensure } safe
@@ -205,7 +238,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             var table = ensure.Table;
             if (canonicalOwners is not null)
             {
-                if (!canonicalOwners.TryGetValue(table, out var resolved) || resolved is null)
+                if (!canonicalOwners.TryGetValue(table, out var resolved)
+                    || resolved is null)
                 {
                     continue;
                 }
@@ -219,7 +253,10 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             }
 
             var columnKey = (schema, table, ensure.Definition.Name);
-            if (!(targets ??= new(PhysicalForeignKeyMemberComparer.Instance)).Add(columnKey))
+            if (!(targets ??=
+                    new HashSet<(string? Schema, string Table, string Column)>(
+                        PhysicalForeignKeyMemberComparer.Instance))
+                .Add(columnKey))
             {
                 // WHY: Even an unsupported or differently cased later intent
                 // makes this physical target ambiguous. Never choose whichever
@@ -229,20 +266,28 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 continue;
             }
 
-            if (safe.GetAnnotations().Any()
+            if (safe
+                    .GetAnnotations()
+                    .Any()
                 || !MySqlSafeMigrationCatalogSqlBuilder.CanUseRequiredColumnAddProtocol(ensure.Definition))
             {
                 continue;
             }
 
             var guardName = MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(ensure);
-            if (checks.TryGetValue((schema, table, guardName), out var findingIndex) && findingIndex >= 0)
+            if (checks.TryGetValue((schema, table, guardName), out var findingIndex)
+                && findingIndex >= 0)
             {
-                (candidates ??= new(PhysicalForeignKeyMemberComparer.Instance))
+                (candidates ??=
+                        new Dictionary<(string? Schema, string Table, string Column), (SafeMigrationOperation Operation,
+                            int
+                            FindingIndex)>(PhysicalForeignKeyMemberComparer.Instance))
                     .Add(columnKey, (safe, findingIndex));
             }
         }
 
-        return candidates is null ? [] : candidates.Values.ToArray();
+        return candidates is null
+            ? []
+            : candidates.Values.ToArray();
     }
 }

@@ -8,7 +8,9 @@ public sealed class MySqlNullabilityDataProofTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void RequiredRepair_MaterializesOneNullScan(bool varchar)
+    public void RequiredRepair_MaterializesOneNullScan(
+        bool varchar
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -17,21 +19,32 @@ public sealed class MySqlNullabilityDataProofTests
                 "proof_rows",
                 new ExpectedColumnDefinition(
                     "Value",
-                    varchar ? typeof(string) : typeof(int),
+                    varchar
+                        ? typeof(string)
+                        : typeof(int),
                     isNullable: false,
-                    storeType: varchar ? "varchar(20)" : "int",
-                    maxLength: varchar ? 20 : null)),
+                    storeType: varchar
+                        ? "varchar(20)"
+                        : "int",
+                    maxLength: varchar
+                        ? 20
+                        : null)),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var command = Assert.Single(context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+        var command = Assert.Single(context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model));
+
         var payloads = DecodePayloads(command.CommandText);
 
         // Assert
         const string nullScan = "EXISTS (SELECT 1 FROM `proof_rows` WHERE `Value` IS NULL LIMIT 1)";
         var proof = Assert.Single(payloads, sql => sql.Contains(nullScan, StringComparison.Ordinal));
-        var state = Assert.Single(payloads, sql => sql.StartsWith("SELECT (", StringComparison.Ordinal)
-            && sql.EndsWith("INTO @doka_sm_state", StringComparison.Ordinal));
+        var state = Assert.Single(
+            payloads,
+            sql => sql.StartsWith("SELECT (", StringComparison.Ordinal)
+                && sql.EndsWith("INTO @doka_sm_state", StringComparison.Ordinal));
 
         Assert.EndsWith("INTO @doka_sm_nullability_blocked", proof, StringComparison.Ordinal);
         Assert.Contains("@doka_sm_nullability_blocked", state, StringComparison.Ordinal);
@@ -47,7 +60,8 @@ public sealed class MySqlNullabilityDataProofTests
             StringComparison.Ordinal);
 
         Assert.DoesNotContain(nullScan, command.CommandText, StringComparison.Ordinal);
-        Assert.True(command.CommandText.IndexOf("@doka_sm_prerequisite_ok", StringComparison.Ordinal)
+        Assert.True(
+            command.CommandText.IndexOf("@doka_sm_prerequisite_ok", StringComparison.Ordinal)
             < command.CommandText.IndexOf("SET @doka_sm_column_repair_eligible", StringComparison.Ordinal));
     }
 
@@ -58,26 +72,43 @@ public sealed class MySqlNullabilityDataProofTests
     [InlineData(true, SafeMigrationPolicy.RepairIfSafe)]
     [InlineData(false, SafeMigrationPolicy.ThrowIfDifferent)]
     [InlineData(true, SafeMigrationPolicy.ThrowIfDifferent)]
-    public void InapplicableNullabilityRepair_EmitsNoNullScan(bool nullable, SafeMigrationPolicy policy)
+    public void InapplicableNullabilityRepair_EmitsNoNullScan(
+        bool nullable,
+        SafeMigrationPolicy policy
+    )
     {
         // Arrange
         using var context = CreateContext();
+
         // WHY: A required no-default target now needs a NULL proof for exact
         // staged recovery even without RepairIfSafe. An explicit default
         // keeps this fixture on its original non-protocol repair-only path.
-        var definition = new ExpectedColumnDefinition("Value", typeof(int), isNullable: nullable, storeType: "int",
-            defaultValue: nullable ? SafeMigrationDefaultValue.None : SafeMigrationDefaultValue.Literal(1));
+        var definition = new ExpectedColumnDefinition(
+            "Value",
+            typeof(int),
+            isNullable: nullable,
+            storeType: "int",
+            defaultValue: nullable
+                ? SafeMigrationDefaultValue.None
+                : SafeMigrationDefaultValue.Literal(1));
 
         var operation = new SafeMigrationOperation(
-            new EnsureColumnIntent("proof_rows", definition), policy);
+            new EnsureColumnIntent("proof_rows", definition),
+            policy);
 
         // Act
-        var command = Assert.Single(context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+        var command = Assert.Single(context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model));
 
         // Assert
         Assert.False(MySqlSafeMigrationCatalogSqlBuilder.CanUseRequiredColumnAddProtocol(definition));
-        Assert.DoesNotContain(DecodePayloads(command.CommandText), sql => sql.Contains(
-            "INTO @doka_sm_nullability_blocked", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            DecodePayloads(command.CommandText),
+            sql => sql.Contains(
+                "INTO @doka_sm_nullability_blocked",
+                StringComparison.Ordinal));
+
         Assert.DoesNotContain("@doka_sm_nullability_blocked = FALSE;", command.CommandText, StringComparison.Ordinal);
     }
 
@@ -87,7 +118,9 @@ public sealed class MySqlNullabilityDataProofTests
     [InlineData(SafeMigrationPolicy.ExistenceOnly)]
     [InlineData(SafeMigrationPolicy.ThrowIfDifferent)]
     [InlineData(SafeMigrationPolicy.RepairIfSafe)]
-    public void AtomicRequiredAdd_MaterializesStagedNullProofIndependentlyOfRepairPolicy(SafeMigrationPolicy policy)
+    public void AtomicRequiredAdd_MaterializesStagedNullProofIndependentlyOfRepairPolicy(
+        SafeMigrationPolicy policy
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -95,7 +128,10 @@ public sealed class MySqlNullabilityDataProofTests
         var operation = new SafeMigrationOperation(new EnsureColumnIntent("proof_rows", definition), policy);
 
         // Act
-        var command = Assert.Single(context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+        var command = Assert.Single(context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model));
+
         var payloads = DecodePayloads(command.CommandText);
 
         // Assert
@@ -109,7 +145,10 @@ public sealed class MySqlNullabilityDataProofTests
         Assert.Contains("WHEN 'missing' THEN 'apply'", command.CommandText, StringComparison.Ordinal);
         Assert.Contains("@doka_sm_nullability_blocked = FALSE;", command.CommandText, StringComparison.Ordinal);
         Assert.DoesNotContain(nullScan, command.CommandText, StringComparison.Ordinal);
-        Assert.Equal(policy == SafeMigrationPolicy.RepairIfSafe ? 3 : 2,
+        Assert.Equal(
+            policy == SafeMigrationPolicy.RepairIfSafe
+                ? 3
+                : 2,
             payloads.Count(static sql => sql.StartsWith("ALTER TABLE ", StringComparison.Ordinal)));
     }
 
@@ -118,38 +157,63 @@ public sealed class MySqlNullabilityDataProofTests
     [Theory]
     [InlineData("__DOKA_SM_NULLABILITY_DATA_PROBE__")]
     [InlineData("__DOKA_SM_DATA_PROBE____DOKA_SM_NULLABILITY_DATA_PROBE____DOKA_SM_TRANSITION_INVARIANT__")]
-    [InlineData("a__DOKA_SM_TRANSITION_INVARIANT__b__DOKA_SM_NULLABILITY_DATA_PROBE__"
+    [InlineData(
+        "a__DOKA_SM_TRANSITION_INVARIANT__b__DOKA_SM_NULLABILITY_DATA_PROBE__"
         + "c__DOKA_SM_DATA_PROBE__d__DOKA_SM_NULLABILITY_DATA_PROBE__")]
     [InlineData(MySqlSafeMigrationRuntimePlan.ColumnRepairInvariantPlaceholder)]
     [InlineData("TRUE")]
-    public void ProofRenderer_PreservesInlineAnalysisAndCachedRuntime(string template)
+    public void ProofRenderer_PreservesInlineAnalysisAndCachedRuntime(
+        string template
+    )
     {
         var plan = new MySqlSafeMigrationRuntimePlan(template, "TRUE", SafeMigrationRepairCapability.Safe, template)
         {
             DataProbe = new MySqlSafeMigrationDataProbe(
-                "rows", "Value", 20, "`rows`", "`Value`", "eligible", "narrowing"),
+                "rows",
+                "Value",
+                20,
+                "`rows`",
+                "`Value`",
+                "eligible",
+                "narrowing"),
             NullabilityDataProbe = new MySqlSafeMigrationNullabilityDataProbe("nullable", "eligible", "null_probe"),
         };
 
         var analysis = plan.RenderStateExpression(static value => value.Value?.ToString() ?? "NULL");
         var runtime = plan.RenderPreparedStateExpression([], "length_cache", "eligible_cache");
 
-        var expectedAnalysis = template.Replace(MySqlSafeMigrationRuntimePlan.DataProbePlaceholder,
-                plan.DataProbe.BuildBlockedExpression(), StringComparison.Ordinal)
+        var expectedAnalysis = template
+            .Replace(
+                MySqlSafeMigrationRuntimePlan.DataProbePlaceholder,
+                plan.DataProbe.BuildBlockedExpression(),
+                StringComparison.Ordinal)
             .Replace(MySqlSafeMigrationRuntimePlan.TransitionInvariantPlaceholder, "eligible", StringComparison.Ordinal)
-            .Replace(MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder,
-                "CASE WHEN (nullable) AND (eligible) THEN (null_probe) ELSE FALSE END", StringComparison.Ordinal)
-            .Replace(MySqlSafeMigrationRuntimePlan.ColumnRepairInvariantPlaceholder,
-                "eligible", StringComparison.Ordinal);
+            .Replace(
+                MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder,
+                "CASE WHEN (nullable) AND (eligible) THEN (null_probe) ELSE FALSE END",
+                StringComparison.Ordinal)
+            .Replace(
+                MySqlSafeMigrationRuntimePlan.ColumnRepairInvariantPlaceholder,
+                "eligible",
+                StringComparison.Ordinal);
 
-        var expectedRuntime = template.Replace(MySqlSafeMigrationRuntimePlan.DataProbePlaceholder,
-                "length_cache", StringComparison.Ordinal)
-            .Replace(MySqlSafeMigrationRuntimePlan.TransitionInvariantPlaceholder,
-                "eligible_cache", StringComparison.Ordinal)
-            .Replace(MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder,
-                "@doka_sm_nullability_blocked", StringComparison.Ordinal)
-            .Replace(MySqlSafeMigrationRuntimePlan.ColumnRepairInvariantPlaceholder,
-                "@doka_sm_column_repair_eligible", StringComparison.Ordinal);
+        var expectedRuntime = template
+            .Replace(
+                MySqlSafeMigrationRuntimePlan.DataProbePlaceholder,
+                "length_cache",
+                StringComparison.Ordinal)
+            .Replace(
+                MySqlSafeMigrationRuntimePlan.TransitionInvariantPlaceholder,
+                "eligible_cache",
+                StringComparison.Ordinal)
+            .Replace(
+                MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder,
+                "@doka_sm_nullability_blocked",
+                StringComparison.Ordinal)
+            .Replace(
+                MySqlSafeMigrationRuntimePlan.ColumnRepairInvariantPlaceholder,
+                "@doka_sm_column_repair_eligible",
+                StringComparison.Ordinal);
 
         Assert.Equal(expectedAnalysis, analysis);
         Assert.Equal(expectedRuntime, runtime);
@@ -160,8 +224,11 @@ public sealed class MySqlNullabilityDataProofTests
     [Fact]
     public void NullabilityOnlyPlan_RendersWithoutLengthProbe()
     {
-        var plan = new MySqlSafeMigrationRuntimePlan(MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder,
-            "TRUE", SafeMigrationRepairCapability.Safe, MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder)
+        var plan = new MySqlSafeMigrationRuntimePlan(
+            MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder,
+            "TRUE",
+            SafeMigrationRepairCapability.Safe,
+            MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder)
         {
             NullabilityDataProbe = new MySqlSafeMigrationNullabilityDataProbe("nullable", "eligible", "null_probe"),
         };
@@ -182,18 +249,32 @@ public sealed class MySqlNullabilityDataProofTests
     [InlineData(MySqlSafeMigrationRuntimePlan.TransitionInvariantPlaceholder)]
     [InlineData(MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder)]
     [InlineData(MySqlSafeMigrationRuntimePlan.ColumnRepairInvariantPlaceholder)]
-    public void ProofTokensInNamesAndLiterals_RemainUnchanged(string token)
+    public void ProofTokensInNamesAndLiterals_RemainUnchanged(
+        string token
+    )
     {
         using var context = CreateContext();
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent(token,
-            new ExpectedColumnDefinition(token, typeof(string), isNullable: false, storeType: "varchar(80)",
-                maxLength: 80, comment: "quoted '" + token, defaultValue: SafeMigrationDefaultValue.Literal(token))),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                token,
+                new ExpectedColumnDefinition(
+                    token,
+                    typeof(string),
+                    isNullable: false,
+                    storeType: "varchar(80)",
+                    maxLength: 80,
+                    comment: "quoted '" + token,
+                    defaultValue: SafeMigrationDefaultValue.Literal(token))),
             SafeMigrationPolicy.RepairIfSafe);
 
-        var command = Assert.Single(context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
-        var state = Assert.Single(DecodePayloads(command.CommandText),
+        var command = Assert.Single(context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model));
+
+        var state = Assert.Single(
+            DecodePayloads(command.CommandText),
             sql => sql.StartsWith("SELECT (", StringComparison.Ordinal)
-            && sql.EndsWith("INTO @doka_sm_state", StringComparison.Ordinal));
+                && sql.EndsWith("INTO @doka_sm_state", StringComparison.Ordinal));
 
         Assert.Contains("c.COLUMN_NAME = '" + token + "'", state, StringComparison.Ordinal);
         Assert.Contains("c.TABLE_NAME = '" + token + "'", state, StringComparison.Ordinal);
@@ -224,11 +305,15 @@ public sealed class MySqlNullabilityDataProofTests
     [InlineData("'")]
     [InlineData("\"")]
     [InlineData("`")]
-    public void ProofRenderer_RejectsUnterminatedQuotedToken(string quote)
+    public void ProofRenderer_RejectsUnterminatedQuotedToken(
+        string quote
+    )
     {
         var plan = new MySqlSafeMigrationRuntimePlan(
             quote + MySqlSafeMigrationRuntimePlan.NullabilityDataProbePlaceholder,
-            "TRUE", SafeMigrationRepairCapability.Safe, "TRUE")
+            "TRUE",
+            SafeMigrationRepairCapability.Safe,
+            "TRUE")
         {
             NullabilityDataProbe = new MySqlSafeMigrationNullabilityDataProbe("nullable", "eligible", "proof"),
         };
@@ -243,7 +328,8 @@ public sealed class MySqlNullabilityDataProofTests
     private static DbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<DbContext>()
-            .UseMySql("Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
+            .UseMySql(
+                "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
                 MySqlServerVersion.MySql(new Version(8, 4, 11)))
             .UseMySqlSafeMigrations()
             .Options;
@@ -252,7 +338,9 @@ public sealed class MySqlNullabilityDataProofTests
     }
 
     /// <summary>Decodes generated prepared statements to inspect real row SQL rather than encoded text.</summary>
-    private static List<string> DecodePayloads(string sql)
+    private static List<string> DecodePayloads(
+        string sql
+    )
     {
         const string prefix = "CONVERT(0x";
         const string suffix = " USING utf8mb4)";

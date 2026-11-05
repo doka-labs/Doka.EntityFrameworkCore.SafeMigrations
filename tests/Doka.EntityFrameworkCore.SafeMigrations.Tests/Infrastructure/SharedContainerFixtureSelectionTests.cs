@@ -27,7 +27,8 @@ public sealed class SharedContainerFixtureSelectionTests
 
         // Act
         var requiresFixture = SharedContainerFixtureSelection.RequiresFixture<SelectionFixture>(
-            selectedClass, skipReason);
+            selectedClass,
+            skipReason);
 
         // Assert
         Assert.Equal(expected, requiresFixture);
@@ -75,7 +76,10 @@ public sealed class SharedContainerFixtureSelectionTests
 
         // Assert
         Assert.NotSame(collectionOwned, classMappings);
-        Assert.Same(unrelated, Assert.Single(classMappings).Value);
+        Assert.Same(unrelated,
+            Assert.Single(classMappings)
+                .Value);
+
         Assert.False(classMappings.ContainsKey(typeof(SelectionFixture)));
     }
 
@@ -85,7 +89,10 @@ public sealed class SharedContainerFixtureSelectionTests
     {
         public FixtureConsumer(
             SelectionFixture fixture
-        ) => ArgumentNullException.ThrowIfNull(fixture);
+        )
+        {
+            ArgumentNullException.ThrowIfNull(fixture);
+        }
     }
 
     private sealed class UnitOnlyConsumer { }
@@ -94,20 +101,29 @@ public sealed class SharedContainerFixtureSelectionTests
     {
         private PrivateConstructorConsumer(
             SelectionFixture fixture
-        ) => ArgumentNullException.ThrowIfNull(fixture);
+        )
+        {
+            ArgumentNullException.ThrowIfNull(fixture);
+        }
     }
 
     private abstract class AbstractConsumer
     {
         protected AbstractConsumer(
             SelectionFixture fixture
-        ) => ArgumentNullException.ThrowIfNull(fixture);
+        )
+        {
+            ArgumentNullException.ThrowIfNull(fixture);
+        }
     }
 
     private sealed class DifferentFixtureConsumer
     {
         public DifferentFixtureConsumer(
             object fixture
-        ) => ArgumentNullException.ThrowIfNull(fixture);
+        )
+        {
+            ArgumentNullException.ThrowIfNull(fixture);
+        }
     }
 }

@@ -64,30 +64,48 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             else if (operation.Intent is EnsureCheckConstraintIntent check
                 && analyses[ordinal].ObservedState is SafeMigrationObservedState.Matching
                     or SafeMigrationObservedState.Different
-                && localDrops.Contains(new TransitionDependency("check", check.Definition.Schema ?? "dbo",
-                    check.Definition.Table, check.Definition.Name)))
+                && localDrops.Contains(
+                    new TransitionDependency(
+                        "check",
+                        check.Definition.Schema ?? "dbo",
+                        check.Definition.Table,
+                        check.Definition.Name)))
             {
                 candidates.Add(operation);
             }
         }
 
-        var uniqueCandidates = candidates.Distinct().ToArray();
+        var uniqueCandidates = candidates
+            .Distinct()
+            .ToArray();
+
         var proofs = new SafeMigrationProviderAnalysis[uniqueCandidates.Length];
 
         // WHY: Retain capture offsets while enforcing the bounded CHECK proof window.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
-        for (var offset = 0; offset < uniqueCandidates.Length;
+        for (var offset = 0;
+            offset < uniqueCandidates.Length;
             offset += SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture)
         {
-            var count = Math.Min(SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture,
+            var count = Math.Min(
+                SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture,
                 uniqueCandidates.Length - offset);
 
-            var plans = uniqueCandidates.Skip(offset).Take(count).Select(operation =>
-                _catalogSqlBuilder.BuildCheckPredicateCapturePlan((EnsureCheckConstraintIntent)operation.Intent))
+            var plans = uniqueCandidates
+                .Skip(offset)
+                .Take(count)
+                .Select(operation =>
+                    _catalogSqlBuilder.BuildCheckPredicateCapturePlan((EnsureCheckConstraintIntent)operation.Intent))
                 .ToArray();
 
-            await ReadCatalogCaptureAsync(connection, transaction, commandTimeout, plans, offset, proofs,
+            await ReadCatalogCaptureAsync(
+                connection,
+                transaction,
+                commandTimeout,
+                plans,
+                offset,
+                proofs,
                 cancellationToken);
         }
 
@@ -122,7 +140,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     {
         if (operation.Intent is EnsureCheckConstraintIntent candidate
             && analysis.ObservedState == SafeMigrationObservedState.Missing
-            && _projectedKeyTables.TryGetValue((candidate.Definition.Schema ?? "dbo", candidate.Definition.Table),
+            && _projectedKeyTables.TryGetValue(
+                (candidate.Definition.Schema ?? "dbo", candidate.Definition.Table),
                 out var snapshot)
             && SqlServerSafeMigrationCatalogSqlBuilder.GetStructuredCheckExpression(candidate.Definition)
                 is { } expression
@@ -132,16 +151,22 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             SafeMigrationSqlExpressionInspector.CollectIdentifiers(expression, operands);
             foreach (var name in operands)
             {
-                var supported = columns.TryGetProjectedColumn(candidate.Definition.Table,
-                    candidate.Definition.Schema, name, out var definition)
+                var supported = columns.TryGetProjectedColumn(
+                    candidate.Definition.Table,
+                    candidate.Definition.Schema,
+                    name,
+                    out var definition)
                     ? _catalogSqlBuilder.IsSupportedIntegerCheckColumn(definition)
                     : snapshot.Columns.TryGetValue(name, out var live) && live.CheckEligible;
 
                 if (snapshot.Columns.TryGetValue(name, out var captured))
                 {
                     var recreated = _projectedColumnLayouts.TryGetValue(
-                        (candidate.Definition.Schema ?? "dbo", candidate.Definition.Table), out var layout)
-                        && layout is not null && layout.Bindings.TryGetValue(name, out var identity) && identity < 0;
+                            (candidate.Definition.Schema ?? "dbo", candidate.Definition.Table),
+                            out var layout)
+                        && layout is not null
+                        && layout.Bindings.TryGetValue(name, out var identity)
+                        && identity < 0;
 
                     // WHY: Matching authored facets do not erase hidden live
                     // operand flags. Only an accepted new physical allocation
@@ -155,14 +180,18 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     // validation, not the provider's scalar/physical contract.
                     // Existing unsupported operands must not be hidden by a
                     // newly added column that initially blocked SQL binding.
-                    return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
-                        SafeMigrationRepairCapability.None, false, "check_column_type_unproven");
+                    return new SafeMigrationProviderAnalysis(
+                        SafeMigrationObservedState.Unsupported,
+                        SafeMigrationRepairCapability.None,
+                        false,
+                        "check_column_type_unproven");
                 }
             }
         }
 
         if (operation.Intent is not EnsureCheckConstraintIntent check
-            || analysis.IsInvariantUnsupported || analysis.ObservedState == SafeMigrationObservedState.Matching
+            || analysis.IsInvariantUnsupported
+            || analysis.ObservedState == SafeMigrationObservedState.Matching
             || !_checkPredicateProofs.TryGetValue(operation, out var proof))
         {
             return analysis;
@@ -177,21 +206,30 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             // but it cannot prove replacement row truth after DML or changed
             // operand identity. Missing is not an empty-table certificate.
             return analysis.ObservedState == SafeMigrationObservedState.Missing
-                ? new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
-                    SafeMigrationRepairCapability.None, false, "projected_data_state_unknown")
-                    { IsOpaqueProjectionUnknown = true, RequiresLiveDataProof = true }
+                ? new SafeMigrationProviderAnalysis(
+                    SafeMigrationObservedState.PrerequisiteMissing,
+                    SafeMigrationRepairCapability.None,
+                    false,
+                    "projected_data_state_unknown")
+                {
+                    IsOpaqueProjectionUnknown = true,
+                    RequiresLiveDataProof = true,
+                }
                 : analysis;
         }
 
-        if (proof.RequiresLocalDrop && !_acceptedTransitionDrops.Contains(ResolveTransitionDropIdentity(
-            new TransitionDependency("check", key.Schema, key.Table, check.Definition.Name))))
+        if (proof.RequiresLocalDrop
+            && !_acceptedTransitionDrops.Contains(
+                ResolveTransitionDropIdentity(
+                    new TransitionDependency("check", key.Schema, key.Table, check.Definition.Name))))
         {
             return analysis;
         }
 
         return analysis.Code == "projected_structure_state_unknown"
-            || proof.RequiresLocalDrop && analysis.ObservedState == SafeMigrationObservedState.Missing
-                ? proof.Analysis : analysis;
+            || (proof.RequiresLocalDrop && analysis.ObservedState == SafeMigrationObservedState.Missing)
+                ? proof.Analysis
+                : analysis;
     }
 
     private void ObserveProjectedCheckPredicate(
@@ -223,8 +261,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 break;
             case RenameTableIntent table:
                 _checkPredicateUnknownTables.Add((table.Schema ?? "dbo", table.Name));
-                _checkPredicateUnknownTables.Add((table.NewSchema ?? table.Schema ?? "dbo",
-                    table.NewName ?? table.Name));
+                _checkPredicateUnknownTables.Add(
+                    (table.NewSchema ?? table.Schema ?? "dbo",
+                        table.NewName ?? table.Name));
+
                 break;
         }
     }

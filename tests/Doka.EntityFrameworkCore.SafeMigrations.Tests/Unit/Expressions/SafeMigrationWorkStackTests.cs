@@ -24,7 +24,10 @@ public sealed class SafeMigrationWorkStackTests
     {
         var pool = new RecordingPool<object>();
         var stack = new SafeMigrationWorkStack<object>(pool);
-        var values = Enumerable.Range(0, 65).Select(static _ => new object()).ToArray();
+        var values = Enumerable
+            .Range(0, 65)
+            .Select(static _ => new object())
+            .ToArray();
 
         foreach (var value in values)
         {
@@ -54,9 +57,11 @@ public sealed class SafeMigrationWorkStackTests
         var stack = new SafeMigrationWorkStack<ReferenceFrame>(pool);
         var value = new object();
 
-        stack.Push(new(value));
+        stack.Push(new ReferenceFrame(value));
         var popped = stack.TryPop(out var actual);
-        var retained = pool.Rented[0][0].Value;
+        var retained = pool
+            .Rented[0][0].Value;
+
         stack.Dispose();
 
         Assert.True(popped);
@@ -128,7 +133,9 @@ public sealed class SafeMigrationWorkStackTests
     }
 
     /// <summary>Exercises real exception unwinding without capturing a ref struct in a delegate.</summary>
-    private static void ThrowWithPendingWork(RecordingPool<object> pool)
+    private static void ThrowWithPendingWork(
+        RecordingPool<object> pool
+    )
     {
         var stack = new SafeMigrationWorkStack<object>(pool);
 
@@ -145,7 +152,9 @@ public sealed class SafeMigrationWorkStackTests
     }
 
     /// <summary>Leaves a full owned buffer pending when the next pool rent fails.</summary>
-    private static void ExhaustPool(RecordingPool<object> pool)
+    private static void ExhaustPool(
+        RecordingPool<object> pool
+    )
     {
         var stack = new SafeMigrationWorkStack<object>(pool);
 
@@ -181,7 +190,9 @@ public sealed class SafeMigrationWorkStackTests
         public int? FailRentNumber { get; init; }
 
         /// <inheritdoc />
-        public override T[] Rent(int minimumLength)
+        public override T[] Rent(
+            int minimumLength
+        )
         {
             if (Rented.Count + 1 == FailRentNumber)
             {
@@ -196,7 +207,10 @@ public sealed class SafeMigrationWorkStackTests
         }
 
         /// <inheritdoc />
-        public override void Return(T[] array, bool clearArray = false)
+        public override void Return(
+            T[] array,
+            bool clearArray = false
+        )
         {
             Returned.Add(array);
             ClearRequests.Add(clearArray);

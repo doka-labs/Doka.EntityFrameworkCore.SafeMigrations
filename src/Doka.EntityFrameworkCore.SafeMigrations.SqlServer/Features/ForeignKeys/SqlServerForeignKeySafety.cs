@@ -31,7 +31,8 @@ internal static class SqlServerForeignKeySafety
             var dependentColumns = string.Join(", ", definition.Columns.Select(literal));
             var principalColumns = string.Join(", ", definition.PrincipalColumns.Select(literal));
 
-            predicates.Add("NOT EXISTS (SELECT 1 FROM sys.columns c WHERE c.system_type_id = 189 "
+            predicates.Add(
+                "NOT EXISTS (SELECT 1 FROM sys.columns c WHERE c.system_type_id = 189 "
                 + $"AND ((c.object_id = {dependent} AND c.name IN ({dependentColumns})) "
                 + $"OR (c.object_id = {principal} AND c.name IN ({principalColumns}))))");
         }
@@ -54,11 +55,14 @@ internal static class SqlServerForeignKeySafety
         {
             var columns = string.Join(", ", definition.Columns.Select(literal));
 
-            predicates.Add($"NOT EXISTS (SELECT 1 FROM sys.columns c WHERE c.object_id = {dependent} "
+            predicates.Add(
+                $"NOT EXISTS (SELECT 1 FROM sys.columns c WHERE c.object_id = {dependent} "
                 + $"AND c.name IN ({columns}) AND c.is_nullable = 0 AND c.default_object_id = 0)");
         }
 
-        return predicates.Count == 0 ? "1 = 1" : string.Join(" AND ", predicates);
+        return predicates.Count == 0
+            ? "1 = 1"
+            : string.Join(" AND ", predicates);
     }
 
     /// <summary>Renders an ordered graph check against current live FKs and the candidate additions.</summary>
@@ -72,31 +76,50 @@ internal static class SqlServerForeignKeySafety
         bool onlyWhenTableMissing = false
     )
     {
-        var candidates = definitions.Where(HasCascadingAction).ToArray();
+        var candidates = definitions
+            .Where(HasCascadingAction)
+            .ToArray();
+
         if (candidates.Length == 0)
         {
             return null;
         }
 
         var sql = new StringBuilder(4096);
-        var missingCandidates = string.Join(" OR ", candidates.Select(candidate =>
-            "NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE parent_object_id = "
-            + TableId(candidate.Table, candidate.Schema, literal) + " AND name = " + literal(candidate.Name) + ")"));
+        var missingCandidates = string.Join(
+            " OR ",
+            candidates.Select(candidate =>
+                "NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE parent_object_id = "
+                + TableId(candidate.Table, candidate.Schema, literal)
+                + " AND name = "
+                + literal(candidate.Name)
+                + ")"));
 
         sql.AppendLine("DECLARE @doka_fk_graph_safe bit = 1;");
+
         // WHY: A matching FK already passed SQL Server's topology validation.
         // Do not walk its complete graph again during a no-op/replay analysis.
-        sql.Append("IF (").Append(missingCandidates).Append(')');
+        sql
+            .Append("IF (")
+            .Append(missingCandidates)
+            .Append(')');
+
         if (onlyWhenTableMissing)
         {
-            sql.Append(" AND ").Append(TableId(candidates[0].Table, candidates[0].Schema, literal)).Append(" IS NULL");
+            sql
+                .Append(" AND ")
+                .Append(TableId(candidates[0].Table, candidates[0].Schema, literal))
+                .Append(" IS NULL");
         }
 
         sql.AppendLine(" BEGIN");
 
-        sql.AppendLine("DECLARE @doka_fk_edges TABLE (principal int NOT NULL, source_event tinyint NOT NULL, "
-            + "dependent int NOT NULL, target_event tinyint NOT NULL);")
-            .AppendLine("INSERT INTO @doka_fk_edges SELECT referenced_object_id, 1, parent_object_id, "
+        sql
+            .AppendLine(
+                "DECLARE @doka_fk_edges TABLE (principal int NOT NULL, source_event tinyint NOT NULL, "
+                + "dependent int NOT NULL, target_event tinyint NOT NULL);")
+            .AppendLine(
+                "INSERT INTO @doka_fk_edges SELECT referenced_object_id, 1, parent_object_id, "
                 + "CASE WHEN delete_referential_action = 1 THEN 1 ELSE 2 END "
                 + "FROM sys.foreign_keys WHERE delete_referential_action <> 0 "
                 + "UNION ALL SELECT referenced_object_id, 2, parent_object_id, 2 "
@@ -109,11 +132,19 @@ internal static class SqlServerForeignKeySafety
             var selfReference = candidate.Table == candidate.PrincipalTable
                 && (candidate.Schema ?? "dbo") == (candidate.PrincipalSchema ?? "dbo");
 
-            var principalId = selfReference ? $"COALESCE({principal}, -1)" : principal;
+            var principalId = selfReference
+                ? $"COALESCE({principal}, -1)"
+                : principal;
 
-            sql.Append("IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE parent_object_id = ")
-                .Append(dependent).Append(" AND name = ").Append(literal(candidate.Name)).Append(") AND ")
-                .Append(principalId).AppendLine(" IS NOT NULL BEGIN");
+            sql
+                .Append("IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE parent_object_id = ")
+                .Append(dependent)
+                .Append(" AND name = ")
+                .Append(literal(candidate.Name))
+                .Append(") AND ")
+                .Append(principalId)
+                .AppendLine(" IS NOT NULL BEGIN");
+
             AppendEdge(sql, principalId, $"COALESCE({dependent}, -1)", candidate.OnDelete, isDelete: true);
             AppendEdge(sql, principalId, $"COALESCE({dependent}, -1)", candidate.OnUpdate, isDelete: false);
             sql.AppendLine("END;");
@@ -123,7 +154,9 @@ internal static class SqlServerForeignKeySafety
         // NULL/DEFAULT changes the event to UPDATE, which can cascade onward.
         // A capped breadth-first walk stops at the first repeated physical
         // table; it never enumerates exponentially many complete paths.
-        sql.AppendLine("DECLARE @doka_fk_roots TABLE (table_id int NOT NULL, event_id tinyint NOT NULL, "
+        sql
+            .AppendLine(
+                "DECLARE @doka_fk_roots TABLE (table_id int NOT NULL, event_id tinyint NOT NULL, "
                 + "PRIMARY KEY (table_id, event_id));")
             .AppendLine("INSERT INTO @doka_fk_roots SELECT DISTINCT principal, source_event FROM @doka_fk_edges;")
             .AppendLine("DECLARE @doka_fk_seen TABLE (table_id int NOT NULL PRIMARY KEY);")
@@ -138,12 +171,15 @@ internal static class SqlServerForeignKeySafety
             .AppendLine("INSERT INTO @doka_fk_frontier VALUES (@doka_fk_root, @doka_fk_event);")
             .AppendLine("WHILE @doka_fk_graph_safe = 1 AND EXISTS (SELECT 1 FROM @doka_fk_frontier) BEGIN")
             .AppendLine("DELETE FROM @doka_fk_next;")
-            .AppendLine("INSERT INTO @doka_fk_next SELECT e.dependent, e.target_event FROM @doka_fk_edges e "
+            .AppendLine(
+                "INSERT INTO @doka_fk_next SELECT e.dependent, e.target_event FROM @doka_fk_edges e "
                 + "JOIN @doka_fk_frontier f ON f.table_id = e.principal AND f.event_id = e.source_event;")
-            .AppendLine("IF EXISTS (SELECT 1 FROM @doka_fk_next GROUP BY table_id HAVING COUNT(*) > 1) "
+            .AppendLine(
+                "IF EXISTS (SELECT 1 FROM @doka_fk_next GROUP BY table_id HAVING COUNT(*) > 1) "
                 + "OR EXISTS (SELECT 1 FROM @doka_fk_next n JOIN @doka_fk_seen s ON s.table_id = n.table_id) "
                 + "SET @doka_fk_graph_safe = 0;")
-            .AppendLine("ELSE BEGIN INSERT INTO @doka_fk_seen SELECT table_id FROM @doka_fk_next; "
+            .AppendLine(
+                "ELSE BEGIN INSERT INTO @doka_fk_seen SELECT table_id FROM @doka_fk_next; "
                 + "DELETE FROM @doka_fk_frontier; "
                 + "INSERT INTO @doka_fk_frontier SELECT table_id, event_id FROM @doka_fk_next; END;")
             .AppendLine("END; END;");
@@ -180,7 +216,8 @@ internal static class SqlServerForeignKeySafety
                         && !column.IsNullable)
                     || ((foreignKey.OnDelete == ReferentialAction.SetDefault
                             || foreignKey.OnUpdate == ReferentialAction.SetDefault)
-                        && !column.IsNullable && column.DefaultValue.Kind == SafeMigrationDefaultValueKind.None))
+                        && !column.IsNullable
+                        && column.DefaultValue.Kind == SafeMigrationDefaultValueKind.None))
                 {
                     return "1 = 0";
                 }
@@ -212,15 +249,18 @@ internal static class SqlServerForeignKeySafety
             }
         }
 
-        return predicates.Count == 0 ? "1 = 1" : string.Join(" AND ", predicates);
+        return predicates.Count == 0
+            ? "1 = 1"
+            : string.Join(" AND ", predicates);
     }
 
     private static bool IsRowVersion(
         ExpectedColumnDefinition column
     )
-        => column.IsRowVersion || column.StoreType is { } type
-            && (type.Equals("rowversion", StringComparison.OrdinalIgnoreCase)
-                || type.Equals("timestamp", StringComparison.OrdinalIgnoreCase));
+        => column.IsRowVersion
+            || (column.StoreType is { } type
+                && (type.Equals("rowversion", StringComparison.OrdinalIgnoreCase)
+                    || type.Equals("timestamp", StringComparison.OrdinalIgnoreCase)));
 
     private static void AppendEdge(
         StringBuilder sql,
@@ -235,9 +275,22 @@ internal static class SqlServerForeignKeySafety
             return;
         }
 
-        sql.Append("INSERT INTO @doka_fk_edges VALUES (").Append(principal).Append(", ")
-            .Append(isDelete ? '1' : '2').Append(", ").Append(dependent).Append(", ")
-            .Append(isDelete && action == ReferentialAction.Cascade ? '1' : '2').AppendLine(");");
+        sql
+            .Append("INSERT INTO @doka_fk_edges VALUES (")
+            .Append(principal)
+            .Append(", ")
+            .Append(
+                isDelete
+                    ? '1'
+                    : '2')
+            .Append(", ")
+            .Append(dependent)
+            .Append(", ")
+            .Append(
+                isDelete && action == ReferentialAction.Cascade
+                    ? '1'
+                    : '2')
+            .AppendLine(");");
     }
 
     private static string TriggerAbsent(
@@ -252,6 +305,12 @@ internal static class SqlServerForeignKeySafety
         string? schema,
         Func<string, string> literal
     )
-        => "OBJECT_ID(" + literal("[" + (schema ?? "dbo").Replace("]", "]]", StringComparison.Ordinal)
-            + "].[" + table.Replace("]", "]]", StringComparison.Ordinal) + "]") + ", N'U')";
+        => "OBJECT_ID("
+            + literal(
+                "["
+                + (schema ?? "dbo").Replace("]", "]]", StringComparison.Ordinal)
+                + "].["
+                + table.Replace("]", "]]", StringComparison.Ordinal)
+                + "]")
+            + ", N'U')";
 }

@@ -1,3 +1,6 @@
+using System.Xml.Linq;
+using TypeFilter = BenchmarkDotNet.Running.TypeFilter;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>Pins native job, filter and artifact behavior while binding only source-project discovery.</summary>
@@ -19,17 +22,26 @@ public sealed class BenchmarkProgramSourceBoundTests
         var baseConfig = ManualConfig.Create(DefaultConfig.Instance);
         var (parsed, parsedConfig, _) = ConfigParser.Parse(arguments, NullLogger.Instance, baseConfig);
         var nativeConfig = ImmutableConfigBuilder.Create(ManualConfig.Union(baseConfig, parsedConfig));
-        var nativeJob = nativeConfig.GetJobs().Single();
+        var nativeJob = nativeConfig
+            .GetJobs()
+            .Single();
+
         var nativeToolchain = nativeJob.Infrastructure.TryGetToolchain(out var selected)
             ? selected
             : CsProjCoreToolchain.NetCoreApp10_0;
+
         var nativeGenerator = (CsProjGenerator)nativeToolchain.Generator;
         var nativeSettings = JobSettings(nativeJob);
 
         // Act
         IConfig boundConfig = new SourceBoundConfig(baseConfig, parsedConfig);
-        var boundJobs = boundConfig.GetJobs().ToArray();
-        var boundSettings = boundJobs.Select(JobSettings).ToArray();
+        var boundJobs = boundConfig
+            .GetJobs()
+            .ToArray();
+
+        var boundSettings = boundJobs
+            .Select(JobSettings)
+            .ToArray();
 
         // Assert
         Assert.True(parsed);
@@ -60,13 +72,21 @@ public sealed class BenchmarkProgramSourceBoundTests
         var baseConfig = ManualConfig.Create(DefaultConfig.Instance);
         var (parsed, parsedConfig, _) = ConfigParser.Parse(arguments, NullLogger.Instance, baseConfig);
         var nativeConfig = ImmutableConfigBuilder.Create(ManualConfig.Union(baseConfig, parsedConfig));
-        var nativeJob = nativeConfig.GetJobs().Single();
+        var nativeJob = nativeConfig
+            .GetJobs()
+            .Single();
+
         var nativeSettings = JobSettings(nativeJob);
 
         // Act
         IConfig boundConfig = new SourceBoundConfig(baseConfig, parsedConfig);
-        var boundJobs = boundConfig.GetJobs().ToArray();
-        var boundSettings = boundJobs.Select(JobSettings).ToArray();
+        var boundJobs = boundConfig
+            .GetJobs()
+            .ToArray();
+
+        var boundSettings = boundJobs
+            .Select(JobSettings)
+            .ToArray();
 
         // Assert
         Assert.True(parsed);
@@ -87,10 +107,14 @@ public sealed class BenchmarkProgramSourceBoundTests
     {
         // Arrange
         using var evidence = new BenchmarkProgramTestEvidence();
-        var baseConfig = ManualConfig.Create(DefaultConfig.Instance)
+        var baseConfig = ManualConfig
+            .Create(DefaultConfig.Instance)
             .WithArtifactsPath(Path.Combine(evidence.DirectoryPath, "base-artifacts"));
+
         var (parsed, parsedConfig, _) = ConfigParser.Parse(
-            ["--filter", "*", option, evidence.DirectoryPath], NullLogger.Instance, baseConfig);
+            ["--filter", "*", option, evidence.DirectoryPath],
+            NullLogger.Instance,
+            baseConfig);
 
         // Act
         var boundConfig = new SourceBoundConfig(baseConfig, parsedConfig);
@@ -120,13 +144,18 @@ public sealed class BenchmarkProgramSourceBoundTests
         // Arrange
         var baseConfig = ManualConfig.Create(DefaultConfig.Instance);
         var (parsed, parsedConfig, _) = ConfigParser.Parse(
-            ["--filter", filter, "--job", "Dry"], NullLogger.Instance, baseConfig);
+            ["--filter", filter, "--job", "Dry"],
+            NullLogger.Instance,
+            baseConfig);
+
         var boundConfig = new SourceBoundConfig(baseConfig, parsedConfig);
-        var (validTypes, runnableTypes) = BenchmarkDotNet.Running.TypeFilter.GetTypesWithRunnableBenchmarks(
-            [typeof(BenchmarkProgramOutcomeProbe)], [], NullLogger.Instance);
+        var (validTypes, runnableTypes) = TypeFilter.GetTypesWithRunnableBenchmarks(
+            [typeof(BenchmarkProgramOutcomeProbe)],
+            [],
+            NullLogger.Instance);
 
         // Act
-        var selected = BenchmarkDotNet.Running.TypeFilter.Filter(boundConfig, runnableTypes);
+        var selected = TypeFilter.Filter(boundConfig, runnableTypes);
         var selectedCases = selected.Sum(static info => info.BenchmarksCases.Length);
 
         // Assert
@@ -183,12 +212,15 @@ public sealed class BenchmarkProgramSourceBoundTests
         var projectPath = Path.Combine(benchmarkRoot, projectName, projectName + ".csproj");
 
         // Act
-        var shared = System.Xml.Linq.XDocument.Load(sharedPath);
-        var project = System.Xml.Linq.XDocument.Load(projectPath);
-        var sharedReferences = shared.Descendants("PackageReference")
+        var shared = XDocument.Load(sharedPath);
+        var project = XDocument.Load(projectPath);
+        var sharedReferences = shared
+            .Descendants("PackageReference")
             .Where(static element => (string?)element.Attribute("Include") == "BenchmarkDotNet")
             .ToArray();
-        var localOverrides = project.Descendants("PackageReference")
+
+        var localOverrides = project
+            .Descendants("PackageReference")
             .Where(static element => (string?)element.Attribute("Include") == "BenchmarkDotNet"
                 || (string?)element.Attribute("Update") == "BenchmarkDotNet")
             .ToArray();
@@ -211,7 +243,9 @@ public sealed class BenchmarkProgramSourceBoundTests
         var firstGenerator = CreateSourceBoundGenerator();
         var secondGenerator = CreateSourceBoundGenerator();
         var nativePath = BuildDirectory(
-            CsProjCoreToolchain.NetCoreApp10_0.Generator, partition, partition.ProgramName);
+            CsProjCoreToolchain.NetCoreApp10_0.Generator,
+            partition,
+            partition.ProgramName);
 
         // Act
         var firstPath = BuildDirectory(firstGenerator, partition, partition.ProgramName);
@@ -248,10 +282,14 @@ public sealed class BenchmarkProgramSourceBoundTests
     {
         // Arrange
         using var evidence = new BenchmarkProgramTestEvidence();
-        var firstConfig = ManualConfig.Create(DefaultConfig.Instance)
+        var firstConfig = ManualConfig
+            .Create(DefaultConfig.Instance)
             .WithArtifactsPath(Path.Combine(evidence.DirectoryPath, "first-reports"));
-        var secondConfig = ManualConfig.Create(DefaultConfig.Instance)
+
+        var secondConfig = ManualConfig
+            .Create(DefaultConfig.Instance)
             .WithArtifactsPath(Path.Combine(evidence.DirectoryPath, "second-reports"));
+
         var firstPartition = CreateBuildPartition(firstConfig);
         var secondPartition = CreateBuildPartition(secondConfig);
         var firstGenerator = CreateSourceBoundGenerator();
@@ -284,8 +322,10 @@ public sealed class BenchmarkProgramSourceBoundTests
     {
         config ??= ManualConfig.Create(DefaultConfig.Instance);
         config.AddJob(Job.Dry);
-        var benchmark = BenchmarkConverter.TypeToBenchmarks(typeof(BenchmarkProgramOutcomeProbe), config)
+        var benchmark = BenchmarkConverter
+            .TypeToBenchmarks(typeof(BenchmarkProgramOutcomeProbe), config)
             .BenchmarksCases[0];
+
         var info = new BenchmarkBuildInfo(benchmark, benchmark.Config, 0);
 
         return new BuildPartition([info], EngineResolver.Instance);
@@ -311,8 +351,11 @@ public sealed class BenchmarkProgramSourceBoundTests
         string programName
     )
     {
-        var method = generator.GetType().GetMethod("GetBuildArtifactsDirectoryPath",
-            BindingFlags.Instance | BindingFlags.NonPublic)
+        var method = generator
+                .GetType()
+                .GetMethod(
+                    "GetBuildArtifactsDirectoryPath",
+                    BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new MissingMethodException("Native generator build-directory calculation is unavailable.");
 
         return method.Invoke(generator, [partition, programName]) as string
@@ -324,7 +367,8 @@ public sealed class BenchmarkProgramSourceBoundTests
     /// <returns>Ordered exact values, excluding generated IDs and the source-bound toolchain.</returns>
     private static (string Name, object? Value)[] JobSettings(
         Job job
-    ) => job.GetCharacteristicsWithValues()
+    ) => job
+        .GetCharacteristicsWithValues()
         .Where(static characteristic => !characteristic.HasChildCharacteristics
             && characteristic != InfrastructureMode.ToolchainCharacteristic
             && characteristic != CharacteristicObject.IdCharacteristic)
@@ -334,8 +378,11 @@ public sealed class BenchmarkProgramSourceBoundTests
 
     /// <summary>Finds the repository independently of the assembly's source-project metadata.</summary>
     /// <returns>The actual source test project's absolute path.</returns>
-    private static string ExpectedTestProjectPath() => Path.Combine(RepositoryRoot(), "tests",
-        "Doka.EntityFrameworkCore.SafeMigrations.Tests", "Doka.EntityFrameworkCore.SafeMigrations.Tests.csproj");
+    private static string ExpectedTestProjectPath() => Path.Combine(
+        RepositoryRoot(),
+        "tests",
+        "Doka.EntityFrameworkCore.SafeMigrations.Tests",
+        "Doka.EntityFrameworkCore.SafeMigrations.Tests.csproj");
 
     /// <summary>Locates the source tree without assuming the current working directory.</summary>
     /// <returns>The source repository root containing the solution.</returns>

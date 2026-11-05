@@ -11,10 +11,10 @@ internal sealed class MySqlSafeMigrationProviderOperationAdapter : ISafeMigratio
     private const string GuidFormatAnnotation = "Doka:MySql:GuidFormat";
     private const string ValueGenerationStrategyAnnotation = "Doka:MySql:ValueGenerationStrategy";
 
+    private MySqlSafeMigrationProviderOperationAdapter() { }
+
     /// <summary>Gets the stateless MySQL/MariaDB operation adapter.</summary>
     public static MySqlSafeMigrationProviderOperationAdapter Instance { get; } = new();
-
-    private MySqlSafeMigrationProviderOperationAdapter() { }
 
     /// <inheritdoc />
     public bool TryNormalize(
@@ -67,8 +67,14 @@ internal sealed class MySqlSafeMigrationProviderOperationAdapter : ISafeMigratio
     )
     {
         var metadata = operation.GetMySqlMigrationMetadata();
-        var recognizedAnnotationCount = metadata.IndexPrefixLengths is null ? 0 : 1;
-        if (operation.GetAnnotations().Count() != recognizedAnnotationCount)
+        var recognizedAnnotationCount = metadata.IndexPrefixLengths is null
+            ? 0
+            : 1;
+
+        if (operation
+                .GetAnnotations()
+                .Count()
+            != recognizedAnnotationCount)
         {
             return null;
         }
@@ -137,7 +143,10 @@ internal sealed class MySqlSafeMigrationProviderOperationAdapter : ISafeMigratio
         IReadOnlyAnnotatable operation
     )
     {
-        var annotations = operation.GetAnnotations().ToArray();
+        var annotations = operation
+            .GetAnnotations()
+            .ToArray();
+
         if (annotations.Length == 0)
         {
             return true;

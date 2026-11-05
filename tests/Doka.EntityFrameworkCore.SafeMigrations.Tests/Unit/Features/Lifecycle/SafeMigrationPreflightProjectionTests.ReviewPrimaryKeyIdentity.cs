@@ -19,7 +19,8 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     {
         // Arrange
         var projection = ReviewPrimaryKeyIdentityProjection(completeTable);
-        var drop = new SafeMigrationOperation(new DropPrimaryKeyIntent("wrong_name", "items"),
+        var drop = new SafeMigrationOperation(
+            new DropPrimaryKeyIntent("wrong_name", "items"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var live = Live(liveState);
@@ -30,8 +31,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         projection.Observe(drop, live, analysis, decision);
 
-        var retained = Project(projection, new EnsurePrimaryKeyIntent(
-            new ExpectedPrimaryKeyDefinition("pk_physical", "items", ["id"])), SafeMigrationObservedState.Matching);
+        var retained = Project(
+            projection,
+            new EnsurePrimaryKeyIntent(
+                new ExpectedPrimaryKeyDefinition("pk_physical", "items", ["id"])),
+            SafeMigrationObservedState.Matching);
 
         // Assert
         Assert.Equal(liveState, analysis.ObservedState);
@@ -44,7 +48,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(SafeMigrationObservedState.Missing)]
     [InlineData(SafeMigrationObservedState.Different)]
-    public void PrimaryKeySemanticAliasDoesNotBecomePhysicalDropName(SafeMigrationObservedState liveDropState)
+    public void PrimaryKeySemanticAliasDoesNotBecomePhysicalDropName(
+        SafeMigrationObservedState liveDropState
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
@@ -52,7 +58,8 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         ObserveAccepted(projection, alias, SafeMigrationObservedState.Matching, "pk_physical");
 
-        var drop = new SafeMigrationOperation(new DropPrimaryKeyIntent("pk_alias", "items"),
+        var drop = new SafeMigrationOperation(
+            new DropPrimaryKeyIntent("pk_alias", "items"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var live = Live(liveDropState);
@@ -63,7 +70,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         projection.Observe(drop, live, analysis, decision);
 
-        var physical = Project(projection, new DropPrimaryKeyIntent("pk_physical", "items"),
+        var physical = Project(
+            projection,
+            new DropPrimaryKeyIntent("pk_physical", "items"),
             SafeMigrationObservedState.Missing);
 
         // Assert
@@ -77,7 +86,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void UnresolvedPrimaryKeyPhysicalIdentityRetainsNativeWrongNameRejection(bool fromTable)
+    public void UnresolvedPrimaryKeyPhysicalIdentityRetainsNativeWrongNameRejection(
+        bool fromTable
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
@@ -85,20 +96,33 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         if (fromTable)
         {
-            ObserveAccepted(projection, new EnsureTableIntent(new ExpectedTableDefinition("items", [Column("id")],
-                primaryKey: definition), SafeMigrationTableMode.StrictDefinition), SafeMigrationObservedState.Matching);
+            ObserveAccepted(
+                projection,
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition(
+                        "items",
+                        [Column("id")],
+                        primaryKey: definition),
+                    SafeMigrationTableMode.StrictDefinition),
+                SafeMigrationObservedState.Matching);
         }
         else
         {
-            ObserveAccepted(projection, new EnsurePrimaryKeyIntent(definition), SafeMigrationObservedState.Matching,
+            ObserveAccepted(
+                projection,
+                new EnsurePrimaryKeyIntent(definition),
+                SafeMigrationObservedState.Matching,
                 matchedObjectName: null);
         }
 
         var live = Live(SafeMigrationObservedState.Different);
 
         // Act
-        var analysis = projection.Project(new SafeMigrationOperation(new DropPrimaryKeyIntent("pk_authored", "items"),
-            SafeMigrationPolicy.ThrowIfDifferent), live);
+        var analysis = projection.Project(
+            new SafeMigrationOperation(
+                new DropPrimaryKeyIntent("pk_authored", "items"),
+                SafeMigrationPolicy.ThrowIfDifferent),
+            live);
 
         // Assert
         Assert.Same(live, analysis);
@@ -110,31 +134,42 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void PhysicalPrimaryKeyDropAndRecreationRetainsExactNameLifetime(bool completeTable)
+    public void PhysicalPrimaryKeyDropAndRecreationRetainsExactNameLifetime(
+        bool completeTable
+    )
     {
         // Arrange
         var projection = ReviewPrimaryKeyIdentityProjection(completeTable);
         var original = new ExpectedPrimaryKeyDefinition("pk_physical", "items", ["id"]);
         var replacement = new ExpectedPrimaryKeyDefinition("pk_recreated", "items", ["id"]);
 
-        ObserveAccepted(projection, new DropPrimaryKeyIntent(original.Name, "items"),
+        ObserveAccepted(
+            projection,
+            new DropPrimaryKeyIntent(original.Name, "items"),
             SafeMigrationObservedState.Matching);
 
-        var replacementOperation = new SafeMigrationOperation(new EnsurePrimaryKeyIntent(replacement),
+        var replacementOperation = new SafeMigrationOperation(
+            new EnsurePrimaryKeyIntent(replacement),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var live = Live(SafeMigrationObservedState.Matching, original.Name);
         var analysis = projection.Project(replacementOperation, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(replacementOperation.Intent.Kind, analysis.ObservedState,
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            replacementOperation.Intent.Kind,
+            analysis.ObservedState,
             replacementOperation.Policy);
 
         // Act
         projection.Observe(replacementOperation, live, analysis, decision);
 
-        var oldName = Project(projection, new DropPrimaryKeyIntent(original.Name, "items"),
+        var oldName = Project(
+            projection,
+            new DropPrimaryKeyIntent(original.Name, "items"),
             SafeMigrationObservedState.Matching);
 
-        var currentName = Project(projection, new DropPrimaryKeyIntent(replacement.Name, "items"),
+        var currentName = Project(
+            projection,
+            new DropPrimaryKeyIntent(replacement.Name, "items"),
             SafeMigrationObservedState.Missing);
 
         // Assert
@@ -149,22 +184,30 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void NameIndependentPrimaryKeyIdentityPermitsLogicalNameDrop(bool completeTable)
+    public void NameIndependentPrimaryKeyIdentityPermitsLogicalNameDrop(
+        bool completeTable
+    )
     {
         // Arrange
         var projection = ReviewPrimaryKeyIdentityProjection(completeTable, nameIndependent: true);
-        var operation = new SafeMigrationOperation(new DropPrimaryKeyIntent("any_authored_name", "items"),
+        var operation = new SafeMigrationOperation(
+            new DropPrimaryKeyIntent("any_authored_name", "items"),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var live = Live(SafeMigrationObservedState.Matching);
 
         // Act
         var analysis = projection.Project(operation, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, analysis.ObservedState,
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            analysis.ObservedState,
             operation.Policy);
 
         projection.Observe(operation, live, analysis, decision);
 
-        var repeated = Project(projection, new DropPrimaryKeyIntent("another_authored_name", "items"),
+        var repeated = Project(
+            projection,
+            new DropPrimaryKeyIntent("another_authored_name", "items"),
             SafeMigrationObservedState.Matching);
 
         // Assert
@@ -181,22 +224,30 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         bool nameIndependent = false
     )
     {
-        var projection = new SafeMigrationPreflightProjection(projectedKeyAnalyzer:
-            nameIndependent ? new ReviewNameIndependentPrimaryKeyAnalyzer() : null);
+        var projection = new SafeMigrationPreflightProjection(
+            projectedKeyAnalyzer:
+            nameIndependent
+                ? new ReviewNameIndependentPrimaryKeyAnalyzer()
+                : null);
 
         var definition = new ExpectedPrimaryKeyDefinition("pk_physical", "items", ["id"]);
 
         if (completeTable)
         {
-            Apply(projection, new EnsureTableIntent(
-                new ExpectedTableDefinition("items", [Column("id")], primaryKey: definition),
-                SafeMigrationTableMode.StrictDefinition));
+            Apply(
+                projection,
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition("items", [Column("id")], primaryKey: definition),
+                    SafeMigrationTableMode.StrictDefinition));
         }
         else
         {
             ObserveColumnsOnExistingTable(projection, "items", Column("id"));
-            ObserveAccepted(projection, new EnsurePrimaryKeyIntent(definition),
-                SafeMigrationObservedState.Matching, definition.Name);
+            ObserveAccepted(
+                projection,
+                new EnsurePrimaryKeyIntent(definition),
+                SafeMigrationObservedState.Matching,
+                definition.Name);
         }
 
         return projection;
@@ -212,18 +263,27 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         public bool PrimaryKeyUsesNameIndependentIdentity => true;
 
         /// <inheritdoc />
-        public SafeMigrationProviderAnalysis ValidateProjectedIndex(EnsureIndexIntent intent,
-            ISafeMigrationProjectedColumnSource columns, SafeMigrationProviderAnalysis liveAnalysis,
-            SafeMigrationProviderAnalysis projectedAnalysis) => projectedAnalysis;
+        public SafeMigrationProviderAnalysis ValidateProjectedIndex(
+            EnsureIndexIntent intent,
+            ISafeMigrationProjectedColumnSource columns,
+            SafeMigrationProviderAnalysis liveAnalysis,
+            SafeMigrationProviderAnalysis projectedAnalysis
+        ) => projectedAnalysis;
 
         /// <inheritdoc />
-        public SafeMigrationProviderAnalysis ValidateProjectedPrimaryKey(EnsurePrimaryKeyIntent intent,
-            ISafeMigrationProjectedColumnSource columns, SafeMigrationProviderAnalysis liveAnalysis,
-            SafeMigrationProviderAnalysis projectedAnalysis) => projectedAnalysis;
+        public SafeMigrationProviderAnalysis ValidateProjectedPrimaryKey(
+            EnsurePrimaryKeyIntent intent,
+            ISafeMigrationProjectedColumnSource columns,
+            SafeMigrationProviderAnalysis liveAnalysis,
+            SafeMigrationProviderAnalysis projectedAnalysis
+        ) => projectedAnalysis;
 
         /// <inheritdoc />
-        public SafeMigrationProviderAnalysis ValidateProjectedUniqueConstraint(EnsureUniqueConstraintIntent intent,
-            ISafeMigrationProjectedColumnSource columns, SafeMigrationProviderAnalysis liveAnalysis,
-            SafeMigrationProviderAnalysis projectedAnalysis) => projectedAnalysis;
+        public SafeMigrationProviderAnalysis ValidateProjectedUniqueConstraint(
+            EnsureUniqueConstraintIntent intent,
+            ISafeMigrationProjectedColumnSource columns,
+            SafeMigrationProviderAnalysis liveAnalysis,
+            SafeMigrationProviderAnalysis projectedAnalysis
+        ) => projectedAnalysis;
     }
 }

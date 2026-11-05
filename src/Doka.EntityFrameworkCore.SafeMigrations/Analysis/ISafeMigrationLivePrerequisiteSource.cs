@@ -12,7 +12,11 @@ internal interface ISafeMigrationLivePrerequisiteSource
     /// <param name="schema">The provider-qualified schema, or null for its active default.</param>
     /// <param name="column">The requested physical column.</param>
     /// <returns>Whether the captured catalog independently proves owner and column presence.</returns>
-    bool HasLiveColumn(string table, string? schema, string column);
+    bool HasLiveColumn(
+        string table,
+        string? schema,
+        string column
+    );
 
     /// <summary>Requires native metadata qualification even when accepted CLR definitions look equal.</summary>
     /// <param name="intent">The exact affected FK contract.</param>
@@ -23,7 +27,9 @@ internal interface ISafeMigrationLivePrerequisiteSource
     /// physical facts, including defaults of an actually accepted new lifetime.
     /// Other projected owners retain the default-false separate contract.
     /// </remarks>
-    bool RequiresLiveForeignKeyQualification(EnsureForeignKeyIntent intent) => false;
+    bool RequiresLiveForeignKeyQualification(
+        EnsureForeignKeyIntent intent
+    ) => false;
 
     /// <summary>
     /// Requalifies a dynamic native FK blocker after certified accepted prerequisite mutations.
@@ -40,7 +46,8 @@ internal interface ISafeMigrationLivePrerequisiteSource
     bool CanRequalifyLiveForeignKeyPrerequisites(
         EnsureForeignKeyIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis,
-        ISafeMigrationProjectedColumnSource columns) => false;
+        ISafeMigrationProjectedColumnSource columns
+    ) => false;
 
     /// <summary>
     /// Certifies safe removal of a captured index after exact accepted dependency removals.
@@ -57,7 +64,8 @@ internal interface ISafeMigrationLivePrerequisiteSource
     bool CanRequalifyLiveDropIndexPrerequisites(
         DropIndexIntent intent,
         SafeMigrationProviderAnalysis liveAnalysis,
-        ISafeMigrationProjectedColumnSource columns) => false;
+        ISafeMigrationProjectedColumnSource columns
+    ) => false;
 
     /// <summary>Qualifies mixed live/projected FK endpoints and returns actual live candidate-key identities.</summary>
     /// <param name="intent">The exact authored foreign-key contract.</param>
@@ -73,7 +81,8 @@ internal interface ISafeMigrationLivePrerequisiteSource
     /// </remarks>
     IReadOnlyList<SafeMigrationLiveCandidateKey>? GetLiveForeignKeyCandidateKeys(
         EnsureForeignKeyIntent intent,
-        ISafeMigrationProjectedColumnSource columns);
+        ISafeMigrationProjectedColumnSource columns
+    );
 }
 
 /// <summary>Identifies a real native candidate key without conflating its constraint and backing index.</summary>
@@ -83,4 +92,5 @@ internal interface ISafeMigrationLivePrerequisiteSource
 internal readonly record struct SafeMigrationLiveCandidateKey(
     SafeMigrationDatabaseObjectKind Kind,
     string PhysicalName,
-    string? BackingIndexName = null);
+    string? BackingIndexName = null
+);

@@ -16,7 +16,9 @@ public sealed class BenchmarkProgramExecutionTests
     {
         // Arrange
         using var evidence = new BenchmarkProgramTestEvidence();
-        var benchmark = BenchmarkProgramTestEvidence.CreateCases()[0];
+        var benchmark = BenchmarkProgramTestEvidence
+            .CreateCases()[0];
+
         var execution = BenchmarkProgramTestEvidence.CreateExecution(nanoseconds, allocatedBytes);
         var report = BenchmarkProgramTestEvidence.CreateReport(benchmark, true, execution);
         var summary = evidence.CreateSummary([report]);
@@ -37,10 +39,14 @@ public sealed class BenchmarkProgramExecutionTests
     {
         // Arrange
         using var evidence = new BenchmarkProgramTestEvidence();
-        var reports = BenchmarkProgramTestEvidence.CreateCases()
+        var reports = BenchmarkProgramTestEvidence
+            .CreateCases()
             .Select(static benchmark => BenchmarkProgramTestEvidence.CreateReport(
-                benchmark, true, BenchmarkProgramTestEvidence.CreateExecution()))
+                benchmark,
+                true,
+                BenchmarkProgramTestEvidence.CreateExecution()))
             .ToArray();
+
         var summary = evidence.CreateSummary(reports, new ValidationError(false, "Synthetic warning."));
 
         // Act
@@ -67,10 +73,14 @@ public sealed class BenchmarkProgramExecutionTests
     {
         // Arrange
         using var evidence = new BenchmarkProgramTestEvidence();
-        var reports = BenchmarkProgramTestEvidence.CreateCases()
+        var reports = BenchmarkProgramTestEvidence
+            .CreateCases()
             .Select(static benchmark => BenchmarkProgramTestEvidence.CreateReport(
-                benchmark, true, BenchmarkProgramTestEvidence.CreateExecution()))
+                benchmark,
+                true,
+                BenchmarkProgramTestEvidence.CreateExecution()))
             .ToArray();
+
         var summary = evidence.CreateSummary(reports);
 
         // Act
@@ -89,7 +99,10 @@ public sealed class BenchmarkProgramExecutionTests
         using var evidence = new BenchmarkProgramTestEvidence();
         var selectedCases = BenchmarkProgramTestEvidence.CreateCases();
         var report = BenchmarkProgramTestEvidence.CreateReport(
-            selectedCases[0], true, BenchmarkProgramTestEvidence.CreateExecution());
+            selectedCases[0],
+            true,
+            BenchmarkProgramTestEvidence.CreateExecution());
+
         var summary = evidence.CreateSummary([report]);
 
         // Act
@@ -111,8 +124,13 @@ public sealed class BenchmarkProgramExecutionTests
         using var evidence = new BenchmarkProgramTestEvidence();
         var selectedCases = BenchmarkProgramTestEvidence.CreateCases();
         var summaries = selectedCases
-            .Select(benchmark => evidence.CreateSummary([BenchmarkProgramTestEvidence.CreateReport(
-                benchmark, true, BenchmarkProgramTestEvidence.CreateExecution())]))
+            .Select(benchmark => evidence.CreateSummary(
+            [
+                BenchmarkProgramTestEvidence.CreateReport(
+                    benchmark,
+                    true,
+                    BenchmarkProgramTestEvidence.CreateExecution()),
+            ]))
             .ToArray();
 
         // Act
@@ -158,9 +176,14 @@ public sealed class BenchmarkProgramExecutionTests
     {
         // Arrange
         using var evidence = new BenchmarkProgramTestEvidence();
-        var benchmark = BenchmarkProgramTestEvidence.CreateCases()[0];
+        var benchmark = BenchmarkProgramTestEvidence
+            .CreateCases()[0];
+
         var report = BenchmarkProgramTestEvidence.CreateReport(
-            benchmark, true, BenchmarkProgramTestEvidence.CreateExecution());
+            benchmark,
+            true,
+            BenchmarkProgramTestEvidence.CreateExecution());
+
         var summary = evidence.CreateSummary([report], new ValidationError(true, "Synthetic configuration failure."));
 
         // Act
@@ -177,9 +200,14 @@ public sealed class BenchmarkProgramExecutionTests
     {
         // Arrange
         using var evidence = new BenchmarkProgramTestEvidence();
-        var benchmark = BenchmarkProgramTestEvidence.CreateCases()[0];
+        var benchmark = BenchmarkProgramTestEvidence
+            .CreateCases()[0];
+
         var report = BenchmarkProgramTestEvidence.CreateReport(
-            benchmark, false, BenchmarkProgramTestEvidence.CreateExecution());
+            benchmark,
+            false,
+            BenchmarkProgramTestEvidence.CreateExecution());
+
         var summary = evidence.CreateSummary([report]);
 
         // Act
@@ -196,7 +224,9 @@ public sealed class BenchmarkProgramExecutionTests
     {
         // Arrange
         using var evidence = new BenchmarkProgramTestEvidence();
-        var benchmark = BenchmarkProgramTestEvidence.CreateCases()[0];
+        var benchmark = BenchmarkProgramTestEvidence
+            .CreateCases()[0];
+
         var generation = GenerateResult.Success(ArtifactsPaths.Empty, []);
         var build = BuildResult.Failure(generation, "Synthetic build failure.");
         var report = new BenchmarkReport(false, benchmark, generation, build, [], []);
@@ -217,7 +247,10 @@ public sealed class BenchmarkProgramExecutionTests
     {
         // Arrange
         using var evidence = new BenchmarkProgramTestEvidence();
-        var report = BenchmarkProgramTestEvidence.CreateReport(BenchmarkProgramTestEvidence.CreateCases()[0], true);
+        var report = BenchmarkProgramTestEvidence.CreateReport(BenchmarkProgramTestEvidence
+                .CreateCases()[0],
+            true);
+
         var summary = evidence.CreateSummary([report]);
 
         // Act
@@ -241,10 +274,15 @@ public sealed class BenchmarkProgramExecutionTests
     {
         // Arrange
         using var evidence = new BenchmarkProgramTestEvidence();
-        var benchmark = BenchmarkProgramTestEvidence.CreateCases()[0];
-        var report = BenchmarkProgramTestEvidence.CreateReport(benchmark, true,
+        var benchmark = BenchmarkProgramTestEvidence
+            .CreateCases()[0];
+
+        var report = BenchmarkProgramTestEvidence.CreateReport(
+            benchmark,
+            true,
             BenchmarkProgramTestEvidence.CreateExecution(),
             BenchmarkProgramTestEvidence.CreateExecution(exitCode: exitCode));
+
         var summary = evidence.CreateSummary([report]);
 
         // Act
@@ -262,7 +300,9 @@ public sealed class BenchmarkProgramExecutionTests
     {
         // Arrange
         using var evidence = new BenchmarkProgramTestEvidence();
-        var benchmark = BenchmarkProgramTestEvidence.CreateCases()[0];
+        var benchmark = BenchmarkProgramTestEvidence
+            .CreateCases()[0];
+
         var execution = BenchmarkProgramTestEvidence.CreateExecution(stage: IterationStage.Actual);
         var report = BenchmarkProgramTestEvidence.CreateReport(benchmark, true, execution);
         var summary = evidence.CreateSummary([report]);
@@ -282,9 +322,21 @@ public sealed class BenchmarkProgramExecutionTests
     {
         // Arrange
         using var evidence = new BenchmarkProgramTestEvidence();
-        var execution = new ExecuteResult(true, 0, 1, [], [], [], 1);
+        var execution = new ExecuteResult(
+            true,
+            0,
+            1,
+            [],
+            [],
+            [],
+            1);
+
         var report = BenchmarkProgramTestEvidence.CreateReport(
-            BenchmarkProgramTestEvidence.CreateCases()[0], true, execution);
+            BenchmarkProgramTestEvidence
+                .CreateCases()[0],
+            true,
+            execution);
+
         var summary = evidence.CreateSummary([report]);
 
         // Act
@@ -304,7 +356,10 @@ public sealed class BenchmarkProgramExecutionTests
         using var evidence = new BenchmarkProgramTestEvidence();
         var benchmarks = BenchmarkProgramTestEvidence.CreateCases();
         var successful = BenchmarkProgramTestEvidence.CreateReport(
-            benchmarks[0], true, BenchmarkProgramTestEvidence.CreateExecution());
+            benchmarks[0],
+            true,
+            BenchmarkProgramTestEvidence.CreateExecution());
+
         var failed = BenchmarkProgramTestEvidence.CreateReport(benchmarks[1], false);
         var summary = evidence.CreateSummary([successful, failed]);
 
@@ -322,9 +377,14 @@ public sealed class BenchmarkProgramExecutionTests
     {
         // Arrange
         using var evidence = new BenchmarkProgramTestEvidence();
-        var benchmark = BenchmarkProgramTestEvidence.CreateCases()[0];
+        var benchmark = BenchmarkProgramTestEvidence
+            .CreateCases()[0];
+
         var successfulReport = BenchmarkProgramTestEvidence.CreateReport(
-            benchmark, true, BenchmarkProgramTestEvidence.CreateExecution());
+            benchmark,
+            true,
+            BenchmarkProgramTestEvidence.CreateExecution());
+
         var successful = evidence.CreateSummary([successfulReport]);
         var failed = evidence.CreateSummary([BenchmarkProgramTestEvidence.CreateReport(benchmark, false)]);
 

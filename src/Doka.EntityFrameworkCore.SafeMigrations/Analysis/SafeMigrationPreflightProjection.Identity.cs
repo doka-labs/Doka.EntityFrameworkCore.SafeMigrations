@@ -12,7 +12,9 @@ internal sealed partial class SafeMigrationPreflightProjection
     private static string? NormalizeSchema(
         ISafeMigrationProviderObjectIdentityNormalizer? normalizer,
         string? schema
-    ) => normalizer is null ? schema : normalizer.NormalizeSchema(schema);
+    ) => normalizer is null
+        ? schema
+        : normalizer.NormalizeSchema(schema);
 
     private static bool IdentifierEquals(
         ISafeMigrationProviderObjectIdentityNormalizer? normalizer,
@@ -53,7 +55,9 @@ internal sealed partial class SafeMigrationPreflightProjection
             TableKey value
         ) => HashCode.Combine(
             IdentifierHashCode(normalizer, value.Table),
-            Normalize(value.Schema) is { } schema ? StringComparer.Ordinal.GetHashCode(schema) : 0);
+            Normalize(value.Schema) is { } schema
+                ? StringComparer.Ordinal.GetHashCode(schema)
+                : 0);
 
         private string? Normalize(
             string? schema
@@ -63,8 +67,8 @@ internal sealed partial class SafeMigrationPreflightProjection
     private sealed class IndexKeyComparer(ISafeMigrationProviderObjectIdentityNormalizer? normalizer)
         : IEqualityComparer<IndexKey>
     {
-        private readonly TableKeyComparer _tableComparer = new(normalizer);
         private readonly StringComparer _nameComparer = normalizer?.IndexIdentifierComparer ?? StringComparer.Ordinal;
+        private readonly TableKeyComparer _tableComparer = new(normalizer);
 
         public bool Equals(
             IndexKey left,

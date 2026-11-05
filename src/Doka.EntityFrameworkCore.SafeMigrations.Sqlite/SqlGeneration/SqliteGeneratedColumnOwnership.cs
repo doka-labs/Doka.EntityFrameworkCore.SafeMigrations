@@ -4,9 +4,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 internal sealed class SqliteGeneratedColumnOwnership
 {
     private readonly HashSet<MigrationOperation> _inputs;
+    private readonly Dictionary<string, bool> _lifetimes = new(SqliteIdentifierComparer.Instance);
     private readonly HashSet<MigrationOperation>? _providerOperations;
     private readonly HashSet<CreateTableOperation> _safeCreators = new(ReferenceEqualityComparer.Instance);
-    private readonly Dictionary<string, bool> _lifetimes = new(SqliteIdentifierComparer.Instance);
 
     /// <summary>Captures accepted input identities and current table lifetimes before native rewriting.</summary>
     /// <param name="operations">The accepted native operations before provider rewriting.</param>
@@ -47,7 +47,8 @@ internal sealed class SqliteGeneratedColumnOwnership
                     _lifetimes[rename.NewName ?? rename.Name] = owned;
                     break;
                 default:
-                    if (safe && SqliteSafeMigrationOperationClassifier.RequiresTableRebuild(operation)
+                    if (safe
+                        && SqliteSafeMigrationOperationClassifier.RequiresTableRebuild(operation)
                         && SqliteSafeMigrationOperationClassifier.TableName(operation) is { } table)
                     {
                         _lifetimes[table] = true;
@@ -61,7 +62,9 @@ internal sealed class SqliteGeneratedColumnOwnership
     /// <summary>Checks whether fresh or rebuilt generated declarations have an accepted safe owner.</summary>
     /// <param name="model">The native target model, when available.</param>
     /// <returns>Whether the accepted safe lifetime owns any generated-column declaration.</returns>
-    public bool RequiresCompleteDeclarations(IModel? model)
+    public bool RequiresCompleteDeclarations(
+        IModel? model
+    )
     {
         foreach (var creator in _safeCreators)
         {
@@ -73,9 +76,11 @@ internal sealed class SqliteGeneratedColumnOwnership
 
         if (model is not null)
         {
-            foreach (var table in model.GetRelationalModel().Tables)
+            foreach (var table in model.GetRelationalModel()
+                .Tables)
             {
-                if (_lifetimes.TryGetValue(table.Name, out var owned) && owned
+                if (_lifetimes.TryGetValue(table.Name, out var owned)
+                    && owned
                     && table.Columns.Any(static column => column.ComputedColumnSql is not null))
                 {
                     return true;
@@ -89,12 +94,15 @@ internal sealed class SqliteGeneratedColumnOwnership
     /// <summary>Resolves native rebuild creators through compiler-produced rename metadata, never SQL names.</summary>
     /// <param name="rewritten">The actual operations produced by the official provider's rewrite.</param>
     /// <returns>The exact fresh and rebuilt creators whose generated facets belong to the safe contract.</returns>
-    public HashSet<CreateTableOperation> ResolveCreators(IReadOnlyList<MigrationOperation> rewritten)
+    public HashSet<CreateTableOperation> ResolveCreators(
+        IReadOnlyList<MigrationOperation> rewritten
+    )
     {
         Dictionary<string, string>? nativeTargets = null;
         foreach (var operation in rewritten)
         {
-            if (operation is RenameTableOperation { NewName: not null } rename && !_inputs.Contains(rename))
+            if (operation is RenameTableOperation { NewName: not null } rename
+                && !_inputs.Contains(rename))
             {
                 // WHY: The native rewriter supplies the actual temporary-to-final
                 // binding. User-authored renames cannot impersonate that proof,
@@ -111,7 +119,8 @@ internal sealed class SqliteGeneratedColumnOwnership
                 && (_safeCreators.Contains(creator)
                     || (!_inputs.Contains(creator)
                         && nativeTargets?.TryGetValue(creator.Name, out var target) == true
-                        && _lifetimes.TryGetValue(target, out var owned) && owned)))
+                        && _lifetimes.TryGetValue(target, out var owned)
+                        && owned)))
             {
                 _ = creators.Add(creator);
             }
@@ -123,5 +132,7 @@ internal sealed class SqliteGeneratedColumnOwnership
     /// <summary>Recognizes original provider objects, including computed ADDs folded into creators.</summary>
     /// <param name="operation">The exact native operation to inspect.</param>
     /// <returns>Whether the operation is an original provider-owned object.</returns>
-    public bool IsProviderOperation(MigrationOperation operation) => _providerOperations?.Contains(operation) == true;
+    public bool IsProviderOperation(
+        MigrationOperation operation
+    ) => _providerOperations?.Contains(operation) == true;
 }

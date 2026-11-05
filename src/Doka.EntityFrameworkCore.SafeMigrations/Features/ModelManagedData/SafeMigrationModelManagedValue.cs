@@ -8,7 +8,9 @@ internal static class SafeMigrationModelManagedValue
     {
         Validate(value);
 
-        return value is byte[] bytes ? bytes.ToArray() : value;
+        return value is byte[] bytes
+            ? bytes.ToArray()
+            : value;
     }
 
     public static bool AreEqual(
@@ -16,8 +18,10 @@ internal static class SafeMigrationModelManagedValue
         object? right
     ) => left switch
     {
-        byte[] leftBytes when right is byte[] rightBytes => leftBytes.AsSpan().SequenceEqual(rightBytes),
-        _ => object.Equals(left, right),
+        byte[] leftBytes when right is byte[] rightBytes => leftBytes
+            .AsSpan()
+            .SequenceEqual(rightBytes),
+        _ => Equals(left, right),
     };
 
     public static void Write(
@@ -43,16 +47,16 @@ internal static class SafeMigrationModelManagedValue
                 writer.Add(boolean);
                 break;
             case byte number:
-                writer.Add((int)number);
+                writer.Add(number);
                 break;
             case sbyte number:
-                writer.Add((int)number);
+                writer.Add(number);
                 break;
             case short number:
-                writer.Add((int)number);
+                writer.Add(number);
                 break;
             case ushort number:
-                writer.Add((int)number);
+                writer.Add(number);
                 break;
             case int number:
                 writer.Add(number);
@@ -83,7 +87,7 @@ internal static class SafeMigrationModelManagedValue
                 writer.Add(text);
                 break;
             case char character:
-                writer.Add((int)character);
+                writer.Add(character);
                 break;
             case byte[] bytes:
                 writer.Add(bytes);

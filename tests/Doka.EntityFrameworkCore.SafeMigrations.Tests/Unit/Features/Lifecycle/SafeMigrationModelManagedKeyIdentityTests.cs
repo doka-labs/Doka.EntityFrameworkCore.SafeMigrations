@@ -8,7 +8,9 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ModelManagedPostflightKeyColumnIdentityRequiresProviderOptIn(bool insensitive)
+    public void ModelManagedPostflightKeyColumnIdentityRequiresProviderOptIn(
+        bool insensitive
+    )
     {
         // Arrange
         var identity = new ColumnKeyNormalizer(insensitive);
@@ -34,15 +36,33 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
     [InlineData("column")]
     [InlineData("key_value")]
     [InlineData("key_type")]
-    public void ModelManagedColumnFoldingRetainsOtherIdentityBoundaries(string boundary)
+    public void ModelManagedColumnFoldingRetainsOtherIdentityBoundaries(
+        string boundary
+    )
     {
         // Arrange
         var identity = new ColumnKeyNormalizer(insensitive: true);
         var earlier = Ensure("Items", "Id", new object?[,] { { 1, 7 } });
-        var later = Update(boundary == "owner" ? "items" : "Items",
-            boundary == "column" ? "OtherId" : "ID",
-            new object?[,] { { boundary == "key_value" ? 2 : boundary == "key_type" ? (object)1L : 1 } },
-            boundary == "schema" ? "OtherSchema" : null);
+        var later = Update(
+            boundary == "owner"
+                ? "items"
+                : "Items",
+            boundary == "column"
+                ? "OtherId"
+                : "ID",
+            new[,]
+            {
+                {
+                    boundary == "key_value"
+                        ? 2
+                        : boundary == "key_type"
+                            ? (object)1L
+                            : 1,
+                },
+            },
+            boundary == "schema"
+                ? "OtherSchema"
+                : null);
 
         MigrationOperation[] operations = [Operation(earlier), Operation(later)];
 
@@ -59,14 +79,29 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ModelManagedRowSetRetainsExactValuesButNotAuthoredRowOrder(bool changedSet)
+    public void ModelManagedRowSetRetainsExactValuesButNotAuthoredRowOrder(
+        bool changedSet
+    )
     {
         // Arrange
         var identity = new ColumnKeyNormalizer(insensitive: true);
         MigrationOperation[] operations =
         [
             Operation(Ensure("Items", "Id", new object?[,] { { 1, 7 }, { 2, 7 }, { 3, 7 } })),
-            Operation(Update("Items", "ID", new object?[,] { { 3 }, { changedSet ? 4 : 1 }, { 2 } })),
+            Operation(
+                Update(
+                    "Items",
+                    "ID",
+                    new object?[,]
+                    {
+                        { 3 },
+                        {
+                            changedSet
+                                ? 4
+                                : 1,
+                        },
+                        { 2 },
+                    })),
         ];
 
         // Act
@@ -82,14 +117,28 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ModelManagedDefaultAsciiNormalizerPreservesUnicodeIdentity(bool unicode)
+    public void ModelManagedDefaultAsciiNormalizerPreservesUnicodeIdentity(
+        bool unicode
+    )
     {
         // Arrange
         var identity = new AsciiKeyNormalizer();
         MigrationOperation[] operations =
         [
-            Operation(Ensure("Items", unicode ? "\u00c4" : "Id", new object?[,] { { 1, 7 } })),
-            Operation(Update("items", unicode ? "\u00e4" : "ID", new object?[,] { { 1 } })),
+            Operation(
+                Ensure(
+                    "Items",
+                    unicode
+                        ? "\u00c4"
+                        : "Id",
+                    new object?[,] { { 1, 7 } })),
+            Operation(
+                Update(
+                    "items",
+                    unicode
+                        ? "\u00e4"
+                        : "ID",
+                    new object?[,] { { 1 } })),
         ];
 
         // Act
@@ -125,10 +174,19 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ModelManagedCanonicalColumnsAllocateOnlyAfterActualSpellingChange(bool changed)
+    public void ModelManagedCanonicalColumnsAllocateOnlyAfterActualSpellingChange(
+        bool changed
+    )
     {
         // Arrange
-        string[] columns = [changed ? "Id" : "ID", "CODE"];
+        string[] columns =
+        [
+            changed
+                ? "Id"
+                : "ID",
+            "CODE",
+        ];
+
         var identity = new ColumnKeyNormalizer(insensitive: true);
 
         // Act
@@ -137,7 +195,12 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
 
         // Assert
         Assert.Equal(changed, !ReferenceEquals(columns, canonical));
-        Assert.Equal(changed ? "ID" : "OTHER", canonical[0]);
+        Assert.Equal(
+            changed
+                ? "ID"
+                : "OTHER",
+            canonical[0]);
+
         Assert.Equal("CODE", canonical[1]);
         Assert.Equal(2, identity.ColumnNormalizationCalls);
     }
@@ -158,7 +221,10 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
     [InlineData("\U00010428tail", "\U00010401TAIL")]
     [InlineData("\ud800tail", "\ud800TAIL")]
     [InlineData("\ud800tail", "\ud801TAIL")]
-    public void ModelManagedOrdinalColumnNormalizationHasNoUnicodeOvermerge(string left, string right)
+    public void ModelManagedOrdinalColumnNormalizationHasNoUnicodeOvermerge(
+        string left,
+        string right
+    )
     {
         // Arrange
         var expectedEqual = StringComparer.OrdinalIgnoreCase.Equals(left, right);
@@ -178,22 +244,36 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ModelManagedPreflightKeyAndValueLabelsUseColumnIdentity(bool insensitive)
+    public void ModelManagedPreflightKeyAndValueLabelsUseColumnIdentity(
+        bool insensitive
+    )
     {
         // Arrange
         var identity = new ColumnKeyNormalizer(insensitive);
         var projection = new SafeMigrationPreflightProjection(objectIdentityNormalizer: identity);
         Accept(projection, Operation(Ensure("Items", "Id", new object?[,] { { 1, 7 } })));
-        var update = Operation(new UpdateModelManagedDataIntent("Items", ["ID"], ["int"],
-            new object?[,] { { 1 } }, ["value"], ["int"], new object?[,] { { 7 } }, new object?[,] { { 8 } },
-            schema: null, uniqueKeys: null));
+        var update = Operation(
+            new UpdateModelManagedDataIntent(
+                "Items",
+                ["ID"],
+                ["int"],
+                new object?[,] { { 1 } },
+                ["value"],
+                ["int"],
+                new object?[,] { { 7 } },
+                new object?[,] { { 8 } },
+                schema: null,
+                uniqueKeys: null));
 
         // Act
         var analysis = projection.Project(update, Live(SafeMigrationObservedState.PrerequisiteMissing));
 
         // Assert
-        Assert.Equal(insensitive ? SafeMigrationObservedState.TransitionReady
-            : SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
+        Assert.Equal(
+            insensitive
+                ? SafeMigrationObservedState.TransitionReady
+                : SafeMigrationObservedState.PrerequisiteMissing,
+            analysis.ObservedState);
     }
 
     /// <summary>Typed column canonicalization cannot prove a different pending key's uniqueness.</summary>
@@ -201,26 +281,58 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ModelManagedCandidateKeyFingerprintUsesColumnIdentity(bool differentColumn)
+    public void ModelManagedCandidateKeyFingerprintUsesColumnIdentity(
+        bool differentColumn
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection(
             objectIdentityNormalizer: new ColumnKeyNormalizer(insensitive: true));
 
-        Accept(projection, Operation(new EnsureTableIntent(new ExpectedTableDefinition("Items",
-            [Column("Id"), Column("Value"), Column("Payload")]), SafeMigrationTableMode.StrictDefinition)));
-        Accept(projection, Operation(new EnsureModelManagedDataIntent("Items", ["Id"], ["int"],
-            ["Id", "Value", "Payload"], ["int", "int", "int"], new object?[,] { { 1, 7, 8 }, { 2, 9, 8 } },
-            schema: null, uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Value"])])));
-        var index = Operation(new EnsureIndexIntent(new ExpectedIndexDefinition("pending_value", "Items",
-            [new ExpectedIndexKeyDefinition(differentColumn ? "Payload" : "value")], unique: true)));
+        Accept(
+            projection,
+            Operation(
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition(
+                        "Items",
+                        [Column("Id"), Column("Value"), Column("Payload")]),
+                    SafeMigrationTableMode.StrictDefinition)));
+
+        Accept(
+            projection,
+            Operation(
+                new EnsureModelManagedDataIntent(
+                    "Items",
+                    ["Id"],
+                    ["int"],
+                    ["Id", "Value", "Payload"],
+                    ["int", "int", "int"],
+                    new object?[,] { { 1, 7, 8 }, { 2, 9, 8 } },
+                    schema: null,
+                    uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Value"])])));
+
+        var index = Operation(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "pending_value",
+                    "Items",
+                    [
+                        new ExpectedIndexKeyDefinition(
+                            differentColumn
+                                ? "Payload"
+                                : "value"),
+                    ],
+                    unique: true)));
 
         // Act
         var analysis = projection.Project(index, Live(SafeMigrationObservedState.PrerequisiteMissing));
 
         // Assert
-        Assert.Equal(differentColumn ? SafeMigrationObservedState.PrerequisiteMissing
-            : SafeMigrationObservedState.Missing, analysis.ObservedState);
+        Assert.Equal(
+            differentColumn
+                ? SafeMigrationObservedState.PrerequisiteMissing
+                : SafeMigrationObservedState.Missing,
+            analysis.ObservedState);
     }
 
     /// <summary>Unique collision checks use the same physical row owner identity as the stored evidence.</summary>
@@ -229,13 +341,31 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection(objectIdentityNormalizer: new AsciiKeyNormalizer());
-        Accept(projection, Operation(new EnsureModelManagedDataIntent("Items", ["Id"], ["int"],
-            ["Id", "Value", "Payload"], ["int", "int", "int"], new object?[,] { { 1, 7, 8 } },
-            schema: null, uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Value"])])));
-        var update = Operation(new UpdateModelManagedDataIntent("items", ["ID"], ["int"],
-            new object?[,] { { 1 } }, ["Value", "Payload"], ["int", "int"],
-            new object?[,] { { 7, 8 } }, new object?[,] { { 7, 9 } }, schema: null,
-            uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Value"])]));
+        Accept(
+            projection,
+            Operation(
+                new EnsureModelManagedDataIntent(
+                    "Items",
+                    ["Id"],
+                    ["int"],
+                    ["Id", "Value", "Payload"],
+                    ["int", "int", "int"],
+                    new object?[,] { { 1, 7, 8 } },
+                    schema: null,
+                    uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Value"])])));
+
+        var update = Operation(
+            new UpdateModelManagedDataIntent(
+                "items",
+                ["ID"],
+                ["int"],
+                new object?[,] { { 1 } },
+                ["Value", "Payload"],
+                ["int", "int"],
+                new object?[,] { { 7, 8 } },
+                new object?[,] { { 7, 9 } },
+                schema: null,
+                uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Value"])]));
 
         // Act
         var analysis = projection.Project(update, Live(SafeMigrationObservedState.PrerequisiteMissing));
@@ -246,11 +376,25 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
     }
 
     /// <summary>Creates a required integer column without defaults, expressions or provider side effects.</summary>
-    private static ExpectedColumnDefinition Column(string name) => new(name, typeof(int), false, "int");
+    private static ExpectedColumnDefinition Column(
+        string name
+    ) => new(name, typeof(int), false, "int");
 
     /// <summary>Creates one immutable managed row-set contract with an explicit typed key label.</summary>
-    private static EnsureModelManagedDataIntent Ensure(string table, string key, object?[,] values) =>
-        new(table, [key], ["int"], [key, "Value"], ["int", "int"], values, schema: null, uniqueKeys: null);
+    private static EnsureModelManagedDataIntent Ensure(
+        string table,
+        string key,
+        object?[,] values
+    ) =>
+        new(
+            table,
+            [key],
+            ["int"],
+            [key, "Value"],
+            ["int", "int"],
+            values,
+            schema: null,
+            uniqueKeys: null);
 
     /// <summary>Creates a same-row update whose value change does not affect physical row identity.</summary>
     private static UpdateModelManagedDataIntent Update(
@@ -268,25 +412,44 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
             newValues[row, 0] = 8;
         }
 
-        return new UpdateModelManagedDataIntent(table, [key], ["int"], keyValues, ["Value"], ["int"],
-            oldValues, newValues, schema, uniqueKeys: null);
+        return new UpdateModelManagedDataIntent(
+            table,
+            [key],
+            ["int"],
+            keyValues,
+            ["Value"],
+            ["int"],
+            oldValues,
+            newValues,
+            schema,
+            uniqueKeys: null);
     }
 
     /// <summary>Creates one strict safe operation without inventing provider compatibility facts.</summary>
-    private static SafeMigrationOperation Operation(SafeMigrationIntent intent) =>
+    private static SafeMigrationOperation Operation(
+        SafeMigrationIntent intent
+    ) =>
         new(intent, SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Creates immutable native evidence used only when no ordered row evidence exists.</summary>
-    private static SafeMigrationProviderAnalysis Live(SafeMigrationObservedState state) =>
+    private static SafeMigrationProviderAnalysis Live(
+        SafeMigrationObservedState state
+    ) =>
         new(state, SafeMigrationRepairCapability.None, false, "test_live");
 
     /// <summary>Accepts a fixture only through the normal decision and observation pipeline.</summary>
-    private static void Accept(SafeMigrationPreflightProjection projection, SafeMigrationOperation operation)
+    private static void Accept(
+        SafeMigrationPreflightProjection projection,
+        SafeMigrationOperation operation
+    )
     {
         var live = Live(SafeMigrationObservedState.Missing);
         var analysis = projection.Project(operation, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, analysis.ObservedState,
-            operation.Policy, analysis.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            analysis.ObservedState,
+            operation.Policy,
+            analysis.RepairCapability);
 
         Assert.Equal(SafeMigrationAction.Apply, decision.Action);
         projection.Observe(operation, live, analysis, decision);
@@ -303,25 +466,36 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
 
         /// <inheritdoc />
         public StringComparer ColumnIdentifierComparer =>
-            insensitive ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+            insensitive
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal;
 
         /// <inheritdoc />
-        public string NormalizeIdentifier(string identifier) => identifier;
+        public string NormalizeIdentifier(
+            string identifier
+        ) => identifier;
 
         /// <inheritdoc />
-        public string NormalizeColumnIdentifier(string identifier)
+        public string NormalizeColumnIdentifier(
+            string identifier
+        )
         {
             ColumnNormalizationCalls++;
 
             return insensitive
-                ? SafeMigrationModelManagedKeyIdentity.NormalizeOrdinalIgnoreCase(identifier) : identifier;
+                ? SafeMigrationModelManagedKeyIdentity.NormalizeOrdinalIgnoreCase(identifier)
+                : identifier;
         }
 
         /// <inheritdoc />
-        public string? NormalizeSchema(string? schema) => schema;
+        public string? NormalizeSchema(
+            string? schema
+        ) => schema;
 
         /// <inheritdoc />
-        public bool IsObjectIdentityMismatch(SafeMigrationProviderAnalysis analysis) => false;
+        public bool IsObjectIdentityMismatch(
+            SafeMigrationProviderAnalysis analysis
+        ) => false;
     }
 
     /// <summary>Uses inherited typed-column normalization to model SQLite's ASCII-only identity boundary.</summary>
@@ -333,23 +507,34 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
         public StringComparer IdentifierComparer => s_comparer;
 
         /// <inheritdoc />
-        public string NormalizeIdentifier(string identifier) => NormalizeAscii(identifier);
+        public string NormalizeIdentifier(
+            string identifier
+        ) => NormalizeAscii(identifier);
 
         /// <inheritdoc />
-        public string? NormalizeSchema(string? schema) => schema;
+        public string? NormalizeSchema(
+            string? schema
+        ) => schema;
 
         /// <inheritdoc />
-        public bool IsObjectIdentityMismatch(SafeMigrationProviderAnalysis analysis) => false;
+        public bool IsObjectIdentityMismatch(
+            SafeMigrationProviderAnalysis analysis
+        ) => false;
 
         /// <summary>Folds ASCII only; non-ASCII code units remain exactly authored.</summary>
-        private static string NormalizeAscii(string value) => string.Create(value.Length, value,
+        private static string NormalizeAscii(
+            string value
+        ) => string.Create(
+            value.Length,
+            value,
             static (destination, source) =>
             {
                 for (var index = 0; index < source.Length; index++)
                 {
                     var character = source[index];
                     destination[index] = character is >= 'A' and <= 'Z'
-                        ? (char)(character + ('a' - 'A')) : character;
+                        ? (char)(character + ('a' - 'A'))
+                        : character;
                 }
             });
 
@@ -357,15 +542,33 @@ public sealed partial class SafeMigrationModelManagedKeyIdentityTests
         private sealed class AsciiComparer : StringComparer
         {
             /// <inheritdoc />
-            public override int Compare(string? x, string? y) => StringComparer.Ordinal.Compare(
-                x is null ? null : NormalizeAscii(x), y is null ? null : NormalizeAscii(y));
+            public override int Compare(
+                string? x,
+                string? y
+            ) => Ordinal.Compare(
+                x is null
+                    ? null
+                    : NormalizeAscii(x),
+                y is null
+                    ? null
+                    : NormalizeAscii(y));
 
             /// <inheritdoc />
-            public override bool Equals(string? x, string? y) => StringComparer.Ordinal.Equals(
-                x is null ? null : NormalizeAscii(x), y is null ? null : NormalizeAscii(y));
+            public override bool Equals(
+                string? x,
+                string? y
+            ) => Ordinal.Equals(
+                x is null
+                    ? null
+                    : NormalizeAscii(x),
+                y is null
+                    ? null
+                    : NormalizeAscii(y));
 
             /// <inheritdoc />
-            public override int GetHashCode(string obj) => StringComparer.Ordinal.GetHashCode(NormalizeAscii(obj));
+            public override int GetHashCode(
+                string obj
+            ) => Ordinal.GetHashCode(NormalizeAscii(obj));
         }
     }
 }

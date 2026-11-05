@@ -37,8 +37,11 @@ public static partial class SafeMigrationDiagnosticMessages
         ArgumentNullException.ThrowIfNull(guardCode);
         ValidateOrdinal(operationOrdinal);
 
-        return FormatCapturedRuntime(SafeMigrationRuntimeDiagnosticContext.Create(operation),
-            guardCode, operationOrdinal, diagnosticReasonCode);
+        return FormatCapturedRuntime(
+            SafeMigrationRuntimeDiagnosticContext.Create(operation),
+            guardCode,
+            operationOrdinal,
+            diagnosticReasonCode);
     }
 
     /// <summary>Formats a runtime rejection with its actual classified analysis and planner decision.</summary>
@@ -63,7 +66,8 @@ public static partial class SafeMigrationDiagnosticMessages
         if (!decision.Action.RejectsExecution())
         {
             throw new ArgumentException(
-                "A runtime rejection diagnostic requires a rejecting decision.", nameof(decision));
+                "A runtime rejection diagnostic requires a rejecting decision.",
+                nameof(decision));
         }
 
         var guardCode = decision.Action switch
@@ -76,11 +80,22 @@ public static partial class SafeMigrationDiagnosticMessages
         };
 
         var builder = new StringBuilder(256);
-        AppendRuntimeCore(builder, operation.Policy, SafeMigrationOperationIdentity.Create(operation.Intent),
-            guardCode, operationOrdinal,
+        AppendRuntimeCore(
+            builder,
+            operation.Policy,
+            SafeMigrationOperationIdentity.Create(operation.Intent),
+            guardCode,
+            operationOrdinal,
             GetExplanation(operation.Intent, analysis.ObservedState, analysis.Code, decision.Code));
-        builder.Append("; analysis=").Append(BoundForDisplay(analysis.Code));
-        builder.Append("; decision=").Append(BoundForDisplay(decision.Code));
+
+        builder
+            .Append("; analysis=")
+            .Append(BoundForDisplay(analysis.Code));
+
+        builder
+            .Append("; decision=")
+            .Append(BoundForDisplay(decision.Code));
+
         ClampLength(builder, 0, MaximumMessageLength);
 
         return builder.ToString();
@@ -103,14 +118,23 @@ public static partial class SafeMigrationDiagnosticMessages
 
         if (analysis.PostconditionSatisfied)
         {
-            throw new ArgumentException("A postcondition failure diagnostic requires an unsatisfied condition.",
+            throw new ArgumentException(
+                "A postcondition failure diagnostic requires an unsatisfied condition.",
                 nameof(analysis));
         }
 
         var builder = new StringBuilder(256);
-        AppendRuntime(builder, operation, SafeMigrationOperationIdentity.Create(operation.Intent),
-            "doka_sm_postcondition", operationOrdinal);
-        builder.Append("; analysis=").Append(BoundForDisplay(analysis.Code));
+        AppendRuntime(
+            builder,
+            operation,
+            SafeMigrationOperationIdentity.Create(operation.Intent),
+            "doka_sm_postcondition",
+            operationOrdinal);
+
+        builder
+            .Append("; analysis=")
+            .Append(BoundForDisplay(analysis.Code));
+
         ClampLength(builder, 0, MaximumMessageLength);
 
         return builder.ToString();
@@ -119,12 +143,18 @@ public static partial class SafeMigrationDiagnosticMessages
     /// <summary>Formats an assessment independently of its surrounding report or migration source.</summary>
     /// <param name="assessment">The immutable observed, projected or deferred assessment.</param>
     /// <returns>A printable ASCII summary of at most 2048 characters with an honest owner and reason.</returns>
-    public static string FormatAssessment(SafeMigrationAssessment assessment)
+    public static string FormatAssessment(
+        SafeMigrationAssessment assessment
+    )
     {
         ArgumentNullException.ThrowIfNull(assessment);
 
         var builder = new StringBuilder(256);
-        builder.Append("operation ").Append(assessment.Ordinal.ToString(CultureInfo.InvariantCulture)).Append(' ');
+        builder
+            .Append("operation ")
+            .Append(assessment.Ordinal.ToString(CultureInfo.InvariantCulture))
+            .Append(' ');
+
         if (assessment.Identity is { } identity)
         {
             AppendIdentity(builder, identity);
@@ -136,39 +166,69 @@ public static partial class SafeMigrationDiagnosticMessages
             AppendIdentifier(builder, assessment.ObjectName ?? "<unavailable>");
         }
 
-        builder.Append("; action=").Append(assessment.Action);
+        builder
+            .Append("; action=")
+            .Append(assessment.Action);
+
         AppendExplanation(builder, assessment.Explanation);
         if (assessment.MigrationId is { } migrationId)
         {
-            builder.Append("; migration=").Append(BoundForDisplay(migrationId));
+            builder
+                .Append("; migration=")
+                .Append(BoundForDisplay(migrationId));
         }
 
         if (assessment.Policy is { } policy)
         {
-            builder.Append("; policy=").Append(policy);
+            builder
+                .Append("; policy=")
+                .Append(policy);
         }
 
         if (assessment.DeferredOrigin is { } origin)
         {
             builder.Append("; deferred-origin migration=");
-            builder.Append(origin.MigrationId is null ? "<unavailable>" : BoundForDisplay(origin.MigrationId));
-            builder.Append(" operation ").Append(origin.OperationOrdinal.ToString(CultureInfo.InvariantCulture));
-            builder.Append(" type=").Append(BoundForDisplay(origin.OperationType));
+            builder.Append(
+                origin.MigrationId is null
+                    ? "<unavailable>"
+                    : BoundForDisplay(origin.MigrationId));
+
+            builder
+                .Append(" operation ")
+                .Append(origin.OperationOrdinal.ToString(CultureInfo.InvariantCulture));
+
+            builder
+                .Append(" type=")
+                .Append(BoundForDisplay(origin.OperationType));
         }
 
-        builder.Append("; analysis=").Append(BoundForDisplay(assessment.AnalysisCode));
-        builder.Append("; decision=").Append(BoundForDisplay(assessment.DecisionCode));
+        builder
+            .Append("; analysis=")
+            .Append(BoundForDisplay(assessment.AnalysisCode));
+
+        builder
+            .Append("; decision=")
+            .Append(BoundForDisplay(assessment.DecisionCode));
+
         // WHY: Emit only the first two differences so exception messages remain bounded.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < Math.Min(assessment.Differences.Count, 2); index++)
         {
             var difference = assessment.Differences[index];
-            builder.Append("; ").Append(BoundForDisplay(difference.Facet, 64));
+            builder
+                .Append("; ")
+                .Append(BoundForDisplay(difference.Facet, 64));
+
             if (CanDisplayFacetValues(difference.Facet))
             {
-                builder.Append(": expected ").Append(BoundForDisplay(difference.Expected, 96));
-                builder.Append(", actual ").Append(BoundForDisplay(difference.Actual, 96));
+                builder
+                    .Append(": expected ")
+                    .Append(BoundForDisplay(difference.Expected, 96));
+
+                builder
+                    .Append(", actual ")
+                    .Append(BoundForDisplay(difference.Actual, 96));
             }
             else
             {
@@ -176,7 +236,6 @@ public static partial class SafeMigrationDiagnosticMessages
                 // comments. Only explicitly safe schema facets belong in ordinary log text.
                 builder.Append(": values omitted; inspect protected report evidence");
             }
-
         }
 
         ClampLength(builder, 0, MaximumMessageLength);
@@ -187,7 +246,9 @@ public static partial class SafeMigrationDiagnosticMessages
     /// <summary>Formats qualified owners, named members, FK endpoints and rename targets.</summary>
     /// <param name="identity">The authored structural identity.</param>
     /// <returns>A printable ASCII label of at most 1024 characters with explicit truncation.</returns>
-    public static string FormatIdentity(SafeMigrationOperationIdentity identity)
+    public static string FormatIdentity(
+        SafeMigrationOperationIdentity identity
+    )
     {
         ArgumentNullException.ThrowIfNull(identity);
 
@@ -219,9 +280,11 @@ public static partial class SafeMigrationDiagnosticMessages
         ArgumentNullException.ThrowIfNull(guardCode);
         ValidateOrdinal(operationOrdinal);
 
-        var context = new SafeMigrationRuntimeDiagnosticContext(identity, operation.Policy,
+        var context = new SafeMigrationRuntimeDiagnosticContext(
+            identity,
+            operation.Policy,
             operation.Intent is EnsureColumnIntent column
-                && !SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(column.Definition));
+            && !SafeMigrationColumnRepairHelper.CanSafelyAddMissingColumn(column.Definition));
 
         AppendCapturedRuntime(destination, context, guardCode, operationOrdinal, diagnosticReasonCode);
     }
@@ -259,7 +322,8 @@ public static partial class SafeMigrationDiagnosticMessages
         if (context.Identity is null)
         {
             throw new ArgumentException(
-                "A runtime diagnostic context must contain a captured identity.", nameof(context));
+                "A runtime diagnostic context must contain a captured identity.",
+                nameof(context));
         }
 
         var knownGuard = NormalizeGuardCode(guardCode);
@@ -272,17 +336,22 @@ public static partial class SafeMigrationDiagnosticMessages
         {
             // WHY: A future or provider-specific stable code remains useful machine evidence
             // even when Core cannot give a more specific diagnosis. Native text is not a code.
-            destination.Append("; analysis=").Append(code);
+            destination
+                .Append("; analysis=")
+                .Append(code);
+
             ClampLength(destination, start, MaximumMessageLength);
         }
-
     }
 
     /// <summary>Escapes diagnostic identifiers without exposing arbitrary payloads or control characters.</summary>
     /// <param name="value">A structural identifier or bounded machine code, never SQL or a row value.</param>
     /// <param name="maximumLength">The maximum emitted ASCII length, including truncation marks.</param>
     /// <returns>The original printable ASCII string when safe, otherwise a bounded escaped representation.</returns>
-    internal static string BoundForDisplay(string value, int maximumLength = MaximumIdentifierLength)
+    internal static string BoundForDisplay(
+        string value,
+        int maximumLength = MaximumIdentifierLength
+    )
     {
         ArgumentNullException.ThrowIfNull(value);
         ArgumentOutOfRangeException.ThrowIfLessThan(maximumLength, 4);
@@ -298,10 +367,11 @@ public static partial class SafeMigrationDiagnosticMessages
             {
                 break;
             }
-
         }
 
-        if (!requiresEscaping && escapedLength <= maximumLength && value.Length <= maximumLength)
+        if (!requiresEscaping
+            && escapedLength <= maximumLength
+            && value.Length <= maximumLength)
         {
             return value;
         }
@@ -309,7 +379,11 @@ public static partial class SafeMigrationDiagnosticMessages
         // WHY: Scan and copy only the bounded prefix. Hostile oversized identifiers must not
         // allocate a same-size temporary string merely to produce a short error message.
         var truncated = escapedLength > maximumLength;
-        var writableLength = maximumLength - (truncated ? 3 : 0);
+        var writableLength = maximumLength
+            - (truncated
+                ? 3
+                : 0);
+
         var builder = new StringBuilder(Math.Min(maximumLength, 256));
         foreach (var character in value)
         {
@@ -339,30 +413,51 @@ public static partial class SafeMigrationDiagnosticMessages
     )
     {
         var start = destination.Length;
-        destination.Append(guardCode).Append(": SafeMigrations rejected ");
+        destination
+            .Append(guardCode)
+            .Append(": SafeMigrations rejected ");
+
         AppendIdentity(destination, identity);
         if (ordinal is { } value)
         {
-            destination.Append("; operation ").Append(value.ToString(CultureInfo.InvariantCulture));
+            destination
+                .Append("; operation ")
+                .Append(value.ToString(CultureInfo.InvariantCulture));
         }
 
-        destination.Append("; policy=").Append(policy);
+        destination
+            .Append("; policy=")
+            .Append(policy);
+
         AppendExplanation(destination, explanation);
         ClampLength(destination, start, MaximumMessageLength);
     }
 
-    private static void AppendExplanation(StringBuilder builder, SafeMigrationDiagnosticExplanation explanation)
+    private static void AppendExplanation(
+        StringBuilder builder,
+        SafeMigrationDiagnosticExplanation explanation
+    )
     {
-        builder.Append("; reasonCode=").Append(explanation.ReasonCode);
-        builder.Append("; reason=").Append(explanation.Reason);
+        builder
+            .Append("; reasonCode=")
+            .Append(explanation.ReasonCode);
+
+        builder
+            .Append("; reason=")
+            .Append(explanation.Reason);
+
         if (explanation.NextStep.Length != 0)
         {
-            builder.Append("; next=").Append(explanation.NextStep);
+            builder
+                .Append("; next=")
+                .Append(explanation.NextStep);
         }
-
     }
 
-    private static void AppendIdentity(StringBuilder builder, SafeMigrationOperationIdentity identity)
+    private static void AppendIdentity(
+        StringBuilder builder,
+        SafeMigrationOperationIdentity identity
+    )
     {
         var start = builder.Length;
         AppendOperationKind(builder, identity.OperationKind);
@@ -406,12 +501,16 @@ public static partial class SafeMigrationDiagnosticMessages
         ClampLength(builder, start, MaximumIdentityLength);
     }
 
-    private static void AppendOperationKind(StringBuilder builder, SafeMigrationOperationKind? kind)
-    {
-        builder.Append(kind?.ToString() ?? "ProviderOwnedOperation");
-    }
+    private static void AppendOperationKind(
+        StringBuilder builder,
+        SafeMigrationOperationKind? kind
+    ) => builder.Append(kind?.ToString() ?? "ProviderOwnedOperation");
 
-    private static void AppendOwner(StringBuilder builder, string? schema, string table)
+    private static void AppendOwner(
+        StringBuilder builder,
+        string? schema,
+        string table
+    )
     {
         if (schema is null)
         {
@@ -426,7 +525,10 @@ public static partial class SafeMigrationDiagnosticMessages
         AppendIdentifier(builder, table);
     }
 
-    private static void AppendIdentifier(StringBuilder builder, string identifier)
+    private static void AppendIdentifier(
+        StringBuilder builder,
+        string identifier
+    )
     {
         var bounded = BoundForDisplay(identifier);
         builder.Append('[');
@@ -437,20 +539,26 @@ public static partial class SafeMigrationDiagnosticMessages
             {
                 builder.Append(']');
             }
-
         }
 
         builder.Append(']');
     }
 
-    private static void AppendColumns(StringBuilder builder, string label, IReadOnlyList<string> columns)
+    private static void AppendColumns(
+        StringBuilder builder,
+        string label,
+        IReadOnlyList<string> columns
+    )
     {
         if (columns.Count == 0)
         {
             return;
         }
 
-        builder.Append(label).Append('(');
+        builder
+            .Append(label)
+            .Append('(');
+
         // WHY: Retain ordered members and comma positions while enforcing the diagnostic column limit.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -472,14 +580,17 @@ public static partial class SafeMigrationDiagnosticMessages
         builder.Append(')');
     }
 
-    private static int GetDisplayWidth(char character) => character switch
+    private static int GetDisplayWidth(
+        char character
+    ) => character switch
     {
-        '\\' => 2,
-        >= ' ' and <= '~' => 1,
-        _ => 6,
+        '\\' => 2, >= ' ' and <= '~' => 1, _ => 6,
     };
 
-    private static void AppendEscapedCharacter(StringBuilder builder, char character)
+    private static void AppendEscapedCharacter(
+        StringBuilder builder,
+        char character
+    )
     {
         switch (character)
         {
@@ -494,10 +605,13 @@ public static partial class SafeMigrationDiagnosticMessages
                 builder.Append(digits[character & 15]);
                 break;
         }
-
     }
 
-    private static void ClampLength(StringBuilder builder, int start, int maximumLength)
+    private static void ClampLength(
+        StringBuilder builder,
+        int start,
+        int maximumLength
+    )
     {
         if (builder.Length - start > maximumLength)
         {
@@ -506,7 +620,6 @@ public static partial class SafeMigrationDiagnosticMessages
             builder.Length = GetDisplayPrefixLength(builder, start, start + maximumLength - 3);
             builder.Append("...");
         }
-
     }
 
     /// <summary>Finds a complete display-escape boundary without flattening or modifying a bounded buffer.</summary>
@@ -518,7 +631,11 @@ public static partial class SafeMigrationDiagnosticMessages
     /// <param name="start">The first logical character of the range.</param>
     /// <param name="end">The proposed exclusive end, within the original buffer.</param>
     /// <returns>The absolute exclusive end, moved back only when it would split a display escape.</returns>
-    internal static int GetDisplayPrefixLength(StringBuilder message, int start, int end)
+    internal static int GetDisplayPrefixLength(
+        StringBuilder message,
+        int start,
+        int end
+    )
     {
         ArgumentNullException.ThrowIfNull(message);
         ArgumentOutOfRangeException.ThrowIfNegative(start);
@@ -538,7 +655,8 @@ public static partial class SafeMigrationDiagnosticMessages
             }
 
             var runStart = offset;
-            while (runStart > start && message[runStart - 1] == '\\')
+            while (runStart > start
+                && message[runStart - 1] == '\\')
             {
                 runStart--;
             }
@@ -548,21 +666,38 @@ public static partial class SafeMigrationDiagnosticMessages
                 return end;
             }
 
-            var width = offset + 1 < message.Length && message[offset + 1] == 'u' ? 6 : 2;
+            var width = offset + 1 < message.Length && message[offset + 1] == 'u'
+                ? 6
+                : 2;
 
-            return offset + width > end ? offset : end;
+            return offset + width > end
+                ? offset
+                : end;
         }
 
         return end;
     }
 
-    private static bool CanDisplayFacetValues(string facet) => facet is
-        "column_store_type" or "column_max_length" or "column_nullability" or "column_precision"
-        or "column_scale" or "column_unicode" or "column_fixed_length" or "column_collation"
-        or "column_row_version" or "primary_key_key_semantics" or "unique_key_semantics"
-        or "foreign_key_delete_behavior" or "foreign_key_update_behavior";
+    private static bool CanDisplayFacetValues(
+        string facet
+    ) => facet is
+        "column_store_type"
+        or "column_max_length"
+        or "column_nullability"
+        or "column_precision"
+        or "column_scale"
+        or "column_unicode"
+        or "column_fixed_length"
+        or "column_collation"
+        or "column_row_version"
+        or "primary_key_key_semantics"
+        or "unique_key_semantics"
+        or "foreign_key_delete_behavior"
+        or "foreign_key_update_behavior";
 
-    private static bool IsMachineCode(string value)
+    private static bool IsMachineCode(
+        string value
+    )
     {
         if (value.Length is 0 or > 64)
         {
@@ -575,19 +710,20 @@ public static partial class SafeMigrationDiagnosticMessages
             {
                 return false;
             }
-
         }
 
         return true;
     }
 
-    private static void ValidateOrdinal(int? operationOrdinal)
+    private static void ValidateOrdinal(
+        int? operationOrdinal
+    )
     {
         if (operationOrdinal is < 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(operationOrdinal),
+            throw new ArgumentOutOfRangeException(
+                nameof(operationOrdinal),
                 "A known operation ordinal must be non-negative; use null when it is unavailable.");
         }
-
     }
 }

@@ -4,6 +4,7 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 public sealed class SqlServerStackSafeExpressionTests
 {
     private const int DeepCount = 12_000;
+
     private const string ConnectionString = "Server=127.0.0.1;Database=stack_safe;"
         + "User ID=sa;Password=unused;TrustServerCertificate=True";
 
@@ -16,7 +17,9 @@ public sealed class SqlServerStackSafeExpressionTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void DeepBinaryRenderingPreservesExactSql(bool leftDeep)
+    public void DeepBinaryRenderingPreservesExactSql(
+        bool leftDeep
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
@@ -29,7 +32,8 @@ public sealed class SqlServerStackSafeExpressionTests
                 : SafeMigrationSql.Binary(SafeMigrationSql.Literal(1), SafeMigrationSqlBinaryOperator.Add, expression);
         }
 
-        var expected = leftDeep ? new string('(', DeepCount) + "[x]" + Repeat(" + 1)", DeepCount)
+        var expected = leftDeep
+            ? new string('(', DeepCount) + "[x]" + Repeat(" + 1)", DeepCount)
             : Repeat("(1 + ", DeepCount) + "[x]" + new string(')', DeepCount);
 
         // Act
@@ -46,7 +50,9 @@ public sealed class SqlServerStackSafeExpressionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void DeepUnaryRenderingPreservesNativeRoles(bool predicateRole)
+    public void DeepUnaryRenderingPreservesNativeRoles(
+        bool predicateRole
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
@@ -58,11 +64,16 @@ public sealed class SqlServerStackSafeExpressionTests
         }
 
         var expected = Repeat("(NOT ", DeepCount)
-            + (predicateRole ? "([enabled] = CAST(1 AS bit))" : "[enabled]") + new string(')', DeepCount);
+            + (predicateRole
+                ? "([enabled] = CAST(1 AS bit))"
+                : "[enabled]")
+            + new string(')', DeepCount);
 
         if (predicateRole)
         {
-            expression = SafeMigrationSql.Case([new(expression, SafeMigrationSql.Literal(1))]);
+            expression =
+                SafeMigrationSql.Case([new SafeMigrationSqlCaseWhenClause(expression, SafeMigrationSql.Literal(1))]);
+
             expected = "CASE WHEN " + expected + " THEN 1 END";
         }
 
@@ -80,23 +91,33 @@ public sealed class SqlServerStackSafeExpressionTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var renderer = Renderer(context);
-        var condition = SafeMigrationSql.In(SafeMigrationSql.Identifier("x"),
+        var condition = SafeMigrationSql.In(
+            SafeMigrationSql.Identifier("x"),
             [SafeMigrationSql.Literal(1), SafeMigrationSql.Literal(2)]);
 
-        var predicate = SafeMigrationSql.Between(SafeMigrationSql.Identifier("x"),
-            SafeMigrationSql.Literal(0), SafeMigrationSql.Literal(3));
+        var predicate = SafeMigrationSql.Between(
+            SafeMigrationSql.Identifier("x"),
+            SafeMigrationSql.Literal(0),
+            SafeMigrationSql.Literal(3));
 
-        var expression = SafeMigrationSql.Case([new(condition, predicate)],
-            SafeMigrationSql.Cast(SafeMigrationSql.Function("COALESCE",
-                [SafeMigrationSql.Literal(null), SafeMigrationSql.Literal(0)]), "bit"));
+        var expression = SafeMigrationSql.Case(
+            [new SafeMigrationSqlCaseWhenClause(condition, predicate)],
+            SafeMigrationSql.Cast(
+                SafeMigrationSql.Function(
+                    "COALESCE",
+                    SafeMigrationSql.Literal(null),
+                    SafeMigrationSql.Literal(0)),
+                "bit"));
 
         // Act
         var sql = renderer.Render(expression);
 
         // Assert
-        Assert.Equal("CASE WHEN ([x] IN (1, 2)) THEN CASE WHEN ([x] BETWEEN 0 AND 3) "
+        Assert.Equal(
+            "CASE WHEN ([x] IN (1, 2)) THEN CASE WHEN ([x] BETWEEN 0 AND 3) "
             + "THEN CAST(1 AS bit) WHEN NOT ([x] BETWEEN 0 AND 3) THEN CAST(0 AS bit) ELSE NULL END "
-            + "ELSE CAST(COALESCE(NULL, 0) AS bit) END", sql);
+            + "ELSE CAST(COALESCE(NULL, 0) AS bit) END",
+            sql);
     }
 
     /// <summary>Wide argument lists use a resumable cursor without reversing their literal order.</summary>
@@ -105,12 +126,17 @@ public sealed class SqlServerStackSafeExpressionTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var values = Enumerable.Range(0, DeepCount).Select(static value => SafeMigrationSql.Literal(value)).ToArray();
+        var values = Enumerable
+            .Range(0, DeepCount)
+            .Select(static value => SafeMigrationSql.Literal(value))
+            .ToArray();
+
         var expression = SafeMigrationSql.In(SafeMigrationSql.Identifier("x"), values);
         var expected = "([x] IN (" + string.Join(", ", Enumerable.Range(0, DeepCount)) + "))";
 
         // Act
-        var sql = Renderer(context).Render(expression);
+        var sql = Renderer(context)
+            .Render(expression);
 
         // Assert
         Assert.Equal(expected, sql);
@@ -121,12 +147,15 @@ public sealed class SqlServerStackSafeExpressionTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void DeepValidationPreservesFailurePriority(bool firstOpaque)
+    public void DeepValidationPreservesFailurePriority(
+        bool firstOpaque
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var renderer = Renderer(context);
-        var first = firstOpaque ? SafeMigrationSql.Opaque("untrusted")
+        var first = firstOpaque
+            ? SafeMigrationSql.Opaque("untrusted")
             : SafeMigrationSql.Cast(SafeMigrationSql.Literal(1), "not_a_native_type");
 
         for (var index = 0; index < DeepCount; index++)
@@ -134,7 +163,8 @@ public sealed class SqlServerStackSafeExpressionTests
             first = SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Negate, first);
         }
 
-        var second = firstOpaque ? SafeMigrationSql.Cast(SafeMigrationSql.Literal(1), "not_a_native_type")
+        var second = firstOpaque
+            ? SafeMigrationSql.Cast(SafeMigrationSql.Literal(1), "not_a_native_type")
             : SafeMigrationSql.Opaque("untrusted");
 
         var expression = SafeMigrationSql.Binary(first, SafeMigrationSqlBinaryOperator.Add, second);
@@ -143,7 +173,11 @@ public sealed class SqlServerStackSafeExpressionTests
         var feature = renderer.GetUnsupportedFeature(expression);
 
         // Assert
-        Assert.Equal(firstOpaque ? "opaque_sql_expression" : "structured_cast_type", feature);
+        Assert.Equal(
+            firstOpaque
+                ? "opaque_sql_expression"
+                : "structured_cast_type",
+            feature);
     }
 
     /// <summary>Rejected left siblings still prevent evaluation of a later unknown public node kind.</summary>
@@ -152,11 +186,14 @@ public sealed class SqlServerStackSafeExpressionTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var expression = SafeMigrationSql.Binary(SafeMigrationSql.Opaque("unproven"),
-            SafeMigrationSqlBinaryOperator.Add, new UnknownExpression());
+        var expression = SafeMigrationSql.Binary(
+            SafeMigrationSql.Opaque("unproven"),
+            SafeMigrationSqlBinaryOperator.Add,
+            new UnknownExpression());
 
         // Act
-        var feature = Renderer(context).GetUnsupportedFeature(expression);
+        var feature = Renderer(context)
+            .GetUnsupportedFeature(expression);
 
         // Assert
         Assert.Equal("opaque_sql_expression", feature);
@@ -169,7 +206,10 @@ public sealed class SqlServerStackSafeExpressionTests
     [InlineData(0, true)]
     [InlineData(1, true)]
     [InlineData(2, false)]
-    public void DeepFiniteBooleanProofPreservesItsDomain(int terminal, bool expected)
+    public void DeepFiniteBooleanProofPreservesItsDomain(
+        int terminal,
+        bool expected
+    )
     {
         // Arrange
         var expression = SafeMigrationSql.Literal(terminal);
@@ -192,10 +232,16 @@ public sealed class SqlServerStackSafeExpressionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void DeepCollationProofPreservesTerminalNullability(bool hasValue)
+    public void DeepCollationProofPreservesTerminalNullability(
+        bool hasValue
+    )
     {
         // Arrange
-        var expression = SafeMigrationSql.Literal(hasValue ? 1 : null);
+        var expression = SafeMigrationSql.Literal(
+            hasValue
+                ? 1
+                : null);
+
         for (var index = 0; index < DeepCount; index++)
         {
             expression = SafeMigrationSql.Collate(expression, "Latin1_General_100_CI_AS");
@@ -213,20 +259,28 @@ public sealed class SqlServerStackSafeExpressionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void DeepCaseProofDoesNotBroadenNativeEligibility(bool nullableElse)
+    public void DeepCaseProofDoesNotBroadenNativeEligibility(
+        bool nullableElse
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var expression = SafeMigrationSql.Literal(nullableElse ? null : 1);
+        var expression = SafeMigrationSql.Literal(
+            nullableElse
+                ? null
+                : 1);
+
         for (var index = 0; index < DeepCount; index++)
         {
-            expression = SafeMigrationSql.Case([new(SafeMigrationSql.Literal(true), SafeMigrationSql.Literal(0))],
+            expression = SafeMigrationSql.Case(
+                [new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.Literal(true), SafeMigrationSql.Literal(0))],
                 expression);
         }
 
         // Act
         var nonNull = SqlServerComputedColumnContract.IsNonNull(expression);
-        var feature = Renderer(context).GetUnsupportedFeature(expression);
+        var feature = Renderer(context)
+            .GetUnsupportedFeature(expression);
 
         // Assert
         Assert.Equal(!nullableElse, nonNull);
@@ -238,13 +292,19 @@ public sealed class SqlServerStackSafeExpressionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void DeepCoalesceProofRetainsAllNullRejection(bool hasValue)
+    public void DeepCoalesceProofRetainsAllNullRejection(
+        bool hasValue
+    )
     {
         // Arrange
-        var expression = SafeMigrationSql.Literal(hasValue ? 1 : null);
+        var expression = SafeMigrationSql.Literal(
+            hasValue
+                ? 1
+                : null);
+
         for (var index = 0; index < DeepCount; index++)
         {
-            expression = SafeMigrationSql.Function("COALESCE", [SafeMigrationSql.Literal(null), expression]);
+            expression = SafeMigrationSql.Function("COALESCE", SafeMigrationSql.Literal(null), expression);
         }
 
         // Act
@@ -259,7 +319,9 @@ public sealed class SqlServerStackSafeExpressionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void DeepFilterValidationAndEnumerationPreserveOrder(bool supported)
+    public void DeepFilterValidationAndEnumerationPreserveOrder(
+        bool supported
+    )
     {
         // Arrange
         var expression = supported
@@ -268,15 +330,20 @@ public sealed class SqlServerStackSafeExpressionTests
 
         for (var index = DeepCount - 1; index >= 0; index--)
         {
-            var comparison = SafeMigrationSql.Binary(SafeMigrationSql.Identifier("c" + index),
-                SafeMigrationSqlBinaryOperator.Equal, SafeMigrationSql.Literal(index));
+            var comparison = SafeMigrationSql.Binary(
+                SafeMigrationSql.Identifier("c" + index),
+                SafeMigrationSqlBinaryOperator.Equal,
+                SafeMigrationSql.Literal(index));
 
             expression = SafeMigrationSql.Binary(comparison, SafeMigrationSqlBinaryOperator.And, expression);
         }
 
         // Act
         var valid = SqlServerSafeMigrationCatalogSqlBuilder.IsSupportedIndexFilter(expression);
-        var enumerator = SqlServerSafeMigrationCatalogSqlBuilder.GetIndexFilterComparisons(expression).GetEnumerator();
+        var enumerator = SqlServerSafeMigrationCatalogSqlBuilder
+            .GetIndexFilterComparisons(expression)
+            .GetEnumerator();
+
         using (enumerator)
         {
             // Assert
@@ -306,12 +373,17 @@ public sealed class SqlServerStackSafeExpressionTests
     public void ParsedFilterRewriteRetainsLiteralEncodingAndOperandIdentity()
     {
         // Arrange
-        var definition = new ExpectedIndexDefinition("IX_items_code", "items", [new("code")],
+        var definition = new ExpectedIndexDefinition(
+            "IX_items_code",
+            "items",
+            [new ExpectedIndexKeyDefinition("code")],
             filter: "[a] = 'first' AND [b] IN (N'second', 'third') AND [c] IS NOT NULL");
 
         // Act
         var rewritten = SqlServerSafeMigrationCatalogSqlBuilder.GetStructuredIndexFilter(definition);
-        var comparisons = SqlServerSafeMigrationCatalogSqlBuilder.GetIndexFilterComparisons(rewritten!).ToArray();
+        var comparisons = SqlServerSafeMigrationCatalogSqlBuilder
+            .GetIndexFilterComparisons(rewritten!)
+            .ToArray();
 
         // Assert
         Assert.Equal(s_filterColumns, comparisons.Select(static item => item.Column));
@@ -330,16 +402,23 @@ public sealed class SqlServerStackSafeExpressionTests
         };
 
         var aliases = new Dictionary<string, string>(StringComparer.Ordinal);
-        var expression = SafeMigrationSql.Binary(SafeMigrationSql.Identifier("missing"),
-            SafeMigrationSqlBinaryOperator.Equal, SafeMigrationSql.Identifier("right"));
+        var expression = SafeMigrationSql.Binary(
+            SafeMigrationSql.Identifier("missing"),
+            SafeMigrationSqlBinaryOperator.Equal,
+            SafeMigrationSql.Identifier("right"));
 
         // Act
-        var rewritten = InvokeStatic<SafeMigrationSqlExpression?>("BindProjectedSeedFilter",
-            expression, columns, aliases);
+        var rewritten = InvokeStatic<SafeMigrationSqlExpression?>(
+            "BindProjectedSeedFilter",
+            expression,
+            columns,
+            aliases);
 
         // Assert
         Assert.Null(rewritten);
-        Assert.Equal("f0", Assert.Single(aliases).Value);
+        Assert.Equal("f0",
+            Assert.Single(aliases)
+                .Value);
     }
 
     /// <summary>Deep seed predicates rebuild in alias order while retaining immutable shared literals.</summary>
@@ -354,26 +433,38 @@ public sealed class SqlServerStackSafeExpressionTests
         };
 
         var aliases = new Dictionary<string, string>(StringComparer.Ordinal);
-        var expression = SafeMigrationSql.Binary(SafeMigrationSql.Identifier("source"),
-            SafeMigrationSqlBinaryOperator.Equal, literal);
+        var expression = SafeMigrationSql.Binary(
+            SafeMigrationSql.Identifier("source"),
+            SafeMigrationSqlBinaryOperator.Equal,
+            literal);
 
         for (var index = 0; index < DeepCount; index++)
         {
-            expression = SafeMigrationSql.Binary(expression, SafeMigrationSqlBinaryOperator.And,
+            expression = SafeMigrationSql.Binary(
+                expression,
+                SafeMigrationSqlBinaryOperator.And,
                 SafeMigrationSql.IsNotNull(SafeMigrationSql.Identifier("source")));
         }
 
         // Act
-        var rewritten = InvokeStatic<SafeMigrationSqlExpression?>("BindProjectedSeedFilter",
-            expression, columns, aliases);
+        var rewritten = InvokeStatic<SafeMigrationSqlExpression?>(
+            "BindProjectedSeedFilter",
+            expression,
+            columns,
+            aliases);
 
-        var comparisons = SqlServerSafeMigrationCatalogSqlBuilder.GetIndexFilterComparisons(rewritten!).ToArray();
+        var comparisons = SqlServerSafeMigrationCatalogSqlBuilder
+            .GetIndexFilterComparisons(rewritten!)
+            .ToArray();
 
         // Assert
         Assert.Equal(DeepCount + 1, comparisons.Length);
         Assert.All(comparisons, static item => Assert.Equal("f0", item.Column));
         Assert.Same(literal, comparisons[0].Literal);
-        Assert.Equal("f0", Assert.Single(aliases).Value);
+        Assert.Equal("f0",
+            Assert.Single(aliases)
+                .Value);
+
         Assert.NotSame(expression, rewritten);
     }
 
@@ -382,19 +473,26 @@ public sealed class SqlServerStackSafeExpressionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void DeepAddedNullProofPreservesItsNegativeCase(bool negated)
+    public void DeepAddedNullProofPreservesItsNegativeCase(
+        bool negated
+    )
     {
         // Arrange
-        var expression = negated ? SafeMigrationSql.IsNotNull(SafeMigrationSql.Identifier("new"))
+        var expression = negated
+            ? SafeMigrationSql.IsNotNull(SafeMigrationSql.Identifier("new"))
             : SafeMigrationSql.IsNull(SafeMigrationSql.Identifier("new"));
+
         for (var index = 0; index < DeepCount; index++)
         {
-            expression = SafeMigrationSql.Binary(SafeMigrationSql.Literal(true),
-                SafeMigrationSqlBinaryOperator.And, expression);
+            expression = SafeMigrationSql.Binary(
+                SafeMigrationSql.Literal(true),
+                SafeMigrationSqlBinaryOperator.And,
+                expression);
         }
 
-        var method = typeof(SqlServerProjectedKeyShape).GetMethod("RejectsAddedNull",
-            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var method = typeof(SqlServerProjectedKeyShape).GetMethod(
+            "RejectsAddedNull",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
 
         // Act
         var rejected = method.Invoke(null, [expression, new HashSet<string>(StringComparer.Ordinal) { "new" }]);
@@ -408,22 +506,32 @@ public sealed class SqlServerStackSafeExpressionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void DeepDefaultValidationPreservesBranchFailure(bool valid)
+    public void DeepDefaultValidationPreservesBranchFailure(
+        bool valid
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = Catalog(context);
-        var expression = SafeMigrationSql.Literal(valid ? 1 : "invalid integer");
+        var expression = SafeMigrationSql.Literal(
+            valid
+                ? 1
+                : "invalid integer");
+
         for (var index = 0; index < DeepCount; index++)
         {
-            expression = SafeMigrationSql.Function("COALESCE", [SafeMigrationSql.Literal(1), expression]);
+            expression = SafeMigrationSql.Function("COALESCE", SafeMigrationSql.Literal(1), expression);
         }
 
         // Act
         var feature = InvokeInstance<string?>(catalog, "GetDefaultExpressionFeature", expression, "int", false);
 
         // Assert
-        Assert.Equal(valid ? null : SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode, feature);
+        Assert.Equal(
+            valid
+                ? null
+                : SqlServerSafeMigrationRuntimePlan.DefaultValueUnsupportedCode,
+            feature);
     }
 
     /// <summary>Deep omitted-column default proofs keep the all-NULL negative without recursive calls.</summary>
@@ -431,13 +539,19 @@ public sealed class SqlServerStackSafeExpressionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void DeepDefaultNullabilityProofRetainsNegative(bool hasValue)
+    public void DeepDefaultNullabilityProofRetainsNegative(
+        bool hasValue
+    )
     {
         // Arrange
-        var expression = SafeMigrationSql.Literal(hasValue ? 1 : null);
+        var expression = SafeMigrationSql.Literal(
+            hasValue
+                ? 1
+                : null);
+
         for (var index = 0; index < DeepCount; index++)
         {
-            expression = SafeMigrationSql.Function("COALESCE", [SafeMigrationSql.Literal(null), expression]);
+            expression = SafeMigrationSql.Function("COALESCE", SafeMigrationSql.Literal(null), expression);
         }
 
         // Act
@@ -455,33 +569,50 @@ public sealed class SqlServerStackSafeExpressionTests
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = Catalog(context);
         var literal = SafeMigrationSql.Literal(1);
-        var leaf = InvokeInstance<string>(catalog, "BuildDefaultExpressionSupportPredicate",
-            literal, "int", true, null);
+        var leaf = InvokeInstance<string>(
+            catalog,
+            "BuildDefaultExpressionSupportPredicate",
+            literal,
+            "int",
+            true,
+            null);
 
         var expression = literal;
         const int depth = 2_048;
         for (var index = 0; index < depth; index++)
         {
-            expression = SafeMigrationSql.Function("COALESCE", [SafeMigrationSql.Literal(null), expression]);
+            expression = SafeMigrationSql.Function("COALESCE", SafeMigrationSql.Literal(null), expression);
         }
 
         var expected = Repeat("(1 = 1 AND ", depth) + leaf + new string(')', depth);
 
         // Act
-        var proof = InvokeInstance<string>(catalog, "BuildDefaultExpressionSupportPredicate",
-            expression, "int", false, null);
+        var proof = InvokeInstance<string>(
+            catalog,
+            "BuildDefaultExpressionSupportPredicate",
+            expression,
+            "int",
+            false,
+            null);
 
         // Assert
         Assert.Equal(expected, proof);
     }
 
-    private static SqlServerSafeMigrationSqlExpressionRenderer Renderer(DbContext context)
+    private static SqlServerSafeMigrationSqlExpressionRenderer Renderer(
+        DbContext context
+    )
         => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
-    private static SqlServerSafeMigrationCatalogSqlBuilder Catalog(DbContext context)
+    private static SqlServerSafeMigrationCatalogSqlBuilder Catalog(
+        DbContext context
+    )
         => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
-    private static string Repeat(string text, int count)
+    private static string Repeat(
+        string text,
+        int count
+    )
     {
         var builder = new StringBuilder(text.Length * count);
         for (var index = 0; index < count; index++)
@@ -492,10 +623,14 @@ public sealed class SqlServerStackSafeExpressionTests
         return builder.ToString();
     }
 
-    private static TResult InvokeStatic<TResult>(string name, params object?[] arguments)
+    private static TResult InvokeStatic<TResult>(
+        string name,
+        params object?[] arguments
+    )
     {
-        var method = typeof(SqlServerSafeMigrationCatalogSqlBuilder).GetMethod(name,
-            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var method = typeof(SqlServerSafeMigrationCatalogSqlBuilder).GetMethod(
+            name,
+            BindingFlags.Static | BindingFlags.NonPublic)!;
 
         return (TResult)method.Invoke(null, arguments)!;
     }
@@ -506,8 +641,9 @@ public sealed class SqlServerStackSafeExpressionTests
         params object?[] arguments
     )
     {
-        var method = typeof(SqlServerSafeMigrationCatalogSqlBuilder).GetMethod(name,
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var method = typeof(SqlServerSafeMigrationCatalogSqlBuilder).GetMethod(
+            name,
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
 
         return (TResult)method.Invoke(instance, arguments)!;
     }

@@ -4,8 +4,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 internal sealed class SqlServerProjectedCandidateKeys
 {
     private readonly Dictionary<int, Dictionary<int, List<KeyColumn>>> _keys = [];
-    private readonly Dictionary<NameIdentity, KeyIdentity> _names = [];
     private readonly Dictionary<KeyIdentity, SafeMigrationLiveCandidateKey> _liveIdentities = [];
+    private readonly Dictionary<NameIdentity, KeyIdentity> _names = [];
     private int _nextKeyId = -1;
 
     /// <summary>Binds a requested catalog name to its physical backing index.</summary>
@@ -54,7 +54,10 @@ internal sealed class SqlServerProjectedCandidateKeys
         CancellationToken cancellationToken
     )
     {
-        foreach (var chunk in principalTables.Where(static id => id > 0).Distinct().Chunk(256))
+        foreach (var chunk in principalTables
+            .Where(static id => id > 0)
+            .Distinct()
+            .Chunk(256))
         {
             var tableIds = string.Join(", ", chunk.Select(static id => id.ToString(CultureInfo.InvariantCulture)));
 
@@ -70,6 +73,7 @@ internal sealed class SqlServerProjectedCandidateKeys
                 + $"WHERE i.object_id IN ({tableIds}) AND i.is_unique = 1 AND i.is_disabled = 0 "
                 + "AND i.is_hypothetical = 0 AND i.has_filter = 0 AND ic.key_ordinal > 0 "
                 + "ORDER BY i.object_id, i.index_id, ic.key_ordinal;";
+
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
             while (await reader.ReadAsync(cancellationToken))
@@ -86,13 +90,24 @@ internal sealed class SqlServerProjectedCandidateKeys
 
                 columns.Add(new KeyColumn(reader.GetString(4), reader.GetInt32(5)));
                 BindName(table, reader.GetString(2), index);
-                var kind = reader.IsDBNull(6) ? SafeMigrationDatabaseObjectKind.Index
-                    : reader.GetString(6).TrimEnd() == "PK" ? SafeMigrationDatabaseObjectKind.PrimaryKey
-                    : SafeMigrationDatabaseObjectKind.UniqueConstraint;
+                var kind = reader.IsDBNull(6)
+                    ? SafeMigrationDatabaseObjectKind.Index
+                    : reader
+                        .GetString(6)
+                        .TrimEnd()
+                    == "PK"
+                        ? SafeMigrationDatabaseObjectKind.PrimaryKey
+                        : SafeMigrationDatabaseObjectKind.UniqueConstraint;
 
-                _liveIdentities[new KeyIdentity(table, index)] = new SafeMigrationLiveCandidateKey(kind,
-                    reader.IsDBNull(3) ? reader.GetString(2) : reader.GetString(3),
-                    reader.IsDBNull(3) ? null : reader.GetString(2));
+                _liveIdentities[new KeyIdentity(table, index)] = new SafeMigrationLiveCandidateKey(
+                    kind,
+                    reader.IsDBNull(3)
+                        ? reader.GetString(2)
+                        : reader.GetString(3),
+                    reader.IsDBNull(3)
+                        ? null
+                        : reader.GetString(2));
+
                 if (!reader.IsDBNull(3))
                 {
                     BindName(table, reader.GetString(3), index);
@@ -120,19 +135,22 @@ internal sealed class SqlServerProjectedCandidateKeys
         List<SafeMigrationLiveCandidateKey>? result = null;
         foreach (var pair in keys)
         {
-            if (pair.Value.Count != columns.Count || columnIds.Length != columns.Count
+            if (pair.Value.Count != columns.Count
+                || columnIds.Length != columns.Count
                 || !_liveIdentities.TryGetValue(new KeyIdentity(table, pair.Key), out var identity))
             {
                 continue;
             }
 
             var matching = true;
+
             // WHY: Compare each candidate column identity with the same requested key position.
             // ReSharper disable once ForCanBeConvertedToForeach
             // ReSharper disable once LoopCanBeConvertedToQuery
             for (var ordinal = 0; ordinal < columns.Count; ordinal++)
             {
-                if (pair.Value[ordinal].Id <= 0 || pair.Value[ordinal].Id != columnIds[ordinal])
+                if (pair.Value[ordinal].Id <= 0
+                    || pair.Value[ordinal].Id != columnIds[ordinal])
                 {
                     matching = false;
                     break;
@@ -212,7 +230,8 @@ internal sealed class SqlServerProjectedCandidateKeys
         var alias = new NameIdentity(table, name);
         var tableKeys = GetTableKeys(table);
 
-        if (!_names.TryGetValue(alias, out var identity) || !tableKeys.ContainsKey(identity.Index))
+        if (!_names.TryGetValue(alias, out var identity)
+            || !tableKeys.ContainsKey(identity.Index))
         {
             identity = new KeyIdentity(table, _nextKeyId--);
             _names[alias] = identity;
@@ -225,7 +244,12 @@ internal sealed class SqlServerProjectedCandidateKeys
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < columns.Count; ordinal++)
         {
-            key.Add(new KeyColumn(columns[ordinal], columnIds.Length == columns.Count ? columnIds[ordinal] : 0));
+            key.Add(
+                new KeyColumn(
+                    columns[ordinal],
+                    columnIds.Length == columns.Count
+                        ? columnIds[ordinal]
+                        : 0));
         }
 
         tableKeys[identity.Index] = key;
@@ -286,7 +310,8 @@ internal sealed class SqlServerProjectedCandidateKeys
             // ReSharper disable once LoopCanBeConvertedToQuery
             for (var ordinal = 0; ordinal < columns.Count; ordinal++)
             {
-                if ((columnId > 0 && columns[ordinal].Id == columnId) || columns[ordinal].Name == name)
+                if ((columnId > 0 && columns[ordinal].Id == columnId)
+                    || columns[ordinal].Name == name)
                 {
                     columns[ordinal] = columns[ordinal] with { Name = newName };
                 }
@@ -309,8 +334,11 @@ internal sealed class SqlServerProjectedCandidateKeys
             return;
         }
 
-        foreach (var index in keys.Where(pair => pair.Value.Any(column => column.Name == name
-                || (columnId > 0 && column.Id == columnId))).Select(static pair => pair.Key).ToArray())
+        foreach (var index in keys
+            .Where(pair => pair.Value.Any(column => column.Name == name
+                || (columnId > 0 && column.Id == columnId)))
+            .Select(static pair => pair.Key)
+            .ToArray())
         {
             keys.Remove(index);
         }

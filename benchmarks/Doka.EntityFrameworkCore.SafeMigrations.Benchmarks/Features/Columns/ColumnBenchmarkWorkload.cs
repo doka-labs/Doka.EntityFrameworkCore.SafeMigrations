@@ -150,7 +150,9 @@ internal static class ColumnBenchmarkWorkload
                 outcome.ObservedState,
                 outcome.Action,
                 postconditionSatisfied: !isBlocking,
-                isBlocking ? "different_reject" : "classified_matching");
+                isBlocking
+                    ? "different_reject"
+                    : "classified_matching");
         }
 
         return new SafeMigrationRunReport(

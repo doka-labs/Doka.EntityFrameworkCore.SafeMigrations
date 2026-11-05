@@ -4,12 +4,21 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
 {
     /// <summary>Retains SQL and callback order with owned continuations instead of recursive rendering.</summary>
     private void AppendIterative(
-        IExpressionTextWriter writer, SafeMigrationSqlExpression expression, bool catalogShape,
-        bool functionArgument = false, bool deparsed = false)
+        IExpressionTextWriter writer,
+        SafeMigrationSqlExpression expression,
+        bool catalogShape,
+        bool functionArgument = false,
+        bool deparsed = false
+    )
     {
         var pending = new SafeMigrationWorkStack<RenderStep>();
-        var step = new RenderStep(deparsed ? RenderStepKind.Deparsed : RenderStepKind.Expression,
-            writer, expression, Flag: functionArgument);
+        var step = new RenderStep(
+            deparsed
+                ? RenderStepKind.Deparsed
+                : RenderStepKind.Expression,
+            writer,
+            expression,
+            Flag: functionArgument);
 
         try
         {
@@ -39,7 +48,11 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
     }
 
     /// <summary>Executes one continuation without recursively rendering another node.</summary>
-    private void ExecuteRenderStep(RenderStep step, bool catalogShape, ref SafeMigrationWorkStack<RenderStep> pending)
+    private void ExecuteRenderStep(
+        RenderStep step,
+        bool catalogShape,
+        ref SafeMigrationWorkStack<RenderStep> pending
+    )
     {
         var writer = step.Writer;
         switch (step.Kind)
@@ -66,7 +79,13 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             case RenderStepKind.Deparsed:
                 if (step.Expression is not SafeMigrationSqlBinaryExpression deparsed)
                 {
-                    pending.Push(step with { Kind = RenderStepKind.Expression, Flag = false });
+                    pending.Push(
+                        step with
+                        {
+                            Kind = RenderStepKind.Expression,
+                            Flag = false,
+                        });
+
                     return;
                 }
 
@@ -75,8 +94,13 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                     writer.Append('(');
                 }
 
-                pending.Push(new RenderStep(RenderStepKind.DeparsedRight, writer, deparsed,
-                    Flag: step.Index == 0));
+                pending.Push(
+                    new RenderStep(
+                        RenderStepKind.DeparsedRight,
+                        writer,
+                        deparsed,
+                        Flag: step.Index == 0));
+
                 ScheduleDeparsedOperand(ref pending, writer, deparsed.Left, deparsed.Operator, false);
                 return;
             case RenderStepKind.DeparsedRight:
@@ -103,13 +127,23 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                     // n-ary node. Unlike operators keep their own parentheses.
                     // Interned separators avoid one new string per flattened node.
                     pending.Push(step with { Expression = flattened.Right });
-                    pending.Push(TextStep(writer,
-                        flattened.Operator == SafeMigrationSqlBinaryOperator.And ? " AND " : " OR "));
+                    pending.Push(
+                        TextStep(
+                            writer,
+                            flattened.Operator == SafeMigrationSqlBinaryOperator.And
+                                ? " AND "
+                                : " OR "));
+
                     pending.Push(step with { Expression = flattened.Left });
                 }
                 else
                 {
-                    pending.Push(step with { Kind = RenderStepKind.Expression, Flag = false });
+                    pending.Push(
+                        step with
+                        {
+                            Kind = RenderStepKind.Expression,
+                            Flag = false,
+                        });
                 }
 
                 return;
@@ -133,8 +167,13 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                 }
 
                 pending.Push(step with { Index = step.Index + 1 });
-                pending.Push(new RenderStep(RenderStepKind.Expression, writer, function.Arguments[step.Index],
-                    Flag: true));
+                pending.Push(
+                    new RenderStep(
+                        RenderStepKind.Expression,
+                        writer,
+                        function.Arguments[step.Index],
+                        Flag: true));
+
                 return;
             case RenderStepKind.CaseClauses:
                 ScheduleCaseClause(step, catalogShape, ref pending);
@@ -142,7 +181,9 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
             case RenderStepKind.CaseResult:
                 var conditional = (SafeMigrationSqlCaseExpression)step.Expression;
                 var result = step.Index < conditional.WhenClauses.Count
-                    ? conditional.WhenClauses[step.Index].Result : conditional.ElseResult!;
+                    ? conditional.WhenClauses[step.Index].Result
+                    : conditional.ElseResult!;
+
                 if (writer is not CatalogExpressionTextWriter { NativeLiteralForms: true } catalog
                     || !catalog.TryScheduleCaseResult(result, conditional, ref pending))
                 {
@@ -182,18 +223,24 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
     }
 
     /// <summary>Schedules children while evaluating native special forms in their original order.</summary>
-    private void ScheduleExpression(RenderStep step, bool catalogShape, ref SafeMigrationWorkStack<RenderStep> pending)
+    private void ScheduleExpression(
+        RenderStep step,
+        bool catalogShape,
+        ref SafeMigrationWorkStack<RenderStep> pending
+    )
     {
         var writer = step.Writer;
         switch (step.Expression)
         {
             case SafeMigrationSqlUnaryExpression unary:
-                if (writer.NativeLiteralForms && TryAppendCapturedNumericUnary(writer, unary))
+                if (writer.NativeLiteralForms
+                    && TryAppendCapturedNumericUnary(writer, unary))
                 {
                     return;
                 }
 
-                if (writer.NativeLiteralForms && unary.Operator == SafeMigrationSqlUnaryOperator.Negate)
+                if (writer.NativeLiteralForms
+                    && unary.Operator == SafeMigrationSqlUnaryOperator.Negate)
                 {
                     // WHY: A failed signed-token proof applies to this entire
                     // consecutive run. Do not rescan its suffix at each node.
@@ -201,7 +248,9 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                     var count = 1;
                     writer.Append("(- ");
                     while (operand is SafeMigrationSqlUnaryExpression
-                        { Operator: SafeMigrationSqlUnaryOperator.Negate } nested)
+                        {
+                            Operator: SafeMigrationSqlUnaryOperator.Negate,
+                        } nested)
                     {
                         writer.Append("(- ");
                         count++;
@@ -213,8 +262,13 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                     return;
                 }
 
-                writer.Append(unary.Operator == SafeMigrationSqlUnaryOperator.Not ? "(NOT "
-                    : writer.NativeLiteralForms ? "(- " : "(-");
+                writer.Append(
+                    unary.Operator == SafeMigrationSqlUnaryOperator.Not
+                        ? "(NOT "
+                        : writer.NativeLiteralForms
+                            ? "(- "
+                            : "(-");
+
                 pending.Push(TextStep(writer, ")"));
                 pending.Push(new RenderStep(RenderStepKind.Expression, writer, unary.Operand));
                 return;
@@ -224,36 +278,63 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                     && binary.Operator is SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or)
                 {
                     pending.Push(TextStep(writer, ")"));
-                    pending.Push(new RenderStep(RenderStepKind.NativeBoolean, writer, binary,
-                        Index: (int)binary.Operator));
+                    pending.Push(
+                        new RenderStep(
+                            RenderStepKind.NativeBoolean,
+                            writer,
+                            binary,
+                            Index: (int)binary.Operator));
                 }
                 else
                 {
                     pending.Push(new RenderStep(RenderStepKind.BinaryRight, writer, binary));
-                    ScheduleBinaryOperand(ref pending, writer, binary.Left, binary.Right,
-                        binary.Operator, catalogShape);
+                    ScheduleBinaryOperand(
+                        ref pending,
+                        writer,
+                        binary.Left,
+                        binary.Right,
+                        binary.Operator,
+                        catalogShape);
                 }
 
                 return;
             case SafeMigrationSqlNullTestExpression test:
                 writer.Append('(');
-                pending.Push(TextStep(writer, test.Negated ? " IS NOT NULL)" : " IS NULL)"));
+                pending.Push(
+                    TextStep(
+                        writer,
+                        test.Negated
+                            ? " IS NOT NULL)"
+                            : " IS NULL)"));
+
                 pending.Push(new RenderStep(RenderStepKind.Expression, writer, test.Operand));
                 return;
             case SafeMigrationSqlBetweenExpression between:
-                writer.Append(catalogShape ? "((" : "(");
+                writer.Append(
+                    catalogShape
+                        ? "(("
+                        : "(");
+
                 pending.Push(new RenderStep(RenderStepKind.Between, writer, between, Index: 1));
                 pending.Push(new RenderStep(RenderStepKind.Expression, writer, between.Operand));
                 return;
             case SafeMigrationSqlInExpression list:
-                if (catalogShape && writer.NativeLiteralForms && list.Values.Count == 1)
+                if (catalogShape
+                    && writer.NativeLiteralForms
+                    && list.Values.Count == 1)
                 {
                     // WHY: Native singleton IN is scalar equality, not ANY.
-                    pending.Push(new RenderStep(RenderStepKind.Expression, writer,
-                        new SafeMigrationSqlBinaryExpression(list.Operand,
-                            list.Negated ? SafeMigrationSqlBinaryOperator.NotEqual
-                                : SafeMigrationSqlBinaryOperator.Equal,
-                            list.Values[0])));
+                    pending.Push(
+                        new RenderStep(
+                            RenderStepKind.Expression,
+                            writer,
+                            new SafeMigrationSqlBinaryExpression(
+                                list.Operand,
+                                list.Negated
+                                    ? SafeMigrationSqlBinaryOperator.NotEqual
+                                    : SafeMigrationSqlBinaryOperator.Equal,
+                                list.Values[0])));
+
                     return;
                 }
 
@@ -262,8 +343,11 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                 pending.Push(new RenderStep(RenderStepKind.Expression, writer, list.Operand));
                 return;
             case SafeMigrationSqlFunctionExpression function:
-                writer.Append(writer.NativeLiteralForms && IsNativeSpecialForm(function.Name)
-                    ? function.Name.ToUpperInvariant() : function.Name.ToLowerInvariant());
+                writer.Append(
+                    writer.NativeLiteralForms && IsNativeSpecialForm(function.Name)
+                        ? function.Name.ToUpperInvariant()
+                        : function.Name.ToLowerInvariant());
+
                 writer.Append('(');
                 if (writer.TryAppendNativeLowerOperand(function))
                 {
@@ -295,17 +379,28 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
                 }
 
                 var castType = FindCanonicalStoreType(cast.StoreType);
-                if (writer.NativeLiteralForms && TryAppendNativeIntegerConstant(writer, cast, castType))
+                if (writer.NativeLiteralForms
+                    && TryAppendNativeIntegerConstant(writer, cast, castType))
                 {
                     return;
                 }
 
-                writer.Append(catalogShape ? "(" : "CAST(");
-                pending.Push(TextStep(writer, catalogShape ? ")::" + castType : " AS " + castType + ")"));
+                writer.Append(
+                    catalogShape
+                        ? "("
+                        : "CAST(");
+
+                pending.Push(
+                    TextStep(
+                        writer,
+                        catalogShape
+                            ? ")::" + castType
+                            : " AS " + castType + ")"));
+
                 pending.Push(new RenderStep(RenderStepKind.Expression, writer, cast.Operand));
                 return;
             case SafeMigrationSqlCollateExpression collation:
-                var parentheses = writer.ParenthesizeCollations || writer.NativeLiteralForms && !step.Flag;
+                var parentheses = writer.ParenthesizeCollations || (writer.NativeLiteralForms && !step.Flag);
                 if (parentheses)
                 {
                     writer.Append('(');
@@ -322,9 +417,13 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
 
     /// <summary>Defers native child writers instead of recursively rendering from coercion helpers.</summary>
     private static void ScheduleBinaryOperand(
-        ref SafeMigrationWorkStack<RenderStep> pending, IExpressionTextWriter writer,
-        SafeMigrationSqlExpression operand, SafeMigrationSqlExpression other,
-        SafeMigrationSqlBinaryOperator operation, bool catalogShape)
+        ref SafeMigrationWorkStack<RenderStep> pending,
+        IExpressionTextWriter writer,
+        SafeMigrationSqlExpression operand,
+        SafeMigrationSqlExpression other,
+        SafeMigrationSqlBinaryOperator operation,
+        bool catalogShape
+    )
     {
         if (operation is not (SafeMigrationSqlBinaryOperator.And or SafeMigrationSqlBinaryOperator.Or)
             && writer is CatalogExpressionTextWriter { NativeLiteralForms: true } catalog
@@ -334,9 +433,9 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
         }
 
         if (TryAppendNativeTextComparisonMember(writer, operand, other, operation)
-            || operand is SafeMigrationSqlLiteralExpression literal
-            && other is SafeMigrationSqlIdentifierExpression column
-            && writer.TryAppendNativeUnknownLiteral(literal, column))
+            || (operand is SafeMigrationSqlLiteralExpression literal
+                && other is SafeMigrationSqlIdentifierExpression column
+                && writer.TryAppendNativeUnknownLiteral(literal, column)))
         {
             return;
         }
@@ -346,8 +445,12 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
 
     /// <summary>Preserves deparser precedence without recursively descending binary spines.</summary>
     private static void ScheduleDeparsedOperand(
-        ref SafeMigrationWorkStack<RenderStep> pending, IExpressionTextWriter writer,
-        SafeMigrationSqlExpression operand, SafeMigrationSqlBinaryOperator parentOperator, bool right)
+        ref SafeMigrationWorkStack<RenderStep> pending,
+        IExpressionTextWriter writer,
+        SafeMigrationSqlExpression operand,
+        SafeMigrationSqlBinaryOperator parentOperator,
+        bool right
+    )
     {
         if (operand is not SafeMigrationSqlBinaryExpression binary)
         {
@@ -357,37 +460,69 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
 
         var childPrecedence = BinaryPrecedence(binary.Operator);
         var parentPrecedence = BinaryPrecedence(parentOperator);
-        var parentheses = childPrecedence < parentPrecedence || right && childPrecedence <= parentPrecedence;
+        var parentheses = childPrecedence < parentPrecedence || (right && childPrecedence <= parentPrecedence);
 
-        pending.Push(new RenderStep(RenderStepKind.Deparsed, writer, binary, Index: parentheses ? 0 : 1));
+        pending.Push(
+            new RenderStep(
+                RenderStepKind.Deparsed,
+                writer,
+                binary,
+                Index: parentheses
+                    ? 0
+                    : 1));
     }
 
     /// <summary>Visits each BETWEEN occurrence separately, preserving native parameter callback order.</summary>
     private static void ScheduleBetweenStep(
-        RenderStep step, bool catalogShape, ref SafeMigrationWorkStack<RenderStep> pending)
+        RenderStep step,
+        bool catalogShape,
+        ref SafeMigrationWorkStack<RenderStep> pending
+    )
     {
         var writer = step.Writer;
         var between = (SafeMigrationSqlBetweenExpression)step.Expression;
         SafeMigrationSqlExpression operand;
         if (step.Index == 1)
         {
-            writer.Append(catalogShape ? between.Negated ? " < " : " >= "
-                : between.Negated ? " NOT BETWEEN " : " BETWEEN ");
+            writer.Append(
+                catalogShape
+                    ? between.Negated
+                        ? " < "
+                        : " >= "
+                    : between.Negated
+                        ? " NOT BETWEEN "
+                        : " BETWEEN ");
+
             operand = between.Lower;
         }
         else if (step.Index == 2 && catalogShape)
         {
-            writer.Append(between.Negated ? ") OR (" : ") AND (");
+            writer.Append(
+                between.Negated
+                    ? ") OR ("
+                    : ") AND (");
+
             operand = between.Operand;
         }
-        else if (step.Index == 2 || step.Index == 3 && catalogShape)
+        else if (step.Index == 2
+            || (step.Index == 3 && catalogShape))
         {
-            writer.Append(catalogShape ? between.Negated ? " > " : " <= " : " AND ");
+            writer.Append(
+                catalogShape
+                    ? between.Negated
+                        ? " > "
+                        : " <= "
+                    : " AND ");
+
             operand = between.Upper;
         }
         else
         {
-            writer.Append(catalogShape ? "))" : ")");
+            writer.Append(
+                catalogShape
+                    ? "))"
+                    : ")");
+
             return;
         }
 
@@ -397,21 +532,35 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
 
     /// <summary>Streams IN arguments rather than pushing the entire authored list onto the work stack.</summary>
     private static void ScheduleInValues(
-        RenderStep step, bool catalogShape, ref SafeMigrationWorkStack<RenderStep> pending)
+        RenderStep step,
+        bool catalogShape,
+        ref SafeMigrationWorkStack<RenderStep> pending
+    )
     {
         var writer = step.Writer;
         var list = (SafeMigrationSqlInExpression)step.Expression;
         var index = step.Index;
         if (index < 0)
         {
-            writer.Append(catalogShape ? list.Negated ? " <> ALL (ARRAY[" : " = ANY (ARRAY["
-                : list.Negated ? " NOT IN (" : " IN (");
+            writer.Append(
+                catalogShape
+                    ? list.Negated
+                        ? " <> ALL (ARRAY["
+                        : " = ANY (ARRAY["
+                    : list.Negated
+                        ? " NOT IN ("
+                        : " IN (");
+
             index = 0;
         }
 
         if (index == list.Values.Count)
         {
-            writer.Append(catalogShape ? "]))" : "))");
+            writer.Append(
+                catalogShape
+                    ? "]))"
+                    : "))");
+
             return;
         }
 
@@ -421,7 +570,8 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
         }
 
         pending.Push(step with { Index = index + 1 });
-        if (!catalogShape || list.Values[index] is not SafeMigrationSqlLiteralExpression literal
+        if (!catalogShape
+            || list.Values[index] is not SafeMigrationSqlLiteralExpression literal
             || list.Operand is not SafeMigrationSqlIdentifierExpression column
             || !writer.TryAppendNativeUnknownLiteral(literal, column))
         {
@@ -431,13 +581,17 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
 
     /// <summary>Retains WHEN/THEN/ELSE rendering order and one owned depth-restoration frame per CASE.</summary>
     private static void ScheduleCaseClause(
-        RenderStep step, bool catalogShape, ref SafeMigrationWorkStack<RenderStep> pending)
+        RenderStep step,
+        bool catalogShape,
+        ref SafeMigrationWorkStack<RenderStep> pending
+    )
     {
         var writer = step.Writer;
         var conditional = (SafeMigrationSqlCaseExpression)step.Expression;
         if (step.Index > conditional.WhenClauses.Count
-            || step.Index == conditional.WhenClauses.Count && conditional.ElseResult is null
-            && !writer.NativeLiteralForms)
+            || (step.Index == conditional.WhenClauses.Count
+                && conditional.ElseResult is null
+                && !writer.NativeLiteralForms))
         {
             return;
         }
@@ -470,19 +624,28 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
         pending.Push(step with { Index = step.Index + 1 });
         pending.Push(new RenderStep(RenderStepKind.CaseResult, writer, conditional, Index: step.Index));
         pending.Push(TextStep(writer, " THEN "));
-        pending.Push(new RenderStep(RenderStepKind.Expression, writer,
-            conditional.WhenClauses[step.Index].Condition));
+        pending.Push(
+            new RenderStep(
+                RenderStepKind.Expression,
+                writer,
+                conditional.WhenClauses[step.Index].Condition));
     }
 
     /// <summary>Appends one operator exactly where the recursive implementation visited it.</summary>
-    private static void AppendOperator(IExpressionTextWriter writer, SafeMigrationSqlBinaryOperator operation)
+    private static void AppendOperator(
+        IExpressionTextWriter writer,
+        SafeMigrationSqlBinaryOperator operation
+    )
     {
         writer.Append(' ');
         writer.Append(BinaryOperator(operation));
         writer.Append(' ');
     }
 
-    private static RenderStep TextStep(IExpressionTextWriter writer, string text)
+    private static RenderStep TextStep(
+        IExpressionTextWriter writer,
+        string text
+    )
         => new(RenderStepKind.Text, writer, null!, Text: text);
 
     private enum RenderStepKind
@@ -493,7 +656,14 @@ internal sealed partial class PostgreSqlSafeMigrationSqlExpressionRenderer
 
     /// <summary>Stores value-type continuations without closures or per-operand task allocations.</summary>
     private readonly record struct RenderStep(
-        RenderStepKind Kind, IExpressionTextWriter Writer, SafeMigrationSqlExpression Expression,
-        int Index = 0, bool Flag = false, string? Text = null, IExpressionTextWriter? Parent = null,
-        string? Input = null, string? Common = null);
+        RenderStepKind Kind,
+        IExpressionTextWriter Writer,
+        SafeMigrationSqlExpression Expression,
+        int Index = 0,
+        bool Flag = false,
+        string? Text = null,
+        IExpressionTextWriter? Parent = null,
+        string? Input = null,
+        string? Common = null
+    );
 }

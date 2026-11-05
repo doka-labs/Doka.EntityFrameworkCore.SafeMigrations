@@ -128,6 +128,7 @@ public sealed partial class SafeMigrationScaffoldingTests
             string.Concat(",", Environment.NewLine, "    prefixLengths: [0, 64]"),
             source,
             StringComparison.Ordinal);
+
         Assert.Null(intent.Definition.Keys[0].PrefixLength);
         Assert.Equal(64, intent.Definition.Keys[1].PrefixLength);
         Assert.Empty(safeOperation.GetAnnotations());
@@ -168,6 +169,7 @@ public sealed partial class SafeMigrationScaffoldingTests
             ".CreateCompositeIndexWithIncludesIfNotExistsFromModel(",
             sourceBuilder.ToString(),
             StringComparison.Ordinal);
+
         Assert.Contains("includedColumns: [\"display_name\"]", sourceBuilder.ToString(), StringComparison.Ordinal);
         Assert.Equal("display_name", Assert.Single(intent.Definition.IncludedColumns));
         Assert.Empty(safeOperation.GetAnnotations());
@@ -236,6 +238,7 @@ public sealed partial class SafeMigrationScaffoldingTests
                 "users",
                 "email",
                 prefixLengths));
+
         // Assert
         Assert.Empty(migrationBuilder.Operations);
     }

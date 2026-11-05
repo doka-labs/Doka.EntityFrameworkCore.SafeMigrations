@@ -9,22 +9,27 @@ public sealed class MySqlCatalogPurposeCounterTests
     [InlineData(2)]
     [InlineData(9)]
     [InlineData(10)]
-    public async Task NativeBatchCounterCountsDispatchWithoutInventingSequentialClassifierFacts(int fieldCount)
+    public async Task NativeBatchCounterCountsDispatchWithoutInventingSequentialClassifierFacts(
+        int fieldCount
+    )
     {
         // Arrange
         await using var connection = new CatalogClassificationCountingConnection(
-            new CatalogStatementTestConnection(true, (_, _) =>
-            {
-                var result = new System.Data.DataTable();
-                for (var index = 0; index < fieldCount; index++)
+            new CatalogStatementTestConnection(
+                true,
+                (_, _) =>
                 {
-                    result.Columns.Add("field_" + index, typeof(int));
-                }
+                    var result = new DataTable();
+                    for (var index = 0; index < fieldCount; index++)
+                    {
+                        result.Columns.Add("field_" + index, typeof(int));
+                    }
 
-                result.Rows.Add(new object[fieldCount]);
+                    result.Rows.Add(new object[fieldCount]);
 
-                return result;
-            }), nativeBatch: true);
+                    return result;
+                }),
+            nativeBatch: true);
 
         await using var batch = connection.CreateBatch();
         var command = batch.CreateBatchCommand();
@@ -56,17 +61,23 @@ public sealed class MySqlCatalogPurposeCounterTests
     [InlineData(true, "dependency")]
     [InlineData(false, "unrelated")]
     [InlineData(true, "unrelated")]
-    public async Task ColumnSafetyFactsKeepPurposeAcrossNativeAndFallback(bool native, string purpose)
+    public async Task ColumnSafetyFactsKeepPurposeAcrossNativeAndFallback(
+        bool native,
+        string purpose
+    )
     {
         // Arrange
         await using var connection = new CatalogClassificationCountingConnection(
-            new CatalogStatementTestConnection(native, (_, _) => SafetyFactResult(purpose)), nativeBatch: native);
+            new CatalogStatementTestConnection(native, (_, _) => SafetyFactResult(purpose)),
+            nativeBatch: native);
+
         var sql = purpose switch
         {
             "session" => "SELECT @@default_storage_engine, @@SESSION.sql_mode, "
                 + "@@SESSION.explicit_defaults_for_timestamp, 1;",
             "engine" => MySqlSafeMigrationProviderAnalyzer.BuildRequiredColumnAddOwnerEngineQuery(
-                "SELECT 17 AS ordinal, 'items' AS owner", "'items'"),
+                "SELECT 17 AS ordinal, 'items' AS owner",
+                "'items'"),
             "status" => "SELECT 17, (CASE WHEN FALSE THEN 'complete' "
                 + "WHEN FALSE THEN CASE WHEN FALSE THEN 'conflict' ELSE 'fresh' END "
                 + "WHEN FALSE THEN CASE WHEN FALSE THEN 'conflict' ELSE 'staged' END ELSE 'ordinary' END) ORDER BY 1;",
@@ -95,10 +106,30 @@ public sealed class MySqlCatalogPurposeCounterTests
 
         // Assert
         Assert.True(hasRow);
-        Assert.Equal(purpose == "session" ? 1 : 0, connection.RequiredAddSessionStatementCount);
-        Assert.Equal(purpose == "engine" ? 1 : 0, connection.RequiredAddOwnerEngineStatementCount);
-        Assert.Equal(purpose == "status" ? 1 : 0, connection.RequiredAddStatusStatementCount);
-        Assert.Equal(purpose == "dependency" ? 1 : 0, connection.ColumnDependencyStatementCount);
+        Assert.Equal(
+            purpose == "session"
+                ? 1
+                : 0,
+            connection.RequiredAddSessionStatementCount);
+
+        Assert.Equal(
+            purpose == "engine"
+                ? 1
+                : 0,
+            connection.RequiredAddOwnerEngineStatementCount);
+
+        Assert.Equal(
+            purpose == "status"
+                ? 1
+                : 0,
+            connection.RequiredAddStatusStatementCount);
+
+        Assert.Equal(
+            purpose == "dependency"
+                ? 1
+                : 0,
+            connection.ColumnDependencyStatementCount);
+
         Assert.Equal(0, connection.NarrowingEligibilityStatementCount);
         Assert.Equal(0, connection.NarrowingDataStatementCount);
     }
@@ -122,6 +153,7 @@ public sealed class MySqlCatalogPurposeCounterTests
         // Arrange
         await using var connection = new CatalogClassificationCountingConnection(
             new CatalogStatementTestConnection(false, static (_, _) => ThreeFieldResult()));
+
         await using var command = connection.CreateCommand();
         command.CommandText = purpose switch
         {
@@ -131,6 +163,7 @@ public sealed class MySqlCatalogPurposeCounterTests
             "eligibility" => "SELECT 17, COALESCE((TRUE), FALSE), COALESCE((EXISTS (SELECT 1 "
                 + "FROM INFORMATION_SCHEMA.COLUMNS narrowing_column WHERE "
                 + "narrowing_column.CHARACTER_MAXIMUM_LENGTH > 5)), FALSE) ORDER BY 1;",
+
             // WHY: The shared counter must recognize PostgreSQL's lowercase
             // catalog identifiers without confusing unrelated three-field SQL.
             "postgresql_eligibility" => "SELECT 17, COALESCE((TRUE), FALSE), COALESCE((EXISTS (SELECT 1 "
@@ -166,7 +199,9 @@ public sealed class MySqlCatalogPurposeCounterTests
         return result;
     }
 
-    private static DataTable SafetyFactResult(string purpose)
+    private static DataTable SafetyFactResult(
+        string purpose
+    )
     {
         var result = new DataTable();
         if (purpose == "session")
@@ -181,7 +216,11 @@ public sealed class MySqlCatalogPurposeCounterTests
         {
             result.Columns.Add("ordinal", typeof(int));
             result.Columns.Add("fact", typeof(object));
-            result.Rows.Add(17, purpose == "status" ? (object)"ordinary" : true);
+            result.Rows.Add(
+                17,
+                purpose == "status"
+                    ? "ordinary"
+                    : true);
         }
 
         return result;

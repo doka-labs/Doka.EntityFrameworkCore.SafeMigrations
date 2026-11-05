@@ -12,35 +12,58 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [InlineData("\"id\" > 0", "check")]
     [InlineData("[id] > 0", "table-check")]
     [InlineData("\"id\" > 0", "table-check")]
-    public async Task CapturedForeignQuoteRolesCannotMatchNativeContracts(string sql, string kind)
+    public async Task CapturedForeignQuoteRolesCannotMatchNativeContracts(
+        string sql,
+        string kind
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        var check = SafeMigrationExpectedDefinitionFactory.From(new AddCheckConstraintOperation
-        {
-            Name = "ck_source_role", Table = Table, Sql = sql,
-        });
+        var check = SafeMigrationExpectedDefinitionFactory.From(
+            new AddCheckConstraintOperation
+            {
+                Name = "ck_source_role",
+                Table = Table,
+                Sql = sql,
+            });
 
         if (kind == "table-check")
         {
-            builder.EnsureTable(new ExpectedTableDefinition(Table,
-                [new ExpectedColumnDefinition("id", typeof(int), false, "int")], checkConstraints: [check]),
-                SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+            builder.EnsureTable(
+                new ExpectedTableDefinition(
+                    Table,
+                    [new ExpectedColumnDefinition("id", typeof(int), false, "int")],
+                    checkConstraints: [check]),
+                SafeMigrationTableMode.StrictDefinition,
+                SafeMigrationPolicy.ThrowIfDifferent);
         }
         else
         {
-            await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, "
+            await ExecuteSqlAsync(
+                connectionString,
+                $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY, "
                 + "native_result tinyint(1) GENERATED ALWAYS AS (id > 0) VIRTUAL, "
-                + "CONSTRAINT ck_source_role CHECK(id > 0));", cancellationToken: CancellationToken.None);
+                + "CONSTRAINT ck_source_role CHECK(id > 0));",
+                cancellationToken: CancellationToken.None);
+
             if (kind == "column")
             {
-                builder.EnsureColumn(Table, SafeMigrationExpectedDefinitionFactory.From(new AddColumnOperation
-                {
-                    Name = "native_result", Table = Table, ClrType = typeof(bool), ColumnType = "tinyint(1)",
-                    ComputedColumnSql = sql, IsStored = false, IsNullable = true,
-                }), SafeMigrationPolicy.ThrowIfDifferent);
+                builder.EnsureColumn(
+                    Table,
+                    SafeMigrationExpectedDefinitionFactory.From(
+                        new AddColumnOperation
+                        {
+                            Name = "native_result",
+                            Table = Table,
+                            ClrType = typeof(bool),
+                            ColumnType = "tinyint(1)",
+                            ComputedColumnSql = sql,
+                            IsStored = false,
+                            IsNullable = true,
+                        }),
+                    SafeMigrationPolicy.ThrowIfDifferent);
             }
             else
             {
@@ -49,21 +72,37 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         }
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("captured-native-quote-boundary"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("captured-native-quote-boundary"),
+                CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
-        var owners = await ScalarIntAsync(connectionString,
+        var owners = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{Table}';", cancellationToken: CancellationToken.None);
+            + $"AND TABLE_NAME = '{Table}';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal("captured_expression_dialect_unverified", Assert.Single(report.Assessments).AnalysisCode);
+        Assert.Equal("captured_expression_dialect_unverified",
+            Assert.Single(report.Assessments)
+                .AnalysisCode);
+
         AssertOwnedGuardFailure(exception);
-        Assert.Equal(kind == "table-check" ? 0 : 1, owners);
+        Assert.Equal(
+            kind == "table-check"
+                ? 0
+                : 1,
+            owners);
     }
 
     /// <summary>MariaDB's lossy supplementary source catalog is rejected before target DDL.</summary>
@@ -72,29 +111,42 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [InlineData("column")]
     [InlineData("check")]
     [InlineData("table-check")]
-    public async Task CapturedSupplementaryLiteralIsRejectedBeforeDdl(string kind)
+    public async Task CapturedSupplementaryLiteralIsRejectedBeforeDdl(
+        string kind
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         if (kind != "table-check")
         {
-            await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY);",
+            await ExecuteSqlAsync(
+                connectionString,
+                $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY);",
                 cancellationToken: CancellationToken.None);
         }
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        var definition = SafeMigrationExpectedDefinitionFactory.From(new AddColumnOperation
-        {
-            Name = "source_result", Table = Table, ClrType = typeof(string), ColumnType = "varchar(20)",
-            MaxLength = 20, IsNullable = true, IsStored = false,
-            ComputedColumnSql = "CASE WHEN id > 0 THEN '\U0001F642' ELSE '' END",
-        });
+        var definition = SafeMigrationExpectedDefinitionFactory.From(
+            new AddColumnOperation
+            {
+                Name = "source_result",
+                Table = Table,
+                ClrType = typeof(string),
+                ColumnType = "varchar(20)",
+                MaxLength = 20,
+                IsNullable = true,
+                IsStored = false,
+                ComputedColumnSql = "CASE WHEN id > 0 THEN '\U0001F642' ELSE '' END",
+            });
 
-        var check = SafeMigrationExpectedDefinitionFactory.From(new AddCheckConstraintOperation
-        {
-            Name = "ck_supplementary_source", Table = Table, Sql = "id > 0 AND '\U0001F642' = '\U0001F642'",
-        });
+        var check = SafeMigrationExpectedDefinitionFactory.From(
+            new AddCheckConstraintOperation
+            {
+                Name = "ck_supplementary_source",
+                Table = Table,
+                Sql = "id > 0 AND '\U0001F642' = '\U0001F642'",
+            });
 
         if (kind == "column")
         {
@@ -106,27 +158,42 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         }
         else
         {
-            builder.EnsureTable(new ExpectedTableDefinition(Table,
-                [new ExpectedColumnDefinition("id", typeof(int), false, "int")], checkConstraints: [check]),
-                SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+            builder.EnsureTable(
+                new ExpectedTableDefinition(
+                    Table,
+                    [new ExpectedColumnDefinition("id", typeof(int), false, "int")],
+                    checkConstraints: [check]),
+                SafeMigrationTableMode.StrictDefinition,
+                SafeMigrationPolicy.ThrowIfDifferent);
         }
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("captured-lossy-source-boundary"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("captured-lossy-source-boundary"),
+                CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
-        var columns = await ScalarIntAsync(connectionString,
+        var columns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + $"AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'source_result';",
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal("captured_expression_literal_catalog_unverifiable",
-            Assert.Single(report.Assessments).AnalysisCode);
+        Assert.Equal(
+            "captured_expression_literal_catalog_unverifiable",
+            Assert.Single(report.Assessments)
+                .AnalysisCode);
+
         AssertOwnedGuardFailure(exception);
         Assert.Equal(0, columns);
     }
@@ -136,25 +203,41 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [GeneratedMySqlTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task CapturedSupplementaryMySqlSourceRoundTrips(bool adoptExisting)
+    public async Task CapturedSupplementaryMySqlSourceRoundTrips(
+        bool adoptExisting
+    )
     {
         // Arrange
         const string source = "CASE WHEN id > 0 THEN '\U0001F642' ELSE '' END";
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY); "
-            + $"INSERT INTO `{Table}` VALUES (1);", cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY); "
+            + $"INSERT INTO `{Table}` VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         if (adoptExisting)
         {
-            await ExecuteSqlAsync(connectionString, $"ALTER TABLE `{Table}` ADD COLUMN source_result varchar(20) "
-                + $"GENERATED ALWAYS AS ({source}) VIRTUAL;", cancellationToken: CancellationToken.None);
+            await ExecuteSqlAsync(
+                connectionString,
+                $"ALTER TABLE `{Table}` ADD COLUMN source_result varchar(20) "
+                + $"GENERATED ALWAYS AS ({source}) VIRTUAL;",
+                cancellationToken: CancellationToken.None);
         }
 
-        var definition = SafeMigrationExpectedDefinitionFactory.From(new AddColumnOperation
-        {
-            Name = "source_result", Table = Table, ClrType = typeof(string), ColumnType = "varchar(20)",
-            MaxLength = 20, IsNullable = true, IsStored = false, ComputedColumnSql = source,
-        });
+        var definition = SafeMigrationExpectedDefinitionFactory.From(
+            new AddColumnOperation
+            {
+                Name = "source_result",
+                Table = Table,
+                ClrType = typeof(string),
+                ColumnType = "varchar(20)",
+                MaxLength = 20,
+                IsNullable = true,
+                IsStored = false,
+                ComputedColumnSql = source,
+            });
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn(Table, definition, SafeMigrationPolicy.ThrowIfDifferent);
@@ -166,10 +249,17 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         });
 
-        var report = await context.GetService<ISafeMigrationRunner>().VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("captured-mysql-supplementary-replay"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("captured-mysql-supplementary-replay"),
+                CancellationToken.None);
 
-        var result = await ScalarStringAsync(connectionString, $"SELECT source_result FROM `{Table}` WHERE id = 1;",
+        var result = await ScalarStringAsync(
+            connectionString,
+            $"SELECT source_result FROM `{Table}` WHERE id = 1;",
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -177,6 +267,63 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         Assert.True(exception is null, $"{exception?.Message}; " + DescribeGeneratedReport(report));
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal("\U0001F642", result);
+    }
+
+    /// <summary>Unambiguous source delimiter doubling retains author SQL and its native escaped display.</summary>
+    [Fact]
+    public async Task CapturedEscapedQuotePreservesSourceAndNativeResult()
+    {
+        // Arrange
+        const string source = "CASE WHEN id > 0 THEN 'A''B' ELSE '' END";
+        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
+        await using var context = CreateContext(connectionString);
+        await ExecuteSqlAsync(
+            connectionString,
+            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY); "
+            + $"INSERT INTO `{Table}` VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
+        var definition = SafeMigrationExpectedDefinitionFactory.From(
+            new AddColumnOperation
+            {
+                Name = "source_result",
+                Table = Table,
+                ClrType = typeof(string),
+                ColumnType = "varchar(20)",
+                MaxLength = 20,
+                IsNullable = true,
+                IsStored = false,
+                ComputedColumnSql = source,
+            });
+
+        var builder = new MigrationBuilder(context.Database.ProviderName!);
+        builder.EnsureColumn(Table, definition, SafeMigrationPolicy.ThrowIfDifferent);
+
+        // Act
+        var exception = await Record.ExceptionAsync(async () =>
+        {
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
+        });
+
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("captured-delimiter-source-replay"),
+                CancellationToken.None);
+
+        var result = await ScalarStringAsync(
+            connectionString,
+            $"SELECT source_result FROM `{Table}` WHERE id = 1;",
+            cancellationToken: CancellationToken.None);
+
+        // Assert
+        Assert.Same(source, definition.CapturedComputedSql);
+        Assert.True(exception is null, $"{exception?.Message}; " + DescribeGeneratedReport(report));
+        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
+        Assert.Equal("A'B", result);
     }
 
     /// <summary>Reports the encoded supplementary source contract only for its independently verified engine.</summary>
@@ -190,44 +337,5 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
                 Skip = "MySQL encoded source metadata is not MariaDB's explicitly rejected lossy catalog path.";
             }
         }
-    }
-
-    /// <summary>Unambiguous source delimiter doubling retains author SQL and its native escaped display.</summary>
-    [Fact]
-    public async Task CapturedEscapedQuotePreservesSourceAndNativeResult()
-    {
-        // Arrange
-        const string source = "CASE WHEN id > 0 THEN 'A''B' ELSE '' END";
-        var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await using var context = CreateContext(connectionString);
-        await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY); "
-            + $"INSERT INTO `{Table}` VALUES (1);", cancellationToken: CancellationToken.None);
-        var definition = SafeMigrationExpectedDefinitionFactory.From(new AddColumnOperation
-        {
-            Name = "source_result", Table = Table, ClrType = typeof(string), ColumnType = "varchar(20)",
-            MaxLength = 20, IsNullable = true, IsStored = false, ComputedColumnSql = source,
-        });
-
-        var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureColumn(Table, definition, SafeMigrationPolicy.ThrowIfDifferent);
-
-        // Act
-        var exception = await Record.ExceptionAsync(async () =>
-        {
-            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-            await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        });
-
-        var report = await context.GetService<ISafeMigrationRunner>().VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("captured-delimiter-source-replay"), CancellationToken.None);
-
-        var result = await ScalarStringAsync(connectionString, $"SELECT source_result FROM `{Table}` WHERE id = 1;",
-            cancellationToken: CancellationToken.None);
-
-        // Assert
-        Assert.Same(source, definition.CapturedComputedSql);
-        Assert.True(exception is null, $"{exception?.Message}; " + DescribeGeneratedReport(report));
-        Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Equal("A'B", result);
     }
 }

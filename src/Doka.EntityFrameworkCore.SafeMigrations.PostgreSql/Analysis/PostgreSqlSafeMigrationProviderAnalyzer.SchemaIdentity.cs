@@ -3,10 +3,10 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 {
     private const string SchemaIdentityMismatchCode = "schema_search_path_mismatch";
-    private string? _currentSchema;
     private readonly HashSet<int> _schemaIdentityMismatchOrdinals = [];
-    private int? _schemaIdentityOriginOrdinal;
     private IReadOnlyList<MigrationOperation>? _analysisOperationStream;
+    private string? _currentSchema;
+    private int? _schemaIdentityOriginOrdinal;
 
     /// <inheritdoc />
     StringComparer ISafeMigrationProviderObjectIdentityNormalizer.IdentifierComparer => StringComparer.Ordinal;
@@ -24,14 +24,20 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     bool ISafeMigrationProviderObjectIdentityNormalizer.KeyConstraintsUseSchemaScopedBackingIndexNames => true;
 
     /// <inheritdoc />
-    string ISafeMigrationProviderObjectIdentityNormalizer.NormalizeIdentifier(string identifier) => identifier;
+    string ISafeMigrationProviderObjectIdentityNormalizer.NormalizeIdentifier(
+        string identifier
+    ) => identifier;
 
     /// <inheritdoc />
-    string? ISafeMigrationProviderObjectIdentityNormalizer.NormalizeSchema(string? schema)
+    string? ISafeMigrationProviderObjectIdentityNormalizer.NormalizeSchema(
+        string? schema
+    )
         => PostgreSqlSafeMigrationSchemaIdentity.Normalize(schema, _currentSchema);
 
     /// <inheritdoc />
-    bool ISafeMigrationProviderObjectIdentityNormalizer.IsObjectIdentityMismatch(SafeMigrationProviderAnalysis analysis)
+    bool ISafeMigrationProviderObjectIdentityNormalizer.IsObjectIdentityMismatch(
+        SafeMigrationProviderAnalysis analysis
+    )
         => analysis.Code == SchemaIdentityMismatchCode
             && (analysis.IsInvariantUnsupported
                 || !((_schemaIdentityOriginOrdinal is { } origin && _projectedOperationOrdinal > origin)
@@ -47,6 +53,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         bool[]? unproven = null;
         var laterIdentityBoundary = false;
         HashSet<string>? bindings = null;
+
         // WHY: Walk backward so later identity boundaries invalidate only earlier evidence.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -83,10 +90,52 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         return new PostflightSchemaIdentity(_currentSchema, unproven);
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
+        DbContext context,
+        IReadOnlyList<MigrationOperation> operations,
+        IReadOnlyList<IModel?>? targetModels,
+        CancellationToken cancellationToken
+    )
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(operations);
+        if (targetModels is not null
+            && targetModels.Count != operations.Count)
+        {
+            throw new ArgumentException("The target-model list must match the operation stream.", nameof(targetModels));
+        }
+
+        if (_analysisOperationStream is not null)
+        {
+            throw new InvalidOperationException("A PostgreSQL ordered analysis invocation is already active.");
+        }
+
+        // WHY: The established interface exposes ordinary-operation barriers
+        // which the safe-only overload cannot see. Target models are not used
+        // to strengthen contracts or change PostgreSQL model ownership.
+        _analysisOperationStream = operations;
+        try
+        {
+            return await AnalyzeAsync(
+                context,
+                operations
+                    .OfType<SafeMigrationOperation>()
+                    .ToArray(),
+                cancellationToken);
+        }
+        finally
+        {
+            _analysisOperationStream = null;
+        }
+    }
+
     /// <summary>Uses captured callback risk without parsing user functions or inventing execution history.</summary>
     /// <param name="operation">The safe operation which could have executed before final verification.</param>
     /// <returns>Whether its known native command shape can reach an identity-changing callback.</returns>
-    private bool PostflightOperationMayChangeSchemaIdentity(SafeMigrationOperation operation)
+    private bool PostflightOperationMayChangeSchemaIdentity(
+        SafeMigrationOperation operation
+    )
     {
         if (PostgreSqlSafeMigrationSchemaIdentity.HasUnqualifiedNativeBindings(operation.Intent))
         {
@@ -118,51 +167,17 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         // certified command-free operations do not introduce a boundary.
 
         return _eventTriggerRisk != PostgreSqlTriggerRisk.None
-            || (_dmlTriggerRisk != PostgreSqlTriggerRisk.None && (operation.Intent switch
-            {
-                EnsureColumnIntent column => operation.Policy == SafeMigrationPolicy.RepairIfSafe
-                    && !column.Definition.IsNullable
-                    && column.Definition.DefaultValue.Kind != SafeMigrationDefaultValueKind.None,
-                AlterColumnIntent column => column.OldDefinition?.IsNullable == true
-                    && !column.Definition.IsNullable
-                    && column.Definition.DefaultValue.Kind != SafeMigrationDefaultValueKind.None,
-                _ => false,
-            }));
-    }
-
-    /// <inheritdoc />
-    public async Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
-        DbContext context,
-        IReadOnlyList<MigrationOperation> operations,
-        IReadOnlyList<IModel?>? targetModels,
-        CancellationToken cancellationToken
-    )
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(operations);
-        if (targetModels is not null && targetModels.Count != operations.Count)
-        {
-            throw new ArgumentException("The target-model list must match the operation stream.", nameof(targetModels));
-        }
-
-        if (_analysisOperationStream is not null)
-        {
-            throw new InvalidOperationException("A PostgreSQL ordered analysis invocation is already active.");
-        }
-
-        // WHY: The established interface exposes ordinary-operation barriers
-        // which the safe-only overload cannot see. Target models are not used
-        // to strengthen contracts or change PostgreSQL model ownership.
-        _analysisOperationStream = operations;
-        try
-        {
-            return await AnalyzeAsync(context, operations.OfType<SafeMigrationOperation>().ToArray(),
-                cancellationToken);
-        }
-        finally
-        {
-            _analysisOperationStream = null;
-        }
+            || (_dmlTriggerRisk != PostgreSqlTriggerRisk.None
+                && operation.Intent switch
+                {
+                    EnsureColumnIntent column => operation.Policy == SafeMigrationPolicy.RepairIfSafe
+                        && !column.Definition.IsNullable
+                        && column.Definition.DefaultValue.Kind != SafeMigrationDefaultValueKind.None,
+                    AlterColumnIntent column => column.OldDefinition?.IsNullable == true
+                        && !column.Definition.IsNullable
+                        && column.Definition.DefaultValue.Kind != SafeMigrationDefaultValueKind.None,
+                    _ => false,
+                });
     }
 
     /// <summary>Captures the proven active schema required to compare qualified and unqualified identities.</summary>
@@ -218,7 +233,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         {
             foreach (var operation in _analysisOperationStream)
             {
-                if (operation is SafeMigrationOperation || ProviderOperationPreservesTableState(operation))
+                if (operation is SafeMigrationOperation
+                    || ProviderOperationPreservesTableState(operation))
                 {
                     continue;
                 }
@@ -246,7 +262,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             }
         }
 
-        if (!hasUnqualifiedOwner || !hasQualifiedOwner)
+        if (!hasUnqualifiedOwner
+            || !hasQualifiedOwner)
         {
             return;
         }
@@ -259,14 +276,19 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
     /// <summary>Preserves the identity-first diagnostic from the catalog-only prerequisite phase.</summary>
     private SafeMigrationProviderAnalysis ShortCircuitAnalysis(
-        int ordinal, SafeMigrationObservedState state, SafeMigrationIntent intent)
+        int ordinal,
+        SafeMigrationObservedState state,
+        SafeMigrationIntent intent
+    )
     {
-        var code = _schemaIdentityMismatchOrdinals.Contains(ordinal) ? SchemaIdentityMismatchCode
-                : _indexInputShortCircuitCodes?.TryGetValue(ordinal, out var indexCode) == true ? indexCode
+        var code = _schemaIdentityMismatchOrdinals.Contains(ordinal)
+            ? SchemaIdentityMismatchCode
+            : _indexInputShortCircuitCodes?.TryGetValue(ordinal, out var indexCode) == true
+                ? indexCode
                 : state == SafeMigrationObservedState.Unsupported
-                    && _stateEvaluationGuardShortCircuitCodes?.TryGetValue(ordinal, out var guardCode) == true
+                && _stateEvaluationGuardShortCircuitCodes?.TryGetValue(ordinal, out var guardCode) == true
                     ? guardCode
-                : ClassificationCode(state);
+                    : ClassificationCode(state);
 
         // WHY: A guarded exact ALTER target is already its terminal contract.
         // Matching DROP/RENAME sources still require their distinct postcondition.
@@ -288,9 +310,12 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     )
     {
         var origin = _schemaIdentityOriginOrdinal
-            ?? (analysis.Code == SchemaIdentityMismatchCode ? _triggerOriginOrdinal : null);
+            ?? (analysis.Code == SchemaIdentityMismatchCode
+                ? _triggerOriginOrdinal
+                : null);
 
-        if (origin is not { } ordinal || analysis.IsInvariantUnsupported
+        if (origin is not { } ordinal
+            || analysis.IsInvariantUnsupported
             || (analysis.ObservedState == SafeMigrationObservedState.Unsupported
                 && analysis.Code != SchemaIdentityMismatchCode))
         {
@@ -309,15 +334,21 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         // change the effective path. Preserve existing trigger diagnostics for
         // other states while recording this identity-specific mutable boundary.
 
-        return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
-            SafeMigrationRepairCapability.None, false, "projected_schema_identity_state_unknown")
+        return new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.PrerequisiteMissing,
+            SafeMigrationRepairCapability.None,
+            false,
+            "projected_schema_identity_state_unknown")
         {
             ProviderDeferredOriginOrdinal = ordinal,
         };
     }
 
     /// <summary>Provides stable exact identifier rules and bounded historical-identity exclusions.</summary>
-    private sealed class PostflightSchemaIdentity(string? currentSchema, bool[]? unproven)
+    private sealed class PostflightSchemaIdentity(
+        string? currentSchema,
+        bool[]? unproven
+    )
         : ISafeMigrationProviderObjectIdentityNormalizer
     {
         /// <inheritdoc />
@@ -336,18 +367,27 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         public bool KeyConstraintsUseSchemaScopedBackingIndexNames => true;
 
         /// <inheritdoc />
-        public string NormalizeIdentifier(string identifier) => identifier;
+        public string NormalizeIdentifier(
+            string identifier
+        ) => identifier;
 
         /// <inheritdoc />
-        public string? NormalizeSchema(string? schema)
+        public string? NormalizeSchema(
+            string? schema
+        )
             => PostgreSqlSafeMigrationSchemaIdentity.Normalize(schema, currentSchema);
 
         /// <inheritdoc />
-        public bool IsObjectIdentityMismatch(SafeMigrationProviderAnalysis analysis)
+        public bool IsObjectIdentityMismatch(
+            SafeMigrationProviderAnalysis analysis
+        )
             => analysis.Code == SchemaIdentityMismatchCode;
 
         /// <inheritdoc />
-        public bool IsPostflightIdentityProven(SafeMigrationIntent intent, int ordinal)
+        public bool IsPostflightIdentityProven(
+            SafeMigrationIntent intent,
+            int ordinal
+        )
         {
             ArgumentNullException.ThrowIfNull(intent);
 

@@ -11,7 +11,8 @@ public sealed class MySqlExpressionCanonicalizerTests
             + "then case when `value` is null or `value` = '' then 0 else 1 end else 0 end";
 
         // Act
-        var candidates = MySqlExpressionCanonicalizer.BuildCatalogDisplayCandidates(expression,
+        var candidates = MySqlExpressionCanonicalizer.BuildCatalogDisplayCandidates(
+            expression,
             includeMySqlEncodedDisplay: false);
 
         // Assert
@@ -22,7 +23,9 @@ public sealed class MySqlExpressionCanonicalizerTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void CatalogDisplayCandidates_PreserveMultipleTermsAndQuotedBooleanWords(bool includeEncodedDisplay)
+    public void CatalogDisplayCandidates_PreserveMultipleTermsAndQuotedBooleanWords(
+        bool includeEncodedDisplay
+    )
     {
         // Arrange
         const string expression = "`a` = 'x or y' AND `b` = 'and' OR `c` IS NULL";
@@ -34,7 +37,10 @@ public sealed class MySqlExpressionCanonicalizerTests
         // Assert
         Assert.Equal(normalized, candidates[0]);
         Assert.Contains("((`a` = 'x or y') and (`b` = 'and') or (`c` is null))", candidates, StringComparer.Ordinal);
-        Assert.Equal(candidates.Count, candidates.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(candidates.Count,
+            candidates
+                .Distinct(StringComparer.Ordinal)
+                .Count());
     }
 
     [Fact]

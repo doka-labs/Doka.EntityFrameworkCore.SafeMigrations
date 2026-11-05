@@ -36,6 +36,7 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
             ["parent_id"],
             "records",
             ["id"]);
+
         builder.DropForeignKeyIfExists("fk_records_old", "records");
         builder.AddForeignKeyIfNotExists(
             "fk_records_parent",
@@ -47,12 +48,18 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
 
         // Act
         var projected = SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations);
-        var constraints = Assert.Single(projected).Value;
+        var constraints = Assert.Single(projected)
+            .Value;
 
         // Assert
         Assert.Equal("pk_records", constraints.PrimaryKey?.Name);
-        Assert.Equal("uq_records_code", Assert.Single(constraints.UniqueConstraints).Name);
-        Assert.Equal("ck_records_code", Assert.Single(constraints.CheckConstraints).Name);
+        Assert.Equal("uq_records_code",
+            Assert.Single(constraints.UniqueConstraints)
+                .Name);
+
+        Assert.Equal("ck_records_code",
+            Assert.Single(constraints.CheckConstraints)
+                .Name);
 
         var foreignKey = Assert.Single(constraints.ForeignKeys);
         Assert.Equal("fk_records_parent", foreignKey.Name);
@@ -62,14 +69,17 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         Assert.Equal(
             ["pk_records_old", "pk_records"],
             constraints.AllowedPrimaryKeys.Select(static value => value.Name));
+
         Assert.Empty(constraints.RequiredUniqueConstraints);
         Assert.Equal(
             ["uq_records_code", "uq_records_old"],
             constraints.AllowedUniqueConstraints.Select(static value => value.Name));
+
         Assert.Empty(constraints.RequiredCheckConstraints);
         Assert.Equal(
             ["ck_records_code", "ck_records_old"],
             constraints.AllowedCheckConstraints.Select(static value => value.Name));
+
         Assert.Empty(constraints.RequiredForeignKeys);
         Assert.Equal(
             ["fk_records_old", "fk_records_parent"],
@@ -100,6 +110,7 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
                 ]),
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.AddForeignKeyIfNotExists(
             "fk_records_parent",
             "records",
@@ -110,15 +121,27 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
 
         // Act
         var projected = SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations);
-        var constraints = Assert.Single(projected).Value;
+        var constraints = Assert.Single(projected)
+            .Value;
 
         // Assert
         Assert.False(constraints.PrimaryKeyMayBeAbsent);
-        Assert.Equal("pk_records", Assert.Single(constraints.AllowedPrimaryKeys).Name);
-        Assert.Equal("uq_records_code", Assert.Single(constraints.RequiredUniqueConstraints).Name);
-        Assert.Equal("ck_records_code", Assert.Single(constraints.RequiredCheckConstraints).Name);
+        Assert.Equal("pk_records",
+            Assert.Single(constraints.AllowedPrimaryKeys)
+                .Name);
+
+        Assert.Equal("uq_records_code",
+            Assert.Single(constraints.RequiredUniqueConstraints)
+                .Name);
+
+        Assert.Equal("ck_records_code",
+            Assert.Single(constraints.RequiredCheckConstraints)
+                .Name);
+
         Assert.Empty(constraints.RequiredForeignKeys);
-        Assert.Equal("fk_records_parent", Assert.Single(constraints.AllowedForeignKeys).Name);
+        Assert.Equal("fk_records_parent",
+            Assert.Single(constraints.AllowedForeignKeys)
+                .Name);
     }
 
     [Fact]
@@ -129,13 +152,18 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         var uniqueConstraint = new ExpectedUniqueConstraintDefinition("uq_records_code", "records", ["code"]);
         const string checkSql = "code >= 0";
         var checkConstraint = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
-            "ck_records_code", "records", checkSql, schema: null);
+            "ck_records_code",
+            "records",
+            checkSql,
+            schema: null);
+
         var foreignKey = new ExpectedForeignKeyDefinition(
             "fk_records_parent",
             "records",
             ["parent_id"],
             "records",
             ["id"]);
+
         var builder = new MigrationBuilder("Provider");
         builder.EnsureTable(
             new ExpectedTableDefinition(
@@ -151,6 +179,7 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
                 foreignKeys: [foreignKey]),
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.DropPrimaryKeyIfExists(primaryKey.Name, primaryKey.Table);
         builder.AddPrimaryKeyIfNotExists(primaryKey.Name, primaryKey.Table, primaryKey.Columns);
         builder.DropUniqueConstraintIfExists(uniqueConstraint.Name, uniqueConstraint.Table);
@@ -158,6 +187,7 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
             uniqueConstraint.Name,
             uniqueConstraint.Table,
             uniqueConstraint.Columns);
+
         builder.DropCheckConstraintIfExists(checkConstraint.Name, checkConstraint.Table);
         builder.AddCheckConstraintIfNotExists(checkConstraint.Name, checkConstraint.Table, checkSql);
         builder.DropForeignKeyIfExists(foreignKey.Name, foreignKey.Table);
@@ -170,17 +200,29 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
 
         // Act
         var projected = SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations);
-        var constraints = Assert.Single(projected).Value;
+        var constraints = Assert.Single(projected)
+            .Value;
 
         // Assert
         Assert.True(constraints.PrimaryKeyMayBeAbsent);
-        Assert.Equal(primaryKey.Name, Assert.Single(constraints.AllowedPrimaryKeys).Name);
+        Assert.Equal(primaryKey.Name,
+            Assert.Single(constraints.AllowedPrimaryKeys)
+                .Name);
+
         Assert.Empty(constraints.RequiredUniqueConstraints);
-        Assert.Equal(uniqueConstraint.Name, Assert.Single(constraints.AllowedUniqueConstraints).Name);
+        Assert.Equal(uniqueConstraint.Name,
+            Assert.Single(constraints.AllowedUniqueConstraints)
+                .Name);
+
         Assert.Empty(constraints.RequiredCheckConstraints);
-        Assert.Equal(checkConstraint.Name, Assert.Single(constraints.AllowedCheckConstraints).Name);
+        Assert.Equal(checkConstraint.Name,
+            Assert.Single(constraints.AllowedCheckConstraints)
+                .Name);
+
         Assert.Empty(constraints.RequiredForeignKeys);
-        Assert.Equal(foreignKey.Name, Assert.Single(constraints.AllowedForeignKeys).Name);
+        Assert.Equal(foreignKey.Name,
+            Assert.Single(constraints.AllowedForeignKeys)
+                .Name);
     }
 
     [Fact]
@@ -194,6 +236,7 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
                 [new ExpectedColumnDefinition("id", typeof(int), isNullable: false, storeType: "integer")]),
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.AddPrimaryKeyIfNotExists("pk_records", "records", ["id"]);
         builder.DropTableIfExists("records");
 
@@ -223,6 +266,7 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
                 ]),
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.EnsureTable(
             new ExpectedTableDefinition(
                 "children",
@@ -241,6 +285,7 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
                 ]),
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.RenameColumnIfExists("id", "parents", "parent_key");
         builder.RenameTableIfExists("parents", "renamed_parents");
         builder.RenameColumnIfExists("parent_id", "children", "owner_id");
@@ -251,7 +296,9 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
         // Assert
         var parent = projected[(null, "renamed_parents")];
         Assert.Equal(["parent_key"], parent.PrimaryKey?.Columns);
-        Assert.Equal("renamed_parents", Assert.Single(parent.UniqueConstraints).Table);
+        Assert.Equal("renamed_parents",
+            Assert.Single(parent.UniqueConstraints)
+                .Table);
 
         var childForeignKey = Assert.Single(projected[(null, "children")].ForeignKeys);
         Assert.Equal(["owner_id"], childForeignKey.Columns);
@@ -274,6 +321,7 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
                 ]),
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.RenameColumnIfExists("value", "records", "score");
 
         // Act
@@ -282,7 +330,9 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
 
         // Assert
         var invalidOperation = Assert.IsType<InvalidOperationException>(exception);
-        Assert.Contains("Drop and recreate owned check constraints", invalidOperation.Message, StringComparison.Ordinal);
+        Assert.Contains("Drop and recreate owned check constraints",
+            invalidOperation.Message,
+            StringComparison.Ordinal);
     }
 
     /// <summary>Captured CHECK renames preserve native number, type, function, and literal token roles.</summary>
@@ -292,19 +342,29 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
     [InlineData("[value] + 2147483648 > 0 AND 'value' <> ''", "[score] + 2147483648 > 0 AND 'value' <> ''")]
     [InlineData("`value` + 2147483648 > 0 AND 'value' <> ''", "`score` + 2147483648 > 0 AND 'value' <> ''")]
     [InlineData("\"value\" + 2147483648 > 0 AND 'value' <> ''", "\"score\" + 2147483648 > 0 AND 'value' <> ''")]
-    public void CapturedCheckColumnRenamePreservesNativeRoles(string source, string expected)
+    public void CapturedCheckColumnRenamePreservesNativeRoles(
+        string source,
+        string expected
+    )
     {
         // Arrange
-        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_records_value", "records", source,
+        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
+            "ck_records_value",
+            "records",
+            source,
             schema: null);
-        var builder = CreateBuilder(new ExpectedTableDefinition("records",
-            [new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "integer")],
-            checkConstraints: [definition]));
+
+        var builder = CreateBuilder(
+            new ExpectedTableDefinition(
+                "records",
+                [new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "integer")],
+                checkConstraints: [definition]));
 
         builder.RenameColumnIfExists("value", "records", "score");
 
         // Act
-        var constraints = Assert.Single(SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations)).Value;
+        var constraints = Assert.Single(SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations))
+            .Value;
 
         // Assert
         var check = Assert.Single(constraints.CheckConstraints);
@@ -320,25 +380,33 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
     public void StructuredCheckColumnRenamePreservesOtherExpressionRoles()
     {
         // Arrange
-        var expression = SafeMigrationSql.Binary(SafeMigrationSql.Cast(SafeMigrationSql.Identifier("value"), "bigint"),
-            SafeMigrationSqlBinaryOperator.GreaterThan, SafeMigrationSql.Literal(0));
+        var expression = SafeMigrationSql.Binary(
+            SafeMigrationSql.Cast(SafeMigrationSql.Identifier("value"), "bigint"),
+            SafeMigrationSqlBinaryOperator.GreaterThan,
+            SafeMigrationSql.Literal(0));
 
         var definition = ExpectedCheckConstraintDefinition.FromExpression("ck_records_value", "records", expression);
-        var builder = CreateBuilder(new ExpectedTableDefinition("records",
-            [new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "integer")],
-            checkConstraints: [definition]));
+        var builder = CreateBuilder(
+            new ExpectedTableDefinition(
+                "records",
+                [new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "integer")],
+                checkConstraints: [definition]));
 
         builder.RenameColumnIfExists("value", "records", "score");
 
         // Act
-        var constraints = Assert.Single(SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations)).Value;
+        var constraints = Assert.Single(SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations))
+            .Value;
 
         // Assert
         var check = Assert.Single(constraints.CheckConstraints);
         var binary = Assert.IsType<SafeMigrationSqlBinaryExpression>(check.Expression);
         var cast = Assert.IsType<SafeMigrationSqlCastExpression>(binary.Left);
         Assert.Equal("bigint", cast.StoreType);
-        Assert.Equal("score", Assert.Single(Assert.IsType<SafeMigrationSqlIdentifierExpression>(cast.Operand).Parts));
+        Assert.Equal("score",
+            Assert.Single(Assert.IsType<SafeMigrationSqlIdentifierExpression>(cast.Operand)
+                .Parts));
+
         Assert.Null(check.CapturedSql);
     }
 
@@ -348,17 +416,26 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
     {
         // Arrange
         const string source = "CASE WHEN [value] > 0 THEN 2147483648 / 2147483647 ELSE 0 END >= 0";
-        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_records_value", "records", source,
+        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
+            "ck_records_value",
+            "records",
+            source,
             schema: null);
-        var builder = CreateBuilder(new ExpectedTableDefinition("records",
-            [new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "integer")],
-            checkConstraints: [definition]));
+
+        var builder = CreateBuilder(
+            new ExpectedTableDefinition(
+                "records",
+                [new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "integer")],
+                checkConstraints: [definition]));
 
         builder.RenameTableIfExists("records", "renamed_records");
 
         // Act
-        var constraints = Assert.Single(SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations,
-            static schema => schema ?? "native")).Value;
+        var constraints = Assert.Single(
+                SafeMigrationExpectedTableConstraints.FromOperations(
+                    builder.Operations,
+                    static schema => schema ?? "native"))
+            .Value;
 
         // Assert
         var check = Assert.Single(constraints.CheckConstraints);
@@ -374,16 +451,23 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
     {
         // Arrange
         const string source = "[value] > 2147483648";
-        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_records_value", "records", source,
+        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
+            "ck_records_value",
+            "records",
+            source,
             schema: null);
-        var builder = CreateBuilder(new ExpectedTableDefinition("records",
-            [new ExpectedColumnDefinition("other", typeof(int), isNullable: false, storeType: "integer")],
-            checkConstraints: [definition]));
+
+        var builder = CreateBuilder(
+            new ExpectedTableDefinition(
+                "records",
+                [new ExpectedColumnDefinition("other", typeof(int), isNullable: false, storeType: "integer")],
+                checkConstraints: [definition]));
 
         builder.RenameColumnIfExists("other", "records", "renamed");
 
         // Act
-        var constraints = Assert.Single(SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations)).Value;
+        var constraints = Assert.Single(SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations))
+            .Value;
 
         // Assert
         var check = Assert.Single(constraints.CheckConstraints);
@@ -403,21 +487,37 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
     [InlineData("value + 2147483648 > 0", '`', false, "new`value", "`new``value` + 2147483648 > 0")]
     [InlineData("VALUE + 2147483648 > 0", '"', true, "select", "\"select\" + 2147483648 > 0")]
     public void CapturedCheckRenameUsesVerifiedNativeIdentifierRoles(
-        string source, char delimiter, bool fold, string target, string expected)
+        string source,
+        char delimiter,
+        bool fold,
+        string target,
+        string expected
+    )
     {
         // Arrange
-        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_records_value", "records", source,
+        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
+            "ck_records_value",
+            "records",
+            source,
             schema: null);
 
-        var builder = CreateBuilder(new ExpectedTableDefinition("records",
-            [new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "integer")],
-            checkConstraints: [definition]));
+        var builder = CreateBuilder(
+            new ExpectedTableDefinition(
+                "records",
+                [new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "integer")],
+                checkConstraints: [definition]));
 
         builder.RenameColumnIfExists("value", "records", target);
 
         // Act
-        var constraints = Assert.Single(SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations,
-            static schema => schema, StringComparer.Ordinal, delimiter, fold)).Value;
+        var constraints = Assert.Single(
+                SafeMigrationExpectedTableConstraints.FromOperations(
+                    builder.Operations,
+                    static schema => schema,
+                    StringComparer.Ordinal,
+                    delimiter,
+                    fold))
+            .Value;
 
         // Assert
         var check = Assert.Single(constraints.CheckConstraints);
@@ -430,12 +530,17 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
     public void CapturedCheckRenameWithoutNativeQuoteAuthorityFailsClosed()
     {
         // Arrange
-        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_records_value", "records",
-            "value > 0", schema: null);
+        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
+            "ck_records_value",
+            "records",
+            "value > 0",
+            schema: null);
 
-        var builder = CreateBuilder(new ExpectedTableDefinition("records",
-            [new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "integer")],
-            checkConstraints: [definition]));
+        var builder = CreateBuilder(
+            new ExpectedTableDefinition(
+                "records",
+                [new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "integer")],
+                checkConstraints: [definition]));
 
         builder.RenameColumnIfExists("value", "records", "score");
 
@@ -453,22 +558,36 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
     {
         // Arrange
         const string source = "[VALUE] + 2147483648 > 0 AND 'VALUE' <> ''";
-        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_records_value", "records", source,
+        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
+            "ck_records_value",
+            "records",
+            source,
             schema: null);
 
-        var builder = CreateBuilder(new ExpectedTableDefinition("records",
-            [new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "integer")],
-            checkConstraints: [definition]));
+        var builder = CreateBuilder(
+            new ExpectedTableDefinition(
+                "records",
+                [new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "integer")],
+                checkConstraints: [definition]));
 
         builder.RenameColumnIfExists("value", "records", "score");
 
         // Act
-        var constraints = Assert.Single(SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations,
-            static schema => schema, StringComparer.Ordinal, '[', false, StringComparer.OrdinalIgnoreCase)).Value;
+        var constraints = Assert.Single(
+                SafeMigrationExpectedTableConstraints.FromOperations(
+                    builder.Operations,
+                    static schema => schema,
+                    StringComparer.Ordinal,
+                    '[',
+                    false,
+                    StringComparer.OrdinalIgnoreCase))
+            .Value;
 
         // Assert
-        Assert.Equal("[score] + 2147483648 > 0 AND 'VALUE' <> ''",
-            Assert.Single(constraints.CheckConstraints).CapturedSql);
+        Assert.Equal(
+            "[score] + 2147483648 > 0 AND 'VALUE' <> ''",
+            Assert.Single(constraints.CheckConstraints)
+                .CapturedSql);
     }
 
     /// <summary>A CHECK dependency cannot disappear when its native member spelling differs only by case.</summary>
@@ -476,18 +595,28 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
     public void CapturedCheckDropKeepsNativeCaseInsensitiveColumnDependency()
     {
         // Arrange
-        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_records_value", "records",
-            "[VALUE] >= 0", schema: null);
+        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
+            "ck_records_value",
+            "records",
+            "[VALUE] >= 0",
+            schema: null);
 
-        var builder = CreateBuilder(new ExpectedTableDefinition("records",
-            [new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "integer")],
-            checkConstraints: [definition]));
+        var builder = CreateBuilder(
+            new ExpectedTableDefinition(
+                "records",
+                [new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "integer")],
+                checkConstraints: [definition]));
 
         builder.DropColumnIfExists("value", "records");
 
         // Act
-        var exception = Record.Exception(() => SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations,
-            static schema => schema, StringComparer.Ordinal, '[', false, StringComparer.OrdinalIgnoreCase));
+        var exception = Record.Exception(() => SafeMigrationExpectedTableConstraints.FromOperations(
+            builder.Operations,
+            static schema => schema,
+            StringComparer.Ordinal,
+            '[',
+            false,
+            StringComparer.OrdinalIgnoreCase));
 
         // Assert
         Assert.IsType<InvalidOperationException>(exception);
@@ -498,11 +627,16 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void CapturedCheckColumnIdentityIsIndependentFromTableIdentity(bool caseSensitive)
+    public void CapturedCheckColumnIdentityIsIndependentFromTableIdentity(
+        bool caseSensitive
+    )
     {
         // Arrange
         const string source = "ABS([l]) + CAST([l] AS bigint) > 0 AND 'L' <> ''";
-        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_records_value", "records", source,
+        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
+            "ck_records_value",
+            "records",
+            source,
             schema: null);
 
         var columns = caseSensitive
@@ -515,15 +649,29 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
 
         var builder = CreateBuilder(new ExpectedTableDefinition("records", columns, checkConstraints: [definition]));
         builder.RenameColumnIfExists("L", "records", "score");
-        var columnComparer = caseSensitive ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
+        var columnComparer = caseSensitive
+            ? StringComparer.Ordinal
+            : StringComparer.OrdinalIgnoreCase;
 
         // Act
-        var constraints = Assert.Single(SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations,
-            static schema => schema, StringComparer.OrdinalIgnoreCase, '[', false, columnComparer)).Value;
+        var constraints = Assert.Single(
+                SafeMigrationExpectedTableConstraints.FromOperations(
+                    builder.Operations,
+                    static schema => schema,
+                    StringComparer.OrdinalIgnoreCase,
+                    '[',
+                    false,
+                    columnComparer))
+            .Value;
 
         // Assert
-        var expected = caseSensitive ? source : "ABS([score]) + CAST([score] AS bigint) > 0 AND 'L' <> ''";
-        Assert.Equal(expected, Assert.Single(constraints.CheckConstraints).CapturedSql);
+        var expected = caseSensitive
+            ? source
+            : "ABS([score]) + CAST([score] AS bigint) > 0 AND 'L' <> ''";
+
+        Assert.Equal(expected,
+            Assert.Single(constraints.CheckConstraints)
+                .CapturedSql);
     }
 
     /// <summary>A case-sensitive CHECK on l does not prevent dropping the independent physical member L.</summary>
@@ -531,23 +679,38 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
     public void CaseSensitiveCheckDropKeepsDistinctColumnMembers()
     {
         // Arrange
-        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_records_value", "records",
-            "[l] >= 0", schema: null);
+        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
+            "ck_records_value",
+            "records",
+            "[l] >= 0",
+            schema: null);
 
-        var builder = CreateBuilder(new ExpectedTableDefinition("records",
-            [
-                new ExpectedColumnDefinition("L", typeof(int), isNullable: false, storeType: "integer"),
-                new ExpectedColumnDefinition("l", typeof(int), isNullable: false, storeType: "integer"),
-            ], checkConstraints: [definition]));
+        var builder = CreateBuilder(
+            new ExpectedTableDefinition(
+                "records",
+                [
+                    new ExpectedColumnDefinition("L", typeof(int), isNullable: false, storeType: "integer"),
+                    new ExpectedColumnDefinition("l", typeof(int), isNullable: false, storeType: "integer"),
+                ],
+                checkConstraints: [definition]));
 
         builder.DropColumnIfExists("L", "records");
 
         // Act
-        var constraints = Assert.Single(SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations,
-            static schema => schema, StringComparer.OrdinalIgnoreCase, '[', false, StringComparer.Ordinal)).Value;
+        var constraints = Assert.Single(
+                SafeMigrationExpectedTableConstraints.FromOperations(
+                    builder.Operations,
+                    static schema => schema,
+                    StringComparer.OrdinalIgnoreCase,
+                    '[',
+                    false,
+                    StringComparer.Ordinal))
+            .Value;
 
         // Assert
-        Assert.Equal("[l] >= 0", Assert.Single(constraints.CheckConstraints).CapturedSql);
+        Assert.Equal("[l] >= 0",
+            Assert.Single(constraints.CheckConstraints)
+                .CapturedSql);
     }
 
     [Fact]
@@ -559,6 +722,7 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
                 "records",
                 [new ExpectedColumnDefinition("legacy_id", typeof(int), isNullable: false, storeType: "integer")],
                 primaryKey: new ExpectedPrimaryKeyDefinition("pk_records", "records", ["legacy_id"])));
+
         builder.DropColumnIfExists("legacy_id", "records");
 
         // Act
@@ -583,6 +747,7 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
                 [
                     new ExpectedUniqueConstraintDefinition("uq_records_code", "records", ["legacy_code"]),
                 ]));
+
         builder.DropColumnIfExists("legacy_code", "records");
 
         // Act
@@ -605,11 +770,13 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
                 SafeMigrationSql.Identifier("legacy_score"),
                 SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
                 SafeMigrationSql.Literal(0)));
+
         var builder = CreateBuilder(
             new ExpectedTableDefinition(
                 "records",
                 [new ExpectedColumnDefinition("legacy_score", typeof(int), isNullable: false, storeType: "integer")],
                 checkConstraints: [check]));
+
         builder.DropColumnIfExists("legacy_score", "records");
 
         // Act
@@ -636,6 +803,7 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
                 [
                     new ExpectedCheckConstraintDefinition("ck_records_id", "records", "id >= 0"),
                 ]));
+
         builder.DropColumnIfExists("legacy", "records");
 
         // Act
@@ -664,6 +832,7 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
                         "parents",
                         ["id"]),
                 ]));
+
         builder.DropColumnIfExists("legacy_parent_id", "records");
 
         // Act
@@ -683,6 +852,7 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
             new ExpectedTableDefinition(
                 "parents",
                 [new ExpectedColumnDefinition("legacy_id", typeof(int), false, "integer")]));
+
         builder.EnsureTable(
             new ExpectedTableDefinition(
                 "children",
@@ -698,6 +868,7 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
                 ]),
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.DropColumnIfExists("legacy_id", "parents");
 
         // Act
@@ -706,7 +877,10 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
 
         // Assert
         var invalidOperation = Assert.IsType<InvalidOperationException>(exception);
-        Assert.Contains("referencing foreign key 'fk_children_parent'", invalidOperation.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "referencing foreign key 'fk_children_parent'",
+            invalidOperation.Message,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -732,6 +906,7 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
                             SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
                             SafeMigrationSql.Literal(0))),
                 ]));
+
         builder.DropPrimaryKeyIfExists("pk_records", "records");
         builder.DropUniqueConstraintIfExists("uq_records_legacy", "records");
         builder.DropCheckConstraintIfExists("ck_records_legacy", "records");
@@ -739,7 +914,8 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
 
         // Act
         var projected = SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations);
-        var constraints = Assert.Single(projected).Value;
+        var constraints = Assert.Single(projected)
+            .Value;
 
         // Assert
         Assert.Null(constraints.PrimaryKey);
@@ -756,6 +932,7 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
             new ExpectedTableDefinition(
                 "parents",
                 [new ExpectedColumnDefinition("legacy_id", typeof(int), false, "integer")]));
+
         builder.EnsureTable(
             new ExpectedTableDefinition(
                 "children",
@@ -771,6 +948,7 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
                 ]),
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.DropForeignKeyIfExists("fk_children_parent", "children");
         builder.DropColumnIfExists("legacy_parent_id", "children");
         builder.DropColumnIfExists("legacy_id", "parents");
@@ -805,15 +983,19 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
                             SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
                             SafeMigrationSql.Literal(0))),
                 ]));
+
         builder.DropColumnIfExists("legacy", "records");
 
         // Act
         var projected = SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations);
-        var constraints = Assert.Single(projected).Value;
+        var constraints = Assert.Single(projected)
+            .Value;
 
         // Assert
         Assert.Equal("pk_records", constraints.PrimaryKey?.Name);
-        Assert.Equal("ck_records_id", Assert.Single(constraints.CheckConstraints).Name);
+        Assert.Equal("ck_records_id",
+            Assert.Single(constraints.CheckConstraints)
+                .Name);
     }
 
     [Fact]
@@ -828,13 +1010,16 @@ public sealed class SafeMigrationExpectedTableConstraintsTests
                 primaryKey: new ExpectedPrimaryKeyDefinition("pk_records", "records", ["id"])),
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.DropPrimaryKeyIfExists("pk_other", "records");
 
         // Act
         var projected = SafeMigrationExpectedTableConstraints.FromOperations(builder.Operations);
 
         // Assert
-        Assert.Equal("pk_records", Assert.Single(projected).Value.PrimaryKey?.Name);
+        Assert.Equal("pk_records",
+            Assert.Single(projected)
+                .Value.PrimaryKey?.Name);
     }
 
     private static MigrationBuilder CreateBuilder(

@@ -15,7 +15,8 @@ public sealed class SqlServerProjectedSeedKeySqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var builder = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         var columns = new[]
         {
@@ -26,8 +27,12 @@ public sealed class SqlServerProjectedSeedKeySqlTests
         var filter = SafeMigrationSql.IsNotNull(SafeMigrationSql.Identifier("Code"));
 
         // Act
-        var sql = builder.BuildProjectedSeedKeyProofSql([Seed(1, null), Seed(2, null)], columns, ["Code"],
-            requireCapturedUniqueKey: false, filter);
+        var sql = builder.BuildProjectedSeedKeyProofSql(
+            [Seed(1, null), Seed(2, null)],
+            columns,
+            ["Code"],
+            requireCapturedUniqueKey: false,
+            filter);
 
         // Assert
         Assert.NotNull(sql);
@@ -43,7 +48,8 @@ public sealed class SqlServerProjectedSeedKeySqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var builder = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         var columns = new[]
         {
@@ -54,8 +60,12 @@ public sealed class SqlServerProjectedSeedKeySqlTests
         var filter = SafeMigrationSql.IsNotNull(SafeMigrationSql.Identifier("Unknown"));
 
         // Act
-        var sql = builder.BuildProjectedSeedKeyProofSql([Seed(1, null)], columns, ["Code"],
-            requireCapturedUniqueKey: false, filter);
+        var sql = builder.BuildProjectedSeedKeyProofSql(
+            [Seed(1, null)],
+            columns,
+            ["Code"],
+            requireCapturedUniqueKey: false,
+            filter);
 
         // Assert
         Assert.Null(sql);
@@ -68,12 +78,17 @@ public sealed class SqlServerProjectedSeedKeySqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var builder = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         var columns = new[]
         {
             new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
-            new ExpectedColumnDefinition("Code", typeof(string), true, "nvarchar(20)",
+            new ExpectedColumnDefinition(
+                "Code",
+                typeof(string),
+                true,
+                "nvarchar(20)",
                 collation: new SafeMigrationCollationIdentifier("Latin1_General_100_CI_AS")),
         };
 
@@ -101,7 +116,8 @@ public sealed class SqlServerProjectedSeedKeySqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var builder = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         var columns = new[]
         {
@@ -123,18 +139,30 @@ public sealed class SqlServerProjectedSeedKeySqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var builder = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         var columns = new[]
         {
             new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
-            new ExpectedColumnDefinition("Code", typeof(string), false, "varchar(20)", isUnicode: false,
+            new ExpectedColumnDefinition(
+                "Code",
+                typeof(string),
+                false,
+                "varchar(20)",
+                isUnicode: false,
                 collation: new SafeMigrationCollationIdentifier("Latin1_General_100_BIN2")),
         };
 
-        var seed = new EnsureModelManagedDataIntent("seed_proofs", ["Id"], ["int"],
-            ["Id", "Code"], ["int", "varchar(20)"], new object?[,] { { 1, "\u00e9" } },
-            schema: null, uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Code"])]);
+        var seed = new EnsureModelManagedDataIntent(
+            "seed_proofs",
+            ["Id"],
+            ["int"],
+            ["Id", "Code"],
+            ["int", "varchar(20)"],
+            new object?[,] { { 1, "\u00e9" } },
+            schema: null,
+            uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Code"])]);
 
         // Act
         var sql = builder.BuildProjectedSeedKeyProofSql([seed], columns, ["Code"]);
@@ -166,14 +194,19 @@ public sealed class SqlServerProjectedSeedKeySqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var builder = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         // WHY: Core rejects literal NULL for a required column at construction.
         // SQL DEFAULT NULL remains an authored expression, so the provider must
         // independently reject its omitted required-value proof.
-        var defaultValue = !hasDefault ? null
-            : nonNullDefault ? SafeMigrationDefaultValue.Literal(7)
-            : nullable ? SafeMigrationDefaultValue.Literal(null) : SafeMigrationDefaultValue.Sql("NULL");
+        var defaultValue = !hasDefault
+            ? null
+            : nonNullDefault
+                ? SafeMigrationDefaultValue.Literal(7)
+                : nullable
+                    ? SafeMigrationDefaultValue.Literal(null)
+                    : SafeMigrationDefaultValue.Sql("NULL");
 
         var columns = new[]
         {
@@ -205,13 +238,18 @@ public sealed class SqlServerProjectedSeedKeySqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var builder = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         var columns = new[]
         {
             new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
             new ExpectedColumnDefinition("Code", typeof(string), true, "nvarchar(20)"),
-            new ExpectedColumnDefinition("Created", typeof(DateTime), false, "datetime2(7)",
+            new ExpectedColumnDefinition(
+                "Created",
+                typeof(DateTime),
+                false,
+                "datetime2(7)",
                 defaultValue: SafeMigrationDefaultValue.Sql(defaultSql)),
         };
 
@@ -228,8 +266,14 @@ public sealed class SqlServerProjectedSeedKeySqlTests
     {
         // Arrange
         static EnsureModelManagedDataIntent CreateConflictingTypes()
-            => new("seed_proofs", ["Id"], ["bigint"], ["Id", "Code"], ["int", "nvarchar(20)"],
-                new object?[,] { { 1, "one" } }, schema: null,
+            => new(
+                "seed_proofs",
+                ["Id"],
+                ["bigint"],
+                ["Id", "Code"],
+                ["int", "nvarchar(20)"],
+                new object?[,] { { 1, "one" } },
+                schema: null,
                 uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Code"])]);
 
         // Act
@@ -243,7 +287,13 @@ public sealed class SqlServerProjectedSeedKeySqlTests
         int id,
         string? code
     )
-        => new("seed_proofs", ["Id"], ["int"],
-            ["Id", "Code"], ["int", "nvarchar(20)"], new object?[,] { { id, code } },
-            schema: null, uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Code"])]);
+        => new(
+            "seed_proofs",
+            ["Id"],
+            ["int"],
+            ["Id", "Code"],
+            ["int", "nvarchar(20)"],
+            new object?[,] { { id, code } },
+            schema: null,
+            uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Code"])]);
 }

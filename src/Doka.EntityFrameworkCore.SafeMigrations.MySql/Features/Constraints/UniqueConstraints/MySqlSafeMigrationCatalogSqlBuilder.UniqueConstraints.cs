@@ -30,28 +30,29 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             $"tc.CONSTRAINT_NAME <> {Literal(definition.Name)}");
 
         return Plan(
-            $"CASE WHEN NOT {BaseTableExists(definition.Table)} THEN 'prerequisite_missing' "
-            + $"WHEN {exists} AND {matching} THEN 'matching' "
-            + $"WHEN {exists} THEN 'different' "
-            + $"WHEN {indexNameExists} THEN 'different' "
-            + $"WHEN {semanticAlias} THEN 'matching' "
-            + $"WHEN {dataBlocked} THEN 'data_blocked' "
-            + $"WHEN NOT ({physicallyAchievable}) THEN 'unsupported' "
-            + "ELSE 'missing' END",
-            satisfied) with
-        {
-            MatchedObjectNameExpression = ResolveMatchingObjectName(
-                matching,
-                Literal(definition.Name),
-                semanticCandidates),
-            UnsupportedCode = definition.Columns.Count > MySqlProjectedIndexPhysicalShape.MaximumKeyParts
-                ? "unique_constraint_too_many_columns"
-                : "unique_constraint_exceeds_physical_limit",
-            // WHY: Ordered Drop -> Ensure projection still needs duplicate-row
-            // proof hidden by either same-name physical shape conflict.
-            ClassificationCodeExpression = $"CASE WHEN {indexNameExists} AND NOT ({matching}) AND {dataBlocked} "
+                $"CASE WHEN NOT {BaseTableExists(definition.Table)} THEN 'prerequisite_missing' "
+                + $"WHEN {exists} AND {matching} THEN 'matching' "
+                + $"WHEN {exists} THEN 'different' "
+                + $"WHEN {indexNameExists} THEN 'different' "
+                + $"WHEN {semanticAlias} THEN 'matching' "
+                + $"WHEN {dataBlocked} THEN 'data_blocked' "
+                + $"WHEN NOT ({physicallyAchievable}) THEN 'unsupported' "
+                + "ELSE 'missing' END",
+                satisfied) with
+            {
+                MatchedObjectNameExpression = ResolveMatchingObjectName(
+                    matching,
+                    Literal(definition.Name),
+                    semanticCandidates),
+                UnsupportedCode = definition.Columns.Count > MySqlProjectedIndexPhysicalShape.MaximumKeyParts
+                    ? "unique_constraint_too_many_columns"
+                    : "unique_constraint_exceeds_physical_limit",
+
+                // WHY: Ordered Drop -> Ensure projection still needs duplicate-row
+                // proof hidden by either same-name physical shape conflict.
+                ClassificationCodeExpression = $"CASE WHEN {indexNameExists} AND NOT ({matching}) AND {dataBlocked} "
                 + "THEN 'unique_constraint_replacement_data_blocked' ELSE NULL END",
-        };
+            };
     }
 
     private MySqlSafeMigrationRuntimePlan BuildDropUniqueConstraint(

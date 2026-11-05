@@ -1,6 +1,7 @@
 // WHY: Independent collections overlap over one assembly-owned server while each test owns its database.
-[assembly: Xunit.CollectionBehavior(Xunit.CollectionBehavior.CollectionPerClass, MaxParallelThreads = 4)]
-[assembly: Xunit.TestFramework(
+
+[assembly: CollectionBehavior(CollectionBehavior.CollectionPerClass, MaxParallelThreads = 4)]
+[assembly: TestFramework(
     "Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests.SqlServerTestFramework",
     "Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests")]
 
@@ -11,5 +12,7 @@ public sealed class SqlServerTestFramework : SharedContainerTestFramework<SqlSer
 {
     /// <summary>Creates the framework with xUnit's diagnostic message sink.</summary>
     /// <param name="messageSink">The diagnostic sink supplied by the xUnit runner.</param>
-    public SqlServerTestFramework(Xunit.Abstractions.IMessageSink messageSink) : base(messageSink) { }
+    public SqlServerTestFramework(
+        IMessageSink messageSink
+    ) : base(messageSink) { }
 }

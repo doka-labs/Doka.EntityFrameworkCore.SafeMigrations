@@ -1,3 +1,6 @@
+using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>Exercises the actual xUnit runner chain with fake test cases and container-free fixtures.</summary>
@@ -8,7 +11,9 @@ public sealed class SharedContainerRunnerTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task InvokeCollectionRunnerRequiresTheActualFrameworkToken(bool matching)
+    public async Task InvokeCollectionRunnerRequiresTheActualFrameworkToken(
+        bool matching
+    )
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
@@ -16,14 +21,22 @@ public sealed class SharedContainerRunnerTests
         var observed = CancellationToken.None;
         var assembly = CreateAssembly();
         var sink = new RecordingSink();
-        var testCase = CreateCase<UnitConsumer>(assembly, observeArguments: (_, token) =>
-        {
-            observed = token;
+        var testCase = CreateCase<UnitConsumer>(
+            assembly,
+            observeArguments: (_, token) =>
+            {
+                observed = token;
 
-            return Task.FromResult(new RunSummary { Total = 1 });
-        });
+                return Task.FromResult(new RunSummary { Total = 1 });
+            });
+
         using var runner = new SharedContainerTestAssemblyRunner<RunnerFixture>(
-            assembly, [testCase], sink, sink, new RunnerOptions());
+            assembly,
+            [testCase],
+            sink,
+            sink,
+            new RunnerOptions());
+
         using var messageBus = new SynchronousMessageBus(sink, stopOnFail: false);
         await InvokeStartingHookAsync(runner, CancellationToken.None);
         var token = matching
@@ -33,6 +46,7 @@ public sealed class SharedContainerRunnerTests
         // Act
         var failure = await Record.ExceptionAsync(() =>
             InvokeCollectionRunner(runner, testCase, messageBus, cancellation, token));
+
         await runner.EnsureFixtureDisposedAsync();
 
         // Assert
@@ -58,7 +72,7 @@ public sealed class SharedContainerRunnerTests
         var lifecycle = new SharedContainerFixtureLifecycle<RunnerFixture>(() => fixture);
         var assembly = CreateAssembly();
         var sink = new RecordingSink();
-        var observedOrdinaryFixtures = new System.Collections.Concurrent.ConcurrentQueue<OrdinaryFixture>();
+        var observedOrdinaryFixtures = new ConcurrentQueue<OrdinaryFixture>();
 
         Task<RunSummary> ObserveArgumentsAsync(
             object[] arguments,
@@ -85,8 +99,14 @@ public sealed class SharedContainerRunnerTests
             CreateCase<FirstConsumer>(assembly, observeArguments: ObserveArgumentsAsync),
             CreateCase<SecondConsumer>(assembly, observeArguments: ObserveArgumentsAsync),
         ];
+
         using var runner = new SharedContainerTestAssemblyRunner<RunnerFixture>(
-            assembly, cases, sink, sink, new RunnerOptions(maximum: 2), lifecycle);
+            assembly,
+            cases,
+            sink,
+            sink,
+            new RunnerOptions(maximum: 2),
+            lifecycle);
 
         // Act
         var summary = await runner.RunAsync();
@@ -120,8 +140,14 @@ public sealed class SharedContainerRunnerTests
             CreateRealCase<FirstConsumer>(assembly, sink),
             CreateRealCase<SecondConsumer>(assembly, sink),
         ];
+
         using var runner = new SharedContainerTestAssemblyRunner<RunnerFixture>(
-            assembly, cases, sink, sink, new RunnerOptions(), lifecycle);
+            assembly,
+            cases,
+            sink,
+            sink,
+            new RunnerOptions(),
+            lifecycle);
 
         // Act
         var summary = await runner.RunAsync();
@@ -130,7 +156,12 @@ public sealed class SharedContainerRunnerTests
         Assert.Equal(2, summary.Total);
         Assert.Equal(0, summary.Failed);
         Assert.Equal(0, summary.Skipped);
-        Assert.Equal(2, sink.Messages.OfType<ITestPassed>().Count());
+        Assert.Equal(2,
+            sink
+                .Messages
+                .OfType<ITestPassed>()
+                .Count());
+
         Assert.Equal(2, fixture.ConsumerFixtures.Count);
         Assert.All(fixture.ConsumerFixtures, ordinary => Assert.Equal(1, ordinary.DisposeCount));
         Assert.Equal(1, fixture.InitializeCount);
@@ -182,8 +213,15 @@ public sealed class SharedContainerRunnerTests
             CreateCase<FirstConsumer>(assembly, observeArguments: HoldCollectionAsync),
             CreateCase<SecondConsumer>(assembly, observeArguments: HoldCollectionAsync),
         ];
+
         using var runner = new SharedContainerTestAssemblyRunner<RunnerFixture>(
-            assembly, cases, sink, sink, new RunnerOptions(maximum: 2), lifecycle);
+            assembly,
+            cases,
+            sink,
+            sink,
+            new RunnerOptions(maximum: 2),
+            lifecycle);
+
         var activeBeforeRelease = 0;
         var completedBeforeRelease = false;
 
@@ -289,11 +327,21 @@ public sealed class SharedContainerRunnerTests
         [
             CreateCase<FirstConsumer>(assembly, observeArguments: HoldNormalAsync),
             CreateCase<SecondConsumer>(assembly, observeArguments: HoldNormalAsync),
-            CreateCase<UnitConsumer>(assembly, observeArguments: HoldControlAsync,
-                collectionDefinition: exclusive ? Reflector.Wrap(typeof(ProcessWideTestGroup)) : null),
+            CreateCase<UnitConsumer>(
+                assembly,
+                observeArguments: HoldControlAsync,
+                collectionDefinition: exclusive
+                    ? Reflector.Wrap(typeof(ProcessWideTestGroup))
+                    : null),
         ];
+
         using var runner = new SharedContainerTestAssemblyRunner<RunnerFixture>(
-            assembly, cases, sink, sink, new RunnerOptions(maximum: 4), lifecycle);
+            assembly,
+            cases,
+            sink,
+            sink,
+            new RunnerOptions(maximum: 4),
+            lifecycle);
 
         // Act
         var assemblyRun = runner.RunAsync();
@@ -325,8 +373,18 @@ public sealed class SharedContainerRunnerTests
 
         // Assert
         Assert.Equal(!exclusive, controlActiveBeforeNormalRelease);
-        Assert.Equal(exclusive ? 0 : 2, normalActiveAtControlAdmission);
-        Assert.Equal(exclusive ? 2 : 0, normalCompletedAtControlAdmission);
+        Assert.Equal(
+            exclusive
+                ? 0
+                : 2,
+            normalActiveAtControlAdmission);
+
+        Assert.Equal(
+            exclusive
+                ? 2
+                : 0,
+            normalCompletedAtControlAdmission);
+
         Assert.Equal(3, summary.Total);
         Assert.Equal(0, summary.Failed);
         Assert.Equal(1, fixture.InitializeCount);
@@ -345,14 +403,21 @@ public sealed class SharedContainerRunnerTests
 
             return new RunnerFixture();
         });
+
         var assembly = CreateAssembly();
         var sink = new RecordingSink();
         IXunitTestCase[] cases =
         [
             CreateRealCase<UnitConsumer>(assembly, sink),
         ];
+
         using var runner = new SharedContainerTestAssemblyRunner<RunnerFixture>(
-            assembly, cases, sink, sink, new RunnerOptions(), lifecycle);
+            assembly,
+            cases,
+            sink,
+            sink,
+            new RunnerOptions(),
+            lifecycle);
 
         // Act
         var summary = await runner.RunAsync();
@@ -377,6 +442,7 @@ public sealed class SharedContainerRunnerTests
 
             return new RunnerFixture();
         });
+
         var assembly = CreateAssembly();
         var sink = new RecordingSink();
         IXunitTestCase[] cases =
@@ -384,8 +450,14 @@ public sealed class SharedContainerRunnerTests
             CreateRealCase<FirstConsumer>(assembly, sink, skipReason: "selection sentinel"),
             CreateRealCase<SecondConsumer>(assembly, sink, skipReason: "selection sentinel"),
         ];
+
         using var runner = new SharedContainerTestAssemblyRunner<RunnerFixture>(
-            assembly, cases, sink, sink, new RunnerOptions(), lifecycle);
+            assembly,
+            cases,
+            sink,
+            sink,
+            new RunnerOptions(),
+            lifecycle);
 
         // Act
         var summary = await runner.RunAsync();
@@ -397,7 +469,11 @@ public sealed class SharedContainerRunnerTests
         Assert.Equal(0, constructions);
         Assert.Null(lifecycle.Fixture);
         Assert.Empty(runner.FixtureFailures);
-        Assert.Equal(2, sink.Messages.OfType<ITestSkipped>().Count());
+        Assert.Equal(2,
+            sink
+                .Messages
+                .OfType<ITestSkipped>()
+                .Count());
     }
 
     /// <summary>Startup errors fail selected tests and cleanup errors produce the normal xUnit cleanup message.</summary>
@@ -412,12 +488,18 @@ public sealed class SharedContainerRunnerTests
             Initialize = () => Task.FromException(startupFailure),
             Cleanup = () => Task.FromException(cleanupFailure),
         };
+
         var lifecycle = new SharedContainerFixtureLifecycle<RunnerFixture>(() => fixture);
         var assembly = CreateAssembly();
         var sink = new RecordingSink();
         var testCase = CreateCase<FirstConsumer>(assembly);
         using var runner = new SharedContainerTestAssemblyRunner<RunnerFixture>(
-            assembly, [testCase], sink, sink, new RunnerOptions(), lifecycle);
+            assembly,
+            [testCase],
+            sink,
+            sink,
+            new RunnerOptions(),
+            lifecycle);
 
         // Act
         var summary = await runner.RunAsync();
@@ -447,27 +529,39 @@ public sealed class SharedContainerRunnerTests
         var admitted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var executed = 0;
-        var firstCase = CreateCase<FirstConsumer>(assembly, observeArguments: async (arguments, token) =>
-        {
-            Assert.Same(fixture, arguments[0]);
+        var firstCase = CreateCase<FirstConsumer>(
+            assembly,
+            observeArguments: async (arguments, token) =>
+            {
+                Assert.Same(fixture, arguments[0]);
 
-            Interlocked.Increment(ref executed);
-            admitted.SetResult();
+                Interlocked.Increment(ref executed);
+                admitted.SetResult();
 
-            await release.Task.WaitAsync(token);
+                await release.Task.WaitAsync(token);
 
-            return new RunSummary { Total = 1 };
-        });
-        var lateCase = CreateCase<SecondConsumer>(assembly, observeArguments: (_, token) =>
-        {
-            token.ThrowIfCancellationRequested();
+                return new RunSummary { Total = 1 };
+            });
 
-            Interlocked.Increment(ref executed);
+        var lateCase = CreateCase<SecondConsumer>(
+            assembly,
+            observeArguments: (_, token) =>
+            {
+                token.ThrowIfCancellationRequested();
 
-            return Task.FromResult(new RunSummary { Total = 1 });
-        });
+                Interlocked.Increment(ref executed);
+
+                return Task.FromResult(new RunSummary { Total = 1 });
+            });
+
         using var runner = new SharedContainerTestAssemblyRunner<RunnerFixture>(
-            assembly, [firstCase, lateCase], sink, sink, new RunnerOptions(), lifecycle);
+            assembly,
+            [firstCase, lateCase],
+            sink,
+            sink,
+            new RunnerOptions(),
+            lifecycle);
+
         using var cancellation = new CancellationTokenSource();
         using var messageBus = new SynchronousMessageBus(sink, stopOnFail: false);
 
@@ -485,7 +579,9 @@ public sealed class SharedContainerRunnerTests
 
         release.SetResult();
 
-        await Task.WhenAll(firstRun, lateRun, cleanup).WaitAsync(TimeSpan.FromSeconds(10));
+        await Task
+            .WhenAll(firstRun, lateRun, cleanup)
+            .WaitAsync(TimeSpan.FromSeconds(10));
 
         // Assert
         Assert.False(cleanupCompletedBeforeRelease);
@@ -525,25 +621,6 @@ public sealed class SharedContainerRunnerTests
         return new TestMethod(testClass, Reflector.Wrap(method));
     }
 
-    private sealed class SelectedProbeCase : XunitTestCase
-    {
-        private readonly string? _selectedSkipReason;
-
-        public SelectedProbeCase()
-            : this(new RecordingSink(), CreateTestMethod<UnitConsumer>(CreateAssembly()), null) { }
-
-        public SelectedProbeCase(
-            IMessageSink diagnosticMessageSink,
-            ITestMethod testMethod,
-            string? skipReason
-        ) : base(diagnosticMessageSink, TestMethodDisplay.ClassAndMethod, TestMethodDisplayOptions.None, testMethod)
-            => _selectedSkipReason = skipReason;
-
-        protected override string? GetSkipReason(
-            IAttributeInfo factAttribute
-        ) => _selectedSkipReason;
-    }
-
     /// <summary>Invokes the real startup hook without changing its framework-owned parameterless signature.</summary>
     /// <param name="runner">The production runner being exercised.</param>
     /// <param name="cancellationToken">Cancels before startup is invoked and resource ownership is committed.</param>
@@ -555,8 +632,11 @@ public sealed class SharedContainerRunnerTests
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var hook = runner.GetType().GetMethod("AfterTestAssemblyStartingAsync",
-            BindingFlags.Instance | BindingFlags.NonPublic);
+        var hook = runner
+            .GetType()
+            .GetMethod(
+                "AfterTestAssemblyStartingAsync",
+                BindingFlags.Instance | BindingFlags.NonPublic);
 
         Assert.NotNull(hook);
 
@@ -580,19 +660,46 @@ public sealed class SharedContainerRunnerTests
     {
         if (cancellationToken != cancellation.Token)
         {
-            throw new ArgumentException("The token must belong to the runner's cancellation source.",
+            throw new ArgumentException(
+                "The token must belong to the runner's cancellation source.",
                 nameof(cancellationToken));
         }
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var hook = runner.GetType().GetMethod("RunTestCollectionAsync",
-            BindingFlags.Instance | BindingFlags.NonPublic);
+        var hook = runner
+            .GetType()
+            .GetMethod(
+                "RunTestCollectionAsync",
+                BindingFlags.Instance | BindingFlags.NonPublic);
 
         Assert.NotNull(hook);
 
-        return Assert.IsAssignableFrom<Task<RunSummary>>(hook.Invoke(runner,
-            [messageBus, testCase.TestMethod.TestClass.TestCollection, new[] { testCase }, cancellation]));
+        return Assert.IsAssignableFrom<Task<RunSummary>>(
+            hook.Invoke(
+                runner,
+                [messageBus, testCase.TestMethod.TestClass.TestCollection, new[] { testCase }, cancellation]));
+    }
+
+    private sealed class SelectedProbeCase : XunitTestCase
+    {
+        private readonly string? _selectedSkipReason;
+
+        public SelectedProbeCase()
+            : this(new RecordingSink(), CreateTestMethod<UnitConsumer>(CreateAssembly()), null) { }
+
+        public SelectedProbeCase(
+            IMessageSink diagnosticMessageSink,
+            ITestMethod testMethod,
+            string? skipReason
+        ) : base(diagnosticMessageSink, TestMethodDisplay.ClassAndMethod, TestMethodDisplayOptions.None, testMethod)
+        {
+            _selectedSkipReason = skipReason;
+        }
+
+        protected override string? GetSkipReason(
+            IAttributeInfo factAttribute
+        ) => _selectedSkipReason;
     }
 
     private sealed class ProbeCase : LongLivedMarshalByRefObject, IXunitTestCase
@@ -613,6 +720,8 @@ public sealed class SharedContainerRunnerTests
             _observeArguments = observeArguments;
         }
 
+        public Exception? ObservedFailure { get; private set; }
+
         public string DisplayName => TestMethod.TestClass.Class.Name;
 
         public string? SkipReason { get; }
@@ -625,15 +734,15 @@ public sealed class SharedContainerRunnerTests
 
         public Dictionary<string, List<string>> Traits { get; } = [];
 
-        public string UniqueID { get; } = Guid.NewGuid().ToString("N");
+        public string UniqueID { get; } = Guid
+            .NewGuid()
+            .ToString("N");
 
         public Exception? InitializationException => null;
 
         public IMethodInfo Method => TestMethod.Method;
 
         public int Timeout => 0;
-
-        public Exception? ObservedFailure { get; private set; }
 
         public Task<RunSummary> RunAsync(
             IMessageSink diagnosticMessageSink,
@@ -645,14 +754,24 @@ public sealed class SharedContainerRunnerTests
         {
             if (!string.IsNullOrEmpty(SkipReason))
             {
-                return Task.FromResult(new RunSummary { Total = 1, Skipped = 1 });
+                return Task.FromResult(
+                    new RunSummary
+                    {
+                        Total = 1,
+                        Skipped = 1,
+                    });
             }
 
             ObservedFailure = aggregator.ToException();
 
             if (ObservedFailure is not null)
             {
-                return Task.FromResult(new RunSummary { Total = 1, Failed = 1 });
+                return Task.FromResult(
+                    new RunSummary
+                    {
+                        Total = 1,
+                        Failed = 1,
+                    });
             }
 
             return _observeArguments?.Invoke(constructorArguments, cancellationTokenSource.Token)
@@ -674,12 +793,17 @@ public sealed class SharedContainerRunnerTests
 
         public RunnerOptions(
             int maximum = 2
-        ) => SetValue("xunit.execution.MaxParallelThreads", maximum);
+        )
+        {
+            SetValue("xunit.execution.MaxParallelThreads", maximum);
+        }
 
-        [return: System.Diagnostics.CodeAnalysis.MaybeNull]
+        [return: MaybeNull]
         public TValue GetValue<TValue>(
             string name
-        ) => _values.TryGetValue(name, out var value) && value is TValue typedValue ? typedValue : default;
+        ) => _values.TryGetValue(name, out var value) && value is TValue typedValue
+            ? typedValue
+            : default;
 
         public void SetValue<TValue>(
             string name,
@@ -689,7 +813,7 @@ public sealed class SharedContainerRunnerTests
 
     private sealed class RecordingSink : LongLivedMarshalByRefObject, IMessageSink
     {
-        public System.Collections.Concurrent.ConcurrentQueue<IMessageSinkMessage> Messages { get; } = new();
+        public ConcurrentQueue<IMessageSinkMessage> Messages { get; } = new();
 
         public bool OnMessage(
             IMessageSinkMessage message
@@ -713,7 +837,7 @@ public sealed class SharedContainerRunnerTests
         public int DisposeCount { get; private set; }
 
         /// <summary>Records real consumer constructor invocations without process-wide mutable counters.</summary>
-        public System.Collections.Concurrent.ConcurrentQueue<OrdinaryFixture> ConsumerFixtures { get; } = new();
+        public ConcurrentQueue<OrdinaryFixture> ConsumerFixtures { get; } = new();
 
         public Task InitializeAsync()
         {

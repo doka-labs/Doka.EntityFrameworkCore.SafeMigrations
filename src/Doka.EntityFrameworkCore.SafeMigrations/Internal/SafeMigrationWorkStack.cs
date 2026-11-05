@@ -80,7 +80,10 @@ internal ref struct SafeMigrationWorkStack<T>
     private void Grow()
     {
         var previous = _items;
-        var capacity = previous is null ? 16 : checked(previous.Length * 2);
+        var capacity = previous is null
+            ? 16
+            : checked(previous.Length * 2);
+
         var replacement = Pool.Rent(capacity);
 
         if (previous is not null)
@@ -88,6 +91,7 @@ internal ref struct SafeMigrationWorkStack<T>
             previous
                 .AsSpan(0, _count)
                 .CopyTo(replacement);
+
             Pool.Return(previous, clearArray: RuntimeHelpers.IsReferenceOrContainsReferences<T>());
         }
 

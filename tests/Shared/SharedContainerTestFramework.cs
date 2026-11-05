@@ -13,7 +13,7 @@ public abstract class SharedContainerTestFramework<TFixture> : XunitTestFramewor
 
     /// <inheritdoc />
     protected override ITestFrameworkExecutor CreateExecutor(
-        System.Reflection.AssemblyName assemblyName
+        AssemblyName assemblyName
     ) => new SharedContainerTestFrameworkExecutor<TFixture>(
         assemblyName,
         SourceInformationProvider,
@@ -24,7 +24,7 @@ internal sealed class SharedContainerTestFrameworkExecutor<TFixture> : XunitTest
     where TFixture : class, IAsyncLifetime, new()
 {
     public SharedContainerTestFrameworkExecutor(
-        System.Reflection.AssemblyName assemblyName,
+        AssemblyName assemblyName,
         ISourceInformationProvider sourceInformationProvider,
         IMessageSink diagnosticMessageSink
     ) : base(assemblyName, sourceInformationProvider, diagnosticMessageSink) { }
@@ -41,13 +41,17 @@ internal sealed class SharedContainerTestFrameworkExecutor<TFixture> : XunitTest
             DiagnosticMessageSink,
             executionMessageSink,
             executionOptions);
+
         Exception? runnerFailure = null;
 
         try
         {
             // WHY: The v2 executor hook is synchronous. Its assembly runner
             // must finish startup, all parallel collections and final cleanup.
-            runner.RunAsync().GetAwaiter().GetResult();
+            runner
+                .RunAsync()
+                .GetAwaiter()
+                .GetResult();
         }
         catch (Exception exception)
         {
@@ -57,7 +61,10 @@ internal sealed class SharedContainerTestFrameworkExecutor<TFixture> : XunitTest
         {
             // WHY: A failing message sink or runner can bypass the normal
             // finished hook. Both paths await the same single cleanup task.
-            runner.EnsureFixtureDisposedAsync().GetAwaiter().GetResult();
+            runner
+                .EnsureFixtureDisposedAsync()
+                .GetAwaiter()
+                .GetResult();
         }
 
         if (runnerFailure is not null)
@@ -90,15 +97,18 @@ internal sealed class SharedContainerTestAssemblyRunner<TFixture> : XunitTestAss
     {
         _lifecycle = lifecycle ?? new SharedContainerFixtureLifecycle<TFixture>();
         _requiresFixture = SharedContainerFixtureSelection.RequiresFixture<TFixture>(testCases);
-        var collectionBehavior = testAssembly.Assembly
+        var collectionBehavior = testAssembly
+            .Assembly
             .GetCustomAttributes(typeof(CollectionBehaviorAttribute).AssemblyQualifiedName!)
             .SingleOrDefault();
+
         var policy = SharedContainerExecutionPolicy.Resolve(
             executionOptions.MaxParallelThreads(),
             executionOptions.DisableParallelization(),
             collectionBehavior?.GetNamedArgument<int>("MaxParallelThreads") ?? 0,
             collectionBehavior?.GetNamedArgument<bool>("DisableTestParallelization") ?? false,
             Environment.ProcessorCount);
+
         _scheduler = new SharedContainerCollectionScheduler(policy);
     }
 
@@ -121,16 +131,25 @@ internal sealed class SharedContainerTestAssemblyRunner<TFixture> : XunitTestAss
 
     protected override Task AfterTestAssemblyStartingAsync() => Aggregator.RunAsync(async () =>
     {
-        await base.AfterTestAssemblyStartingAsync().ConfigureAwait(false);
+        await base
+            .AfterTestAssemblyStartingAsync()
+            .ConfigureAwait(false);
+
         // WHY: xUnit's parameterless assembly-start hook does not expose a caller token.
         // The fixture lifetime still owns and awaits the entire committed startup operation.
-        await _lifecycle.InitializeAsync(_requiresFixture, CancellationToken.None).ConfigureAwait(false);
+        await _lifecycle
+            .InitializeAsync(_requiresFixture, CancellationToken.None)
+            .ConfigureAwait(false);
     });
 
     protected override async Task BeforeTestAssemblyFinishedAsync()
     {
-        await EnsureFixtureDisposedAsync().ConfigureAwait(false);
-        await Aggregator.RunAsync(() => base.BeforeTestAssemblyFinishedAsync()).ConfigureAwait(false);
+        await EnsureFixtureDisposedAsync()
+            .ConfigureAwait(false);
+
+        await Aggregator
+            .RunAsync(() => base.BeforeTestAssemblyFinishedAsync())
+            .ConfigureAwait(false);
     }
 
     protected override Task<RunSummary> RunTestCollectionAsync(
@@ -167,6 +186,7 @@ internal sealed class SharedContainerTestAssemblyRunner<TFixture> : XunitTestAss
                         _lifecycle.Fixture).RunAsync();
                 },
                 cancellationTokenSource.Token);
+
             _collectionRuns.Add(run);
 
             return run;
@@ -180,9 +200,15 @@ internal sealed class SharedContainerTestAssemblyRunner<TFixture> : XunitTestAss
         // WHY: A failed collection or message sink can bypass upstream's
         // remaining awaits. Every admitted borrower must finish before its
         // shared container is released, including borrowers waiting for capacity.
-        await Aggregator.RunAsync(async () => await Task.WhenAll(collectionRuns).ConfigureAwait(false))
+        await Aggregator
+            .RunAsync(async () => await Task
+                .WhenAll(collectionRuns)
+                .ConfigureAwait(false))
             .ConfigureAwait(false);
-        await Aggregator.RunAsync(_lifecycle.DisposeAsync).ConfigureAwait(false);
+
+        await Aggregator
+            .RunAsync(_lifecycle.DisposeAsync)
+            .ConfigureAwait(false);
     }
 }
 
@@ -200,8 +226,17 @@ internal sealed class SharedContainerTestCollectionRunner<TFixture> : XunitTestC
         ExceptionAggregator aggregator,
         CancellationTokenSource cancellationTokenSource,
         TFixture? sharedFixture
-    ) : base(testCollection, testCases, diagnosticMessageSink, messageBus, testCaseOrderer,
-        aggregator, cancellationTokenSource) => _sharedFixture = sharedFixture;
+    ) : base(
+        testCollection,
+        testCases,
+        diagnosticMessageSink,
+        messageBus,
+        testCaseOrderer,
+        aggregator,
+        cancellationTokenSource)
+    {
+        _sharedFixture = sharedFixture;
+    }
 
     protected override Task<RunSummary> RunTestClassAsync(
         ITestClass testClass,
@@ -232,8 +267,16 @@ internal sealed class SharedContainerTestClassRunner<TFixture> : XunitTestClassR
         ExceptionAggregator aggregator,
         CancellationTokenSource cancellationTokenSource,
         IDictionary<Type, object> fixtureMappings
-    ) : base(testClass, @class, testCases, diagnosticMessageSink, messageBus, testCaseOrderer,
-        aggregator, cancellationTokenSource, fixtureMappings) { }
+    ) : base(
+        testClass,
+        @class,
+        testCases,
+        diagnosticMessageSink,
+        messageBus,
+        testCaseOrderer,
+        aggregator,
+        cancellationTokenSource,
+        fixtureMappings) { }
 
     protected override void CreateClassFixture(
         Type fixtureType

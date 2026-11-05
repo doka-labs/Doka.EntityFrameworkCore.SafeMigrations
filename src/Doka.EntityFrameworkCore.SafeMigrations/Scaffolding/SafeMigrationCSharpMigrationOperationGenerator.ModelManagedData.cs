@@ -108,7 +108,10 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
         AppendStringArray(builder, intent.ColumnTypes);
         builder.AppendLine(",");
 
-        var firstName = intent is EnsureModelManagedDataIntent ? "values" : "oldValues";
+        var firstName = intent is EnsureModelManagedDataIntent
+            ? "values"
+            : "oldValues";
+
         builder
             .Append(firstName)
             .Append(": ");
@@ -159,6 +162,7 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
                 .AppendLine("foreignKeys:")
                 .AppendLine("[")
                 .IncrementIndent();
+
             foreach (var foreignKey in delete.ForeignKeys)
             {
                 builder
@@ -169,6 +173,7 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
                     .Append("table: ")
                     .Append(Dependencies.CSharpHelper.Literal(foreignKey.Table))
                     .AppendLine(",");
+
                 builder.Append("columns: ");
 
                 AppendStringArray(builder, foreignKey.Columns);
@@ -238,6 +243,7 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
         for (var row = 0; row < values.RowCount; row++)
         {
             builder.Append("{ ");
+
             // WHY: Column ordinals select matrix values and delimiters within each rendered row.
             // ReSharper disable once ForCanBeConvertedToForeach
             // ReSharper disable once LoopCanBeConvertedToQuery
@@ -249,7 +255,10 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
                 }
 
                 var value = values.GetUnsafeValue(row, column);
-                builder.Append(value is null ? "null" : Dependencies.CSharpHelper.UnknownLiteral(value));
+                builder.Append(
+                    value is null
+                        ? "null"
+                        : Dependencies.CSharpHelper.UnknownLiteral(value));
             }
 
             builder.AppendLine(" },");

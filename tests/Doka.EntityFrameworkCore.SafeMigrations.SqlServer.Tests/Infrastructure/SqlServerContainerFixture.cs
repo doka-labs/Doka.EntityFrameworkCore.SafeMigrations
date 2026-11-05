@@ -7,15 +7,16 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
 {
     private const string DefaultImage =
         "mcr.microsoft.com/mssql/server@sha256:cf8f0ab2ebe61feec2eed2629061a07d247f791c2a8ddda74a4ac9f06a291718";
+
     private const string Password = "SafeMigrations_Test_2026!";
+    private readonly MsSqlContainer? _container;
+    private readonly Func<string, CancellationToken, Task>? _createDatabaseAsync;
+    private readonly SemaphoreSlim _databaseLifecycleLock = new(1, 1);
 
     private readonly List<string> _databases = [];
-    private readonly SemaphoreSlim _databaseLifecycleLock = new(1, 1);
-    private readonly MsSqlContainer? _container;
-    private readonly string? _rootConnectionString;
-    private readonly Func<string, CancellationToken, Task>? _createDatabaseAsync;
-    private readonly Func<string, CancellationToken, Task>? _dropDatabaseAsync;
     private readonly Func<Task>? _disposeContainerAsync;
+    private readonly Func<string, CancellationToken, Task>? _dropDatabaseAsync;
+    private readonly string? _rootConnectionString;
     private bool _disposed;
 
     /// <summary>
@@ -24,7 +25,9 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
     public SqlServerContainerFixture()
     {
         var configuredImage = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_SQLSERVER_IMAGE");
-        var image = string.IsNullOrWhiteSpace(configuredImage) ? DefaultImage : configuredImage.Trim();
+        var image = string.IsNullOrWhiteSpace(configuredImage)
+            ? DefaultImage
+            : configuredImage.Trim();
 
         _container = new MsSqlBuilder(image)
             .WithPassword(Password)
@@ -54,13 +57,24 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
         _disposeContainerAsync = disposeContainerAsync;
     }
 
+    private string RootConnectionString => new SqlConnectionStringBuilder(
+        _rootConnectionString
+        ?? _container?.GetConnectionString()
+        ?? throw new InvalidOperationException("The SQL Server fixture has no connection string."))
+    {
+        InitialCatalog = "master",
+        Pooling = false,
+        TrustServerCertificate = true,
+    }.ConnectionString;
+
     /// <summary>
     /// Starts the SQL Server instance before the first live test.
     /// </summary>
     public async Task InitializeAsync()
     {
         // WHY: xUnit may construct a class fixture even when every live test is skipped.
-        if (_container is null || RuntimeInformation.OSArchitecture != Architecture.X64)
+        if (_container is null
+            || RuntimeInformation.OSArchitecture != Architecture.X64)
         {
             return;
         }
@@ -75,7 +89,8 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
     /// </summary>
     public async Task DisposeAsync()
     {
-        if (_container is not null && RuntimeInformation.OSArchitecture != Architecture.X64)
+        if (_container is not null
+            && RuntimeInformation.OSArchitecture != Architecture.X64)
         {
             Dispose();
 
@@ -157,7 +172,8 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
         CancellationToken cancellationToken
     )
     {
-        if (_container is not null && RuntimeInformation.OSArchitecture != Architecture.X64)
+        if (_container is not null
+            && RuntimeInformation.OSArchitecture != Architecture.X64)
         {
             throw new PlatformNotSupportedException("SQL Server Linux containers require an x86-64 host.");
         }
@@ -223,7 +239,10 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
 
         try
         {
-            await ReleaseOwnedDatabaseAsync(_databases, database, _dropDatabaseAsync ?? DropDatabaseCoreAsync,
+            await ReleaseOwnedDatabaseAsync(
+                _databases,
+                database,
+                _dropDatabaseAsync ?? DropDatabaseCoreAsync,
                 cancellationToken);
         }
         finally
@@ -253,15 +272,6 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
         TrustServerCertificate = true,
     }.ConnectionString;
 
-    private string RootConnectionString => new SqlConnectionStringBuilder(_rootConnectionString
-        ?? _container?.GetConnectionString()
-        ?? throw new InvalidOperationException("The SQL Server fixture has no connection string."))
-    {
-        InitialCatalog = "master",
-        Pooling = false,
-        TrustServerCertificate = true,
-    }.ConnectionString;
-
     private async Task DropDatabasesAsync(
         CancellationToken cancellationToken
     )
@@ -281,8 +291,10 @@ public sealed class SqlServerContainerFixture : IAsyncLifetime, IDisposable
         await using var connection = new SqlConnection(RootConnectionString);
         await connection.OpenAsync(cancellationToken);
 
-        await DropOwnedDatabasesAsync(_databases,
-            (database, token) => DropDatabaseAsync(connection, database, token), cancellationToken);
+        await DropOwnedDatabasesAsync(
+            _databases,
+            (database, token) => DropDatabaseAsync(connection, database, token),
+            cancellationToken);
     }
 
     private async Task DropDatabaseCoreAsync(

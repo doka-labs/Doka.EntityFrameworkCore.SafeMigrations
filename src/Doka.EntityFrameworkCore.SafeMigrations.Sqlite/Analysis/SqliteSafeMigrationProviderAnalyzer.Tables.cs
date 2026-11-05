@@ -41,10 +41,15 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         }
 
         var matching = TableMatches(
-            snapshot, table, intent.Definition, rebuildArtifacts.GetTableConstraintTransitions(operation));
+            snapshot,
+            table,
+            intent.Definition,
+            rebuildArtifacts.GetTableConstraintTransitions(operation));
 
         return matching
-            ? Matching(postconditionSatisfied: true, matchedObjectName: table.Name,
+            ? Matching(
+                postconditionSatisfied: true,
+                matchedObjectName: table.Name,
                 tableConstraintIdentities: CaptureTableConstraintIdentities(snapshot, table, intent.Definition))
             : Different("table_definition", "matching", "different", matchedObjectName: table.Name);
     }
@@ -103,15 +108,18 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
                 ? Unsupported("legacy_alter_table")
                 : Matching(postconditionSatisfied: false, matchedObjectName: intent.Name),
             false => Missing(postconditionSatisfied: true),
-            _ => Different("rename_target", "missing", "existing")
+            _ => Different("rename_target", "missing", "existing"),
         };
 
         // WHY: Missing source also describes an idempotent replay. An earlier
         // accepted creation may establish the source, but cannot prove that its
         // destination is absent from the immutable live catalog. Tables, views
         // and indexes occupy that namespace; an unrelated trigger does not.
-        return analysis.WithRenameTargetExists(targetOccupied,
-            applyUnsupportedCode: snapshot.LegacyAlterTableEnabled ? "legacy_alter_table" : null);
+        return analysis.WithRenameTargetExists(
+            targetOccupied,
+            applyUnsupportedCode: snapshot.LegacyAlterTableEnabled
+                ? "legacy_alter_table"
+                : null);
     }
 
     /// <summary>Compares physical table facets while respecting explicitly authored constraint transitions.</summary>
@@ -131,7 +139,9 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         }
 
         var primaryKeys = transitions?.AllowedPrimaryKeys
-            ?? (expected.PrimaryKey is null ? [] : [expected.PrimaryKey]);
+            ?? (expected.PrimaryKey is null
+                ? []
+                : [expected.PrimaryKey]);
 
         var primaryKeyMayBeAbsent = transitions?.PrimaryKeyMayBeAbsent ?? expected.PrimaryKey is null;
         var allowedUnique = transitions?.AllowedUniqueConstraints ?? expected.UniqueConstraints;
@@ -148,11 +158,21 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         if ((table.PrimaryKeyColumns.Count == 0
                 ? !primaryKeyMayBeAbsent
                 : !primaryKeys.Any(definition => SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(
-                    table, table.PrimaryKeyKeys, definition.Columns, requireDefaultSortOrder: true)))
+                    table,
+                    table.PrimaryKeyKeys,
+                    definition.Columns,
+                    requireDefaultSortOrder: true)))
             || !SqliteConstraintShapeCapacity.Matches(
-                table.UniqueConstraints, allowedUnique, requiredUnique, UniqueMatches, coalesceRequiredShapes: true)
+                table.UniqueConstraints,
+                allowedUnique,
+                requiredUnique,
+                UniqueMatches,
+                coalesceRequiredShapes: true)
             || !SqliteConstraintShapeCapacity.Matches(
-                table.ForeignKeys, allowedForeignKeys, requiredForeignKeys, ForeignKeyMatches)
+                table.ForeignKeys,
+                allowedForeignKeys,
+                requiredForeignKeys,
+                ForeignKeyMatches)
             || !SqliteConstraintShapeCapacity.Matches(table.Checks, allowedChecks, requiredChecks, CheckMatches))
         {
             return false;
@@ -160,16 +180,33 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
 
         return true;
 
-        bool UniqueMatches(SqliteUniqueSnapshot actual, ExpectedUniqueConstraintDefinition definition)
+        bool UniqueMatches(
+            SqliteUniqueSnapshot actual,
+            ExpectedUniqueConstraintDefinition definition
+        )
             => SqliteCatalogEquivalence.KeyMatchesDeclaredColumns(
-                table, actual.Keys, definition.Columns, requireDefaultSortOrder: true);
+                table,
+                actual.Keys,
+                definition.Columns,
+                requireDefaultSortOrder: true);
 
-        bool ForeignKeyMatches(SqliteForeignKeySnapshot actual, ExpectedForeignKeyDefinition definition)
+        bool ForeignKeyMatches(
+            SqliteForeignKeySnapshot actual,
+            ExpectedForeignKeyDefinition definition
+        )
             => SqliteCatalogEquivalence.ForeignKeyMatches(
-                snapshot, actual, definition.PrincipalTable, definition.Columns, definition.PrincipalColumns,
-                definition.OnUpdate, definition.OnDelete);
+                snapshot,
+                actual,
+                definition.PrincipalTable,
+                definition.Columns,
+                definition.PrincipalColumns,
+                definition.OnUpdate,
+                definition.OnDelete);
 
-        bool CheckMatches(SqliteCheckSnapshot actual, ExpectedCheckConstraintDefinition definition)
+        bool CheckMatches(
+            SqliteCheckSnapshot actual,
+            ExpectedCheckConstraintDefinition definition
+        )
             => RenderCheck(definition) is { } sql && ExpressionMatches(actual.Expression, sql, definition.Expression);
     }
 

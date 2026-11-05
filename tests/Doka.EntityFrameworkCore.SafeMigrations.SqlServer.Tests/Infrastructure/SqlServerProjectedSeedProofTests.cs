@@ -42,7 +42,8 @@ public sealed class SqlServerProjectedSeedProofTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = new SqlServerSafeMigrationProviderAnalyzer(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         var table = Table();
         var tableOperation = new SafeMigrationOperation(
@@ -50,11 +51,18 @@ public sealed class SqlServerProjectedSeedProofTests
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var seedOperation = new SafeMigrationOperation(Seed(), SafeMigrationPolicy.ThrowIfDifferent);
-        await analyzer.CaptureProjectedSeedProofsAsync([tableOperation, seedOperation],
-            static (_, _) => Task.FromResult(1), CancellationToken.None);
+        await analyzer.CaptureProjectedSeedProofsAsync(
+            [tableOperation, seedOperation],
+            static (_, _) => Task.FromResult(1),
+            CancellationToken.None);
+
         var missing = Analysis(SafeMigrationObservedState.Missing, "missing");
-        analyzer.ObserveAcceptedOperation(tableOperation, missing, missing,
+        analyzer.ObserveAcceptedOperation(
+            tableOperation,
+            missing,
+            missing,
             new SafeMigrationDecision(SafeMigrationAction.Apply, "apply"));
+
         if (mutation)
         {
             analyzer.ObserveProviderOperation(new SqlOperation { Sql = "INSERT seeds(Id) VALUES (2);" });
@@ -84,7 +92,8 @@ public sealed class SqlServerProjectedSeedProofTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = new SqlServerSafeMigrationProviderAnalyzer(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         var table = Table();
         var tableOperation = new SafeMigrationOperation(
@@ -92,20 +101,37 @@ public sealed class SqlServerProjectedSeedProofTests
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var seedOperation = new SafeMigrationOperation(Seed(), SafeMigrationPolicy.ThrowIfDifferent);
-        var indexIntent = new EnsureIndexIntent(new ExpectedIndexDefinition("IX_seeds_Code", "seeds",
-            [new ExpectedIndexKeyDefinition("Code")], unique: true));
+        var indexIntent = new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "IX_seeds_Code",
+                "seeds",
+                [new ExpectedIndexKeyDefinition("Code")],
+                unique: true));
 
         var indexOperation = new SafeMigrationOperation(indexIntent, SafeMigrationPolicy.ThrowIfDifferent);
         var mutation = new MigrationBuilder(context.Database.ProviderName!);
         if (delete)
         {
-            mutation.DeleteModelManagedDataFromModel("seeds", ["Id"], ["int"], new object?[,] { { 2 } },
-                ["Code"], ["nvarchar(20)"], new object?[,] { { "second" } });
+            mutation.DeleteModelManagedDataFromModel(
+                "seeds",
+                ["Id"],
+                ["int"],
+                new object?[,] { { 2 } },
+                ["Code"],
+                ["nvarchar(20)"],
+                new object?[,] { { "second" } });
         }
         else
         {
-            mutation.UpdateModelManagedDataFromModel("seeds", ["Id"], ["int"], new object?[,] { { 2 } },
-                ["Code"], ["nvarchar(20)"], new object?[,] { { "second" } }, new object?[,] { { "changed" } });
+            mutation.UpdateModelManagedDataFromModel(
+                "seeds",
+                ["Id"],
+                ["int"],
+                new object?[,] { { 2 } },
+                ["Code"],
+                ["nvarchar(20)"],
+                new object?[,] { { "second" } },
+                new object?[,] { { "changed" } });
         }
 
         var mutationOperation = (SafeMigrationOperation)mutation.Operations.Single();
@@ -119,8 +145,11 @@ public sealed class SqlServerProjectedSeedProofTests
         var contractFailure = Record.Exception(() => SafeMigrationModelManagedDataContractValidator.Validate(
             [tableOperation, seedOperation, mutationOperation, indexOperation]));
 
-        await analyzer.CaptureProjectedSeedProofsAsync([tableOperation, seedOperation, indexOperation],
-            static (_, _) => Task.FromResult(1), CancellationToken.None);
+        await analyzer.CaptureProjectedSeedProofsAsync(
+            [tableOperation, seedOperation, indexOperation],
+            static (_, _) => Task.FromResult(1),
+            CancellationToken.None);
+
         analyzer.ObserveAcceptedOperation(tableOperation, missing, missing, apply);
         analyzer.ObserveAcceptedOperation(seedOperation, missing, missing, apply);
         var before = keyAnalyzer.ValidateProjectedIndex(indexIntent, source, missing, missing);
@@ -155,7 +184,11 @@ public sealed class SqlServerProjectedSeedProofTests
         var seed = Seed();
         var proof = new SqlServerProjectedSeedKeyProof(table, [seed], 1);
         var accepted = new SqlServerProjectedSeedLineage(table);
-        accepted.Seeds.Add(replacement ? Seed() : seed);
+        accepted.Seeds.Add(
+            replacement
+                ? Seed()
+                : seed);
+
         var source = new Source(table, newlyCreated: true);
 
         // Act
@@ -178,7 +211,11 @@ public sealed class SqlServerProjectedSeedProofTests
         var table = Table();
         var seed = Seed();
         var proof = new SqlServerProjectedSeedKeyProof(table, [seed], 1);
-        var accepted = new SqlServerProjectedSeedLineage(recreated ? Table() : table);
+        var accepted = new SqlServerProjectedSeedLineage(
+            recreated
+                ? Table()
+                : table);
+
         accepted.Seeds.Add(seed);
         var source = new Source(accepted.Table, newlyCreated: true);
 
@@ -203,15 +240,25 @@ public sealed class SqlServerProjectedSeedProofTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var source = new Source(Table(length), newlyCreated);
-        var intent = new EnsureIndexIntent(new ExpectedIndexDefinition("IX_seeds_Code", "seeds",
-            [new ExpectedIndexKeyDefinition("Code")], unique: true));
+        var intent = new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "IX_seeds_Code",
+                "seeds",
+                [new ExpectedIndexKeyDefinition("Code")],
+                unique: true));
 
         var missing = Analysis(SafeMigrationObservedState.Missing, "missing");
         var proven = Analysis(SafeMigrationObservedState.Missing, "projected_seed_key_data_safe");
 
         // Act
-        var analysis = SqlServerProjectedKeyShape.Validate(intent, source, missing, missing,
-            snapshot: null, context.GetService<IRelationalTypeMappingSource>(), proven);
+        var analysis = SqlServerProjectedKeyShape.Validate(
+            intent,
+            source,
+            missing,
+            missing,
+            snapshot: null,
+            context.GetService<IRelationalTypeMappingSource>(),
+            proven);
 
         // Assert
         Assert.Equal(expected, analysis.ObservedState);
@@ -224,31 +271,57 @@ public sealed class SqlServerProjectedSeedProofTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var source = new Source(Table(), newlyCreated: true);
-        var intent = new EnsureIndexIntent(new ExpectedIndexDefinition("IX_seeds_Code", "seeds",
-            [new ExpectedIndexKeyDefinition("Code")], unique: true));
+        var intent = new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "IX_seeds_Code",
+                "seeds",
+                [new ExpectedIndexKeyDefinition("Code")],
+                unique: true));
 
-        var snapshot = new SqlServerProjectedKeyTable(true, -1, null,
-            new Dictionary<string, SqlServerProjectedKeyColumn>(), PhysicalSupported: false);
+        var snapshot = new SqlServerProjectedKeyTable(
+            true,
+            -1,
+            null,
+            new Dictionary<string, SqlServerProjectedKeyColumn>(),
+            PhysicalSupported: false);
 
         var missing = Analysis(SafeMigrationObservedState.Missing, "missing");
         var proven = Analysis(SafeMigrationObservedState.Missing, "projected_seed_key_data_safe");
 
         // Act
-        var analysis = SqlServerProjectedKeyShape.Validate(intent, source, missing, missing,
-            snapshot, context.GetService<IRelationalTypeMappingSource>(), proven);
+        var analysis = SqlServerProjectedKeyShape.Validate(
+            intent,
+            source,
+            missing,
+            missing,
+            snapshot,
+            context.GetService<IRelationalTypeMappingSource>(),
+            proven);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Unsupported, analysis.ObservedState);
         Assert.Equal("physical_table_unproven", analysis.Code);
     }
 
-    private static ExpectedTableDefinition Table(int length = 20)
-        => new("seeds", [new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
-            new ExpectedColumnDefinition("Code", typeof(string), true, $"nvarchar({length})", maxLength: length)]);
+    private static ExpectedTableDefinition Table(
+        int length = 20
+    )
+        => new(
+            "seeds",
+            [
+                new ExpectedColumnDefinition("Id", typeof(int), false, "int"),
+                new ExpectedColumnDefinition("Code", typeof(string), true, $"nvarchar({length})", maxLength: length),
+            ]);
 
     private static EnsureModelManagedDataIntent Seed()
-        => new("seeds", ["Id"], ["int"], ["Id", "Code"], ["int", "nvarchar(20)"],
-            new object?[,] { { 1, "one" } }, schema: null,
+        => new(
+            "seeds",
+            ["Id"],
+            ["int"],
+            ["Id", "Code"],
+            ["int", "nvarchar(20)"],
+            new object?[,] { { 1, "one" } },
+            schema: null,
             uniqueKeys: [new ExpectedModelManagedDataUniqueKeyDefinition(["Code"])]);
 
     private static SafeMigrationProviderAnalysis Analysis(

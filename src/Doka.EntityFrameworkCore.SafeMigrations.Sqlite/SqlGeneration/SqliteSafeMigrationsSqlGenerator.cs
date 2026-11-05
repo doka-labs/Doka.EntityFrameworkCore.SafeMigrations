@@ -6,10 +6,10 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 /// </summary>
 public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
 {
-    private readonly ISqliteSafeMigrationsBaselineGenerator _baselineGenerator;
     private readonly SqliteSafeMigrationProviderAnalyzer _analyzer;
-    private readonly SqliteSafeMigrationExecutionState _executionState;
+    private readonly ISqliteSafeMigrationsBaselineGenerator _baselineGenerator;
     private readonly MigrationsSqlGeneratorDependencies _dependencies;
+    private readonly SqliteSafeMigrationExecutionState _executionState;
     private readonly SqliteSafeMigrationSqlExpressionRenderer _expressionRenderer;
 
     /// <summary>Initializes the composed SQLite SafeMigrations generator.</summary>
@@ -32,6 +32,7 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
         _baselineGenerator = baselineGenerator;
         _analyzer = analyzer as SqliteSafeMigrationProviderAnalyzer
             ?? throw new InvalidOperationException("The SQLite SafeMigrations analyzer registration is inconsistent.");
+
         _executionState = executionState;
         _dependencies = dependencies;
         _expressionRenderer = new SqliteSafeMigrationSqlExpressionRenderer(
@@ -60,8 +61,11 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
             {
                 if (operations[ordinal] is SafeMigrationOperation safeOperation)
                 {
-                    throw new NotSupportedException(SafeMigrationDiagnosticMessages.FormatRuntime(
-                        safeOperation, "doka_sm_script_unsupported", ordinal));
+                    throw new NotSupportedException(
+                        SafeMigrationDiagnosticMessages.FormatRuntime(
+                            safeOperation,
+                            "doka_sm_script_unsupported",
+                            ordinal));
                 }
             }
         }
@@ -69,7 +73,8 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
         SafeMigrationExpectedIndexTransitions.Validate(operations);
         var runtimeModel = _dependencies.CurrentContext.Context.Model;
         var effectiveModel = ReferenceEquals(model, runtimeModel)
-            ? _dependencies.CurrentContext.Context.GetService<IDesignTimeModel>().Model
+            ? _dependencies.CurrentContext.Context.GetService<IDesignTimeModel>()
+                .Model
             : model;
 
         var result = new List<MigrationCommand>(operations.Count);
@@ -98,12 +103,13 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
             if (SqliteSafeMigrationOperationClassifier.CanParticipateInStructuralBatch(operation))
             {
                 var structuralOperations = new List<MigrationOperation>();
+
                 // WHY: Batch-local positions lose preceding provider and safe
                 // segments. Retain the original supplied-stream origin for errors.
                 var firstOperationOrdinal = ordinal;
                 while (ordinal < operations.Count
-                       && SqliteSafeMigrationOperationClassifier.CanParticipateInStructuralBatch(
-                           operations[ordinal]))
+                    && SqliteSafeMigrationOperationClassifier.CanParticipateInStructuralBatch(
+                        operations[ordinal]))
                 {
                     structuralOperations.Add(operations[ordinal]);
                     ordinal++;
@@ -146,10 +152,10 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
             {
                 var providerOperations = new List<MigrationOperation>();
                 while (ordinal < operations.Count
-                       && operations[ordinal] is not SafeMigrationOperation
-                       && operations[ordinal] is not SafeMigrationDesignTimeServicesRequiredOperation
-                       && !SqliteSafeMigrationOperationClassifier.CanParticipateInStructuralBatch(
-                           operations[ordinal]))
+                    && operations[ordinal] is not SafeMigrationOperation
+                    && operations[ordinal] is not SafeMigrationDesignTimeServicesRequiredOperation
+                    && !SqliteSafeMigrationOperationClassifier.CanParticipateInStructuralBatch(
+                        operations[ordinal]))
                 {
                     providerOperations.Add(operations[ordinal]);
                     ordinal++;
@@ -179,6 +185,7 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
                     _dependencies.CurrentContext.Context,
                     _dependencies.Logger,
                     ordinal));
+
             ordinal++;
         }
 
@@ -212,7 +219,9 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
         var standardOperation = SafeMigrationStandardOperationFactory.Create(
             operation.Intent,
             _expressionRenderer.Render,
-            static collation => collation.Schema is null ? collation.Name : null);
+            static collation => collation.Schema is null
+                ? collation.Name
+                : null);
 
         return _baselineGenerator.Generate([standardOperation], model, options, guardedOperations: []);
     }
@@ -275,8 +284,12 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
                     precision: definition.Precision,
                     scale: definition.Scale)
                 ?.StoreType
-            ?? throw new NotSupportedException(SafeMigrationDiagnosticMessages.FormatRuntime(
-                operation, "doka_sm_unsupported", operationOrdinal, "column_type_mapping"));
+            ?? throw new NotSupportedException(
+                SafeMigrationDiagnosticMessages.FormatRuntime(
+                    operation,
+                    "doka_sm_unsupported",
+                    operationOrdinal,
+                    "column_type_mapping"));
 
         var expression = definition.CapturedComputedSql
             ?? (definition.ComputedExpression is null
@@ -294,11 +307,15 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
             + " "
             + storeType
             + collation
-            + (definition.IsNullable ? string.Empty : " NOT NULL")
+            + (definition.IsNullable
+                ? string.Empty
+                : " NOT NULL")
             + " GENERATED ALWAYS AS ("
             + expression
             + ") "
-            + (definition.IsStored == true ? "STORED" : "VIRTUAL")
+            + (definition.IsStored == true
+                ? "STORED"
+                : "VIRTUAL")
             + ";";
     }
 
@@ -326,12 +343,15 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
 
             return value;
         });
+
         var filter = definition.StructuredFilter is null
             ? definition.Filter
             : _expressionRenderer.Render(definition.StructuredFilter);
 
         return "CREATE "
-            + (definition.Unique ? "UNIQUE " : string.Empty)
+            + (definition.Unique
+                ? "UNIQUE "
+                : string.Empty)
             + "INDEX "
             + _dependencies.SqlGenerationHelper.DelimitIdentifier(definition.Name)
             + " ON "
@@ -339,7 +359,9 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
             + " ("
             + string.Join(", ", keys)
             + ")"
-            + (filter is null ? string.Empty : " WHERE " + filter)
+            + (filter is null
+                ? string.Empty
+                : " WHERE " + filter)
             + ";";
     }
 
@@ -365,7 +387,10 @@ public sealed class SqliteSafeMigrationsSqlGenerator : IMigrationsSqlGenerator
             {
                 throw new NotSupportedException(
                     SafeMigrationDiagnosticMessages.FormatRuntime(
-                        operation, "doka_sm_unsupported", operationOrdinal, "baseline_transaction_suppressed"));
+                        operation,
+                        "doka_sm_unsupported",
+                        operationOrdinal,
+                        "baseline_transaction_suppressed"));
             }
         }
     }

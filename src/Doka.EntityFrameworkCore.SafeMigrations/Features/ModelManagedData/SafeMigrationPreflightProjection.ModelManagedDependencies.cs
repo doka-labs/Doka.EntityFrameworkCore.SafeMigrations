@@ -3,7 +3,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 internal sealed partial class SafeMigrationPreflightProjection
 {
     /// <summary>Detects accepted incoming keys that the source-frozen delete cannot guard.</summary>
-    private bool HasUnmodeledProjectedIncomingForeignKey(DeleteModelManagedDataIntent intent)
+    private bool HasUnmodeledProjectedIncomingForeignKey(
+        DeleteModelManagedDataIntent intent
+    )
     {
         if (_projectedForeignKeyOwners.Count == 0)
         {
@@ -81,7 +83,8 @@ internal sealed partial class SafeMigrationPreflightProjection
             {
                 if (!columnComparer.Equals(definition.Columns[column], modeled.Columns[column])
                     || !columnComparer.Equals(
-                        definition.PrincipalColumns[column], modeled.PrincipalColumns[column]))
+                        definition.PrincipalColumns[column],
+                        modeled.PrincipalColumns[column]))
                 {
                     matching = false;
                     break;

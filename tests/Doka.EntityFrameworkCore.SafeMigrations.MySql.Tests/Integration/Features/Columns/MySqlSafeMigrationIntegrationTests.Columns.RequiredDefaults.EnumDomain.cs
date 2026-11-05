@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the ColumnsRequiredDefaultsEnumDomain migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlColumnsRequiredDefaultsEnumDomainIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlColumnsRequiredDefaultsEnumDomainIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlColumnsRequiredDefaultsEnumDomainIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlColumnsRequiredDefaultsEnumDomainIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>Exact ENUM and SET domains allow only their owned resume or already matching no-op.</summary>
     /// <param name="useSetStorage">Whether the finite string domain uses SET rather than ENUM.</param>
@@ -24,7 +26,8 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumDomainIntegrationTes
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var operation = RequiredDefaultsEnumDomainOperation(useSetStorage);
         var storeType = RequiredDefaultsEnumDomainStoreType(useSetStorage, "exact");
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             RequiredDefaultsEnumDomainFixtureSql(operation, storeType, alreadyRequired, "Alpha"),
             cancellationToken: CancellationToken.None);
 
@@ -33,35 +36,56 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumDomainIntegrationTes
         var guardName = AtomicRequiredAddGuardName(operation);
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("required-enum-domain-exact"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("required-enum-domain-exact"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
-        var inventory = await context.GetService<ISafeMigrationProviderAnalyzer>().FindUnexpectedObjectsAsync(
-            context, AtomicRequiredAddOwnerInventoryOperations([operation]), CancellationToken.None);
+        var inventory = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .FindUnexpectedObjectsAsync(
+                context,
+                AtomicRequiredAddOwnerInventoryOperations([operation]),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, [operation],
-            new SafeMigrationRunOptions("required-enum-domain-exact-final"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("required-enum-domain-exact-final"),
+            CancellationToken.None);
 
-        var state = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+        var state = await ReadAtomicRequiredAddStateAsync(
+            connectionString,
+            operation,
             cancellationToken: CancellationToken.None);
 
-        var storedValue = await ScalarStringAsync(connectionString,
+        var storedValue = await ScalarStringAsync(
+            connectionString,
             "SELECT `value` FROM `required_enum_domain_items` WHERE `key` = 1;",
             cancellationToken: CancellationToken.None);
 
-        var physicalType = await ScalarStringAsync(connectionString,
+        var physicalType = await ScalarStringAsync(
+            connectionString,
             "SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'required_enum_domain_items' AND COLUMN_NAME = 'value';",
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-        Assert.Equal(alreadyRequired ? SafeMigrationAction.NoOp : SafeMigrationAction.Apply,
-            Assert.Single(preflight.Assessments).Action);
-        Assert.DoesNotContain(inventory,
+        Assert.Equal(
+            alreadyRequired
+                ? SafeMigrationAction.NoOp
+                : SafeMigrationAction.Apply,
+            Assert.Single(preflight.Assessments)
+                .Action);
+
+        Assert.DoesNotContain(
+            inventory,
             item => item.ObjectKind == SafeMigrationDatabaseObjectKind.CheckConstraint && item.Name == guardName);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
         Assert.Equal(new AtomicRequiredAddState(1, 0, 0, 1), state);
         Assert.Equal("Alpha", storedValue);
@@ -87,33 +111,52 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumDomainIntegrationTes
         var originalFingerprint = SafeMigrationContractFingerprint.Create([operation]);
         var guardName = AtomicRequiredAddGuardName(operation);
         var storeType = RequiredDefaultsEnumDomainStoreType(useSetStorage, domainDifference);
-        var originalValue = domainDifference == "literal-case" ? "alpha" : "Alpha";
-        await ExecuteSqlAsync(connectionString,
+        var originalValue = domainDifference == "literal-case"
+            ? "alpha"
+            : "Alpha";
+
+        await ExecuteSqlAsync(
+            connectionString,
             RequiredDefaultsEnumDomainFixtureSql(operation, storeType, alreadyRequired: false, originalValue),
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
-        var before = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+        var before = await ReadAtomicRequiredAddStateAsync(
+            connectionString,
+            operation,
             cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("required-enum-domain-mismatch"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                new SafeMigrationRunOptions("required-enum-domain-mismatch"),
+                CancellationToken.None);
 
-        var inventory = await context.GetService<ISafeMigrationProviderAnalyzer>().FindUnexpectedObjectsAsync(
-            context, AtomicRequiredAddOwnerInventoryOperations([operation]), CancellationToken.None);
+        var inventory = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .FindUnexpectedObjectsAsync(
+                context,
+                AtomicRequiredAddOwnerInventoryOperations([operation]),
+                CancellationToken.None);
 
         var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var after = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+        var after = await ReadAtomicRequiredAddStateAsync(
+            connectionString,
+            operation,
             cancellationToken: CancellationToken.None);
 
-        var storedValue = await ScalarStringAsync(connectionString,
+        var storedValue = await ScalarStringAsync(
+            connectionString,
             "SELECT `value` FROM `required_enum_domain_items` WHERE `key` = 1;",
             cancellationToken: CancellationToken.None);
 
-        var physicalType = await ScalarStringAsync(connectionString,
+        var physicalType = await ScalarStringAsync(
+            connectionString,
             "SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'required_enum_domain_items' AND COLUMN_NAME = 'value';",
             cancellationToken: CancellationToken.None);
@@ -121,17 +164,27 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumDomainIntegrationTes
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         var assessment = Assert.Single(report.Assessments);
-        var typeDifference = Assert.Single(assessment.Differences,
+        var typeDifference = Assert.Single(
+            assessment.Differences,
             difference => difference.Facet == "column_store_type");
 
         Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action);
-        Assert.Equal(Assert.IsType<EnsureColumnIntent>(operation.Intent).Definition.StoreType, typeDifference.Expected);
+        Assert.Equal(Assert.IsType<EnsureColumnIntent>(operation.Intent)
+                .Definition.StoreType,
+            typeDifference.Expected);
+
         Assert.Equal(storeType, typeDifference.Actual);
         Assert.NotEqual(typeDifference.Expected, typeDifference.Actual);
-        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
+        Assert.Contains(
+            "doka_sm_different",
+            AssertOwnedGuardFailure(failure)
+                .Message,
             StringComparison.Ordinal);
-        Assert.Contains(inventory,
+
+        Assert.Contains(
+            inventory,
             item => item.ObjectKind == SafeMigrationDatabaseObjectKind.CheckConstraint && item.Name == guardName);
+
         Assert.Equal(new AtomicRequiredAddState(1, 1, 1, 1), before);
         Assert.Equal(before, after);
         Assert.Equal(originalValue, storedValue);
@@ -142,17 +195,30 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumDomainIntegrationTes
     /// <summary>Captures a no-default required domain without normalizing its case-sensitive members.</summary>
     /// <param name="useSetStorage">Whether the authored keyword is SET rather than ENUM.</param>
     /// <returns>The immutable target whose uppercase keyword and member values remain authored.</returns>
-    private static SafeMigrationOperation RequiredDefaultsEnumDomainOperation(bool useSetStorage)
-        => new(new EnsureColumnIntent("required_enum_domain_items",
-                new ExpectedColumnDefinition("value", typeof(string), false,
-                    (useSetStorage ? "SET" : "ENUM") + "('Alpha','Beta')")),
+    private static SafeMigrationOperation RequiredDefaultsEnumDomainOperation(
+        bool useSetStorage
+    )
+        => new(
+            new EnsureColumnIntent(
+                "required_enum_domain_items",
+                new ExpectedColumnDefinition(
+                    "value",
+                    typeof(string),
+                    false,
+                    (useSetStorage
+                        ? "SET"
+                        : "ENUM")
+                    + "('Alpha','Beta')")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Defines exact live domains independently from the expected target's authored keyword case.</summary>
     /// <param name="useSetStorage">Whether the finite string domain uses SET rather than ENUM.</param>
     /// <param name="difference">The exact, literal-case, or member-order fixture shape.</param>
     /// <returns>The native lower-keyword type with untouched case-sensitive ordered members.</returns>
-    private static string RequiredDefaultsEnumDomainStoreType(bool useSetStorage, string difference)
+    private static string RequiredDefaultsEnumDomainStoreType(
+        bool useSetStorage,
+        string difference
+    )
     {
         var members = difference switch
         {
@@ -162,7 +228,10 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumDomainIntegrationTes
             _ => throw new ArgumentOutOfRangeException(nameof(difference)),
         };
 
-        return (useSetStorage ? "set" : "enum") + members;
+        return (useSetStorage
+                ? "set"
+                : "enum")
+            + members;
     }
 
     /// <summary>Creates a complete or deliberately staged domain with one explicit anonymous row.</summary>
@@ -182,10 +251,15 @@ public sealed partial class MySqlColumnsRequiredDefaultsEnumDomainIntegrationTes
         // in stored values as well as the ordered schema domain. An exact guard
         // name alone must not grant ownership of a different domain.
         return "CREATE TABLE `required_enum_domain_items` (`key` int NOT NULL PRIMARY KEY, `value` "
-            + storeType + (alreadyRequired ? " NOT NULL" : " NULL, CONSTRAINT "
-                + AtomicRequiredAddDelimited(AtomicRequiredAddGuardName(operation)) + " CHECK (`value` IS NOT NULL)")
+            + storeType
+            + (alreadyRequired
+                ? " NOT NULL"
+                : " NULL, CONSTRAINT "
+                + AtomicRequiredAddDelimited(AtomicRequiredAddGuardName(operation))
+                + " CHECK (`value` IS NOT NULL)")
             + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin; "
             + "INSERT INTO `required_enum_domain_items` (`key`, `value`) VALUES (1, "
-            + AtomicRequiredAddLiteral(storedValue) + ");";
+            + AtomicRequiredAddLiteral(storedValue)
+            + ");";
     }
 }

@@ -18,6 +18,7 @@ public sealed class PostgreSqlModelFingerprintTests
             "safe-relational-model:v1:Npgsql.EntityFrameworkCore.PostgreSQL:sha256:",
             firstFingerprint,
             StringComparison.Ordinal);
+
         Assert.Equal(64, firstFingerprint[(firstFingerprint.LastIndexOf(':') + 1)..].Length);
         Assert.Equal(
             "safe-relational-model:v1:Npgsql.EntityFrameworkCore.PostgreSQL:sha256:"
@@ -79,6 +80,7 @@ public sealed class PostgreSqlModelFingerprintTests
         using var context = new JsonArtifactContext();
         var model = context.GetService<IDesignTimeModel>()
             .Model;
+
         var jsonColumn = model
             .GetRelationalModel()
             .Tables
@@ -127,6 +129,7 @@ public sealed class PostgreSqlModelFingerprintTests
         using var context = new FirstOrderContext();
         var model = context.GetService<IDesignTimeModel>()
             .Model;
+
         var expected = SafeMigrationModelFingerprint.Create(model, ProviderContract);
 
         var actual = Enumerable
@@ -192,9 +195,11 @@ public sealed class PostgreSqlModelFingerprintTests
         {
             ["alpha"] = 1,
         };
+
         using var context = new DisposableDictionaryAnnotationContext(dictionary);
         var model = context.GetService<IDesignTimeModel>()
             .Model;
+
         dictionary.ResetDisposalState();
 
         _ = SafeMigrationModelFingerprint.Create(model, ProviderContract);
@@ -228,6 +233,7 @@ public sealed class PostgreSqlModelFingerprintTests
                     .Property(static value => value.Name)
                     .HasMaxLength(maxLength)
                     .HasDefaultValue("default");
+
                 entity
                     .HasIndex(static value => value.Name)
                     .HasDatabaseName("ix_alpha_name");
@@ -338,11 +344,24 @@ public sealed class PostgreSqlModelFingerprintTests
                 "Doka:FingerprintValueMatrix",
                 new object?[]
                 {
-                    DBNull.Value, "text", 'x', true,
-                    (byte)1, (sbyte)-1, (short)-2, (ushort)2,
-                    -3, (uint)3, -4L, 4UL,
-                    5.25M, 6.5F, 7.75D, new DateOnly(2026, 8, 20),
-                    new TimeOnly(12, 34, 56), new DateTime(
+                    DBNull.Value,
+                    "text",
+                    'x',
+                    true,
+                    (byte)1,
+                    (sbyte)-1,
+                    (short)-2,
+                    (ushort)2,
+                    -3,
+                    (uint)3,
+                    -4L,
+                    4UL,
+                    5.25M,
+                    6.5F,
+                    7.75D,
+                    new DateOnly(2026, 8, 20),
+                    new TimeOnly(12, 34, 56),
+                    new DateTime(
                         2026,
                         8,
                         20,
@@ -358,14 +377,20 @@ public sealed class PostgreSqlModelFingerprintTests
                         34,
                         56,
                         TimeSpan.FromHours(2)),
-                    TimeSpan.FromMinutes(5), Guid.Parse("12345678-1234-1234-1234-123456789abc"), new byte[] { 1, 2, 3 },
-                    typeof(string), DayOfWeek.Friday, dictionary, new Dictionary<string, object?>
+                    TimeSpan.FromMinutes(5),
+                    Guid.Parse("12345678-1234-1234-1234-123456789abc"),
+                    new byte[] { 1, 2, 3 },
+                    typeof(string),
+                    DayOfWeek.Friday,
+                    dictionary,
+                    new Dictionary<string, object?>
                     {
                         ["alpha"] = 1,
                         ["beta"] = new object?[] { true, null },
                     },
                     new object?[] { null, "nested" },
                 });
+
             modelBuilder.Model.SetAnnotation("DebugOnly", new object());
         }
     }
@@ -493,7 +518,7 @@ public sealed class PostgreSqlModelFingerprintTests
     {
         public string Name { get; set; } = string.Empty;
 
-        public JsonArtifactDetails Details { get; set; } = new();
+        public JsonArtifactDetails Details { get; } = new();
     }
 
     private sealed class JsonArtifactDetails

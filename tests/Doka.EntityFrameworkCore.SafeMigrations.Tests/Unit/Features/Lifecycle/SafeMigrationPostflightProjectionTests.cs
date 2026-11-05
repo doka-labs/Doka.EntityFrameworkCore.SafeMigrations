@@ -2,6 +2,20 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed class SafeMigrationPostflightProjectionTests
 {
+    public static TheoryData<SafeMigrationIntent, SafeMigrationIntent, SafeMigrationIntent>
+        RenameFinalWriterCases => new()
+    {
+        { new DropTableIntent("source"), new DropTableIntent("target"), new RenameTableIntent("source", "target") },
+        {
+            new DropColumnIntent("source", "records"), new DropColumnIntent("target", "records"),
+            new RenameColumnIntent("source", "records", "target")
+        },
+        {
+            new DropIndexIntent("source", "records"), new DropIndexIntent("target", "records"),
+            new RenameIndexIntent("source", "records", "target")
+        },
+    };
+
     [Fact]
     public void LaterWriterSupersedesAnEarlierPostconditionAcrossProviderOperations()
     {
@@ -9,7 +23,11 @@ public sealed class SafeMigrationPostflightProjectionTests
         var operations = new MigrationOperation[]
         {
             Safe(new DropIndexIntent(indexName, "records")),
-            new AlterTableOperation { Name = "records", Comment = "target" },
+            new AlterTableOperation
+            {
+                Name = "records",
+                Comment = "target",
+            },
             new AlterColumnOperation
             {
                 Name = "code",
@@ -103,16 +121,8 @@ public sealed class SafeMigrationPostflightProjectionTests
     )
     {
         // Arrange
-        var sourceOperations = new MigrationOperation[]
-        {
-            Safe(sourceWriter),
-            Safe(rename),
-        };
-        var targetOperations = new MigrationOperation[]
-        {
-            Safe(targetWriter),
-            Safe(rename),
-        };
+        var sourceOperations = new MigrationOperation[] { Safe(sourceWriter), Safe(rename) };
+        var targetOperations = new MigrationOperation[] { Safe(targetWriter), Safe(rename) };
 
         // Act
         var sourceProjection = new SafeMigrationPostflightProjection(sourceOperations);
@@ -180,8 +190,18 @@ public sealed class SafeMigrationPostflightProjectionTests
     {
         // Arrange
         const string database = "application";
-        var earlier = CreateResourceWriters(earlierIsQualified ? database : null, drop: true);
-        var later = CreateResourceWriters(earlierIsQualified ? null : database, drop: false);
+        var earlier = CreateResourceWriters(
+            earlierIsQualified
+                ? database
+                : null,
+            drop: true);
+
+        var later = CreateResourceWriters(
+            earlierIsQualified
+                ? null
+                : database,
+            drop: false);
+
         var normalizer = new CurrentDatabaseIdentityNormalizer(database);
 
         // Act
@@ -196,11 +216,14 @@ public sealed class SafeMigrationPostflightProjectionTests
         for (var index = 0; index < projections.Length; index++)
         {
             Assert.True(
-                projections[index].IsSuperseded(0),
+                projections[index]
+                    .IsSuperseded(0),
                 $"Resource pair {index} ({earlier[index].Intent.GetType().Name}, "
                 + $"{later[index].Intent.GetType().Name}) was not normalized to one physical identity. "
                 + $"Earlier={Describe(earlier[index].Intent)}, later={Describe(later[index].Intent)}.");
-            Assert.False(projections[index].IsSuperseded(1));
+
+            Assert.False(projections[index]
+                .IsSuperseded(1));
         }
     }
 
@@ -256,33 +279,14 @@ public sealed class SafeMigrationPostflightProjectionTests
         SafeMigrationIntent intent
     ) => new(intent, SafeMigrationPolicy.ThrowIfDifferent);
 
-    public static TheoryData<SafeMigrationIntent, SafeMigrationIntent, SafeMigrationIntent>
-        RenameFinalWriterCases => new()
-        {
-            {
-                new DropTableIntent("source"),
-                new DropTableIntent("target"),
-                new RenameTableIntent("source", "target")
-            },
-            {
-                new DropColumnIntent("source", "records"),
-                new DropColumnIntent("target", "records"),
-                new RenameColumnIntent("source", "records", "target")
-            },
-            {
-                new DropIndexIntent("source", "records"),
-                new DropIndexIntent("target", "records"),
-                new RenameIndexIntent("source", "records", "target")
-            },
-        };
-
     private static string Describe(
         SafeMigrationIntent intent
     ) => intent switch
     {
         DropTableIntent value => $"{value.Schema}.{value.Table}",
         EnsureTableIntent value => $"{value.Definition.Schema}.{value.Definition.Table}",
-        _ => intent.GetType().Name,
+        _ => intent.GetType()
+            .Name,
     };
 
     private static ExpectedColumnDefinition Column(
@@ -314,6 +318,7 @@ public sealed class SafeMigrationPostflightProjectionTests
                     schema: schema),
                 SafeMigrationTableMode.StrictDefinition,
                 SafeMigrationPolicy.ThrowIfDifferent);
+
             builder.CreateIndexIfNotExists("ix_records_code", "records", ["code"], schema);
             builder.AddPrimaryKeyIfNotExists("pk_records", "records", ["code"], schema);
             builder.AddUniqueConstraintIfNotExists("uq_records_code", "records", ["code"], schema);
@@ -336,7 +341,10 @@ public sealed class SafeMigrationPostflightProjectionTests
             new object?[,] { { "value" } },
             schema);
 
-        return builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+        return builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
     }
 
     private sealed class CurrentDatabaseIdentityNormalizer(
@@ -351,7 +359,9 @@ public sealed class SafeMigrationPostflightProjectionTests
 
         public string? NormalizeSchema(
             string? schema
-        ) => StringComparer.Ordinal.Equals(schema, currentDatabase) ? null : schema;
+        ) => StringComparer.Ordinal.Equals(schema, currentDatabase)
+            ? null
+            : schema;
 
         public bool IsObjectIdentityMismatch(
             SafeMigrationProviderAnalysis analysis

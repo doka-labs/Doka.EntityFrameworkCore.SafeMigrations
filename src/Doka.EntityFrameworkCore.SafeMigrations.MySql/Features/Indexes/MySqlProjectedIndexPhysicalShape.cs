@@ -60,8 +60,8 @@ internal static class MySqlProjectedIndexPhysicalShape
                 index.Schema,
                 key.Column,
                 out var column)
-                    ? GetProjectedKeyWidth(column, key.PrefixLength, typeMappingSource)
-                    : GetLiveKeyWidth(key.Column, key.PrefixLength, environment.Columns);
+                ? GetProjectedKeyWidth(column, key.PrefixLength, typeMappingSource)
+                : GetLiveKeyWidth(key.Column, key.PrefixLength, environment.Columns);
 
             if (width.Result != MySqlProjectedIndexPhysicalShapeResult.Feasible)
             {
@@ -142,7 +142,9 @@ internal static class MySqlProjectedIndexPhysicalShape
             return new SafeMigrationIndexColumnPhysicalShape(
                 characterMaximumLength,
                 bytesPerUnit,
-                IsText(normalizedType) ? null : characterOctetLength,
+                IsText(normalizedType)
+                    ? null
+                    : characterOctetLength,
                 SupportsPrefix: true);
         }
 
@@ -151,7 +153,9 @@ internal static class MySqlProjectedIndexPhysicalShape
             return new SafeMigrationIndexColumnPhysicalShape(
                 characterOctetLength,
                 BytesPerPrefixUnit: 1,
-                IsBlob(normalizedType) ? null : characterOctetLength,
+                IsBlob(normalizedType)
+                    ? null
+                    : characterOctetLength,
                 SupportsPrefix: true);
         }
 
@@ -247,8 +251,8 @@ internal static class MySqlProjectedIndexPhysicalShape
                 definition.Scale);
         }
         catch (Exception exception) when (exception is ArgumentException
-                                              or InvalidOperationException
-                                              or NotSupportedException)
+            or InvalidOperationException
+            or NotSupportedException)
         {
             return KeyWidth.Unverifiable;
         }
@@ -376,7 +380,9 @@ internal static class MySqlProjectedIndexPhysicalShape
         "mediumint" => 3,
         "int" or "integer" => 4,
         "bigint" => 8,
-        "float" => (type.FirstArgument ?? precision) <= 24 ? 4 : 8,
+        "float" => (type.FirstArgument ?? precision) <= 24
+            ? 4
+            : 8,
         "double" or "real" => 8,
         "decimal" or "numeric" => DecimalWidth(
             type.FirstArgument ?? precision,
@@ -389,6 +395,7 @@ internal static class MySqlProjectedIndexPhysicalShape
         "timestamp" => 4 + FractionalSeconds(type.FirstArgument ?? dateTimePrecision),
         "enum" => 2,
         "set" => 8,
+
         // WHY: MariaDB stores native UUIDs in sixteen bytes even though Doka
         // transfers canonical text. This fixed scalar has no prefix semantics.
         "uuid" => 16,
@@ -414,7 +421,9 @@ internal static class MySqlProjectedIndexPhysicalShape
         int? scale
     )
     {
-        if (precision is null || scale is null || scale > precision)
+        if (precision is null
+            || scale is null
+            || scale > precision)
         {
             return null;
         }
@@ -424,32 +433,27 @@ internal static class MySqlProjectedIndexPhysicalShape
 
     private static int DecimalDigitsWidth(
         int digits
-    ) => (4 * (digits / 9)) + RemainingDecimalDigitsWidth(digits % 9);
+    ) => 4 * (digits / 9) + RemainingDecimalDigitsWidth(digits % 9);
 
     private static int RemainingDecimalDigitsWidth(
         int digits
     ) => digits switch
     {
-        0 => 0,
-        1 or 2 => 1,
-        3 or 4 => 2,
-        5 or 6 => 3,
-        _ => 4,
+        0 => 0, 1 or 2 => 1, 3 or 4 => 2, 5 or 6 => 3, _ => 4,
     };
 
     private static int? DivideRoundUp(
         int? value,
         int divisor
-    ) => value is null ? null : (value.Value + divisor - 1) / divisor;
+    ) => value is null
+        ? null
+        : (value.Value + divisor - 1) / divisor;
 
     private static int FractionalSeconds(
         int? precision
     ) => precision.GetValueOrDefault() switch
     {
-        0 => 0,
-        1 or 2 => 1,
-        3 or 4 => 2,
-        _ => 3,
+        0 => 0, 1 or 2 => 1, 3 or 4 => 2, _ => 3,
     };
 
     private static bool IsCharacter(
@@ -508,15 +512,26 @@ internal static class MySqlProjectedIndexPhysicalShape
             string storeType
         )
         {
-            var value = storeType.AsSpan().Trim();
+            var value = storeType
+                .AsSpan()
+                .Trim();
+
             var nameEnd = value.IndexOfAny('(', ' ');
-            var name = (nameEnd < 0 ? value : value[..nameEnd]).ToString().ToLowerInvariant();
-            if (nameEnd < 0 || value[nameEnd] != '(')
+            var name = (nameEnd < 0
+                    ? value
+                    : value[..nameEnd])
+                .ToString()
+                .ToLowerInvariant();
+
+            if (nameEnd < 0
+                || value[nameEnd] != '(')
             {
                 return new StoreTypeShape(name, FirstArgument: null, SecondArgument: null);
             }
 
-            var closing = value[(nameEnd + 1)..].IndexOf(')');
+            var closing = value[(nameEnd + 1)..]
+                .IndexOf(')');
+
             if (closing < 0)
             {
                 return new StoreTypeShape(name, FirstArgument: null, SecondArgument: null);
@@ -524,13 +539,20 @@ internal static class MySqlProjectedIndexPhysicalShape
 
             var arguments = value.Slice(nameEnd + 1, closing);
             var separator = arguments.IndexOf(',');
-            var first = separator < 0 ? arguments : arguments[..separator];
-            var second = separator < 0 ? default : arguments[(separator + 1)..];
+            var first = separator < 0
+                ? arguments
+                : arguments[..separator];
+
+            var second = separator < 0
+                ? default
+                : arguments[(separator + 1)..];
 
             return new StoreTypeShape(
                 name,
                 ParseInteger(first),
-                separator < 0 ? null : ParseInteger(second));
+                separator < 0
+                    ? null
+                    : ParseInteger(second));
         }
 
         private static int? ParseInteger(

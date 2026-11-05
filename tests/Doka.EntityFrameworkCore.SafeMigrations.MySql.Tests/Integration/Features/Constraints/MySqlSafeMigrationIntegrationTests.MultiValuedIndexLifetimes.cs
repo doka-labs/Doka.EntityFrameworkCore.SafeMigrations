@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the MultiValuedIndexLifetimes migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlMultiValuedIndexLifetimesIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlMultiValuedIndexLifetimesIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlMultiValuedIndexLifetimesIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>
     /// Accepted source metadata cannot override independent session or remaining SET NULL restrictions.
@@ -16,17 +18,22 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task EnsureColumnIntrinsicLayoutCannotOverrideNativeRepairPrerequisites(bool remainingSetNull)
+    public async Task EnsureColumnIntrinsicLayoutCannotOverrideNativeRepairPrerequisites(
+        bool remainingSetNull
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NULL, "
             + "CONSTRAINT `fk_dropped` FOREIGN KEY (`parent_id`) REFERENCES `live_parent` (`id`) "
             + "ON DELETE CASCADE"
-            + (remainingSetNull ? ", CONSTRAINT `fk_retained` FOREIGN KEY (`parent_id`) "
-                + "REFERENCES `live_parent` (`id`) ON UPDATE SET NULL" : string.Empty)
+            + (remainingSetNull
+                ? ", CONSTRAINT `fk_retained` FOREIGN KEY (`parent_id`) "
+                + "REFERENCES `live_parent` (`id`) ON UPDATE SET NULL"
+                : string.Empty)
             + ") ENGINE=InnoDB; INSERT INTO `live_parent` VALUES (7); INSERT INTO `live_child` VALUES (1,7);",
             cancellationToken: CancellationToken.None);
 
@@ -36,29 +43,47 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
         {
             // WHY: Analysis and execution must see the same deliberately
             // permissive session, not an unrelated short-lived connection.
-            await using var command = context.Database.GetDbConnection().CreateCommand();
+            await using var command = context
+                .Database
+                .GetDbConnection()
+                .CreateCommand();
+
             command.CommandText = "SET SESSION sql_mode='';";
             await command.ExecuteNonQueryAsync(CancellationToken.None);
         }
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExistsFromModel(static operation => operation.AddColumn<int>(
-            "parent_id", "live_child", type: "int", nullable: true));
+            "parent_id",
+            "live_child",
+            type: "int",
+            nullable: true));
 
         builder.DropForeignKeyIfExists("fk_dropped", "live_child");
-        builder.AddColumnIfNotExistsFromModel(static operation => operation.AddColumn<int>(
-            "parent_id", "live_child", type: "int", nullable: false), SafeMigrationPolicy.RepairIfSafe);
+        builder.AddColumnIfNotExistsFromModel(
+            static operation => operation.AddColumn<int>(
+                "parent_id",
+                "live_child",
+                type: "int",
+                nullable: false),
+            SafeMigrationPolicy.RepairIfSafe);
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-ensure-layout-independent-prerequisites"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-ensure-layout-independent-prerequisites"),
+            CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context,
-            builder.Operations, CancellationToken.None));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            CancellationToken.None));
 
-        var nullable = await ScalarIntAsync(connectionString,
+        var nullable = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() "
             + "AND TABLE_NAME='live_child' AND COLUMN_NAME='parent_id' AND IS_NULLABLE='YES';",
             cancellationToken: CancellationToken.None);
@@ -67,7 +92,11 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.NoOp, preflight.Assessments[0].Action);
         Assert.Equal(SafeMigrationAction.RejectDifferent, preflight.Assessments[^1].Action);
-        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message, StringComparison.Ordinal);
+        Assert.Contains("doka_sm_different",
+            AssertOwnedGuardFailure(failure)
+                .Message,
+            StringComparison.Ordinal);
+
         Assert.Equal(1, nullable);
     }
 
@@ -78,14 +107,20 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ForeignKeyEnsureColumnRepairWithoutAcceptedSourceRemainsUnproven(bool makeNullable)
+    public async Task ForeignKeyEnsureColumnRepairWithoutAcceptedSourceRemainsUnproven(
+        bool makeNullable
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int "
-            + (makeNullable ? "NOT NULL" : "NULL") + ", CONSTRAINT `fk_native` FOREIGN KEY (`parent_id`) "
+            + (makeNullable
+                ? "NOT NULL"
+                : "NULL")
+            + ", CONSTRAINT `fk_native` FOREIGN KEY (`parent_id`) "
             + "REFERENCES `live_parent` (`id`) ON DELETE CASCADE) ENGINE=InnoDB; "
             + "INSERT INTO `live_parent` VALUES (7); INSERT INTO `live_child` VALUES (1,7);",
             cancellationToken: CancellationToken.None);
@@ -93,17 +128,32 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_native", "live_child");
-        builder.AddColumnIfNotExistsFromModel(operation => operation.AddColumn<int>(
-            "parent_id", "live_child", type: "int", nullable: makeNullable), SafeMigrationPolicy.RepairIfSafe);
+        builder.AddColumnIfNotExistsFromModel(
+            operation => operation.AddColumn<int>(
+                "parent_id",
+                "live_child",
+                type: "int",
+                nullable: makeNullable),
+            SafeMigrationPolicy.RepairIfSafe);
 
-        builder.AddForeignKeyIfNotExists("fk_native", "live_child", ["parent_id"], "live_parent", ["id"],
-            onDelete: makeNullable ? ReferentialAction.SetNull : ReferentialAction.NoAction);
+        builder.AddForeignKeyIfNotExists(
+            "fk_native",
+            "live_child",
+            ["parent_id"],
+            "live_parent",
+            ["id"],
+            onDelete: makeNullable
+                ? ReferentialAction.SetNull
+                : ReferentialAction.NoAction);
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-ensure-key-layout-source-unproven"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-ensure-key-layout-source-unproven"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
@@ -127,10 +177,14 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int "
-            + (makeNullable ? "NOT NULL" : "NULL") + ", CONSTRAINT `fk_native` FOREIGN KEY (`parent_id`) "
+            + (makeNullable
+                ? "NOT NULL"
+                : "NULL")
+            + ", CONSTRAINT `fk_native` FOREIGN KEY (`parent_id`) "
             + "REFERENCES `live_parent` (`id`) ON DELETE CASCADE) ENGINE=InnoDB; "
             + "INSERT INTO `live_parent` VALUES (7); INSERT INTO `live_child` VALUES (1,7);",
             cancellationToken: CancellationToken.None);
@@ -138,35 +192,60 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExistsFromModel(operation => operation.AddColumn<int>(
-            "parent_id", "live_child", type: "int", nullable: !makeNullable));
+            "parent_id",
+            "live_child",
+            type: "int",
+            nullable: !makeNullable));
 
         builder.DropForeignKeyIfExists("fk_native", "live_child");
         if (ensureRepair)
         {
-            builder.AddColumnIfNotExistsFromModel(operation => operation.AddColumn<int>(
-                "parent_id", "live_child", type: "int", nullable: makeNullable),
+            builder.AddColumnIfNotExistsFromModel(
+                operation => operation.AddColumn<int>(
+                    "parent_id",
+                    "live_child",
+                    type: "int",
+                    nullable: makeNullable),
                 SafeMigrationPolicy.RepairIfSafe);
         }
         else
         {
             builder.AlterColumnIfDifferentFromModel(operation => operation.AlterColumn<int>(
-                "parent_id", "live_child", type: "int", nullable: makeNullable, oldClrType: typeof(int),
-                oldType: "int", oldNullable: !makeNullable), SafeMigrationPolicy.RepairIfSafe);
+                "parent_id",
+                "live_child",
+                type: "int",
+                nullable: makeNullable,
+                oldClrType: typeof(int),
+                oldType: "int",
+                oldNullable: !makeNullable));
         }
 
-        builder.AddForeignKeyIfNotExists("fk_native", "live_child", ["parent_id"], "live_parent", ["id"],
-            onDelete: makeNullable ? ReferentialAction.SetNull : ReferentialAction.NoAction);
+        builder.AddForeignKeyIfNotExists(
+            "fk_native",
+            "live_child",
+            ["parent_id"],
+            "live_parent",
+            ["id"],
+            onDelete: makeNullable
+                ? ReferentialAction.SetNull
+                : ReferentialAction.NoAction);
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-certified-ensure-key-layout"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-certified-ensure-key-layout"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var final = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-certified-ensure-key-layout-final"), CancellationToken.None);
+        var final = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-certified-ensure-key-layout-final"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -184,28 +263,43 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task SparseForeignKeyNativeColumnCertificateDoesNotBorrowAccentedPrincipal(bool accentedPrincipal)
+    public async Task SparseForeignKeyNativeColumnCertificateDoesNotBorrowAccentedPrincipal(
+        bool accentedPrincipal
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var principalColumn = accentedPrincipal ? "\u00e9" : "e";
-        await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE `live_parent` (`" + principalColumn + "` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
+        var principalColumn = accentedPrincipal
+            ? "\u00e9"
+            : "e";
+
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `live_parent` (`"
+            + principalColumn
+            + "` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-            + "INSERT INTO `live_child` VALUES (1);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO `live_child` VALUES (1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExistsFromModel(static operation => operation.AddColumn<int>(
-            "parent_id", "live_child", type: "int", nullable: true));
+            "parent_id",
+            "live_child",
+            type: "int",
+            nullable: true));
 
         builder.CreateIndexIfNotExistsFromModel("ix_parent", "live_child", "parent_id");
         builder.AddForeignKeyIfNotExists("fk_native", "live_child", ["parent_id"], "live_parent", ["E"]);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-column-identity-certificate"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-column-identity-certificate"),
+            CancellationToken.None);
 
         if (!accentedPrincipal)
         {
@@ -214,9 +308,16 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
         }
 
         // Assert
-        Assert.Equal(accentedPrincipal ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready,
+        Assert.Equal(
+            accentedPrincipal
+                ? SafeMigrationReportStatus.Blocked
+                : SafeMigrationReportStatus.Ready,
             preflight.Status);
-        Assert.Equal(accentedPrincipal ? SafeMigrationAction.RejectPrerequisiteMissing : SafeMigrationAction.Apply,
+
+        Assert.Equal(
+            accentedPrincipal
+                ? SafeMigrationAction.RejectPrerequisiteMissing
+                : SafeMigrationAction.Apply,
             preflight.Assessments[^1].Action);
     }
 
@@ -229,41 +330,75 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ForeignKeyNamespaceSnapshotRetainsCurrentAcceptedConstraint(bool differentAction)
+    public async Task ForeignKeyNamespaceSnapshotRetainsCurrentAcceptedConstraint(
+        bool differentAction
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NULL) ENGINE=InnoDB; "
-            + "INSERT INTO `live_child` VALUES (1,NULL);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO `live_child` VALUES (1,NULL);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexIfNotExistsFromModel("ix_parent", "live_child", "parent_id");
-        builder.AddForeignKeyIfNotExists("fk_first", "live_child", ["parent_id"], "live_parent", ["id"],
+        builder.AddForeignKeyIfNotExists(
+            "fk_first",
+            "live_child",
+            ["parent_id"],
+            "live_parent",
+            ["id"],
             onDelete: ReferentialAction.Cascade);
 
-        builder.AddForeignKeyIfNotExists(differentAction ? "fk_first" : "fk_alias", "live_child", ["parent_id"],
-            "live_parent", ["id"], onDelete: differentAction ? ReferentialAction.NoAction : ReferentialAction.Cascade);
+        builder.AddForeignKeyIfNotExists(
+            differentAction
+                ? "fk_first"
+                : "fk_alias",
+            "live_child",
+            ["parent_id"],
+            "live_parent",
+            ["id"],
+            onDelete: differentAction
+                ? ReferentialAction.NoAction
+                : ReferentialAction.Cascade);
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-current-fk-namespace-snapshot"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-current-fk-namespace-snapshot"),
+            CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context,
-            builder.Operations, CancellationToken.None));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            CancellationToken.None));
 
         // Assert
-        Assert.Equal(differentAction ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready,
+        Assert.Equal(
+            differentAction
+                ? SafeMigrationReportStatus.Blocked
+                : SafeMigrationReportStatus.Ready,
             preflight.Status);
-        Assert.Equal(differentAction ? SafeMigrationAction.RejectDifferent : SafeMigrationAction.NoOp,
+
+        Assert.Equal(
+            differentAction
+                ? SafeMigrationAction.RejectDifferent
+                : SafeMigrationAction.NoOp,
             preflight.Assessments[^1].Action);
+
         if (differentAction)
         {
-            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
+            Assert.Contains(
+                "doka_sm_different",
+                AssertOwnedGuardFailure(failure)
+                    .Message,
                 StringComparison.Ordinal);
         }
         else
@@ -279,36 +414,63 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ForeignKeyNewOwnerCannotBorrowRawNullCollationFromMatchingParentDeclarations(bool matchingDefault)
+    public async Task ForeignKeyNewOwnerCannotBorrowRawNullCollationFromMatchingParentDeclarations(
+        bool matchingDefault
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
-        await ExecuteSqlAsync(connectionString,
-            "ALTER DATABASE `" + database + "` CHARACTER SET utf8mb4 COLLATE "
-            + (matchingDefault ? "utf8mb4_unicode_ci" : "utf8mb4_general_ci") + "; "
+        await ExecuteSqlAsync(
+            connectionString,
+            "ALTER DATABASE `"
+            + database
+            + "` CHARACTER SET utf8mb4 COLLATE "
+            + (matchingDefault
+                ? "utf8mb4_unicode_ci"
+                : "utf8mb4_general_ci")
+            + "; "
             + "CREATE TABLE `live_parent` (`id` char(36) NOT NULL PRIMARY KEY) ENGINE=InnoDB "
-            + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;", cancellationToken: CancellationToken.None);
+            + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExistsFromModel(static operation => operation.AddColumn<string>(
-            "id", "live_parent", type: "char(36)", nullable: false, fixedLength: true, maxLength: 36));
+            "id",
+            "live_parent",
+            type: "char(36)",
+            nullable: false,
+            fixedLength: true,
+            maxLength: 36));
 
         builder.AddPrimaryKeyIfNotExists("PRIMARY", "live_parent", ["id"]);
-        builder.EnsureTable(new ExpectedTableDefinition("live_child",
-            [new ExpectedColumnDefinition("id", typeof(int), isNullable: false, storeType: "int"),
-                new ExpectedColumnDefinition("parent_id", typeof(string), isNullable: true,
-                    storeType: "char(36)", isFixedLength: true, maxLength: 36)],
-            primaryKey: new ExpectedPrimaryKeyDefinition("PRIMARY", "live_child", ["id"])),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "live_child",
+                [
+                    new ExpectedColumnDefinition("id", typeof(int), isNullable: false, storeType: "int"),
+                    new ExpectedColumnDefinition(
+                        "parent_id",
+                        typeof(string),
+                        isNullable: true,
+                        storeType: "char(36)",
+                        isFixedLength: true,
+                        maxLength: 36),
+                ],
+                primaryKey: new ExpectedPrimaryKeyDefinition("PRIMARY", "live_child", ["id"])),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         builder.AddForeignKeyIfNotExists("fk_native", "live_child", ["parent_id"], "live_parent", ["id"]);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-new-owner-inherited-parent-collation"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-new-owner-inherited-parent-collation"),
+            CancellationToken.None);
 
         if (matchingDefault)
         {
@@ -317,11 +479,18 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
         }
 
         // Assert
-        Assert.Equal(matchingDefault ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+        Assert.Equal(
+            matchingDefault
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
             preflight.Status);
+
         Assert.Equal(SafeMigrationAction.NoOp, preflight.Assessments[0].Action);
         Assert.Equal(SafeMigrationAction.NoOp, preflight.Assessments[1].Action);
-        Assert.Equal(matchingDefault ? SafeMigrationAction.Apply : SafeMigrationAction.RejectPrerequisiteMissing,
+        Assert.Equal(
+            matchingDefault
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectPrerequisiteMissing,
             preflight.Assessments[^1].Action);
     }
 
@@ -332,31 +501,43 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ForeignKeyFreshSafeReplacementRepeatsWithoutOriginalUnsafeLifetime(bool reuseOperation)
+    public async Task ForeignKeyFreshSafeReplacementRepeatsWithoutOriginalUnsafeLifetime(
+        bool reuseOperation
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NULL, "
-            + "`values_json` JSON NOT NULL) ENGINE=InnoDB;", cancellationToken: CancellationToken.None);
+            + "`values_json` JSON NOT NULL) ENGINE=InnoDB;",
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteSqlAsync(connectionString, Fixture.IsMariaDb
-            ? "ALTER TABLE `live_child` ADD `derived_id` int GENERATED ALWAYS AS (ABS(`id`)) STORED; "
+        await ExecuteSqlAsync(
+            connectionString,
+            Fixture.IsMariaDb
+                ? "ALTER TABLE `live_child` ADD `derived_id` int GENERATED ALWAYS AS (ABS(`id`)) STORED; "
                 + "CREATE INDEX `ix_multi` ON `live_child` (`parent_id`, `derived_id`);"
-            : "CREATE INDEX `ix_multi` ON `live_child` (`parent_id`, "
-                + "(CAST(`values_json` AS UNSIGNED ARRAY)));", cancellationToken: CancellationToken.None);
+                : "CREATE INDEX `ix_multi` ON `live_child` (`parent_id`, "
+                + "(CAST(`values_json` AS UNSIGNED ARRAY)));",
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "ALTER TABLE `live_child` ADD CONSTRAINT `fk_native` FOREIGN KEY (`parent_id`) "
-            + "REFERENCES `live_parent` (`id`);", cancellationToken: CancellationToken.None);
+            + "REFERENCES `live_parent` (`id`);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_native", "live_child");
         builder.DropIndexIfExists("ix_multi", "live_child");
         builder.AddColumnIfNotExistsFromModel(static operation => operation.AddColumn<int>(
-            "empty_marker", "live_child", type: "int", nullable: false));
+            "empty_marker",
+            "live_child",
+            type: "int",
+            nullable: false));
 
         builder.AddForeignKeyIfNotExists("fk_native", "live_child", ["parent_id"], "live_parent", ["id"]);
         if (reuseOperation)
@@ -371,13 +552,19 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-fresh-fk-repeat"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-fresh-fk-repeat"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var final = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-fresh-fk-repeat-final"), CancellationToken.None);
+        var final = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-fresh-fk-repeat-final"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -395,17 +582,24 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ForeignKeyNamespaceAfterRemovalQualifiesInitiallyMissingOrSemanticMatching(bool semanticMatch)
+    public async Task ForeignKeyNamespaceAfterRemovalQualifiesInitiallyMissingOrSemanticMatching(
+        bool semanticMatch
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NULL, `other_id` int NULL, "
             + "INDEX `fk_target` (`other_id`), INDEX `ix_cover` (`parent_id`)) ENGINE=InnoDB; "
             + "ALTER TABLE `live_child` ADD CONSTRAINT `fk_old` FOREIGN KEY (`"
-            + (semanticMatch ? "parent_id" : "other_id") + "`) REFERENCES `live_parent` (`id`); "
-            + "INSERT INTO `live_child` VALUES (1,NULL,NULL);", cancellationToken: CancellationToken.None);
+            + (semanticMatch
+                ? "parent_id"
+                : "other_id")
+            + "`) REFERENCES `live_parent` (`id`); "
+            + "INSERT INTO `live_child` VALUES (1,NULL,NULL);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -415,16 +609,24 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-retired-alias-index-namespace"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-retired-alias-index-namespace"),
+            CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context,
-            builder.Operations, CancellationToken.None));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            CancellationToken.None));
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, preflight.Assessments[^1].Action);
-        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
+        Assert.Contains(
+            "doka_sm_different",
+            AssertOwnedGuardFailure(failure)
+                .Message,
             StringComparison.Ordinal);
     }
 
@@ -434,7 +636,8 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NULL, `other_id` int NULL) "
             + "ENGINE=InnoDB; INSERT INTO `live_child` VALUES (1,NULL,NULL);",
@@ -447,16 +650,24 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-created-wrong-index-namespace"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-created-wrong-index-namespace"),
+            CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context,
-            builder.Operations, CancellationToken.None));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            CancellationToken.None));
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, preflight.Assessments[^1].Action);
-        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
+        Assert.Contains(
+            "doka_sm_different",
+            AssertOwnedGuardFailure(failure)
+                .Message,
             StringComparison.Ordinal);
     }
 
@@ -477,53 +688,82 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NULL, "
             + "`other_id` int NULL, `values_json` JSON NOT NULL, INDEX `ix_ordinary` (`parent_id`), "
-            + "INDEX `ix_other` (`other_id`)) ENGINE=InnoDB;", cancellationToken: CancellationToken.None);
+            + "INDEX `ix_other` (`other_id`)) ENGINE=InnoDB;",
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteSqlAsync(connectionString, Fixture.IsMariaDb
-            ? "ALTER TABLE `live_child` ADD `derived_id` int GENERATED ALWAYS AS (ABS(`id`)) STORED; "
+        await ExecuteSqlAsync(
+            connectionString,
+            Fixture.IsMariaDb
+                ? "ALTER TABLE `live_child` ADD `derived_id` int GENERATED ALWAYS AS (ABS(`id`)) STORED; "
                 + "CREATE INDEX `ix_multi` ON `live_child` (`parent_id`, `derived_id`);"
-            : "CREATE INDEX `ix_multi` ON `live_child` (`parent_id`, "
-                + "(CAST(`values_json` AS UNSIGNED ARRAY)));", cancellationToken: CancellationToken.None);
+                : "CREATE INDEX `ix_multi` ON `live_child` (`parent_id`, "
+                + "(CAST(`values_json` AS UNSIGNED ARRAY)));",
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "ALTER TABLE `live_child` ADD CONSTRAINT `fk_native` FOREIGN KEY (`parent_id`) "
-            + "REFERENCES `live_parent` (`id`)" + (cascade ? " ON DELETE CASCADE" : string.Empty)
+            + "REFERENCES `live_parent` (`id`)"
+            + (cascade
+                ? " ON DELETE CASCADE"
+                : string.Empty)
             + "; INSERT INTO `live_parent` VALUES (1); INSERT INTO `live_child` (`id`,`parent_id`,`values_json`) "
-            + "VALUES (1,1,'[]');", cancellationToken: CancellationToken.None);
+            + "VALUES (1,1,'[]');",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.DropIndexIfExists(targetsFkPrefix ? "ix_ordinary" : "ix_other", "live_child");
+        builder.DropIndexIfExists(
+            targetsFkPrefix
+                ? "ix_ordinary"
+                : "ix_other",
+            "live_child");
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-ordinary-support-drop-integrity"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-ordinary-support-drop-integrity"),
+            CancellationToken.None);
 
-        var dropFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context,
-            builder.Operations, CancellationToken.None));
+        var dropFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            CancellationToken.None));
 
-        var deleteFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString,
-            "DELETE FROM `live_parent` WHERE `id`=1;", cancellationToken: CancellationToken.None));
+        var deleteFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(
+            connectionString,
+            "DELETE FROM `live_parent` WHERE `id`=1;",
+            cancellationToken: CancellationToken.None));
 
-        var remainingParents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `live_parent`;",
+        var remainingParents = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `live_parent`;",
             cancellationToken: CancellationToken.None);
 
         // WHY: A lookup on the broken prefix could itself omit an empty-array
         // row. The primary-key scan independently counts the physical fixture.
-        var remainingChildren = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `live_child` FORCE INDEX (`PRIMARY`);", cancellationToken: CancellationToken.None);
+        var remainingChildren = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `live_child` FORCE INDEX (`PRIMARY`);",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         if (!Fixture.IsMariaDb && targetsFkPrefix)
         {
             Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
             Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[0].Action);
-            Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(dropFailure).Message,
+            Assert.Contains(
+                "doka_sm_unsupported",
+                AssertOwnedGuardFailure(dropFailure)
+                    .Message,
                 StringComparison.Ordinal);
         }
         else
@@ -541,8 +781,17 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
             Assert.IsType<MySqlException>(deleteFailure);
         }
 
-        Assert.Equal(cascade ? 0 : 1, remainingChildren);
-        Assert.Equal(cascade ? 0 : 1, remainingParents);
+        Assert.Equal(
+            cascade
+                ? 0
+                : 1,
+            remainingChildren);
+
+        Assert.Equal(
+            cascade
+                ? 0
+                : 1,
+            remainingParents);
     }
 
     /// <summary>A metadata-only dependency-first stream needs no subsequent ADD or FK to retire the index.</summary>
@@ -550,41 +799,63 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task MultiValuedIndexDependencyFirstRemovalAppliesAndReplaysWithoutNewColumns(bool ordinarySupport)
+    public async Task MultiValuedIndexDependencyFirstRemovalAppliesAndReplaysWithoutNewColumns(
+        bool ordinarySupport
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NULL, "
             + "`values_json` JSON NOT NULL"
-            + (ordinarySupport ? ", INDEX `ix_ordinary` (`parent_id`)" : string.Empty) + ") ENGINE=InnoDB;",
+            + (ordinarySupport
+                ? ", INDEX `ix_ordinary` (`parent_id`)"
+                : string.Empty)
+            + ") ENGINE=InnoDB;",
             cancellationToken: CancellationToken.None);
 
-        await ExecuteSqlAsync(connectionString, Fixture.IsMariaDb
-            ? "ALTER TABLE `live_child` ADD `derived_id` int GENERATED ALWAYS AS (ABS(`id`)) STORED; "
+        await ExecuteSqlAsync(
+            connectionString,
+            Fixture.IsMariaDb
+                ? "ALTER TABLE `live_child` ADD `derived_id` int GENERATED ALWAYS AS (ABS(`id`)) STORED; "
                 + "CREATE INDEX `ix_multi` ON `live_child` (`parent_id`, `derived_id`);"
-            : "CREATE INDEX `ix_multi` ON `live_child` (`parent_id`, "
-                + "(CAST(`values_json` AS UNSIGNED ARRAY)));", cancellationToken: CancellationToken.None);
+                : "CREATE INDEX `ix_multi` ON `live_child` (`parent_id`, "
+                + "(CAST(`values_json` AS UNSIGNED ARRAY)));",
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "ALTER TABLE `live_child` ADD CONSTRAINT `fk_native` FOREIGN KEY (`parent_id`) "
-            + "REFERENCES `live_parent` (`id`);", cancellationToken: CancellationToken.None);
+            + "REFERENCES `live_parent` (`id`);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_native", "live_child");
-        builder.DropIndexIfExists(ordinarySupport ? "ix_ordinary" : "ix_multi", "live_child");
+        builder.DropIndexIfExists(
+            ordinarySupport
+                ? "ix_ordinary"
+                : "ix_multi",
+            "live_child");
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-dependency-first-drop"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-dependency-first-drop"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var replay = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-dependency-first-replay"), CancellationToken.None);
+        var replay = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-dependency-first-replay"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -598,43 +869,65 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task MultiValuedIndexDependencyRemovalCannotBorrowNoOpOrWrongPhysicalAlias(bool wrongName)
+    public async Task MultiValuedIndexDependencyRemovalCannotBorrowNoOpOrWrongPhysicalAlias(
+        bool wrongName
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NULL, "
-            + "`values_json` JSON NOT NULL) ENGINE=InnoDB;", cancellationToken: CancellationToken.None);
+            + "`values_json` JSON NOT NULL) ENGINE=InnoDB;",
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteSqlAsync(connectionString, Fixture.IsMariaDb
-            ? "ALTER TABLE `live_child` ADD `derived_id` int GENERATED ALWAYS AS (ABS(`id`)) STORED; "
+        await ExecuteSqlAsync(
+            connectionString,
+            Fixture.IsMariaDb
+                ? "ALTER TABLE `live_child` ADD `derived_id` int GENERATED ALWAYS AS (ABS(`id`)) STORED; "
                 + "CREATE INDEX `ix_multi` ON `live_child` (`parent_id`, `derived_id`);"
-            : "CREATE INDEX `ix_multi` ON `live_child` (`parent_id`, "
-                + "(CAST(`values_json` AS UNSIGNED ARRAY)));", cancellationToken: CancellationToken.None);
+                : "CREATE INDEX `ix_multi` ON `live_child` (`parent_id`, "
+                + "(CAST(`values_json` AS UNSIGNED ARRAY)));",
+            cancellationToken: CancellationToken.None);
 
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "ALTER TABLE `live_child` ADD CONSTRAINT `fk_native` FOREIGN KEY (`parent_id`) "
             + "REFERENCES `live_parent` (`id`); CREATE INDEX `ix_ordinary` ON `live_child` (`parent_id`);",
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.DropForeignKeyIfExists(wrongName ? "fk_semantic_alias" : "fk_absent", "live_child");
+        builder.DropForeignKeyIfExists(
+            wrongName
+                ? "fk_semantic_alias"
+                : "fk_absent",
+            "live_child");
+
         builder.DropIndexIfExists("ix_multi", "live_child");
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-unowned-dependency-drop"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-unowned-dependency-drop"),
+            CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context,
-            builder.Operations, CancellationToken.None));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            CancellationToken.None));
 
         // Assert
         Assert.Equal(SafeMigrationAction.NoOp, preflight.Assessments[0].Action);
-        Assert.Equal(Fixture.IsMariaDb ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+        Assert.Equal(
+            Fixture.IsMariaDb
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
             preflight.Status);
+
         if (Fixture.IsMariaDb)
         {
             Assert.Null(failure);
@@ -642,14 +935,20 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
         else
         {
             Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[1].Action);
-            Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(failure).Message,
+            Assert.Contains(
+                "doka_sm_unsupported",
+                AssertOwnedGuardFailure(failure)
+                    .Message,
                 StringComparison.Ordinal);
         }
 
-        Assert.Equal(1, await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA=DATABASE() AND TABLE_NAME='live_child' AND CONSTRAINT_NAME='fk_native';",
-            cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
+                + "WHERE CONSTRAINT_SCHEMA=DATABASE() AND TABLE_NAME='live_child' AND CONSTRAINT_NAME='fk_native';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>
@@ -665,7 +964,8 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `old_id` int NULL, "
             + "`parent_id` int NULL, CONSTRAINT `fk_native` FOREIGN KEY (`old_id`) "
@@ -684,24 +984,40 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-existing-endpoint-index-collision"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-existing-endpoint-index-collision"),
+            CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context,
-            builder.Operations, CancellationToken.None));
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
+            CancellationToken.None));
 
         // Assert
-        Assert.Equal(createSupportingIndex ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+        Assert.Equal(
+            createSupportingIndex
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
             preflight.Status);
-        Assert.Equal(createSupportingIndex ? SafeMigrationAction.Apply : SafeMigrationAction.RejectDifferent,
+
+        Assert.Equal(
+            createSupportingIndex
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectDifferent,
             preflight.Assessments[^1].Action);
+
         if (createSupportingIndex)
         {
             Assert.Null(failure);
         }
         else
         {
-            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
+            Assert.Contains(
+                "doka_sm_different",
+                AssertOwnedGuardFailure(failure)
+                    .Message,
                 StringComparison.Ordinal);
         }
     }
@@ -713,25 +1029,32 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
     [InlineData("rejected")]
     [InlineData("existence_only")]
     [InlineData("dropped")]
-    public async Task ForeignKeyOwnedEndpointReplacementCannotBorrowUnacceptedSupportingIndex(string shape)
+    public async Task ForeignKeyOwnedEndpointReplacementCannotBorrowUnacceptedSupportingIndex(
+        string shape
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `old_id` int NULL, "
             + "`parent_id` int NULL, CONSTRAINT `fk_native` FOREIGN KEY (`old_id`) "
             + "REFERENCES `live_parent` (`id`)) ENGINE=InnoDB; INSERT INTO `live_child` VALUES (1, NULL, NULL);"
             + (shape is "rejected" or "existence_only"
                 ? "CREATE INDEX `ix_new` ON `live_child` (`id`);"
-                : string.Empty), cancellationToken: CancellationToken.None);
+                : string.Empty),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropForeignKeyIfExists("fk_native", "live_child");
         if (shape != "future")
         {
-            builder.CreateIndexIfNotExists("ix_new", "live_child", ["parent_id"],
+            builder.CreateIndexIfNotExists(
+                "ix_new",
+                "live_child",
+                ["parent_id"],
                 policy: shape == "existence_only"
                     ? SafeMigrationPolicy.ExistenceOnly
                     : SafeMigrationPolicy.ThrowIfDifferent);
@@ -740,7 +1063,6 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
             {
                 builder.DropIndexIfExists("ix_new", "live_child");
             }
-
         }
 
         var foreignKeyOrdinal = builder.Operations.Count;
@@ -753,13 +1075,17 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-unaccepted-supporting-lifetime"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-unaccepted-supporting-lifetime"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, preflight.Assessments[foreignKeyOrdinal].Action);
-        Assert.Equal("projected_foreign_key_supporting_index_name_collision",
+        Assert.Equal(
+            "projected_foreign_key_supporting_index_name_collision",
             preflight.Assessments[foreignKeyOrdinal].AnalysisCode);
     }
 
@@ -773,11 +1099,15 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public async Task SparseForeignKeyRetirementRetainsDroppedColumnRuntimeGuard(bool conflictingIndex, bool script)
+    public async Task SparseForeignKeyRetirementRetainsDroppedColumnRuntimeGuard(
+        bool conflictingIndex,
+        bool script
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `parent_id` int NULL, "
             + "INDEX `ix_parent` (`parent_id`), CONSTRAINT `fk_native` FOREIGN KEY (`parent_id`) "
@@ -790,39 +1120,66 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
         builder.DropForeignKeyIfExists("fk_native", "live_child");
         builder.DropColumnIfExists("parent_id", "live_child");
         builder.AddColumnIfNotExistsFromModel(static operation => operation.AddColumn<int>(
-            "parent_id", "live_child", type: "int", nullable: true));
+            "parent_id",
+            "live_child",
+            type: "int",
+            nullable: true));
 
         builder.CreateIndexIfNotExistsFromModel("ix_parent", "live_child", "parent_id");
         builder.AddForeignKeyIfNotExists("fk_native", "live_child", ["parent_id"], "live_parent", ["id"]);
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-dropped-column-boundary"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-dropped-column-boundary"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
-        await ExecuteRetiredColumnStreamAsync(context, connectionString,
-            builder.Operations.Take(3).ToArray(), script, cancellationToken: CancellationToken.None);
+        await ExecuteRetiredColumnStreamAsync(
+            context,
+            connectionString,
+            builder
+                .Operations
+                .Take(3)
+                .ToArray(),
+            script,
+            cancellationToken: CancellationToken.None);
+
         if (conflictingIndex)
         {
-            await ExecuteSqlAsync(connectionString, "CREATE INDEX `ix_parent` ON `live_child` (`id`);",
+            await ExecuteSqlAsync(
+                connectionString,
+                "CREATE INDEX `ix_parent` ON `live_child` (`id`);",
                 cancellationToken: CancellationToken.None);
         }
 
-        var failure = await Record.ExceptionAsync(() => ExecuteRetiredColumnStreamAsync(context, connectionString,
-            builder.Operations.Skip(3).ToArray(), script, cancellationToken: CancellationToken.None));
+        var failure = await Record.ExceptionAsync(() => ExecuteRetiredColumnStreamAsync(
+            context,
+            connectionString,
+            builder
+                .Operations
+                .Skip(3)
+                .ToArray(),
+            script,
+            cancellationToken: CancellationToken.None));
 
-        var indexColumns = await ScalarStringAsync(connectionString,
+        var indexColumns = await ScalarStringAsync(
+            connectionString,
             "SELECT GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) FROM INFORMATION_SCHEMA.STATISTICS "
             + "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='live_child' AND INDEX_NAME='ix_parent';",
             cancellationToken: CancellationToken.None);
 
-        var foreignKeys = await ScalarIntAsync(connectionString,
+        var foreignKeys = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA=DATABASE() "
             + "AND TABLE_NAME='live_child' AND CONSTRAINT_NAME='fk_native' AND CONSTRAINT_TYPE='FOREIGN KEY';",
             cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `live_child` WHERE `id`=1;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `live_child` WHERE `id`=1;",
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -830,11 +1187,23 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, preflight.Assessments[3].Action);
         Assert.Equal(1, preflight.Assessments[3].DeferredOrigin?.OperationOrdinal);
         Assert.Equal(1, rows);
-        Assert.Equal(conflictingIndex ? "id" : "parent_id", indexColumns);
-        Assert.Equal(conflictingIndex ? 0 : 1, foreignKeys);
+        Assert.Equal(
+            conflictingIndex
+                ? "id"
+                : "parent_id",
+            indexColumns);
+
+        Assert.Equal(
+            conflictingIndex
+                ? 0
+                : 1,
+            foreignKeys);
+
         if (conflictingIndex)
         {
-            var native = script ? Assert.IsType<MySqlException>(failure) : AssertOwnedGuardFailure(failure);
+            var native = script
+                ? Assert.IsType<MySqlException>(failure)
+                : AssertOwnedGuardFailure(failure);
 
             Assert.Equal(1062, native.Number);
             Assert.Contains("doka_sm_different", native.Message, StringComparison.Ordinal);
@@ -862,10 +1231,15 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
             return ExecuteOperationsAsync(context, operations, cancellationToken);
         }
 
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(operations, context.Model,
-            MigrationsSqlGenerationOptions.Script);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(
+                operations,
+                context.Model,
+                MigrationsSqlGenerationOptions.Script);
 
-        return ExecuteMigrationScriptAsync(connectionString,
+        return ExecuteMigrationScriptAsync(
+            connectionString,
             string.Join(Environment.NewLine, commands.Select(static command => command.CommandText)),
             cancellationToken: cancellationToken);
     }
@@ -887,14 +1261,16 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `live_parent` (`first_id` int NOT NULL, `second_id` int NOT NULL, "
             + "PRIMARY KEY (`first_id`, `second_id`)) ENGINE=InnoDB; "
             + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `first_id` int NULL, "
             + "`second_id` int NULL, `other_id` int NULL, `values_json` JSON NOT NULL, "
             + "INDEX `ix_ordinary` (`first_id`, `second_id`)) ENGINE=InnoDB; "
             + "ALTER TABLE `live_child` ADD CONSTRAINT `fk_native` FOREIGN KEY (`first_id`, `second_id`) "
-            + "REFERENCES `live_parent` (`first_id`, `second_id`);", cancellationToken: CancellationToken.None);
+            + "REFERENCES `live_parent` (`first_id`, `second_id`);",
+            cancellationToken: CancellationToken.None);
 
         var leading = shape switch
         {
@@ -904,28 +1280,46 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
             _ => throw new UnreachableException(),
         };
 
-        await ExecuteSqlAsync(connectionString, Fixture.IsMariaDb
-            ? "ALTER TABLE `live_child` ADD `derived_id` int GENERATED ALWAYS AS (ABS(`id`)) STORED; "
-                + "CREATE INDEX `ix_multi` ON `live_child` (" + leading + ", `derived_id`);"
-            : "CREATE INDEX `ix_multi` ON `live_child` (" + leading
-                + ", (CAST(`values_json` AS UNSIGNED ARRAY)));", cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            Fixture.IsMariaDb
+                ? "ALTER TABLE `live_child` ADD `derived_id` int GENERATED ALWAYS AS (ABS(`id`)) STORED; "
+                + "CREATE INDEX `ix_multi` ON `live_child` ("
+                + leading
+                + ", `derived_id`);"
+                : "CREATE INDEX `ix_multi` ON `live_child` ("
+                + leading
+                + ", (CAST(`values_json` AS UNSIGNED ARRAY)));",
+            cancellationToken: CancellationToken.None);
 
         if (multipleUnsafeAliases && !Fixture.IsMariaDb)
         {
-            await ExecuteSqlAsync(connectionString,
+            await ExecuteSqlAsync(
+                connectionString,
                 "CREATE INDEX `ix_multi_second` ON `live_child` (`first_id`,`second_id`, "
-                + "(CAST(`values_json` AS SIGNED ARRAY)));", cancellationToken: CancellationToken.None);
+                + "(CAST(`values_json` AS SIGNED ARRAY)));",
+                cancellationToken: CancellationToken.None);
         }
 
         var query = MySqlSafeMigrationCatalogSqlBuilder.BuildMultiValuedIndexBoundForeignKeysQuery(
-            "'live_child'", multipleUnsafeAliases ? "'ix_ordinary'" : "'ix_multi'", Fixture.IsMariaDb);
+            "'live_child'",
+            multipleUnsafeAliases
+                ? "'ix_ordinary'"
+                : "'ix_multi'",
+            Fixture.IsMariaDb);
 
         // Act
-        var count = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM (" + query + ") actual;",
+        var count = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM (" + query + ") actual;",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(!Fixture.IsMariaDb && shape == "exact" ? 1 : 0, count);
+        Assert.Equal(
+            !Fixture.IsMariaDb && shape == "exact"
+                ? 1
+                : 0,
+            count);
     }
 
     /// <summary>
@@ -937,24 +1331,38 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         const string accented = "\u00e9";
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-            + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `e` int NULL, `" + accented
-            + "` int NULL, INDEX `fk_native` (`id`), INDEX `ix_e` (`e`), INDEX `ix_" + accented
-            + "` (`" + accented + "`)) ENGINE=InnoDB;", cancellationToken: CancellationToken.None);
-
-        var query = MySqlSafeMigrationCatalogSqlBuilder.BuildForeignKeyChildCoveringIndexQuery(
-            "'live_child'", ["'e'"], Fixture.IsMariaDb);
-
-        var wrongColumnQuery = MySqlSafeMigrationCatalogSqlBuilder.BuildForeignKeyChildCoveringIndexQuery(
-            "'live_child'", ["'" + accented + "'"], Fixture.IsMariaDb);
-
-        // Act
-        var ordinaryCount = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM (" + query + ") actual;",
+            + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `e` int NULL, `"
+            + accented
+            + "` int NULL, INDEX `fk_native` (`id`), INDEX `ix_e` (`e`), INDEX `ix_"
+            + accented
+            + "` (`"
+            + accented
+            + "`)) ENGINE=InnoDB;",
             cancellationToken: CancellationToken.None);
 
-        var accentedCount = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM (" + wrongColumnQuery + ") actual;", cancellationToken: CancellationToken.None);
+        var query = MySqlSafeMigrationCatalogSqlBuilder.BuildForeignKeyChildCoveringIndexQuery(
+            "'live_child'",
+            ["'e'"],
+            Fixture.IsMariaDb);
+
+        var wrongColumnQuery = MySqlSafeMigrationCatalogSqlBuilder.BuildForeignKeyChildCoveringIndexQuery(
+            "'live_child'",
+            ["'" + accented + "'"],
+            Fixture.IsMariaDb);
+
+        // Act
+        var ordinaryCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM (" + query + ") actual;",
+            cancellationToken: CancellationToken.None);
+
+        var accentedCount = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM (" + wrongColumnQuery + ") actual;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(1, ordinaryCount);
@@ -969,28 +1377,40 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var localDatabase = new MySqlConnectionStringBuilder(connectionString).Database;
         var foreignDatabase = localDatabase.ToUpperInvariant();
-        await ExecuteSqlAsync(connectionString, "CREATE DATABASE `" + foreignDatabase + "`;",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE DATABASE `" + foreignDatabase + "`;",
             cancellationToken: CancellationToken.None);
+
         try
         {
-            await ExecuteSqlAsync(connectionString,
+            await ExecuteSqlAsync(
+                connectionString,
                 "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-                + "CREATE TABLE `" + foreignDatabase + "`.`live_parent` "
+                + "CREATE TABLE `"
+                + foreignDatabase
+                + "`.`live_parent` "
                 + "(`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; INSERT INTO `live_child` VALUES (1);",
                 cancellationToken: CancellationToken.None);
 
             await using var context = CreateContext(connectionString);
             var builder = new MigrationBuilder(context.Database.ProviderName!);
             builder.AddColumnIfNotExistsFromModel(static operation => operation.AddColumn<int>(
-                "parent_id", "live_child", type: "int", nullable: true));
+                "parent_id",
+                "live_child",
+                type: "int",
+                nullable: true));
 
             builder.CreateIndexIfNotExistsFromModel("ix_parent", "live_child", "parent_id");
             builder.AddForeignKeyIfNotExists("fk_native", "live_child", ["parent_id"], "live_parent", ["id"]);
             var runner = context.GetService<ISafeMigrationRunner>();
 
             // Act
-            var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-                new SafeMigrationRunOptions("native-case-distinct-database"), CancellationToken.None);
+            var preflight = await runner.AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("native-case-distinct-database"),
+                CancellationToken.None);
 
             // Assert
             Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
@@ -1000,7 +1420,9 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
         {
             // This exact generated database is owned solely by this fixture;
             // the primary fixture separately cleans the local database.
-            await ExecuteSqlAsync(connectionString, "DROP DATABASE `" + foreignDatabase + "`;",
+            await ExecuteSqlAsync(
+                connectionString,
+                "DROP DATABASE `" + foreignDatabase + "`;",
                 cancellationToken: CancellationToken.None);
         }
     }
@@ -1019,21 +1441,29 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
         try
         {
             var connectionString = await dedicated.CreateDatabaseAsync(CancellationToken.None);
-            await ExecuteSqlAsync(connectionString,
+            await ExecuteSqlAsync(
+                connectionString,
                 "CREATE TABLE `live_parent` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
                 + "CREATE TABLE `live_child` (`id` int NOT NULL PRIMARY KEY, `old_id` int NULL, "
-                + "`values_json` JSON NOT NULL) ENGINE=InnoDB;", cancellationToken: CancellationToken.None);
+                + "`values_json` JSON NOT NULL) ENGINE=InnoDB;",
+                cancellationToken: CancellationToken.None);
 
-            await ExecuteSqlAsync(connectionString, dedicated.IsMariaDb
-                ? "ALTER TABLE `live_child` ADD `derived_id` int GENERATED ALWAYS AS (ABS(`id`)) STORED; "
+            await ExecuteSqlAsync(
+                connectionString,
+                dedicated.IsMariaDb
+                    ? "ALTER TABLE `live_child` ADD `derived_id` int GENERATED ALWAYS AS (ABS(`id`)) STORED; "
                     + "CREATE INDEX `ix_multi` ON `live_child` (`old_id`, `derived_id`);"
-                : "CREATE INDEX `ix_multi` ON `live_child` (`old_id`, "
-                    + "(CAST(`values_json` AS UNSIGNED ARRAY)));", cancellationToken: CancellationToken.None);
+                    : "CREATE INDEX `ix_multi` ON `live_child` (`old_id`, "
+                    + "(CAST(`values_json` AS UNSIGNED ARRAY)));",
+                cancellationToken: CancellationToken.None);
 
-            await ExecuteSqlAsync(connectionString,
+            await ExecuteSqlAsync(
+                connectionString,
                 "ALTER TABLE `live_child` ADD CONSTRAINT `fk_native` FOREIGN KEY (`old_id`) "
                 + "REFERENCES `live_parent` (`id`); INSERT INTO `live_child` VALUES "
-                + (dedicated.IsMariaDb ? "(1, NULL, '[]', DEFAULT);" : "(1, NULL, '[]');"),
+                + (dedicated.IsMariaDb
+                    ? "(1, NULL, '[]', DEFAULT);"
+                    : "(1, NULL, '[]');"),
                 cancellationToken: CancellationToken.None);
 
             await using var context = new SafeMigrationDbContext(connectionString, dedicated.ServerVersion);
@@ -1041,27 +1471,39 @@ public sealed partial class MySqlMultiValuedIndexLifetimesIntegrationTests : MyS
             builder.DropForeignKeyIfExists("fk_native", "Live_Child");
             builder.DropIndexIfExists("ix_multi", "live_CHILD");
             builder.AddColumnIfNotExistsFromModel(static operation => operation.AddColumn<int>(
-                "parent_id", "LIVE_CHILD", type: "int", nullable: true));
+                "parent_id",
+                "LIVE_CHILD",
+                type: "int",
+                nullable: true));
 
             builder.CreateIndexIfNotExistsFromModel("ix_new", "Live_Child", "parent_id");
             builder.AddForeignKeyIfNotExists("fk_native", "live_CHILD", ["parent_id"], "LIVE_PARENT", ["id"]);
             var runner = context.GetService<ISafeMigrationRunner>();
 
             // Act
-            var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-                new SafeMigrationRunOptions("native-case-insensitive-lifetime"), CancellationToken.None);
+            var preflight = await runner.AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("native-case-insensitive-lifetime"),
+                CancellationToken.None);
 
             preflight.ThrowIfBlocked();
             await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-            var final = await runner.VerifyAsync(context, builder.Operations,
-                new SafeMigrationRunOptions("native-case-insensitive-lifetime-final"), CancellationToken.None);
+            var final = await runner.VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("native-case-insensitive-lifetime-final"),
+                CancellationToken.None);
 
             // Assert
             Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
             Assert.Equal(SafeMigrationReportStatus.Ready, final.Status);
-            Assert.Equal(1, await ScalarIntAsync(connectionString,
-                "SELECT COUNT(*) FROM `live_child` WHERE `parent_id` IS NULL;",
-                cancellationToken: CancellationToken.None));
+            Assert.Equal(
+                1,
+                await ScalarIntAsync(
+                    connectionString,
+                    "SELECT COUNT(*) FROM `live_child` WHERE `parent_id` IS NULL;",
+                    cancellationToken: CancellationToken.None));
         }
         finally
         {

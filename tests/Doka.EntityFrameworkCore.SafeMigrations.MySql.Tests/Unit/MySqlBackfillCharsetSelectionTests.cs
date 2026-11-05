@@ -40,18 +40,27 @@ public sealed class MySqlBackfillCharsetSelectionTests
     {
         // Arrange
         var literal = Literal(scenario);
+
         // WHY: Equal widths take the simple alter branch and cannot exercise charset proof construction.
         var source = new ExpectedColumnDefinition("value", typeof(string), true, "varchar(128)", maxLength: 128);
-        var target = new ExpectedColumnDefinition("value", typeof(string), false, "varchar(64)", maxLength: 64,
+        var target = new ExpectedColumnDefinition(
+            "value",
+            typeof(string),
+            false,
+            "varchar(64)",
+            maxLength: 64,
             defaultValue: SafeMigrationDefaultValue.Literal(literal));
 
         using var context = Context(mariaDb);
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("backfill_rows", target, source),
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent("backfill_rows", target, source),
             SafeMigrationPolicy.RepairIfSafe);
 
         var capture = context.GetService<MySqlSafeMigrationPlanCapture>();
-        using var lease = capture.Begin([operation],
-            MySqlSafeMigrationPlanCapture.CreateExpectedUniqueIndexes([operation]), includeTransitionEvidence: true);
+        using var lease = capture.Begin(
+            [operation],
+            MySqlSafeMigrationPlanCapture.CreateExpectedUniqueIndexes([operation]),
+            includeTransitionEvidence: true);
 
         var generator = context.GetService<IMigrationsSqlGenerator>();
 
@@ -59,20 +68,36 @@ public sealed class MySqlBackfillCharsetSelectionTests
         _ = generator.Generate([operation], context.Model);
         var plan = Assert.Single(lease.Complete());
         var probe = plan.NullabilityDataProbe;
-        var invariant = probe is null ? plan.RepairPrecondition : probe.RepairInvariantExpression;
-        var rendered = MySqlCatalogSqlTemplate.Render(invariant, plan.ParameterValues,
+        var invariant = probe is null
+            ? plan.RepairPrecondition
+            : probe.RepairInvariantExpression;
+
+        var rendered = MySqlCatalogSqlTemplate.Render(
+            invariant,
+            plan.ParameterValues,
             value => RenderValue(context, value));
 
         // Assert
         Assert.False(plan.IsStaticallyUnsupported);
         Assert.NotNull(probe);
         Assert.NotNull(plan.DataProbe);
-        var expected = expectedCharsets.Length == 0 ? [] : expectedCharsets.Split(',');
+        var expected = expectedCharsets.Length == 0
+            ? []
+            : expectedCharsets.Split(',');
 
-        Assert.All(EveryCharset.Split(','), characterSet => Assert.Equal(expected.Contains(characterSet),
-            MySqlSafeMigrationCatalogSqlBuilder.CanRepresentAlterColumnBackfill(source, target,
-                "varchar(128)", "varchar(64)", characterSet, strictMode: true,
-                supportsQuotedExpressionDefaults: true, supportsTextExpressionControlCharacters: true)));
+        Assert.All(
+            EveryCharset.Split(','),
+            characterSet => Assert.Equal(
+                expected.Contains(characterSet),
+                MySqlSafeMigrationCatalogSqlBuilder.CanRepresentAlterColumnBackfill(
+                    source,
+                    target,
+                    "varchar(128)",
+                    "varchar(64)",
+                    characterSet,
+                    strictMode: true,
+                    supportsQuotedExpressionDefaults: true,
+                    supportsTextExpressionControlCharacters: true)));
 
         if (expected.Length == 0)
         {
@@ -82,7 +107,9 @@ public sealed class MySqlBackfillCharsetSelectionTests
             return;
         }
 
-        var stringMapping = context.GetService<IRelationalTypeMappingSource>().FindMapping(typeof(string))
+        var stringMapping = context
+                .GetService<IRelationalTypeMappingSource>()
+                .FindMapping(typeof(string))
             ?? throw new InvalidOperationException("The native string mapping is absent.");
 
         var expectedList = string.Join(", ", expected.Select(stringMapping.GenerateSqlLiteral));
@@ -104,13 +131,23 @@ public sealed class MySqlBackfillCharsetSelectionTests
     {
         // Arrange
         var source = new ExpectedColumnDefinition("value", typeof(string), true, "varchar(64)");
-        var target = new ExpectedColumnDefinition("value", typeof(string), false, "varchar(64)",
+        var target = new ExpectedColumnDefinition(
+            "value",
+            typeof(string),
+            false,
+            "varchar(64)",
             defaultValue: SafeMigrationDefaultValue.Literal("value"));
 
         // Act
-        var represented = MySqlSafeMigrationCatalogSqlBuilder.CanRepresentAlterColumnBackfill(source, target,
-            "varchar(64)", "varchar(64)", characterSet, strict,
-            supportsQuotedExpressionDefaults: true, supportsTextExpressionControlCharacters: true);
+        var represented = MySqlSafeMigrationCatalogSqlBuilder.CanRepresentAlterColumnBackfill(
+            source,
+            target,
+            "varchar(64)",
+            "varchar(64)",
+            characterSet,
+            strict,
+            supportsQuotedExpressionDefaults: true,
+            supportsTextExpressionControlCharacters: true);
 
         // Assert
         Assert.False(represented);
@@ -129,13 +166,23 @@ public sealed class MySqlBackfillCharsetSelectionTests
     {
         // Arrange
         var source = new ExpectedColumnDefinition("value", typeof(bool), true, sourceType);
-        var target = new ExpectedColumnDefinition("value", typeof(bool), false, "tinyint(1)",
+        var target = new ExpectedColumnDefinition(
+            "value",
+            typeof(bool),
+            false,
+            "tinyint(1)",
             defaultValue: SafeMigrationDefaultValue.Literal(true));
 
         // Act
-        var represented = MySqlSafeMigrationCatalogSqlBuilder.CanRepresentAlterColumnBackfill(source, target,
-            sourceType, "tinyint(1)", characterSet: null, strictMode: true,
-            supportsQuotedExpressionDefaults: true, supportsTextExpressionControlCharacters: true);
+        var represented = MySqlSafeMigrationCatalogSqlBuilder.CanRepresentAlterColumnBackfill(
+            source,
+            target,
+            sourceType,
+            "tinyint(1)",
+            characterSet: null,
+            strictMode: true,
+            supportsQuotedExpressionDefaults: true,
+            supportsTextExpressionControlCharacters: true);
 
         // Assert
         Assert.Equal(expected, represented);
@@ -162,8 +209,11 @@ public sealed class MySqlBackfillCharsetSelectionTests
     /// <returns>The offline context providing real native mappings and handler capture.</returns>
     private static SafeMigrationDbContext Context(
         bool mariaDb
-    ) => new("Server=127.0.0.1;Port=1;Database=unused;User ID=unused;Allow User Variables=true",
-        mariaDb ? MySqlServerVersion.MariaDb(new Version(11, 8, 8)) : MySqlServerVersion.MySql(new Version(8, 4, 11)));
+    ) => new(
+        "Server=127.0.0.1;Port=1;Database=unused;User ID=unused;Allow User Variables=true",
+        mariaDb
+            ? MySqlServerVersion.MariaDb(new Version(11, 8, 8))
+            : MySqlServerVersion.MySql(new Version(8, 4, 11)));
 
     /// <summary>Renders exact typed parameter values without reordering their captured ordinals.</summary>
     /// <param name="context">The native mapping owner.</param>
@@ -178,7 +228,7 @@ public sealed class MySqlBackfillCharsetSelectionTests
         var mapping = value.StoreType is { } storeType
             ? MySqlCatalogTypeMapping.Resolve(mappings, value.Value, storeType)
             : mappings.FindMapping(typeof(string))
-                ?? throw new InvalidOperationException("The native identifier mapping is absent.");
+            ?? throw new InvalidOperationException("The native identifier mapping is absent.");
 
         return mapping.GenerateSqlLiteral(value.Value);
     }

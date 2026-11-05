@@ -5,22 +5,30 @@ public sealed class MySqlRuntimeCommandInterceptorTests
 {
     private const string PreparedEvaluation = "PREPARE doka_sm_statement FROM @doka_sm_sql;"
         + "EXECUTE doka_sm_statement;DEALLOCATE PREPARE doka_sm_statement;";
+
     private const string RuntimeMarker = "/*doka_sm_runtime:7:0123456789abcdef0123456789abcdef*/";
+
     private const string AssertionSetup = "DROP TEMPORARY TABLE IF EXISTS `__doka_sm_assert`;"
         + "CREATE TEMPORARY TABLE `__doka_sm_assert` (`different_code` VARCHAR(40)) "
         + "CHARACTER SET ascii COLLATE ascii_bin;";
+
     private const string Prerequisite = "SET @doka_sm_prerequisite_ok = COALESCE((TRUE), FALSE);";
+
     private const string InitialState = "SET @doka_sm_state = CASE WHEN NOT @doka_sm_prerequisite_ok "
         + "THEN 'prerequisite_missing' ELSE NULL END, @doka_sm_repair_ok = FALSE;";
+
     private const string ActionAssignment = "SET @doka_sm_action = CASE @doka_sm_state "
         + "WHEN 'missing' THEN 'apply' ELSE 'skip' END;";
+
     private const string CorrelatedActionAssignment = "SET @doka_sm_action = CASE @doka_sm_state "
         + "WHEN 'missing' THEN 'apply' ELSE 'skip' END, "
         + "@doka_sm_diag = CONCAT('0123456789abcdef0123456789abcdef-', 7);";
+
     private const string DecisionAssertion = "INSERT INTO `__doka_sm_assert` "
         + "SELECT @doka_sm_diag, @doka_sm_diag, @doka_sm_diag, @doka_sm_diag, @doka_sm_diag "
         + "UNION ALL SELECT @doka_sm_diag, 2, 2, 2, 2 "
         + "WHERE @doka_sm_action = 'reject_different';";
+
     private const string UnknownSetup = "SET @doka_sm_future_probe = FALSE;";
 
     /// <summary>Routes known commands to fixed categories and preserves cleanup/body precedence.</summary>
@@ -30,28 +38,42 @@ public sealed class MySqlRuntimeCommandInterceptorTests
     [InlineData(AssertionSetup, "assertion_setup")]
     [InlineData(Prerequisite, "prerequisite_qualification")]
     [InlineData(InitialState, "prerequisite_qualification")]
-    [InlineData("SET @doka_sm_state = CASE WHEN COALESCE((TRUE), FALSE) THEN NULL ELSE 'unsupported' END;",
+    [InlineData(
+        "SET @doka_sm_state = CASE WHEN COALESCE((TRUE), FALSE) THEN NULL ELSE 'unsupported' END;",
         "prerequisite_qualification")]
-    [InlineData("SET @doka_sm_state = CASE WHEN @doka_sm_state IS NOT NULL THEN @doka_sm_state "
+    [InlineData(
+        "SET @doka_sm_state = CASE WHEN @doka_sm_state IS NOT NULL THEN @doka_sm_state "
         + "WHEN NOT @doka_sm_prerequisite_ok THEN 'prerequisite_missing' ELSE NULL END;",
         "prerequisite_qualification")]
-    [InlineData("SET @doka_sm_transition_eligible = CASE WHEN @doka_sm_state IS NULL THEN TRUE ELSE FALSE END;",
+    [InlineData(
+        "SET @doka_sm_transition_eligible = CASE WHEN @doka_sm_state IS NULL THEN TRUE ELSE FALSE END;",
         "column_data_probe")]
-    [InlineData("SET @doka_sm_data_probe_required = FALSE, @doka_sm_data_blocked = FALSE;",
+    [InlineData(
+        "SET @doka_sm_data_probe_required = FALSE, @doka_sm_data_blocked = FALSE;",
         "column_data_probe")]
-    [InlineData("SET @doka_sm_sql = CASE WHEN @doka_sm_data_probe_required THEN CONVERT(0x53454C4543542031 "
-        + "USING utf8mb4) ELSE 'DO 0' END;" + PreparedEvaluation, "column_data_probe")]
-    [InlineData("SET @doka_sm_state = ('matching'), @doka_sm_repair_ok = (FALSE);",
+    [InlineData(
+        "SET @doka_sm_sql = CASE WHEN @doka_sm_data_probe_required THEN CONVERT(0x53454C4543542031 "
+        + "USING utf8mb4) ELSE 'DO 0' END;"
+        + PreparedEvaluation,
+        "column_data_probe")]
+    [InlineData(
+        "SET @doka_sm_state = ('matching'), @doka_sm_repair_ok = (FALSE);",
         "state_classification_repair")]
-    [InlineData("SET @doka_sm_repair_ok = CASE WHEN @doka_sm_state = 'different' "
-        + "THEN COALESCE((TRUE), FALSE) ELSE FALSE END;", "state_classification_repair")]
-    [InlineData("SET @doka_sm_state = CASE WHEN @doka_sm_state IS NULL THEN CASE WHEN TRUE "
-        + "THEN 'matching' ELSE NULL END ELSE @doka_sm_state END;", "state_classification_repair")]
+    [InlineData(
+        "SET @doka_sm_repair_ok = CASE WHEN @doka_sm_state = 'different' "
+        + "THEN COALESCE((TRUE), FALSE) ELSE FALSE END;",
+        "state_classification_repair")]
+    [InlineData(
+        "SET @doka_sm_state = CASE WHEN @doka_sm_state IS NULL THEN CASE WHEN TRUE "
+        + "THEN 'matching' ELSE NULL END ELSE @doka_sm_state END;",
+        "state_classification_repair")]
     [InlineData(ActionAssignment, "decision_prepare")]
     [InlineData(CorrelatedActionAssignment, "decision_prepare")]
     [InlineData(DecisionAssertion, "decision_prepare")]
-    [InlineData("SET @doka_sm_sql = CASE WHEN @doka_sm_action = 'apply' THEN CONVERT(0x444F2030 "
-        + "USING utf8mb4) ELSE 'DO 0' END;PREPARE doka_sm_statement FROM @doka_sm_sql;", "decision_prepare")]
+    [InlineData(
+        "SET @doka_sm_sql = CASE WHEN @doka_sm_action = 'apply' THEN CONVERT(0x444F2030 "
+        + "USING utf8mb4) ELSE 'DO 0' END;PREPARE doka_sm_statement FROM @doka_sm_sql;",
+        "decision_prepare")]
     [InlineData("PREPARE doka_sm_statement FROM @doka_sm_sql;", "decision_prepare")]
     [InlineData(UnknownSetup, "other_setup")]
     [InlineData("DO @doka_sm_future_probe;", "other_setup")]
@@ -82,9 +104,12 @@ public sealed class MySqlRuntimeCommandInterceptorTests
     /// <param name="statement">The test-owned statement encoded as the real handler encodes prepared SQL.</param>
     /// <param name="expectedCategory">The category of the complete assignment and prepared-control group.</param>
     [Theory]
-    [InlineData("SELECT CASE WHEN NOT COALESCE((TRUE), FALSE) THEN 'data_blocked' ELSE NULL END "
-        + "INTO @doka_sm_state", "column_data_probe")]
-    [InlineData("SELECT ('matching'), COALESCE((FALSE), FALSE) INTO @doka_sm_state, @doka_sm_repair_ok",
+    [InlineData(
+        "SELECT CASE WHEN NOT COALESCE((TRUE), FALSE) THEN 'data_blocked' ELSE NULL END "
+        + "INTO @doka_sm_state",
+        "column_data_probe")]
+    [InlineData(
+        "SELECT ('matching'), COALESCE((FALSE), FALSE) INTO @doka_sm_state, @doka_sm_repair_ok",
         "state_classification_repair")]
     [InlineData("SELECT ('matching') INTO @doka_sm_state", "state_classification_repair")]
     public void Classify_HexAssignmentsUseOnlyKnownPurposePrefixes(
@@ -95,7 +120,9 @@ public sealed class MySqlRuntimeCommandInterceptorTests
         // Arrange
         var hexadecimal = Convert.ToHexString(Encoding.UTF8.GetBytes(statement));
         var sql = "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x"
-            + hexadecimal + " USING utf8mb4) ELSE 'DO 0' END;" + PreparedEvaluation;
+            + hexadecimal
+            + " USING utf8mb4) ELSE 'DO 0' END;"
+            + PreparedEvaluation;
 
         // Act
         var category = MySqlRuntimeCommandInterceptor.Classify(sql);
@@ -113,7 +140,8 @@ public sealed class MySqlRuntimeCommandInterceptorTests
             + "THEN COALESCE((TRUE), FALSE) ELSE FALSE END, @doka_sm_nullability_blocked = FALSE;"
             + "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CASE WHEN COALESCE((TRUE) "
             + "AND @doka_sm_column_repair_eligible, FALSE) THEN CONVERT(0x53454C4543542031 USING utf8mb4) "
-            + "ELSE 'DO 0' END ELSE 'DO 0' END;" + PreparedEvaluation;
+            + "ELSE 'DO 0' END ELSE 'DO 0' END;"
+            + PreparedEvaluation;
 
         // Act
         var category = MySqlRuntimeCommandInterceptor.Classify(sql);
@@ -178,7 +206,9 @@ public sealed class MySqlRuntimeCommandInterceptorTests
     [InlineData("/*doka_sm_runtime:7:0123456789abcdef0123456789abcde*/")]
     [InlineData("/*doka_sm_runtime:7:0123456789abcdef0123456789abcdef")]
     [InlineData("/*doka_sm_unknown:7:0123456789abcdef0123456789abcdef*/")]
-    public void Classify_MalformedRuntimeOwnershipRemainsUnknown(string prefix)
+    public void Classify_MalformedRuntimeOwnershipRemainsUnknown(
+        string prefix
+    )
     {
         // Arrange
         var sql = prefix + "SELECT 1;";
@@ -211,7 +241,10 @@ public sealed class MySqlRuntimeCommandInterceptorTests
     [InlineData(RuntimeMarker, true)]
     [InlineData(" \r\n" + RuntimeMarker + "\n", true)]
     [InlineData("/*doka_sm_runtime:7:bad*/", false)]
-    public void SetupInjectionRequiresRecognizedRuntimeOwnership(string prefix, bool expectedInjected)
+    public void SetupInjectionRequiresRecognizedRuntimeOwnership(
+        string prefix,
+        bool expectedInjected
+    )
     {
         // Arrange
         const string injection = "SET @test_setup_failure_sentinel = 1;";

@@ -64,8 +64,11 @@ internal static class MySqlFixtureLifecycle
         if (failures is not null)
         {
             // WHY: Container teardown must still execute after a database drop failure, and neither cause may disappear.
-            throw new InvalidOperationException("MySQL test-container cleanup failed.",
-                failures.Count == 1 ? failures[0] : new AggregateException(failures));
+            throw new InvalidOperationException(
+                "MySQL test-container cleanup failed.",
+                failures.Count == 1
+                    ? failures[0]
+                    : new AggregateException(failures));
         }
     }
 }

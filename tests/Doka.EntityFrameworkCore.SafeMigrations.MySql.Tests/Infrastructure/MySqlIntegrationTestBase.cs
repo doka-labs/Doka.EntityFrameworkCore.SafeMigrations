@@ -14,38 +14,6 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
 
     protected MySqlEngineContainerFixture Fixture { get; }
 
-    /// <summary>Creates a unique database owned by this test instance rather than its class or assembly.</summary>
-    /// <param name="cancellationToken">Cancels database creation.</param>
-    /// <returns>The new database's root connection string.</returns>
-    protected async Task<string> CreateDatabaseAsync(CancellationToken cancellationToken)
-    {
-        var connectionString = await Fixture.CreateDatabaseAsync(cancellationToken);
-        _ownedDatabases.Add(connectionString);
-
-        return connectionString;
-    }
-
-    /// <summary>Tracks an explicitly enabled pool belonging to one of this test's database leases.</summary>
-    /// <param name="connectionString">The derived connection string with the test's pooling settings.</param>
-    protected void TrackOwnedPool(string connectionString)
-    {
-        var settings = new MySqlConnectionStringBuilder(connectionString);
-        if (!_ownedDatabases.Any(owned =>
-            {
-                var lease = new MySqlConnectionStringBuilder(owned);
-
-                return settings.Database == lease.Database
-                    && settings.Server == lease.Server
-                    && settings.Port == lease.Port;
-            }))
-        {
-            throw new ArgumentException("The pool does not belong to this test's database lease.",
-                nameof(connectionString));
-        }
-
-        _ownedPools.Add(connectionString);
-    }
-
     /// <inheritdoc />
     public Task InitializeAsync() => Task.CompletedTask;
 
@@ -88,6 +56,43 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
         {
             throw new AggregateException("MySQL test database cleanup failed.", failures);
         }
+    }
+
+    /// <summary>Creates a unique database owned by this test instance rather than its class or assembly.</summary>
+    /// <param name="cancellationToken">Cancels database creation.</param>
+    /// <returns>The new database's root connection string.</returns>
+    protected async Task<string> CreateDatabaseAsync(
+        CancellationToken cancellationToken
+    )
+    {
+        var connectionString = await Fixture.CreateDatabaseAsync(cancellationToken);
+        _ownedDatabases.Add(connectionString);
+
+        return connectionString;
+    }
+
+    /// <summary>Tracks an explicitly enabled pool belonging to one of this test's database leases.</summary>
+    /// <param name="connectionString">The derived connection string with the test's pooling settings.</param>
+    protected void TrackOwnedPool(
+        string connectionString
+    )
+    {
+        var settings = new MySqlConnectionStringBuilder(connectionString);
+        if (!_ownedDatabases.Any(owned =>
+            {
+                var lease = new MySqlConnectionStringBuilder(owned);
+
+                return settings.Database == lease.Database
+                    && settings.Server == lease.Server
+                    && settings.Port == lease.Port;
+            }))
+        {
+            throw new ArgumentException(
+                "The pool does not belong to this test's database lease.",
+                nameof(connectionString));
+        }
+
+        _ownedPools.Add(connectionString);
     }
 
     protected SafeMigrationDbContext CreateContext(
@@ -149,8 +154,8 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
         var delimiter = ";";
         var statement = new StringBuilder();
         foreach (var line in script
-                     .Replace("\r\n", "\n", StringComparison.Ordinal)
-                     .Split('\n'))
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Split('\n'))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -160,6 +165,7 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
             {
                 delimiter = trimmed["DELIMITER ".Length..]
                     .Trim();
+
                 if (delimiter.Length == 0)
                 {
                     throw new InvalidOperationException("A migration script declared an empty delimiter.");
@@ -180,6 +186,7 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
 
             statementText = statementText[..^delimiter.Length]
                 .Trim();
+
             statement.Clear();
             if (statementText.Length == 0)
             {
@@ -230,7 +237,7 @@ public abstract class MySqlIntegrationTestBase : IClassFixture<MySqlEngineContai
         cancellationToken.ThrowIfCancellationRequested();
 
         var connection = context.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open)
+        if (connection.State != ConnectionState.Open)
         {
             await connection.OpenAsync(cancellationToken);
         }

@@ -10,39 +10,51 @@ public partial class SqlServerColumnAttribution
     {
         (string Name, string State, SafeMigrationPolicy Policy, SafeMigrationRepairCapability Capability,
             bool ShouldBind)[] probes =
-        [
-            ("matching", "matching", SafeMigrationPolicy.RepairIfSafe, SafeMigrationRepairCapability.Safe, false),
-            ("eligible_different", "different", SafeMigrationPolicy.RepairIfSafe,
-                SafeMigrationRepairCapability.Safe, true),
-            ("nonrepair_policy", "different", SafeMigrationPolicy.ThrowIfDifferent,
-                SafeMigrationRepairCapability.Safe, false),
-            ("no_repair_capability", "different", SafeMigrationPolicy.RepairIfSafe,
-                SafeMigrationRepairCapability.None, false),
-        ];
+            [
+                ("matching", "matching", SafeMigrationPolicy.RepairIfSafe, SafeMigrationRepairCapability.Safe, false),
+                ("eligible_different", "different", SafeMigrationPolicy.RepairIfSafe,
+                    SafeMigrationRepairCapability.Safe, true),
+                ("nonrepair_policy", "different", SafeMigrationPolicy.ThrowIfDifferent,
+                    SafeMigrationRepairCapability.Safe, false),
+                ("no_repair_capability", "different", SafeMigrationPolicy.RepairIfSafe,
+                    SafeMigrationRepairCapability.None, false),
+            ];
 
         // WHY: Use an eligible control to detect the generation strategy once.
         // Ineligible plans intentionally omit both the expression and its IF,
         // so their own SQL cannot distinguish that omission from the baseline.
-        var control = new SafeMigrationOperation(new EnsureColumnIntent("attribution_items",
-            new ExpectedColumnDefinition("value_0", typeof(string), true, "nvarchar(128)")),
+        var control = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "attribution_items",
+                new ExpectedColumnDefinition("value_0", typeof(string), true, "nvarchar(128)")),
             SafeMigrationPolicy.RepairIfSafe);
 
-        var controlPlan = new SqlServerSafeMigrationRuntimePlan("N'matching'", "1",
-            SafeMigrationRepairCapability.Safe, "1");
+        var controlPlan = new SqlServerSafeMigrationRuntimePlan(
+            "N'matching'",
+            "1",
+            SafeMigrationRepairCapability.Safe,
+            "1");
 
         // WHY: The isolated batch quotes the entire guard as dynamic SQL.
-        var conditionalRepair = SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(control, controlPlan, [], [])
+        var conditionalRepair = SqlServerSafeMigrationsSqlGenerator
+            .BuildGuardedSql(control, controlPlan, [], [])
             .Contains("IF @doka_state = N''different''", StringComparison.Ordinal);
 
         var results = new List<object>();
         var contractsSatisfied = true;
         foreach (var probe in probes)
         {
-            var operation = new SafeMigrationOperation(new EnsureColumnIntent("attribution_items",
-                new ExpectedColumnDefinition("value_0", typeof(string), true, "nvarchar(128)")), probe.Policy);
+            var operation = new SafeMigrationOperation(
+                new EnsureColumnIntent(
+                    "attribution_items",
+                    new ExpectedColumnDefinition("value_0", typeof(string), true, "nvarchar(128)")),
+                probe.Policy);
 
             // WHY: The nonexistent object must bind only when a Different state is eligible for repair.
-            var plan = new SqlServerSafeMigrationRuntimePlan($"N'{probe.State}'", "1", probe.Capability,
+            var plan = new SqlServerSafeMigrationRuntimePlan(
+                $"N'{probe.State}'",
+                "1",
+                probe.Capability,
                 "CASE WHEN EXISTS (SELECT 1 FROM dbo.attribution_poison_absent) THEN 1 ELSE 0 END")
             {
                 RequiresDelayedBinding = true,
@@ -50,6 +62,7 @@ public partial class SqlServerColumnAttribution
 
             var sql = SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(operation, plan, [], []);
             File.WriteAllText(Path.Combine(output, "repair-binding-" + probe.Name + ".sql"), sql);
+
             // WHY: Baseline and final products share this harness. Infer only
             // the rendered control-flow shape, not the existence of an unrelated
             // optional matching field, and assert every live result in both arms.
@@ -70,16 +83,18 @@ public partial class SqlServerColumnAttribution
                 errorNumber = exception.Number;
             }
 
-            results.Add(new
-            {
-                probe.Name,
-                ExpectedBinding = expectedBinding,
-                ConditionalRepairEvaluationAvailable = conditionalRepair,
-                ActualBinding = errorNumber == 208,
-                ExpectedErrorNumber = expectedError,
-                ErrorNumber = errorNumber,
-                ContractSatisfied = errorNumber == expectedError,
-            });
+            results.Add(
+                new
+                {
+                    probe.Name,
+                    ExpectedBinding = expectedBinding,
+                    ConditionalRepairEvaluationAvailable = conditionalRepair,
+                    ActualBinding = errorNumber == 208,
+                    ExpectedErrorNumber = expectedError,
+                    ErrorNumber = errorNumber,
+                    ContractSatisfied = errorNumber == expectedError,
+                });
+
             contractsSatisfied &= errorNumber == expectedError;
         }
 

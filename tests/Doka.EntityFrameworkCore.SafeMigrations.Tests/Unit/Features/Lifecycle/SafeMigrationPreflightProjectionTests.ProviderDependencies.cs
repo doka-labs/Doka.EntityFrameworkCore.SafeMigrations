@@ -7,24 +7,34 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     public void CapturedProviderFreshnessPrecedesMissingOwnerShortcut()
     {
         // Arrange
-        var deferred = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
-            SafeMigrationRepairCapability.None, false, "projected_ddl_structure_unknown")
+        var deferred = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.PrerequisiteMissing,
+            SafeMigrationRepairCapability.None,
+            false,
+            "projected_ddl_structure_unknown")
         {
             ProviderDeferredOriginOrdinal = 0,
         };
 
         var validator = new DependencyProbe(capturedReplacement: deferred);
         var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: validator);
-        var drop = new SafeMigrationOperation(new DropTableIntent("dependency_items"),
+        var drop = new SafeMigrationOperation(
+            new DropTableIntent("dependency_items"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var live = Live(SafeMigrationObservedState.Matching);
-        var decision = SafeMigrationDecisionPlanner.Plan(drop.Intent.Kind, live.ObservedState,
-            drop.Policy, live.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            drop.Intent.Kind,
+            live.ObservedState,
+            drop.Policy,
+            live.RepairCapability);
 
         projection.Observe(drop, live, live, decision);
-        var column = new SafeMigrationOperation(new EnsureColumnIntent("dependency_items",
-            new ExpectedColumnDefinition("Id", typeof(int), false, "int")), SafeMigrationPolicy.ThrowIfDifferent);
+        var column = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "dependency_items",
+                new ExpectedColumnDefinition("Id", typeof(int), false, "int")),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var analysis = projection.Project(column, live);
@@ -42,7 +52,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void CapturedProviderFreshnessPreservesPriorIndependentBoundaries(bool opaqueSql)
+    public void CapturedProviderFreshnessPreservesPriorIndependentBoundaries(
+        bool opaqueSql
+    )
     {
         // Arrange
         var validator = new DependencyProbe(capturedReplacement: Live(SafeMigrationObservedState.Missing));
@@ -54,8 +66,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         }
         else
         {
-            live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
-                SafeMigrationRepairCapability.None, false, "invariant_unsupported")
+            live = new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.Unsupported,
+                SafeMigrationRepairCapability.None,
+                false,
+                "invariant_unsupported")
             {
                 IsInvariantUnsupported = true,
             };
@@ -66,7 +81,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         // Assert
         Assert.Equal(0, validator.CapturedValidationCount);
-        Assert.Equal(opaqueSql ? SafeMigrationObservedState.PrerequisiteMissing : SafeMigrationObservedState.Unsupported,
+        Assert.Equal(
+            opaqueSql
+                ? SafeMigrationObservedState.PrerequisiteMissing
+                : SafeMigrationObservedState.Unsupported,
             analysis.ObservedState);
     }
 
@@ -91,11 +109,17 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void OpaqueProviderTransitionRequiresAnExplicitDependencyProof(bool proven)
+    public void OpaqueProviderTransitionRequiresAnExplicitDependencyProof(
+        bool proven
+    )
     {
         // Arrange
         var proof = Live(SafeMigrationObservedState.Missing);
-        var validator = new DependencyProbe(opaqueReplacement: proven ? proof : null);
+        var validator = new DependencyProbe(
+            opaqueReplacement: proven
+                ? proof
+                : null);
+
         var projection = ProjectionAfterDependencyRename(validator);
 
         // Act
@@ -103,8 +127,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         // Assert
         Assert.Equal(1, validator.OpaqueValidationCount);
-        Assert.Equal(proven ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.PrerequisiteMissing,
+        Assert.Equal(
+            proven
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.PrerequisiteMissing,
             analysis.ObservedState);
+
         if (proven)
         {
             Assert.Same(proof, analysis);
@@ -115,7 +143,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ProviderDependencyProofDoesNotOverrideSqlOrInvariantRejection(bool opaqueSql)
+    public void ProviderDependencyProofDoesNotOverrideSqlOrInvariantRejection(
+        bool opaqueSql
+    )
     {
         // Arrange
         var validator = new DependencyProbe(opaqueReplacement: Live(SafeMigrationObservedState.Missing));
@@ -127,8 +157,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         }
         else
         {
-            live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
-                SafeMigrationRepairCapability.None, postconditionSatisfied: false, "invariant_unsupported")
+            live = new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.Unsupported,
+                SafeMigrationRepairCapability.None,
+                postconditionSatisfied: false,
+                "invariant_unsupported")
             {
                 IsInvariantUnsupported = true,
             };
@@ -139,7 +172,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         // Assert
         Assert.Equal(0, validator.OpaqueValidationCount);
-        Assert.Equal(opaqueSql ? SafeMigrationObservedState.PrerequisiteMissing : SafeMigrationObservedState.Unsupported,
+        Assert.Equal(
+            opaqueSql
+                ? SafeMigrationObservedState.PrerequisiteMissing
+                : SafeMigrationObservedState.Unsupported,
             analysis.ObservedState);
     }
 
@@ -198,7 +234,8 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData(SafeMigrationObservedState.Different, 0)]
     public void ProviderDependencyObservationRequiresAcceptedDecision(
         SafeMigrationObservedState state,
-        int expectedObservations)
+        int expectedObservations
+    )
     {
         // Arrange
         var validator = new DependencyProbe();
@@ -239,7 +276,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ProjectedTableSourceDoesNotTreatCreatedTableAsPermanentlyEmpty(bool mutateData)
+    public void ProjectedTableSourceDoesNotTreatCreatedTableAsPermanentlyEmpty(
+        bool mutateData
+    )
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
@@ -254,12 +293,13 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         projection.Observe(operation, analysis, analysis, decision);
         if (mutateData)
         {
-            projection.ObserveProviderPostcondition(new InsertDataOperation
-            {
-                Table = "dependency_items",
-                Columns = ["Id"],
-                Values = new object[,] { { 1 } },
-            });
+            projection.ObserveProviderPostcondition(
+                new InsertDataOperation
+                {
+                    Table = "dependency_items",
+                    Columns = ["Id"],
+                    Values = new object[,] { { 1 } },
+                });
         }
 
         // Act
@@ -283,15 +323,21 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             SafeMigrationTableMode.StrictDefinition),
         SafeMigrationPolicy.ThrowIfDifferent);
 
-    private static SafeMigrationPreflightProjection ProjectionAfterDependencyRename(DependencyProbe validator)
+    private static SafeMigrationPreflightProjection ProjectionAfterDependencyRename(
+        DependencyProbe validator
+    )
     {
         var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: validator);
-        var operation = new SafeMigrationOperation(new RenameTableIntent("parent", "renamed_parent"),
+        var operation = new SafeMigrationOperation(
+            new RenameTableIntent("parent", "renamed_parent"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var analysis = Live(SafeMigrationObservedState.Matching);
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, analysis.ObservedState,
-            operation.Policy, analysis.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            analysis.ObservedState,
+            operation.Policy,
+            analysis.RepairCapability);
 
         projection.Observe(operation, analysis, analysis, decision);
 
@@ -301,7 +347,8 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     private sealed class DependencyProbe(
         SafeMigrationProviderAnalysis? replacement = null,
         SafeMigrationProviderAnalysis? opaqueReplacement = null,
-        SafeMigrationProviderAnalysis? capturedReplacement = null) : ISafeMigrationProjectedDependencyAnalyzer
+        SafeMigrationProviderAnalysis? capturedReplacement = null
+    ) : ISafeMigrationProjectedDependencyAnalyzer
     {
         public int CapturedValidationCount { get; private set; }
 
@@ -318,7 +365,8 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         public SafeMigrationProviderAnalysis? ValidateCapturedProjection(
             SafeMigrationOperation operation,
             SafeMigrationProviderAnalysis liveAnalysis,
-            ISafeMigrationProjectedColumnSource columns)
+            ISafeMigrationProjectedColumnSource columns
+        )
         {
             CapturedValidationCount++;
 
@@ -328,7 +376,8 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         public SafeMigrationProviderAnalysis? ValidateOpaqueProviderPostcondition(
             SafeMigrationOperation operation,
             SafeMigrationProviderAnalysis liveAnalysis,
-            ISafeMigrationProjectedColumnSource columns)
+            ISafeMigrationProjectedColumnSource columns
+        )
         {
             OpaqueValidationCount++;
 
@@ -338,7 +387,8 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         public SafeMigrationProviderAnalysis ValidateProjectedOperation(
             SafeMigrationOperation operation,
             SafeMigrationProviderAnalysis projectedAnalysis,
-            ISafeMigrationProjectedColumnSource columns)
+            ISafeMigrationProjectedColumnSource columns
+        )
         {
             ValidationCount++;
             LastProjectedState = projectedAnalysis.ObservedState;
@@ -350,10 +400,13 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             SafeMigrationOperation operation,
             SafeMigrationProviderAnalysis liveAnalysis,
             SafeMigrationProviderAnalysis analysis,
-            SafeMigrationDecision decision)
+            SafeMigrationDecision decision
+        )
             => ObservationCount++;
 
-        public void ObserveProviderOperation(MigrationOperation operation)
+        public void ObserveProviderOperation(
+            MigrationOperation operation
+        )
             => LastProviderOperation = operation;
     }
 }

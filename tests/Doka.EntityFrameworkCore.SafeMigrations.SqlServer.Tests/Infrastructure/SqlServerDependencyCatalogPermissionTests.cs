@@ -21,15 +21,18 @@ public sealed class SqlServerDependencyCatalogPermissionTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
         SafeMigrationIntent intent = kind switch
         {
-            "integer" => new AlterColumnIntent("items",
+            "integer" => new AlterColumnIntent(
+                "items",
                 new ExpectedColumnDefinition("Value", typeof(long), false, "bigint"),
                 new ExpectedColumnDefinition("Value", typeof(int), false, "int")),
-            "text" => new AlterColumnIntent("items",
+            "text" => new AlterColumnIntent(
+                "items",
                 new ExpectedColumnDefinition("Value", typeof(string), true, "varchar(64)"),
                 new ExpectedColumnDefinition("Value", typeof(string), true, "varchar(32)")),
             "drop-column" => new DropColumnIntent("Value", "items"),
@@ -47,13 +50,22 @@ public sealed class SqlServerDependencyCatalogPermissionTests
         // Assert
         Assert.True(plan.RequiresExpressionDependencyRead);
         Assert.True(plan.RequiresDelayedBinding);
-        Assert.Contains(SqlServerSafeMigrationCatalogSqlBuilder.ExpressionDependencyReadPermission,
-            plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
+        Assert.Contains(
+            SqlServerSafeMigrationCatalogSqlBuilder.ExpressionDependencyReadPermission,
+            plan.StateEvaluationGuardExpression,
+            StringComparison.Ordinal);
+
         Assert.Equal("N'unsupported'", plan.StateEvaluationGuardFailureExpression);
-        Assert.Contains("dependency_catalog_permission", plan.PrerequisiteFailureCodeExpression,
+        Assert.Contains(
+            "dependency_catalog_permission",
+            plan.PrerequisiteFailureCodeExpression,
             StringComparison.Ordinal);
-        Assert.DoesNotContain("FROM sys.sql_expression_dependencies", plan.PrerequisiteFailureCodeExpression,
+
+        Assert.DoesNotContain(
+            "FROM sys.sql_expression_dependencies",
+            plan.PrerequisiteFailureCodeExpression,
             StringComparison.Ordinal);
+
         Assert.Contains("FROM sys.sql_expression_dependencies", plan.StateExpression, StringComparison.Ordinal);
     }
 
@@ -68,7 +80,8 @@ public sealed class SqlServerDependencyCatalogPermissionTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
         SafeMigrationIntent intent = check
@@ -80,8 +93,11 @@ public sealed class SqlServerDependencyCatalogPermissionTests
 
         // Assert
         Assert.False(plan.RequiresExpressionDependencyRead);
-        Assert.DoesNotContain("dependency_catalog_permission", plan.StateEvaluationGuardExpression,
+        Assert.DoesNotContain(
+            "dependency_catalog_permission",
+            plan.StateEvaluationGuardExpression,
             StringComparison.Ordinal);
+
         Assert.DoesNotContain("sys.sql_expression_dependencies", plan.StateExpression, StringComparison.Ordinal);
     }
 
@@ -96,16 +112,20 @@ public sealed class SqlServerDependencyCatalogPermissionTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
-        var source = widening ? new ExpectedColumnDefinition("Value", typeof(int), false, "int")
+        var source = widening
+            ? new ExpectedColumnDefinition("Value", typeof(int), false, "int")
             : new ExpectedColumnDefinition("Value", typeof(string), true, "nvarchar(80)", maxLength: 80);
 
-        var target = widening ? new ExpectedColumnDefinition("Value", typeof(long), false, "bigint")
+        var target = widening
+            ? new ExpectedColumnDefinition("Value", typeof(long), false, "bigint")
             : new ExpectedColumnDefinition("Value", typeof(string), true, "nvarchar(20)", maxLength: 20);
 
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("items", target, source),
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent("items", target, source),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
@@ -124,12 +144,15 @@ public sealed class SqlServerDependencyCatalogPermissionTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("items",
-            new ExpectedColumnDefinition("Value", typeof(string), true, "nvarchar(20)", maxLength: 20),
-            new ExpectedColumnDefinition("Value", typeof(string), true, "nvarchar(80)", maxLength: 80)),
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent(
+                "items",
+                new ExpectedColumnDefinition("Value", typeof(string), true, "nvarchar(20)", maxLength: 20),
+                new ExpectedColumnDefinition("Value", typeof(string), true, "nvarchar(80)", maxLength: 80)),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
@@ -138,8 +161,11 @@ public sealed class SqlServerDependencyCatalogPermissionTests
         // Assert
         Assert.True(plan.RequiresDelayedBinding);
         Assert.Contains("N'OBJECT', N'SELECT'", plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
-        Assert.Contains("column_alter_read_permission", plan.PrerequisiteFailureCodeExpression,
+        Assert.Contains(
+            "column_alter_read_permission",
+            plan.PrerequisiteFailureCodeExpression,
             StringComparison.Ordinal);
+
         Assert.DoesNotContain("FROM [dbo].[items]", plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
         Assert.DoesNotContain("FROM [dbo].[items]", plan.PrerequisiteFailureCodeExpression, StringComparison.Ordinal);
         Assert.Contains("FROM [dbo].[items]", plan.StateExpression, StringComparison.Ordinal);
@@ -157,21 +183,35 @@ public sealed class SqlServerDependencyCatalogPermissionTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
-        SafeMigrationIntent intent = primary ? new DropPrimaryKeyIntent("key", "items")
+        SafeMigrationIntent intent = primary
+            ? new DropPrimaryKeyIntent("key", "items")
             : new DropUniqueConstraintIntent("key", "items");
 
         // Act
         var plan = catalog.Build(new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent));
 
         // Assert
-        Assert.Contains("incoming_foreign_key_key_dependency", plan.ClassificationCodeExpression,
+        Assert.Contains(
+            "incoming_foreign_key_key_dependency",
+            plan.ClassificationCodeExpression,
             StringComparison.Ordinal);
-        Assert.Contains("kc.type = N'" + (primary ? "PK" : "UQ") + "'", plan.ClassificationCodeExpression,
+
+        Assert.Contains(
+            "kc.type = N'"
+            + (primary
+                ? "PK"
+                : "UQ")
+            + "'",
+            plan.ClassificationCodeExpression,
             StringComparison.Ordinal);
-        Assert.Contains("fk.key_index_id = kc.unique_index_id", plan.ClassificationCodeExpression,
+
+        Assert.Contains(
+            "fk.key_index_id = kc.unique_index_id",
+            plan.ClassificationCodeExpression,
             StringComparison.Ordinal);
     }
 }

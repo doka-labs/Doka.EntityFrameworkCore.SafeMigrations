@@ -5,7 +5,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <summary>Checks exact current storage and a complete unprefixed principal candidate key.</summary>
     /// <param name="definition">The requested foreign-key endpoints.</param>
     /// <returns>A catalog-only predicate; it never reads application rows.</returns>
-    private string ForeignKeyPhysicalPrerequisites(ExpectedForeignKeyDefinition definition)
+    private string ForeignKeyPhysicalPrerequisites(
+        ExpectedForeignKeyDefinition definition
+    )
     {
         var pairs = new List<string>(definition.Columns.Count);
         var keyParts = new List<string>(definition.PrincipalColumns.Count);
@@ -15,9 +17,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < definition.Columns.Count; index++)
         {
-            pairs.Add($"(dependent_column.COLUMN_NAME = {Literal(definition.Columns[index])} "
+            pairs.Add(
+                $"(dependent_column.COLUMN_NAME = {Literal(definition.Columns[index])} "
                 + $"AND principal_column.COLUMN_NAME = {Literal(definition.PrincipalColumns[index])})");
-            keyParts.Add($"SUM(CASE WHEN principal_key.SEQ_IN_INDEX = {index + 1} "
+
+            keyParts.Add(
+                $"SUM(CASE WHEN principal_key.SEQ_IN_INDEX = {index + 1} "
                 + $"AND principal_key.COLUMN_NAME = {Literal(definition.PrincipalColumns[index])} "
                 + "AND principal_key.SUB_PART IS NULL THEN 1 ELSE 0 END) = 1");
         }
@@ -58,27 +63,34 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <summary>Requires every affected local column to permit the requested SET NULL action.</summary>
     /// <param name="definition">The complete requested foreign key.</param>
     /// <returns>The current catalog nullability predicate, or TRUE for another action.</returns>
-    private string ForeignKeySetNullIsRepresentable(ExpectedForeignKeyDefinition definition)
+    private string ForeignKeySetNullIsRepresentable(
+        ExpectedForeignKeyDefinition definition
+    )
         => definition.OnDelete != ReferentialAction.SetNull && definition.OnUpdate != ReferentialAction.SetNull
             ? "TRUE"
             : "(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS null_column "
-                + "WHERE null_column.TABLE_SCHEMA = DATABASE() "
-                + $"AND null_column.TABLE_NAME = {Literal(definition.Table)} "
-                + $"AND null_column.COLUMN_NAME IN ({string.Join(", ", definition.Columns.Select(Literal))}) "
-                + "AND null_column.IS_NULLABLE = 'YES') "
-                + $"= {definition.Columns.Count.ToString(CultureInfo.InvariantCulture)}";
+            + "WHERE null_column.TABLE_SCHEMA = DATABASE() "
+            + $"AND null_column.TABLE_NAME = {Literal(definition.Table)} "
+            + $"AND null_column.COLUMN_NAME IN ({string.Join(", ", definition.Columns.Select(Literal))}) "
+            + "AND null_column.IS_NULLABLE = 'YES') "
+            + $"= {definition.Columns.Count.ToString(CultureInfo.InvariantCulture)}";
 
     /// <summary>Captures bounded catalog facts for an ordered, source-bound FK replacement.</summary>
     /// <param name="definition">The immutable replacement endpoints.</param>
     /// <param name="sourceExists">Whether the original live result requires the owned FK to exist.</param>
     /// <returns>Catalog eligibility, nullability and complete matching physical names without reading rows.</returns>
-    internal string BuildForeignKeyReplacementProof(ExpectedForeignKeyDefinition definition, bool sourceExists = true)
+    internal string BuildForeignKeyReplacementProof(
+        ExpectedForeignKeyDefinition definition,
+        bool sourceExists = true
+    )
         => BuildForeignKeyReplacementProbe(definition, includeRows: false, sourceExists);
 
     /// <summary>Reads rows only after both physical endpoint inventories have qualified.</summary>
     /// <param name="definition">The catalog-qualified replacement endpoints.</param>
     /// <returns>The exact target's orphan-safety predicate.</returns>
-    internal string BuildForeignKeyReplacementRowProof(ExpectedForeignKeyDefinition definition)
+    internal string BuildForeignKeyReplacementRowProof(
+        ExpectedForeignKeyDefinition definition
+    )
         => BuildForeignKeyReplacementProbe(definition, includeRows: true, sourceExists: true);
 
     /// <summary>Builds a bounded probe inside an isolated escaped-literal generation scope.</summary>
@@ -125,10 +137,16 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// <param name="definition">The validated immutable foreign key.</param>
     /// <param name="sourceExists">The physical presence required by the independently classified source.</param>
     /// <returns>Repeated catalog eligibility and nullability with each complete matching physical name.</returns>
-    private string BuildForeignKeyReplacementProofCore(ExpectedForeignKeyDefinition definition, bool sourceExists)
+    private string BuildForeignKeyReplacementProofCore(
+        ExpectedForeignKeyDefinition definition,
+        bool sourceExists
+    )
     {
         var ownedExists = ConstraintExists(definition.Table, definition.Name, "FOREIGN KEY");
-        var sourceIdentity = sourceExists ? $"({ownedExists})" : $"NOT ({ownedExists})";
+        var sourceIdentity = sourceExists
+            ? $"({ownedExists})"
+            : $"NOT ({ownedExists})";
+
         var eligible = $"({BaseTableExists(definition.Table)}) "
             + $"AND ({BaseTableExists(definition.PrincipalTable)}) "
             + $"AND ({sourceIdentity}) "
@@ -141,7 +159,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < definition.Columns.Count; index++)
         {
-            nullableBits.Add($"WHEN {Literal(definition.Columns[index])} "
+            nullableBits.Add(
+                $"WHEN {Literal(definition.Columns[index])} "
                 + $"THEN {(1UL << index).ToString(CultureInfo.InvariantCulture)}");
         }
 
@@ -151,7 +170,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             + "WHERE local_column.TABLE_SCHEMA = DATABASE() "
             + $"AND local_column.TABLE_NAME = {Literal(definition.Table)})";
 
-        var matchingAliases = ForeignKeyMatchQuery(definition,
+        var matchingAliases = ForeignKeyMatchQuery(
+            definition,
             $"rc.CONSTRAINT_NAME <> {Literal(definition.Name)}");
 
         // WHY: CASE does not prevent binding missing application columns.

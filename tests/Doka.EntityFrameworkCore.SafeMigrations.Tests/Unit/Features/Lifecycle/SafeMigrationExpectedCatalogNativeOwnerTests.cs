@@ -11,24 +11,57 @@ public sealed class SafeMigrationExpectedCatalogNativeOwnerTests
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(true, true)]
-    public void InventoryRetainsOnlyQualifiedPhysicalOwnerDeclarations(bool foldTables, bool foreignSchema)
+    public void InventoryRetainsOnlyQualifiedPhysicalOwnerDeclarations(
+        bool foldTables,
+        bool foreignSchema
+    )
     {
         // Arrange
-        var index = Index("ROWS", foreignSchema ? "foreign" : "selected");
-        MigrationOperation[] operations = [Table(), Table("ROWS", foreignSchema ? "foreign" : "selected"), index];
-        var comparer = foldTables ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var index = Index(
+            "ROWS",
+            foreignSchema
+                ? "foreign"
+                : "selected");
+
+        MigrationOperation[] operations =
+        [
+            Table(), Table(
+                "ROWS",
+                foreignSchema
+                    ? "foreign"
+                    : "selected"),
+            index,
+        ];
+
+        var comparer = foldTables
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
 
         // Act
-        var inventory = SafeMigrationExpectedCatalog.Create(operations,
-            static schema => schema == "selected" ? null : schema, comparer);
+        var inventory = SafeMigrationExpectedCatalog.Create(
+            operations,
+            static schema => schema == "selected"
+                ? null
+                : schema,
+            comparer);
 
         // Assert
         var sameOwner = foldTables && !foreignSchema;
-        Assert.Equal(sameOwner ? 1 : 2, inventory.Count);
-        var authored = Assert.Single(inventory, table => comparer.Equals(table.Table, "rows")
-            && table.Schema is null or "selected");
+        Assert.Equal(
+            sameOwner
+                ? 1
+                : 2,
+            inventory.Count);
+
+        var authored = Assert.Single(
+            inventory,
+            table => comparer.Equals(table.Table, "rows")
+                && table.Schema is null or "selected");
+
         Assert.Equal(sameOwner, authored.UniqueIndexes.Contains("ux_value"));
-        Assert.Equal("ROWS", Assert.IsType<EnsureIndexIntent>(index.Intent).Definition.Table);
+        Assert.Equal("ROWS",
+            Assert.IsType<EnsureIndexIntent>(index.Intent)
+                .Definition.Table);
     }
 
     /// <summary>Ordered drops use the same physical owner contract as inventory creation.</summary>
@@ -36,7 +69,9 @@ public sealed class SafeMigrationExpectedCatalogNativeOwnerTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void InventoryRetiresIndexAcrossOnlyQualifiedOwnerAliases(bool foldTables)
+    public void InventoryRetiresIndexAcrossOnlyQualifiedOwnerAliases(
+        bool foldTables
+    )
     {
         // Arrange
         MigrationOperation[] operations =
@@ -44,17 +79,24 @@ public sealed class SafeMigrationExpectedCatalogNativeOwnerTests
             Table(),
             Table("ROWS"),
             Index("ROWS"),
-            new SafeMigrationOperation(new DropIndexIntent("ux_value", "rows"),
+            new SafeMigrationOperation(
+                new DropIndexIntent("ux_value", "rows"),
                 SafeMigrationPolicy.ThrowIfDifferent),
         ];
 
-        var comparer = foldTables ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var comparer = foldTables
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
 
         // Act
         var inventory = SafeMigrationExpectedCatalog.Create(operations, static schema => schema, comparer);
 
         // Assert
-        Assert.Equal(foldTables ? 0 : 1, inventory.Sum(static table => table.UniqueIndexes.Count));
+        Assert.Equal(
+            foldTables
+                ? 0
+                : 1,
+            inventory.Sum(static table => table.UniqueIndexes.Count));
     }
 
     /// <summary>Dependency validation consumes owner equality but never changes column or schema equality.</summary>
@@ -66,24 +108,42 @@ public sealed class SafeMigrationExpectedCatalogNativeOwnerTests
     [InlineData(true, true, true)]
     [InlineData(true, false, true)]
     [InlineData(true, true, false)]
-    public void DependencyValidationKeepsMemberAndSchemaBoundaries(bool foldTables, bool sameColumn, bool sameSchema)
+    public void DependencyValidationKeepsMemberAndSchemaBoundaries(
+        bool foldTables,
+        bool sameColumn,
+        bool sameSchema
+    )
     {
         // Arrange
         MigrationOperation[] operations =
         [
             Index("ROWS", "selected"),
-            new SafeMigrationOperation(new DropColumnIntent(sameColumn ? "value" : "VALUE", "rows",
-                sameSchema ? "selected" : "foreign"), SafeMigrationPolicy.ThrowIfDifferent),
+            new SafeMigrationOperation(
+                new DropColumnIntent(
+                    sameColumn
+                        ? "value"
+                        : "VALUE",
+                    "rows",
+                    sameSchema
+                        ? "selected"
+                        : "foreign"),
+                SafeMigrationPolicy.ThrowIfDifferent),
         ];
 
-        var comparer = foldTables ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var comparer = foldTables
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
 
         // Act
-        var failure = Record.Exception(() => SafeMigrationExpectedIndexTransitions.Validate(operations,
-            static schema => schema, comparer));
+        var failure = Record.Exception(() => SafeMigrationExpectedIndexTransitions.Validate(
+            operations,
+            static schema => schema,
+            comparer));
 
         // Assert
-        if (foldTables && sameColumn && sameSchema)
+        if (foldTables
+            && sameColumn
+            && sameSchema)
         {
             Assert.IsType<InvalidOperationException>(failure);
         }
@@ -91,7 +151,6 @@ public sealed class SafeMigrationExpectedCatalogNativeOwnerTests
         {
             Assert.Null(failure);
         }
-
     }
 
     /// <summary>Existing callers retain exact owner identity without requesting a native comparer.</summary>
@@ -106,7 +165,8 @@ public sealed class SafeMigrationExpectedCatalogNativeOwnerTests
 
         // Assert
         Assert.Equal(2, inventory.Count);
-        Assert.Empty(Assert.Single(inventory, static table => table.Table == "rows").UniqueIndexes);
+        Assert.Empty(Assert.Single(inventory, static table => table.Table == "rows")
+            .UniqueIndexes);
     }
 
     /// <summary>Builds the explicit owner without any inferred target-model declarations.</summary>
@@ -115,9 +175,14 @@ public sealed class SafeMigrationExpectedCatalogNativeOwnerTests
     private static SafeMigrationOperation Table(
         string table = "rows",
         string? schema = null
-    ) => new(new EnsureTableIntent(new ExpectedTableDefinition(table,
-            [new ExpectedColumnDefinition("value", typeof(int), isNullable: true, storeType: "int")], schema: schema),
-        SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent);
+    ) => new(
+        new EnsureTableIntent(
+            new ExpectedTableDefinition(
+                table,
+                [new ExpectedColumnDefinition("value", typeof(int), isNullable: true, storeType: "int")],
+                schema: schema),
+            SafeMigrationTableMode.StrictDefinition),
+        SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Builds one independently authored unique index for the requested physical owner.</summary>
     /// <param name="table">The declared physical owner.</param>
@@ -125,7 +190,13 @@ public sealed class SafeMigrationExpectedCatalogNativeOwnerTests
     private static SafeMigrationOperation Index(
         string table,
         string? schema = null
-    ) => new(new EnsureIndexIntent(
-        new ExpectedIndexDefinition("ux_value", table, [new ExpectedIndexKeyDefinition(column: "value")],
-            unique: true, schema: schema)), SafeMigrationPolicy.ThrowIfDifferent);
+    ) => new(
+        new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "ux_value",
+                table,
+                [new ExpectedIndexKeyDefinition(column: "value")],
+                unique: true,
+                schema: schema)),
+        SafeMigrationPolicy.ThrowIfDifferent);
 }

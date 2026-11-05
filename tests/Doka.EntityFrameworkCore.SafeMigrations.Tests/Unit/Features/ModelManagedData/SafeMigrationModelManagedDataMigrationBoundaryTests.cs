@@ -1,3 +1,5 @@
+using System.Collections;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>Preserves one-migration repetition safety while accepting internally certified later migrations.</summary>
@@ -8,7 +10,9 @@ public sealed class SafeMigrationModelManagedDataMigrationBoundaryTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void CertifiedDifferentMigrationOriginsAllowLaterTypedKeyTransition(bool reordered)
+    public void CertifiedDifferentMigrationOriginsAllowLaterTypedKeyTransition(
+        bool reordered
+    )
     {
         // Arrange
         MigrationOperation[] operations = [Seed(), Update(reordered)];
@@ -30,11 +34,16 @@ public sealed class SafeMigrationModelManagedDataMigrationBoundaryTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void OneAuthoredMigrationRejectsRepeatedExactOrReorderedTypedKey(bool reordered, bool knownOrigin)
+    public void OneAuthoredMigrationRejectsRepeatedExactOrReorderedTypedKey(
+        bool reordered,
+        bool knownOrigin
+    )
     {
         // Arrange
         MigrationOperation[] operations = [Seed(), Update(reordered)];
-        string[]? migrationIds = knownOrigin ? ["same_authored", "same_authored"] : null;
+        string[]? migrationIds = knownOrigin
+            ? ["same_authored", "same_authored"]
+            : null;
 
         // Act
         var exception = Assert.Throws<InvalidOperationException>(() =>
@@ -64,12 +73,18 @@ public sealed class SafeMigrationModelManagedDataMigrationBoundaryTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void OrdinaryOperationsWithinOneOriginDoNotResetRepetitionProtection(bool ordinarySql)
+    public void OrdinaryOperationsWithinOneOriginDoNotResetRepetitionProtection(
+        bool ordinarySql
+    )
     {
         // Arrange
         MigrationOperation ordinary = ordinarySql
-            ? new SqlOperation { Sql = "SELECT 1;", }
-            : new AlterTableOperation { Name = "other_items", Comment = "unrelated", };
+            ? new SqlOperation { Sql = "SELECT 1;" }
+            : new AlterTableOperation
+            {
+                Name = "other_items",
+                Comment = "unrelated",
+            };
 
         MigrationOperation[] operations = [Seed(), ordinary, Update(reordered: true)];
         string[] migrationIds = ["same_authored", "same_authored", "same_authored"];
@@ -90,7 +105,11 @@ public sealed class SafeMigrationModelManagedDataMigrationBoundaryTests
         MigrationOperation[] operations =
         [
             Seed(),
-            new AlterTableOperation { Name = "other_items", Comment = "unrelated", },
+            new AlterTableOperation
+            {
+                Name = "other_items",
+                Comment = "unrelated",
+            },
             Update(reordered: true),
         ];
 
@@ -125,11 +144,15 @@ public sealed class SafeMigrationModelManagedDataMigrationBoundaryTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void InvalidCertifiedProvenanceCountFailsBeforeElementAccess(bool tooManyIds)
+    public void InvalidCertifiedProvenanceCountFailsBeforeElementAccess(
+        bool tooManyIds
+    )
     {
         // Arrange
         var operations = new UnreadableOperations();
-        string[] migrationIds = tooManyIds ? ["first", "second", "third"] : ["first"];
+        string[] migrationIds = tooManyIds
+            ? ["first", "second", "third"]
+            : ["first"];
 
         // Act
         var exception = Assert.Throws<ArgumentException>(() =>
@@ -142,16 +165,53 @@ public sealed class SafeMigrationModelManagedDataMigrationBoundaryTests
 
     /// <summary>Creates one authored composite seed with distinct typed key values.</summary>
     private static SafeMigrationOperation Seed() => new(
-        new EnsureModelManagedDataIntent("items", ["Id", "Code"], ["int", "int"],
-            ["Id", "Code", "Value"], ["int", "int", "int"], new object?[,] { { 1, 2, 7 } },
-            schema: null, uniqueKeys: null), SafeMigrationPolicy.ThrowIfDifferent);
+        new EnsureModelManagedDataIntent(
+            "items",
+            ["Id", "Code"],
+            ["int", "int"],
+            ["Id", "Code", "Value"],
+            ["int", "int", "int"],
+            new object?[,] { { 1, 2, 7 } },
+            schema: null,
+            uniqueKeys: null),
+        SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Reorders predicates with their values, or selects an independently different row.</summary>
-    private static SafeMigrationOperation Update(bool reordered, bool differentRow = false) => new(
-        new UpdateModelManagedDataIntent("items", reordered ? ["Code", "Id"] : ["Id", "Code"], ["int", "int"],
-            reordered ? new object?[,] { { 2, differentRow ? 3 : 1 } }
-                : new object?[,] { { differentRow ? 3 : 1, 2 } },
-            ["Value"], ["int"], new object?[,] { { 7 } }, new object?[,] { { 8 } }, schema: null, uniqueKeys: null),
+    private static SafeMigrationOperation Update(
+        bool reordered,
+        bool differentRow = false
+    ) => new(
+        new UpdateModelManagedDataIntent(
+            "items",
+            reordered
+                ? ["Code", "Id"]
+                : ["Id", "Code"],
+            ["int", "int"],
+            reordered
+                ? new object?[,]
+                {
+                    {
+                        2,
+                        differentRow
+                            ? 3
+                            : 1,
+                    },
+                }
+                : new object?[,]
+                {
+                    {
+                        differentRow
+                            ? 3
+                            : 1,
+                        2,
+                    },
+                },
+            ["Value"],
+            ["int"],
+            new object?[,] { { 7 } },
+            new object?[,] { { 8 } },
+            schema: null,
+            uniqueKeys: null),
         SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Proves the count guard without allowing an accidental read to masquerade as validation.</summary>
@@ -164,7 +224,9 @@ public sealed class SafeMigrationModelManagedDataMigrationBoundaryTests
         public int Count => 2;
 
         /// <inheritdoc />
-        public MigrationOperation this[int index]
+        public MigrationOperation this[
+            int index
+        ]
         {
             get
             {
@@ -179,6 +241,6 @@ public sealed class SafeMigrationModelManagedDataMigrationBoundaryTests
             throw new InvalidOperationException("The provenance count must be checked before enumeration.");
 
         /// <inheritdoc />
-        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }
 }

@@ -31,7 +31,8 @@ public sealed class SafeMigrationPrerequisiteColumnsTests
         // Act
         for (var iteration = 0; iteration < count; iteration++)
         {
-            checksum += SafeMigrationPrerequisiteColumns.Local(intent).Count;
+            checksum += SafeMigrationPrerequisiteColumns.Local(intent)
+                .Count;
         }
 
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
@@ -69,14 +70,22 @@ public sealed class SafeMigrationPrerequisiteColumnsTests
     public void Local_CombinesOldAndTargetRolesWithoutChangingIdentity()
     {
         // Arrange
-        var oldExpression = SafeMigrationSql.Binary(SafeMigrationSql.Identifier("a"),
-            SafeMigrationSqlBinaryOperator.Add, SafeMigrationSql.Identifier("A"));
+        var oldExpression = SafeMigrationSql.Binary(
+            SafeMigrationSql.Identifier("a"),
+            SafeMigrationSqlBinaryOperator.Add,
+            SafeMigrationSql.Identifier("A"));
 
-        var targetExpression = SafeMigrationSql.Binary(SafeMigrationSql.Identifier("a"),
-            SafeMigrationSqlBinaryOperator.Add, SafeMigrationSql.Identifier("z"));
+        var targetExpression = SafeMigrationSql.Binary(
+            SafeMigrationSql.Identifier("a"),
+            SafeMigrationSqlBinaryOperator.Add,
+            SafeMigrationSql.Identifier("z"));
 
-        var intent = new AlterColumnIntent("rows",
-            new ExpectedColumnDefinition("value", typeof(int), true,
+        var intent = new AlterColumnIntent(
+            "rows",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(int),
+                true,
                 defaultValue: SafeMigrationDefaultValue.Sql(targetExpression)),
             new ExpectedColumnDefinition("value", typeof(int), true, computedExpression: oldExpression));
 
@@ -92,10 +101,16 @@ public sealed class SafeMigrationPrerequisiteColumnsTests
     public void Local_IndexRetainsAllDependencyRoles()
     {
         // Arrange
-        var intent = new EnsureIndexIntent(new ExpectedIndexDefinition("ix", "rows",
-            [new ExpectedIndexKeyDefinition("z"), new ExpectedIndexKeyDefinition(
-                structuredExpression: SafeMigrationSql.Identifier("a"))],
-            includedColumns: ["A"], structuredFilter: SafeMigrationSql.Identifier("z")));
+        var intent = new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "ix",
+                "rows",
+                [
+                    new ExpectedIndexKeyDefinition("z"), new ExpectedIndexKeyDefinition(
+                        structuredExpression: SafeMigrationSql.Identifier("a")),
+                ],
+                includedColumns: ["A"],
+                structuredFilter: SafeMigrationSql.Identifier("z")));
 
         // Act
         var columns = SafeMigrationPrerequisiteColumns.Local(intent);
@@ -126,17 +141,30 @@ public sealed class SafeMigrationPrerequisiteColumnsTests
     )
     {
         var plain = new ExpectedColumnDefinition("value", typeof(int), true);
-        var literal = new ExpectedColumnDefinition("value", typeof(int), true,
+        var literal = new ExpectedColumnDefinition(
+            "value",
+            typeof(int),
+            true,
             defaultValue: SafeMigrationDefaultValue.Literal(7));
 
         return scenario switch
         {
             "ensure_plain" => new EnsureColumnIntent("rows", plain),
             "ensure_literal" => new EnsureColumnIntent("rows", literal),
-            "ensure_opaque_default" => new EnsureColumnIntent("rows", new ExpectedColumnDefinition(
-                "value", typeof(int), true, defaultValue: SafeMigrationDefaultValue.Sql("legacy_function()"))),
-            "ensure_opaque_computed" => new EnsureColumnIntent("rows", new ExpectedColumnDefinition(
-                "value", typeof(int), true, computedColumnSql: "legacy_source + 1")),
+            "ensure_opaque_default" => new EnsureColumnIntent(
+                "rows",
+                new ExpectedColumnDefinition(
+                    "value",
+                    typeof(int),
+                    true,
+                    defaultValue: SafeMigrationDefaultValue.Sql("legacy_function()"))),
+            "ensure_opaque_computed" => new EnsureColumnIntent(
+                "rows",
+                new ExpectedColumnDefinition(
+                    "value",
+                    typeof(int),
+                    true,
+                    computedColumnSql: "legacy_source + 1")),
             "alter_plain" => new AlterColumnIntent("rows", plain, plain),
             "alter_missing_old" => new AlterColumnIntent("rows", plain),
             "alter_literal" => new AlterColumnIntent("rows", literal, literal),
@@ -152,10 +180,16 @@ public sealed class SafeMigrationPrerequisiteColumnsTests
     )
     {
         var plain = new ExpectedColumnDefinition("value", typeof(int), true);
-        var computed = new ExpectedColumnDefinition("value", typeof(int), true,
+        var computed = new ExpectedColumnDefinition(
+            "value",
+            typeof(int),
+            true,
             computedExpression: SafeMigrationSql.Identifier("source"));
 
-        var defaulted = new ExpectedColumnDefinition("value", typeof(int), true,
+        var defaulted = new ExpectedColumnDefinition(
+            "value",
+            typeof(int),
+            true,
             defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Identifier("source")));
 
         return scenario switch

@@ -10,7 +10,9 @@ public sealed class SqlServerCatalogCompilationBudgetTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task StrictTables_RetainAllOriginalOrdinalsWithinCompilerBudget(bool nativeBatch)
+    public async Task StrictTables_RetainAllOriginalOrdinalsWithinCompilerBudget(
+        bool nativeBatch
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(
@@ -18,33 +20,67 @@ public sealed class SqlServerCatalogCompilationBudgetTests
 
         await using var connection = new SqlServerCatalogTestConnection(nativeBatch)
         {
-            TransformOrdinals = static ordinals => ordinals.Reverse().ToArray(),
+            TransformOrdinals = static ordinals => ordinals
+                .Reverse()
+                .ToArray(),
         };
 
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
-        var plans = Enumerable.Range(0, 100).Select(index => catalog.Build(new SafeMigrationOperation(
-            new EnsureTableIntent(new ExpectedTableDefinition("expected_perf_"
-                + index.ToString("D4", CultureInfo.InvariantCulture),
-                [new ExpectedColumnDefinition("id", typeof(int), false, "int")]),
-                SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent))).ToArray();
+        var plans = Enumerable
+            .Range(0, 100)
+            .Select(index => catalog.Build(
+                new SafeMigrationOperation(
+                    new EnsureTableIntent(
+                        new ExpectedTableDefinition(
+                            "expected_perf_"
+                            + index.ToString("D4", CultureInfo.InvariantCulture),
+                            [new ExpectedColumnDefinition("id", typeof(int), false, "int")]),
+                        SafeMigrationTableMode.StrictDefinition),
+                    SafeMigrationPolicy.ThrowIfDifferent)))
+            .ToArray();
 
         var results = new SafeMigrationProviderAnalysis[plans.Length];
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, 180, plans, 0, results, CancellationToken.None);
+            connection,
+            null,
+            180,
+            plans,
+            0,
+            results,
+            CancellationToken.None);
 
         // Assert
         Assert.True(connection.RecordedStatements.Count > 4);
-        Assert.All(connection.RecordedStatements, statement => Assert.InRange(
-            Encoding.UTF8.GetByteCount(statement), 1, CompilerBudget));
+        Assert.All(
+            connection.RecordedStatements,
+            statement => Assert.InRange(
+                Encoding.UTF8.GetByteCount(statement),
+                1,
+                CompilerBudget));
 
-        Assert.Equal(Enumerable.Range(0, plans.Length).Select(State),
+        Assert.Equal(
+            Enumerable
+                .Range(0, plans.Length)
+                .Select(State),
             results.Select(static item => item.ObservedState));
-        Assert.Equal(nativeBatch ? (connection.RecordedStatements.Count + 7) / 8 : 0, connection.BatchExecutions);
-        Assert.Equal(nativeBatch ? 0 : connection.RecordedStatements.Count, connection.CommandExecutions);
+
+        Assert.Equal(
+            nativeBatch
+                ? (connection.RecordedStatements.Count + 7) / 8
+                : 0,
+            connection.BatchExecutions);
+
+        Assert.Equal(
+            nativeBatch
+                ? 0
+                : connection.RecordedStatements.Count,
+            connection.CommandExecutions);
+
         Assert.All(connection.BatchStatementCounts.SkipLast(1), count => Assert.Equal(8, count));
         Assert.All(connection.BatchPayloadBytes, bytes => Assert.InRange(bytes, 1, 4 * 1024 * 1024));
         Assert.All(connection.ObservedTimeouts, timeout => Assert.Equal(180, timeout));
@@ -56,18 +92,31 @@ public sealed class SqlServerCatalogCompilationBudgetTests
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection();
-        var plans = Enumerable.Range(0, 65).Select(index => Plan(index, delayed: false)).ToArray();
+        var plans = Enumerable
+            .Range(0, 65)
+            .Select(index => Plan(index, delayed: false))
+            .ToArray();
+
         var results = new SafeMigrationProviderAnalysis[plans.Length];
         int[] expectedWidths = [32, 32, 1];
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, null, plans, 0, results, CancellationToken.None);
+            connection,
+            null,
+            null,
+            plans,
+            0,
+            results,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(expectedWidths, connection.RecordedStatements.Select(StatementWidth));
         Assert.Equal(1, connection.BatchExecutions);
-        Assert.Equal(Enumerable.Range(0, plans.Length).Select(State),
+        Assert.Equal(
+            Enumerable
+                .Range(0, plans.Length)
+                .Select(State),
             results.Select(static item => item.ObservedState));
     }
 
@@ -80,27 +129,44 @@ public sealed class SqlServerCatalogCompilationBudgetTests
             "Server=127.0.0.1,1433;Database=compiler;User ID=sa;Password=unused;TrustServerCertificate=True");
 
         await using var connection = new SqlServerCatalogTestConnection();
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
-        var plans = Enumerable.Range(0, 65).Select(index => catalog.Build(new SafeMigrationOperation(
-            new EnsureTableIntent(new ExpectedTableDefinition("absent_perf_"
-                + index.ToString("D4", CultureInfo.InvariantCulture),
-                [new ExpectedColumnDefinition("id", typeof(int), false, "int")]),
-                SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent),
-            targetTableKnownAbsent: true)).ToArray();
+        var plans = Enumerable
+            .Range(0, 65)
+            .Select(index => catalog.Build(
+                new SafeMigrationOperation(
+                    new EnsureTableIntent(
+                        new ExpectedTableDefinition(
+                            "absent_perf_"
+                            + index.ToString("D4", CultureInfo.InvariantCulture),
+                            [new ExpectedColumnDefinition("id", typeof(int), false, "int")]),
+                        SafeMigrationTableMode.StrictDefinition),
+                    SafeMigrationPolicy.ThrowIfDifferent),
+                targetTableKnownAbsent: true))
+            .ToArray();
 
         var results = new SafeMigrationProviderAnalysis[plans.Length];
         int[] expectedWidths = [32, 32, 1];
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, null, plans, 0, results, CancellationToken.None);
+            connection,
+            null,
+            null,
+            plans,
+            0,
+            results,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(expectedWidths, connection.RecordedStatements.Select(StatementWidth));
         Assert.Equal(1, connection.BatchExecutions);
-        Assert.Equal(Enumerable.Range(0, plans.Length).Select(State),
+        Assert.Equal(
+            Enumerable
+                .Range(0, plans.Length)
+                .Select(State),
             results.Select(static item => item.ObservedState));
     }
 
@@ -116,37 +182,68 @@ public sealed class SqlServerCatalogCompilationBudgetTests
     [InlineData("unique")]
     [InlineData("check")]
     [InlineData("foreign")]
-    public void AbsenceHint_RequiresSimpleCertifiedWork(string kind)
+    public void AbsenceHint_RequiresSimpleCertifiedWork(
+        string kind
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(
             "Server=127.0.0.1,1433;Database=compiler;User ID=sa;Password=unused;TrustServerCertificate=True");
 
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
         var id = kind == "collation"
-            ? new ExpectedColumnDefinition("id", typeof(string), false, "varchar(10)",
+            ? new ExpectedColumnDefinition(
+                "id",
+                typeof(string),
+                false,
+                "varchar(10)",
                 collation: new SafeMigrationCollationIdentifier("Latin1_General_100_BIN2"))
-            : new ExpectedColumnDefinition("id", typeof(int), false, "int",
+            : new ExpectedColumnDefinition(
+                "id",
+                typeof(int),
+                false,
+                "int",
                 defaultValue: kind == "default"
-                    ? SafeMigrationDefaultValue.Literal(7) : SafeMigrationDefaultValue.None);
+                    ? SafeMigrationDefaultValue.Literal(7)
+                    : SafeMigrationDefaultValue.None);
 
         var columns = kind == "computed"
-            ? new[] { id, new ExpectedColumnDefinition("derived", typeof(int), true, "int",
-                computedColumnSql: "[id] + 1") } : [id];
+            ? new[]
+            {
+                id,
+                new ExpectedColumnDefinition(
+                    "derived",
+                    typeof(int),
+                    true,
+                    "int",
+                    computedColumnSql: "[id] + 1"),
+            }
+            : [id];
 
-        var definition = new ExpectedTableDefinition("hint_items", columns,
-            primaryKey: kind == "primary" ? new ExpectedPrimaryKeyDefinition("PK_hint", "hint_items", ["id"]) : null,
+        var definition = new ExpectedTableDefinition(
+            "hint_items",
+            columns,
+            primaryKey: kind == "primary"
+                ? new ExpectedPrimaryKeyDefinition("PK_hint", "hint_items", ["id"])
+                : null,
             uniqueConstraints: kind == "unique"
-                ? [new ExpectedUniqueConstraintDefinition("UQ_hint", "hint_items", ["id"])] : [],
+                ? [new ExpectedUniqueConstraintDefinition("UQ_hint", "hint_items", ["id"])]
+                : [],
             checkConstraints: kind == "check"
-                ? [new ExpectedCheckConstraintDefinition("CK_hint", "hint_items", "[id] > 0")] : [],
+                ? [new ExpectedCheckConstraintDefinition("CK_hint", "hint_items", "[id] > 0")]
+                : [],
             foreignKeys: kind == "foreign"
-                ? [new ExpectedForeignKeyDefinition("FK_hint", "hint_items", ["id"], "parent", ["id"])] : []);
+                ? [new ExpectedForeignKeyDefinition("FK_hint", "hint_items", ["id"], "parent", ["id"])]
+                : []);
 
-        var operation = new SafeMigrationOperation(new EnsureTableIntent(definition,
-            SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent);
+        var operation = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                definition,
+                SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var plan = catalog.Build(operation, targetTableKnownAbsent: kind != "existing");
@@ -165,31 +262,57 @@ public sealed class SqlServerCatalogCompilationBudgetTests
             "Server=127.0.0.1,1433;Database=compiler;User ID=sa;Password=unused;TrustServerCertificate=True");
 
         await using var connection = new SqlServerCatalogTestConnection();
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
-        var plans = Enumerable.Range(0, 100).Select(index => catalog.Build(new SafeMigrationOperation(
-            new EnsureTableIntent(new ExpectedTableDefinition((index % 2 == 0 ? "cheap_" : "complex_")
-                + index.ToString("D4", CultureInfo.InvariantCulture),
-                [new ExpectedColumnDefinition("id", typeof(int), false, "int")]),
-                SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent),
-            targetTableKnownAbsent: index % 2 == 0)).ToArray();
+        var plans = Enumerable
+            .Range(0, 100)
+            .Select(index => catalog.Build(
+                new SafeMigrationOperation(
+                    new EnsureTableIntent(
+                        new ExpectedTableDefinition(
+                            (index % 2 == 0
+                                ? "cheap_"
+                                : "complex_")
+                            + index.ToString("D4", CultureInfo.InvariantCulture),
+                            [new ExpectedColumnDefinition("id", typeof(int), false, "int")]),
+                        SafeMigrationTableMode.StrictDefinition),
+                    SafeMigrationPolicy.ThrowIfDifferent),
+                targetTableKnownAbsent: index % 2 == 0))
+            .ToArray();
 
         var results = new SafeMigrationProviderAnalysis[plans.Length];
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, null, plans, 0, results, CancellationToken.None);
+            connection,
+            null,
+            null,
+            plans,
+            0,
+            results,
+            CancellationToken.None);
 
         // Assert
-        Assert.Contains(connection.RecordedStatements, statement => statement.Contains(
-                "cheap_", StringComparison.Ordinal)
-            && statement.Contains("complex_", StringComparison.Ordinal));
+        Assert.Contains(
+            connection.RecordedStatements,
+            statement => statement.Contains(
+                    "cheap_",
+                    StringComparison.Ordinal)
+                && statement.Contains("complex_", StringComparison.Ordinal));
 
-        Assert.All(connection.RecordedStatements, statement => Assert.InRange(
-            Encoding.UTF8.GetByteCount(statement), 1, CompilerBudget));
+        Assert.All(
+            connection.RecordedStatements,
+            statement => Assert.InRange(
+                Encoding.UTF8.GetByteCount(statement),
+                1,
+                CompilerBudget));
 
-        Assert.Equal(Enumerable.Range(0, plans.Length).Select(State),
+        Assert.Equal(
+            Enumerable
+                .Range(0, plans.Length)
+                .Select(State),
             results.Select(static item => item.ObservedState));
     }
 
@@ -199,8 +322,11 @@ public sealed class SqlServerCatalogCompilationBudgetTests
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection();
-        var conservative = new SqlServerSafeMigrationRuntimePlan("N'missing'", "0",
-            SafeMigrationRepairCapability.None, "0");
+        var conservative = new SqlServerSafeMigrationRuntimePlan(
+            "N'missing'",
+            "0",
+            SafeMigrationRepairCapability.None,
+            "0");
 
         var cheap = conservative with { IsSimpleAbsentTableClassifier = true };
         var copy = cheap with { };
@@ -208,7 +334,13 @@ public sealed class SqlServerCatalogCompilationBudgetTests
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, null, [cheap, conservative, copy], 0, results, CancellationToken.None);
+            connection,
+            null,
+            null,
+            [cheap, conservative, copy],
+            0,
+            results,
+            CancellationToken.None);
 
         // Assert
         Assert.False(conservative.IsSimpleAbsentTableClassifier);
@@ -226,26 +358,40 @@ public sealed class SqlServerCatalogCompilationBudgetTests
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection();
-        var plans = Enumerable.Range(0, 33).Select(index => Plan(index, delayed: true) with
-        {
-            StateExpression = "N'missing' /*" + new string('x', CompilerBudget + 1) + "*/",
-        }).ToArray();
+        var plans = Enumerable
+            .Range(0, 33)
+            .Select(index => Plan(index, delayed: true) with
+            {
+                StateExpression = "N'missing' /*" + new string('x', CompilerBudget + 1) + "*/",
+            })
+            .ToArray();
 
         var results = new SafeMigrationProviderAnalysis[plans.Length];
         int[] expectedWidths = [32, 1];
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, null, plans, 0, results, CancellationToken.None);
+            connection,
+            null,
+            null,
+            plans,
+            0,
+            results,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(2, connection.RecordedStatements.Count);
-        Assert.Equal(expectedWidths, connection.RecordedParameters.Select(parameters => parameters.Count(
-            static parameter => parameter.ParameterName.StartsWith("@doka_ordinal", StringComparison.Ordinal))));
+        Assert.Equal(
+            expectedWidths,
+            connection.RecordedParameters.Select(parameters => parameters.Count(static parameter =>
+                parameter.ParameterName.StartsWith("@doka_ordinal", StringComparison.Ordinal))));
 
         Assert.True(Encoding.UTF8.GetByteCount(connection.RecordedStatements[0]) > CompilerBudget);
         Assert.Equal(1, connection.BatchExecutions);
-        Assert.Equal(Enumerable.Range(0, plans.Length).Select(State),
+        Assert.Equal(
+            Enumerable
+                .Range(0, plans.Length)
+                .Select(State),
             results.Select(static item => item.ObservedState));
     }
 
@@ -255,7 +401,9 @@ public sealed class SqlServerCatalogCompilationBudgetTests
     [InlineData(-1)]
     [InlineData(0)]
     [InlineData(1)]
-    public async Task UnicodeBoundary_UsesEncodedStatementBytes(int delta)
+    public async Task UnicodeBoundary_UsesEncodedStatementBytes(
+        int delta
+    )
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection();
@@ -273,15 +421,31 @@ public sealed class SqlServerCatalogCompilationBudgetTests
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, null, [first, second], 0, results, CancellationToken.None);
+            connection,
+            null,
+            null,
+            [first, second],
+            0,
+            results,
+            CancellationToken.None);
 
         // Assert
-        Assert.Equal(delta <= 0 ? 1 : 2, connection.RecordedStatements.Count);
-        Assert.True(connection.RecordedStatements[0].Length
+        Assert.Equal(
+            delta <= 0
+                ? 1
+                : 2,
+            connection.RecordedStatements.Count);
+
+        Assert.True(
+            connection.RecordedStatements[0].Length
             < Encoding.UTF8.GetByteCount(connection.RecordedStatements[0]));
 
-        Assert.All(connection.RecordedStatements, statement => Assert.InRange(
-            Encoding.UTF8.GetByteCount(statement), 1, CompilerBudget));
+        Assert.All(
+            connection.RecordedStatements,
+            statement => Assert.InRange(
+                Encoding.UTF8.GetByteCount(statement),
+                1,
+                CompilerBudget));
 
         Assert.Equal(1, connection.BatchExecutions);
         Assert.Equal(new[] { State(0), State(1) }, results.Select(static item => item.ObservedState));
@@ -295,25 +459,41 @@ public sealed class SqlServerCatalogCompilationBudgetTests
     {
         // Arrange
         await using var connection = new SqlServerCatalogTestConnection();
-        var plans = Enumerable.Range(0, 3).Select(index => Plan(index, delayed: false) with
-        {
-            StateExpression = "N'missing' /*" + new string('x', 100_000) + "*/",
-        }).ToArray();
+        var plans = Enumerable
+            .Range(0, 3)
+            .Select(index => Plan(index, delayed: false) with
+            {
+                StateExpression = "N'missing' /*" + new string('x', 100_000) + "*/",
+            })
+            .ToArray();
 
         var results = new SafeMigrationProviderAnalysis[plans.Length];
 
         // Act
         await SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-            connection, null, null, plans, 0, results, CancellationToken.None);
+            connection,
+            null,
+            null,
+            plans,
+            0,
+            results,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(3, connection.RecordedStatements.Count);
         Assert.All(connection.RecordedStatements, statement => Assert.Equal(1, StatementWidth(statement)));
-        Assert.All(connection.RecordedStatements, statement => Assert.InRange(
-            Encoding.UTF8.GetByteCount(statement), CompilerBudget + 1, 4 * 1024 * 1024));
+        Assert.All(
+            connection.RecordedStatements,
+            statement => Assert.InRange(
+                Encoding.UTF8.GetByteCount(statement),
+                CompilerBudget + 1,
+                4 * 1024 * 1024));
 
         Assert.Equal(1, connection.BatchExecutions);
-        Assert.Equal(Enumerable.Range(0, plans.Length).Select(State),
+        Assert.Equal(
+            Enumerable
+                .Range(0, plans.Length)
+                .Select(State),
             results.Select(static item => item.ObservedState));
     }
 
@@ -329,7 +509,10 @@ public sealed class SqlServerCatalogCompilationBudgetTests
     [InlineData(false, "foreign")]
     [InlineData(true, "extra")]
     [InlineData(false, "extra")]
-    public async Task InvalidResultsAcrossCompilerSplit_RejectAndDispose(bool nativeBatch, string fault)
+    public async Task InvalidResultsAcrossCompilerSplit_RejectAndDispose(
+        bool nativeBatch,
+        string fault
+    )
     {
         // Arrange
         var injected = false;
@@ -355,43 +538,77 @@ public sealed class SqlServerCatalogCompilationBudgetTests
             },
         };
 
-        var plans = Enumerable.Range(0, 10).Select(index => Plan(index, delayed: false) with
-        {
-            StateExpression = "N'missing' /*" + new string('x', 24_000) + "*/",
-        }).ToArray();
+        var plans = Enumerable
+            .Range(0, 10)
+            .Select(index => Plan(index, delayed: false) with
+            {
+                StateExpression = "N'missing' /*" + new string('x', 24_000) + "*/",
+            })
+            .ToArray();
 
         var results = new SafeMigrationProviderAnalysis[plans.Length];
 
         // Act
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             SqlServerSafeMigrationProviderAnalyzer.ReadCatalogCaptureAsync(
-                connection, null, null, plans, 0, results, CancellationToken.None));
+                connection,
+                null,
+                null,
+                plans,
+                0,
+                results,
+                CancellationToken.None));
 
         // Assert
         Assert.True(injected);
-        Assert.Contains(fault is "missing" or "extra" ? "inconsistent row count" : "invalid ordinal",
-            error.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            fault is "missing" or "extra"
+                ? "inconsistent row count"
+                : "invalid ordinal",
+            error.Message,
+            StringComparison.Ordinal);
 
         Assert.True(connection.RecordedStatements.Count >= 3);
-        Assert.Equal(Enumerable.Range(0, 4).Select(State), results.Take(4).Select(static item => item.ObservedState));
-        Assert.Equal(nativeBatch ? 1 : 0, connection.BatchesDisposed);
+        Assert.Equal(Enumerable
+                .Range(0, 4)
+                .Select(State),
+            results
+                .Take(4)
+                .Select(static item => item.ObservedState));
+
+        Assert.Equal(
+            nativeBatch
+                ? 1
+                : 0,
+            connection.BatchesDisposed);
     }
 
     /// <summary>Creates distinct contracts without changing the synthetic reader's result classification.</summary>
-    private static SqlServerSafeMigrationRuntimePlan Plan(int ordinal, bool delayed)
+    private static SqlServerSafeMigrationRuntimePlan Plan(
+        int ordinal,
+        bool delayed
+    )
         => new("N'missing'", "0", SafeMigrationRepairCapability.None, "0")
         {
             RequiresDelayedBinding = delayed,
-            DifferentDifference = new SafeMigrationFacetDifference("probe", "expected", ordinal.ToString(
-                CultureInfo.InvariantCulture)),
+            DifferentDifference = new SafeMigrationFacetDifference(
+                "probe",
+                "expected",
+                ordinal.ToString(
+                    CultureInfo.InvariantCulture)),
         };
 
     /// <summary>Counts only direct UNION branches, never nested SELECT clauses.</summary>
-    private static int StatementWidth(string statement)
-        => statement.Split(SafeMigrationCatalogQueryLimits.Separator, StringSplitOptions.None).Length;
+    private static int StatementWidth(
+        string statement
+    )
+        => statement.Split(SafeMigrationCatalogQueryLimits.Separator)
+            .Length;
 
     /// <summary>Mirrors the transport fixture's ordinal-dependent synthetic observation.</summary>
-    private static SafeMigrationObservedState State(int ordinal)
+    private static SafeMigrationObservedState State(
+        int ordinal
+    )
         => (ordinal % 3) switch
         {
             0 => SafeMigrationObservedState.Missing,

@@ -26,24 +26,24 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         // inherited object with the same visible shape is neither a safe alias
         // nor an absent target, because SafeMigrations cannot own its lifecycle.
         return Plan(
-            $"CASE WHEN NOT {tableExists} OR NOT ({additionalPrerequisite}) THEN 'prerequisite_missing' "
-            + $"WHEN {exists} AND {matching} THEN 'matching' "
-            + $"WHEN {exists} THEN 'different' "
-            + $"WHEN ({semanticAlias}) THEN 'matching' "
-            + $"WHEN ({nonCanonicalAlias}) THEN 'different' "
-            + $"WHEN ({singletonConflict}) THEN 'different' "
-            + $"WHEN ({namespaceCollision}) THEN 'different' "
-            + $"WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END",
-            satisfied) with
-        {
-            DiagnosticEvidenceExpression = diagnosticEvidence,
-            MatchedObjectNameExpression = semanticCandidates is null
-                ? null
-                : ResolveMatchingObjectName(
-                    matching,
-                    Literal(name),
-                    semanticCandidates),
-        };
+                $"CASE WHEN NOT {tableExists} OR NOT ({additionalPrerequisite}) THEN 'prerequisite_missing' "
+                + $"WHEN {exists} AND {matching} THEN 'matching' "
+                + $"WHEN {exists} THEN 'different' "
+                + $"WHEN ({semanticAlias}) THEN 'matching' "
+                + $"WHEN ({nonCanonicalAlias}) THEN 'different' "
+                + $"WHEN ({singletonConflict}) THEN 'different' "
+                + $"WHEN ({namespaceCollision}) THEN 'different' "
+                + $"WHEN {dataBlocked} THEN 'data_blocked' ELSE 'missing' END",
+                satisfied) with
+            {
+                DiagnosticEvidenceExpression = diagnosticEvidence,
+                MatchedObjectNameExpression = semanticCandidates is null
+                    ? null
+                    : ResolveMatchingObjectName(
+                        matching,
+                        Literal(name),
+                        semanticCandidates),
+            };
     }
 
     private PostgreSqlSafeMigrationRuntimePlan BuildDropConstraint(
@@ -124,28 +124,35 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     ) => ConstraintRowsWithoutName(table, schema, type)
         + $" AND {namePredicate}"
         + StandardConstraintSemantics(requireLocalIdentity)
-        + (type == 'u' ? UniqueNullSemanticsMatch() : string.Empty)
-        + $" AND ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord) "
+        + (type == 'u'
+            ? UniqueNullSemanticsMatch()
+            : string.Empty)
+        + " AND ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY AS key(attnum, ord) "
         + "JOIN pg_catalog.pg_attribute a ON a.attrelid = co.conrelid AND a.attnum = key.attnum "
         + $"ORDER BY key.ord) = {columnsExpression}";
 
     private static string StandardConstraintSemantics(
-        bool requireLocalIdentity = true
-    )
+            bool requireLocalIdentity = true
+        )
+
         // JSON projection keeps one catalog query compatible with PostgreSQL
         // 14-18 while still rejecting semantics introduced by newer servers.
-        => (requireLocalIdentity ? LocalConstraintIdentity() : string.Empty)
+        => (requireLocalIdentity
+                ? LocalConstraintIdentity()
+                : string.Empty)
             + " AND NOT co.condeferrable AND NOT co.condeferred AND co.convalidated"
             + " AND COALESCE((to_jsonb(co) ->> 'conenforced')::boolean, TRUE)"
             + " AND NOT COALESCE((to_jsonb(co) ->> 'conperiod')::boolean, FALSE)";
 
     private static string LocalConstraintIdentity()
+
         // Inherited and partition-derived constraints can enforce the same
         // expression while remaining owned by another table. Treating them as
         // local would make a later parent change invalidate our postcondition.
         => " AND co.conparentid = 0 AND co.conislocal AND co.coninhcount = 0";
 
     private static string UniqueNullSemanticsMatch()
+
         // PostgreSQL 15 added indnullsnotdistinct. An ordinary EF unique
         // constraint retains the older/default NULLS DISTINCT behavior.
         => " AND NOT COALESCE((SELECT (to_jsonb(i) ->> 'indnullsnotdistinct')::boolean "
@@ -198,7 +205,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         char type,
         bool requireLocalIdentity = false
     ) => ConstraintBase(table, schema, name, type)
-        + (requireLocalIdentity ? LocalConstraintIdentity() : string.Empty)
+        + (requireLocalIdentity
+            ? LocalConstraintIdentity()
+            : string.Empty)
         + ")";
 
     private string AnyConstraint(

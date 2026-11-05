@@ -10,7 +10,9 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task GeneratedIndexQualificationSurvivesIndependentRenameAnalysis(bool includeRename)
+    public async Task GeneratedIndexQualificationSurvivesIndependentRenameAnalysis(
+        bool includeRename
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -19,13 +21,23 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("unrelated", Table);
         builder.EnsureColumn(Table, CaseColumn(stored: false), SafeMigrationPolicy.ThrowIfDifferent);
-        builder.EnsureIndex(new ExpectedIndexDefinition("ix_generated_scope_result", Table,
-            [new ExpectedIndexKeyDefinition("has_descendants")]), SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                "ix_generated_scope_result",
+                Table,
+                [new ExpectedIndexKeyDefinition("has_descendants")]),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
         AddGeneratedAnalysisScopeRename(builder, includeRename);
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-independent-rename-index-scope"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-independent-rename-index-scope"),
+                CancellationToken.None);
 
         var failure = await Record.ExceptionAsync(async () =>
         {
@@ -33,23 +45,35 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         });
 
-        var postflight = await context.GetService<ISafeMigrationRunner>().VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-independent-rename-index-verify"), CancellationToken.None);
+        var postflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-independent-rename-index-verify"),
+                CancellationToken.None);
 
-        var rows = failure is null ? await CountExpectedCaseRowsAsync(connectionString,
-            cancellationToken: CancellationToken.None) : -1;
+        var rows = failure is null
+            ? await CountExpectedCaseRowsAsync(
+                connectionString,
+                cancellationToken: CancellationToken.None)
+            : -1;
 
-        var indexes = await ScalarIntAsync(connectionString,
+        var indexes = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() "
             + $"AND TABLE_NAME = '{Table}' AND INDEX_NAME = 'ix_generated_scope_result';",
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.True(preflight.Status == SafeMigrationReportStatus.Ready, DescribeGeneratedReport(preflight));
+
         // WHY: The independent rename and rebound index must really apply;
         // a skipped source probe would not exercise the analyzer scope seam.
-        Assert.All(preflight.Assessments,
+        Assert.All(
+            preflight.Assessments,
             static assessment => Assert.Equal(SafeMigrationAction.Apply, assessment.Action));
+
         Assert.Null(failure);
         Assert.True(postflight.Status == SafeMigrationReportStatus.Ready, DescribeGeneratedReport(postflight));
         Assert.Equal(5, rows);
@@ -61,7 +85,9 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task GeneratedDependencyExpirySurvivesIndependentRenameAnalysis(bool includeRename)
+    public async Task GeneratedDependencyExpirySurvivesIndependentRenameAnalysis(
+        bool includeRename
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -73,20 +99,29 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         AddGeneratedAnalysisScopeRename(builder, includeRename);
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("generated-independent-rename-dependency-scope"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("generated-independent-rename-dependency-scope"),
+                CancellationToken.None);
 
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
         var expiredOwners = typeof(MySqlSafeMigrationProviderAnalyzer)
             .GetField("_expiredGeneratedDependencyOwners", BindingFlags.Instance | BindingFlags.NonPublic)
             ?.GetValue(analyzer) as HashSet<(string? Schema, string Table)>;
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
-        var retainedSource = await ScalarIntAsync(connectionString,
+        var retainedSource = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + $"AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'left_bound';", cancellationToken: CancellationToken.None);
+            + $"AND TABLE_NAME = '{Table}' AND COLUMN_NAME = 'left_bound';",
+            cancellationToken: CancellationToken.None);
 
         var rows = await CountExpectedCaseRowsAsync(connectionString, cancellationToken: CancellationToken.None);
 
@@ -105,9 +140,14 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
         Assert.Equal(SafeMigrationAction.RejectUnsupported, preflight.Assessments[1].Action);
-        Assert.True(preflight.Assessments[1].AnalysisCode
-            is "generated_column_drop_dependency" or "generated_column_drop_unproven");
-        Assert.Equal("doka_sm_unsupported", Assert.IsType<SafeMigrationExecutionException>(failure).GuardCode);
+        Assert.True(
+            preflight.Assessments[1].AnalysisCode
+                is "generated_column_drop_dependency" or "generated_column_drop_unproven");
+
+        Assert.Equal("doka_sm_unsupported",
+            Assert.IsType<SafeMigrationExecutionException>(failure)
+                .GuardCode);
+
         Assert.Equal(1, retainedSource);
         Assert.Equal(5, rows);
     }
@@ -121,16 +161,22 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             $"CREATE TABLE `{Table}` (id int NOT NULL PRIMARY KEY, left_bound bigint NOT NULL, "
             + "right_bound bigint NOT NULL, unrelated int NULL); "
             + $"CREATE TABLE `{AnalysisScopeSource}` (id int NOT NULL PRIMARY KEY, value int NOT NULL); "
-            + $"INSERT INTO `{AnalysisScopeSource}` (id, value) VALUES (1, 7);", cancellationToken: cancellationToken);
+            + $"INSERT INTO `{AnalysisScopeSource}` (id, value) VALUES (1, 7);",
+            cancellationToken: cancellationToken);
+
         await SeedCaseRowsAsync(connectionString, cancellationToken: cancellationToken);
     }
 
     /// <summary>Forces a real rebound EnsureIndex analysis on a separate renamed native owner.</summary>
-    private static void AddGeneratedAnalysisScopeRename(MigrationBuilder builder, bool includeRename)
+    private static void AddGeneratedAnalysisScopeRename(
+        MigrationBuilder builder,
+        bool includeRename
+    )
     {
         if (!includeRename)
         {
@@ -138,7 +184,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         }
 
         builder.RenameTableIfExists(AnalysisScopeSource, newName: AnalysisScopeTarget);
-        builder.EnsureIndex(new ExpectedIndexDefinition("ix_generated_scope_renamed_value", AnalysisScopeTarget,
-            [new ExpectedIndexKeyDefinition("value")]), SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                "ix_generated_scope_renamed_value",
+                AnalysisScopeTarget,
+                [new ExpectedIndexKeyDefinition("value")]),
+            SafeMigrationPolicy.ThrowIfDifferent);
     }
 }

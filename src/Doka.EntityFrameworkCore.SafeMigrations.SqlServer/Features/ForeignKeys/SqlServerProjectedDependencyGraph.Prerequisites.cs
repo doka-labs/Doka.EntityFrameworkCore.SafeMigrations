@@ -112,6 +112,7 @@ internal sealed partial class SqlServerProjectedDependencyGraph
     )
     {
         var dependentId = GetTable(table.Table, table.Schema);
+
         // WHY: SQL Server caps FK keys at 32 columns. A fixed stack buffer
         // avoids allocating requested id vectors for every inline assessment.
         Span<int> columnIds = stackalloc int[32];
@@ -137,7 +138,10 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                 return false;
             }
 
-            var principal = principalId == dependentId ? table : _createdTables.GetValueOrDefault(principalId);
+            var principal = principalId == dependentId
+                ? table
+                : _createdTables.GetValueOrDefault(principalId);
+
             if (principalId == dependentId
                 && !(table.PrimaryKey?.Columns.SequenceEqual(foreignKey.PrincipalColumns) == true
                     || table.UniqueConstraints.Any(key => key.Columns.SequenceEqual(foreignKey.PrincipalColumns))))
@@ -218,14 +222,16 @@ internal sealed partial class SqlServerProjectedDependencyGraph
         {
             return new ColumnSafety(
                 definition.IsRowVersion
-                || definition.StoreType is { } type
-                && (type.Equals("rowversion", StringComparison.OrdinalIgnoreCase)
-                    || type.Equals("timestamp", StringComparison.OrdinalIgnoreCase)),
+                || (definition.StoreType is { } type
+                    && (type.Equals("rowversion", StringComparison.OrdinalIgnoreCase)
+                        || type.Equals("timestamp", StringComparison.OrdinalIgnoreCase))),
                 definition.IsNullable,
                 definition.DefaultValue.Kind != SafeMigrationDefaultValueKind.None);
         }
 
-        return _columns.TryGetValue(new ColumnKey(GetTable(table, schema), column), out var live) ? live : null;
+        return _columns.TryGetValue(new ColumnKey(GetTable(table, schema), column), out var live)
+            ? live
+            : null;
     }
 
     /// <summary>Binds one exact dependent alternative to a surviving native principal operand.</summary>

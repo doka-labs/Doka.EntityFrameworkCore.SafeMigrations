@@ -7,12 +7,16 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void SchemaGlobalIndexRenameRetainsIndependentDestinationConflict(bool completeTable)
+    public void SchemaGlobalIndexRenameRetainsIndependentDestinationConflict(
+        bool completeTable
+    )
     {
         // Arrange
         var projection = ReviewNamespaceProjection(completeTable);
-        var live = ReviewNamespaceRenameAnalysis(SafeMigrationObservedState.Missing,
-            targetExists: true, sourceSupported: false);
+        var live = ReviewNamespaceRenameAnalysis(
+            SafeMigrationObservedState.Missing,
+            targetExists: true,
+            sourceSupported: false);
 
         // Act
         var analysis = ReviewNamespaceRename(projection, live);
@@ -28,15 +32,19 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("table")]
     [InlineData("primary")]
     [InlineData("unique")]
-    public void SchemaGlobalIndexRenameDetectsProjectedCrossOwnerRelation(string kind)
+    public void SchemaGlobalIndexRenameDetectsProjectedCrossOwnerRelation(
+        string kind
+    )
     {
         // Arrange
         var projection = ReviewNamespaceProjection(completeTable: true);
 
         ReviewNamespaceCreateOccupant(projection, kind);
 
-        var live = ReviewNamespaceRenameAnalysis(SafeMigrationObservedState.Matching,
-            targetExists: false, sourceSupported: true);
+        var live = ReviewNamespaceRenameAnalysis(
+            SafeMigrationObservedState.Matching,
+            targetExists: false,
+            sourceSupported: true);
 
         // Act
         var analysis = ReviewNamespaceRename(projection, live);
@@ -53,15 +61,20 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("foreign", true)]
     [InlineData("primary", false)]
     [InlineData("unique", false)]
-    public void SchemaGlobalIndexRenameDoesNotInventConstraintRelationNames(string kind, bool backingNames)
+    public void SchemaGlobalIndexRenameDoesNotInventConstraintRelationNames(
+        string kind,
+        bool backingNames
+    )
     {
         // Arrange
         var projection = ReviewNamespaceProjection(completeTable: true, backingNames: backingNames);
 
         ReviewNamespaceCreateOccupant(projection, kind);
 
-        var live = ReviewNamespaceRenameAnalysis(SafeMigrationObservedState.Matching,
-            targetExists: false, sourceSupported: true);
+        var live = ReviewNamespaceRenameAnalysis(
+            SafeMigrationObservedState.Matching,
+            targetExists: false,
+            sourceSupported: true);
 
         // Act
         var analysis = ReviewNamespaceRename(projection, live);
@@ -80,8 +93,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         ReviewNamespaceCreateOccupant(projection, "index");
         ObserveAccepted(projection, new DropIndexIntent("target", "other_items"), SafeMigrationObservedState.Matching);
 
-        var live = ReviewNamespaceRenameAnalysis(SafeMigrationObservedState.Different,
-            targetExists: true, sourceSupported: true);
+        var live = ReviewNamespaceRenameAnalysis(
+            SafeMigrationObservedState.Different,
+            targetExists: true,
+            sourceSupported: true);
 
         // Act
         var analysis = ReviewNamespaceRename(projection, live);
@@ -97,7 +112,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("table")]
     [InlineData("primary")]
     [InlineData("unique")]
-    public void SchemaGlobalIndexRenameRejectsRecreatedDestinationAfterDrop(string kind)
+    public void SchemaGlobalIndexRenameRejectsRecreatedDestinationAfterDrop(
+        string kind
+    )
     {
         // Arrange
         var projection = ReviewNamespaceProjection(completeTable: false);
@@ -106,8 +123,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         ObserveAccepted(projection, new DropIndexIntent("target", "other_items"), SafeMigrationObservedState.Matching);
         ReviewNamespaceCreateOccupant(projection, kind, owner: "replacement_items");
 
-        var live = ReviewNamespaceRenameAnalysis(SafeMigrationObservedState.Different,
-            targetExists: true, sourceSupported: true);
+        var live = ReviewNamespaceRenameAnalysis(
+            SafeMigrationObservedState.Different,
+            targetExists: true,
+            sourceSupported: true);
 
         // Act
         var analysis = ReviewNamespaceRename(projection, live);
@@ -122,15 +141,20 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(true, "archive")]
     [InlineData(false, null)]
-    public void IndexRenamePreservesSchemaAndOwnerNamespaceIsolation(bool schemaScoped, string? otherSchema)
+    public void IndexRenamePreservesSchemaAndOwnerNamespaceIsolation(
+        bool schemaScoped,
+        string? otherSchema
+    )
     {
         // Arrange
         var projection = ReviewNamespaceProjection(completeTable: false, schemaScoped: schemaScoped);
 
         ReviewNamespaceCreateOccupant(projection, "index", schema: otherSchema);
 
-        var live = ReviewNamespaceRenameAnalysis(SafeMigrationObservedState.Matching,
-            targetExists: false, sourceSupported: true);
+        var live = ReviewNamespaceRenameAnalysis(
+            SafeMigrationObservedState.Matching,
+            targetExists: false,
+            sourceSupported: true);
 
         // Act
         var analysis = ReviewNamespaceRename(projection, live);
@@ -155,14 +179,23 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var projection = new SafeMigrationPreflightProjection(
             objectIdentityNormalizer: new ReviewIndexNamespaceNormalizer());
 
+        ObserveAccepted(
+            projection,
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "source",
+                    "items",
+                    [new ExpectedIndexKeyDefinition(column: "id")])),
+            SafeMigrationObservedState.Matching,
+            "source");
 
-        ObserveAccepted(projection, new EnsureIndexIntent(new ExpectedIndexDefinition("source", "items",
-            [new ExpectedIndexKeyDefinition(column: "id")])), SafeMigrationObservedState.Matching, "source");
         ReviewNamespaceCreateOccupant(projection, "index");
         ObserveAccepted(projection, new DropIndexIntent("target", "other_items"), SafeMigrationObservedState.Matching);
 
-        var live = ReviewNamespaceRenameAnalysis(SafeMigrationObservedState.Different,
-            targetExists: true, sourceSupported);
+        var live = ReviewNamespaceRenameAnalysis(
+            SafeMigrationObservedState.Different,
+            targetExists: true,
+            sourceSupported);
 
         // Act
         var analysis = ReviewNamespaceRename(projection, live);
@@ -181,12 +214,16 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void IndexRenameUsesFreshCreatedSourceInsteadOfOldWrongKind(bool completeTable)
+    public void IndexRenameUsesFreshCreatedSourceInsteadOfOldWrongKind(
+        bool completeTable
+    )
     {
         // Arrange
         var projection = ReviewNamespaceProjection(completeTable);
-        var live = ReviewNamespaceRenameAnalysis(SafeMigrationObservedState.Different,
-            targetExists: false, sourceSupported: false);
+        var live = ReviewNamespaceRenameAnalysis(
+            SafeMigrationObservedState.Different,
+            targetExists: false,
+            sourceSupported: false);
 
         // Act
         var analysis = ReviewNamespaceRename(projection, live);
@@ -201,7 +238,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("index")]
     [InlineData("primary")]
     [InlineData("unique")]
-    public void SchemaGlobalIndexRenameUsesDroppedOwnerIndexProvenance(string kind)
+    public void SchemaGlobalIndexRenameUsesDroppedOwnerIndexProvenance(
+        string kind
+    )
     {
         // Arrange
         var projection = ReviewNamespaceProjection(completeTable: false);
@@ -209,8 +248,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         ReviewNamespaceCreateOccupant(projection, kind);
         ObserveAccepted(projection, new DropTableIntent("other_items"), SafeMigrationObservedState.Matching);
 
-        var live = ReviewNamespaceRenameAnalysis(SafeMigrationObservedState.Different,
-            targetExists: true, sourceSupported: true);
+        var live = ReviewNamespaceRenameAnalysis(
+            SafeMigrationObservedState.Different,
+            targetExists: true,
+            sourceSupported: true);
 
         // Act
         var analysis = ReviewNamespaceRename(projection, live);
@@ -229,8 +270,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         ObserveAccepted(projection, new DropIndexIntent("source", "items"), SafeMigrationObservedState.Matching);
         ReviewNamespaceCreateOccupant(projection, "index");
 
-        var live = ReviewNamespaceRenameAnalysis(SafeMigrationObservedState.Different,
-            targetExists: true, sourceSupported: true);
+        var live = ReviewNamespaceRenameAnalysis(
+            SafeMigrationObservedState.Different,
+            targetExists: true,
+            sourceSupported: true);
 
         // Act
         var analysis = ReviewNamespaceRename(projection, live);
@@ -244,8 +287,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     public void IndexSourceEligibilityCopyPreservesDestinationAndPhysicalIdentity()
     {
         // Arrange
-        var original = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.None, false, "test_source_kind")
+        var original = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.None,
+            false,
+            "test_source_kind")
         {
             RenameTargetExists = true,
             RenameIntermediateTargetExists = false,
@@ -272,17 +318,27 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         bool backingNames = true
     )
     {
-        var projection = new SafeMigrationPreflightProjection(objectIdentityNormalizer:
+        var projection = new SafeMigrationPreflightProjection(
+            objectIdentityNormalizer:
             new ReviewIndexNamespaceNormalizer(schemaScoped, backingNames));
 
         if (completeTable)
         {
-            Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("items", [Column("id")]),
-                SafeMigrationTableMode.StrictDefinition));
+            Apply(
+                projection,
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition("items", [Column("id")]),
+                    SafeMigrationTableMode.StrictDefinition));
         }
 
-        ObserveAccepted(projection, new EnsureIndexIntent(new ExpectedIndexDefinition("source", "items",
-            [new ExpectedIndexKeyDefinition(column: "id")])), SafeMigrationObservedState.Missing);
+        ObserveAccepted(
+            projection,
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "source",
+                    "items",
+                    [new ExpectedIndexKeyDefinition(column: "id")])),
+            SafeMigrationObservedState.Missing);
 
         return projection;
     }
@@ -297,21 +353,39 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     {
         if (kind == "index")
         {
-            ObserveAccepted(projection, new EnsureIndexIntent(new ExpectedIndexDefinition("target", owner,
-                [new ExpectedIndexKeyDefinition(column: "id")], schema)), SafeMigrationObservedState.Missing);
+            ObserveAccepted(
+                projection,
+                new EnsureIndexIntent(
+                    new ExpectedIndexDefinition(
+                        "target",
+                        owner,
+                        [new ExpectedIndexKeyDefinition(column: "id")],
+                        schema)),
+                SafeMigrationObservedState.Missing);
 
             return;
         }
 
-        var table = kind == "table" ? "target" : owner;
-        var definition = new ExpectedTableDefinition(table, [Column("id")], schema,
-            primaryKey: kind == "primary" ? new ExpectedPrimaryKeyDefinition("target", table, ["id"], schema) : null,
+        var table = kind == "table"
+            ? "target"
+            : owner;
+
+        var definition = new ExpectedTableDefinition(
+            table,
+            [Column("id")],
+            schema,
+            primaryKey: kind == "primary"
+                ? new ExpectedPrimaryKeyDefinition("target", table, ["id"], schema)
+                : null,
             uniqueConstraints: kind == "unique"
-                ? [new ExpectedUniqueConstraintDefinition("target", table, ["id"], schema)] : [],
+                ? [new ExpectedUniqueConstraintDefinition("target", table, ["id"], schema)]
+                : [],
             checkConstraints: kind == "check"
-                ? [ExpectedCheckConstraintDefinition.FromExpression("target", table, Positive("id"), schema)] : [],
+                ? [ExpectedCheckConstraintDefinition.FromExpression("target", table, Positive("id"), schema)]
+                : [],
             foreignKeys: kind == "foreign"
-                ? [new ExpectedForeignKeyDefinition("target", table, ["id"], "parents", ["id"], schema)] : []);
+                ? [new ExpectedForeignKeyDefinition("target", table, ["id"], "parents", ["id"], schema)]
+                : []);
 
         Apply(projection, new EnsureTableIntent(definition, SafeMigrationTableMode.StrictDefinition));
     }
@@ -320,8 +394,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     private static SafeMigrationProviderAnalysis ReviewNamespaceRename(
         SafeMigrationPreflightProjection projection,
         SafeMigrationProviderAnalysis live
-    ) => projection.Project(new SafeMigrationOperation(new RenameIndexIntent("source", "items", "target"),
-        SafeMigrationPolicy.ThrowIfDifferent), live);
+    ) => projection.Project(
+        new SafeMigrationOperation(
+            new RenameIndexIntent("source", "items", "target"),
+            SafeMigrationPolicy.ThrowIfDifferent),
+        live);
 
     /// <summary>Creates independent immutable destination and source-kind certificates.</summary>
     private static SafeMigrationProviderAnalysis ReviewNamespaceRenameAnalysis(
@@ -335,7 +412,10 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     };
 
     /// <summary>Models verified PostgreSQL or SQLite schema scope without broadening object identity.</summary>
-    private sealed class ReviewIndexNamespaceNormalizer(bool schemaScoped = true, bool backingNames = true)
+    private sealed class ReviewIndexNamespaceNormalizer(
+        bool schemaScoped = true,
+        bool backingNames = true
+    )
         : ISafeMigrationProviderObjectIdentityNormalizer
     {
         /// <inheritdoc />
@@ -348,12 +428,18 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         public bool KeyConstraintsUseSchemaScopedBackingIndexNames => backingNames;
 
         /// <inheritdoc />
-        public string NormalizeIdentifier(string identifier) => identifier;
+        public string NormalizeIdentifier(
+            string identifier
+        ) => identifier;
 
         /// <inheritdoc />
-        public string? NormalizeSchema(string? schema) => schema ?? "public";
+        public string? NormalizeSchema(
+            string? schema
+        ) => schema ?? "public";
 
         /// <inheritdoc />
-        public bool IsObjectIdentityMismatch(SafeMigrationProviderAnalysis analysis) => false;
+        public bool IsObjectIdentityMismatch(
+            SafeMigrationProviderAnalysis analysis
+        ) => false;
     }
 }

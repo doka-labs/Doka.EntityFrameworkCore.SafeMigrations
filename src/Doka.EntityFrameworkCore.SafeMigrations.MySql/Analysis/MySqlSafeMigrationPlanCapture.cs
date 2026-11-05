@@ -17,35 +17,59 @@ internal sealed class MySqlSafeMigrationPlanCapture
     private static readonly IReadOnlyDictionary<MySqlTableIdentity, IReadOnlyList<ExpectedIndexDefinition>>
         s_emptyUniqueIndexCatalog = new Dictionary<MySqlTableIdentity, IReadOnlyList<ExpectedIndexDefinition>>();
 
+    private bool _completed;
+
     private SafeMigrationOperation[]? _expected;
+    private MySqlBackfillConstraintCatalog? _expectedBackfillConstraints;
+    private MySqlGeneratedColumnDependencyContractCatalog? _expectedGeneratedColumnDependencies;
     private IReadOnlySet<SafeMigrationOperation>? _expectedPrimaryKeyReplacements;
 
     private IReadOnlyDictionary<(string? Schema, string Table), SafeMigrationExpectedTableConstraints>?
         _expectedTableConstraints;
 
-    private IReadOnlyDictionary<(string? Schema, string Table), SafeMigrationExpectedTableConstraints>?
-        _generationTableConstraints;
+    private MySqlExpectedUniqueIndexCatalog? _expectedUniqueIndexes;
+    private MySqlBackfillConstraintCatalog? _generationBackfillConstraints;
+
+    private IReadOnlyList<string>? _generationDatabaseQualifiers;
+    private MySqlBackfillConstraintCatalog? _generationFoldedBackfillConstraints;
+    private MySqlGeneratedColumnDependencyContractCatalog? _generationFoldedGeneratedColumnDependencies;
 
     private IReadOnlyDictionary<(string? Schema, string Table), SafeMigrationExpectedTableConstraints>?
         _generationFoldedTableConstraints;
 
-    private IReadOnlyList<string>? _generationDatabaseQualifiers;
-    private MySqlExpectedUniqueIndexCatalog? _generationUniqueIndexes;
-    private MySqlExpectedUniqueIndexCatalog? _generationFoldedUniqueIndexes;
-    private MySqlExpectedUniqueIndexCatalog? _expectedUniqueIndexes;
-    private MySqlBackfillConstraintCatalog? _expectedBackfillConstraints;
-    private MySqlBackfillConstraintCatalog? _generationBackfillConstraints;
-    private MySqlBackfillConstraintCatalog? _generationFoldedBackfillConstraints;
-    private MySqlGeneratedColumnDependencyContractCatalog? _expectedGeneratedColumnDependencies;
-    private MySqlGeneratedColumnDependencyContractCatalog? _generationGeneratedColumnDependencies;
-    private MySqlGeneratedColumnDependencyContractCatalog? _generationFoldedGeneratedColumnDependencies;
     private bool _generationFoldedTableContractInvalid;
-    private MySqlSafeMigrationRuntimePlan?[]? _plans;
+    private MySqlExpectedUniqueIndexCatalog? _generationFoldedUniqueIndexes;
+    private MySqlGeneratedColumnDependencyContractCatalog? _generationGeneratedColumnDependencies;
+
+    private IReadOnlyDictionary<(string? Schema, string Table), SafeMigrationExpectedTableConstraints>?
+        _generationTableConstraints;
+
+    private MySqlExpectedUniqueIndexCatalog? _generationUniqueIndexes;
     private bool _includeAnalysisEvidence;
     private bool _includeTransitionEvidence;
-    private bool _completed;
-    private Dictionary<int, MySqlSafeMigrationRuntimeDiagnostic>? _runtimeDiagnostics;
+    private MySqlSafeMigrationRuntimePlan?[]? _plans;
     private int _runtimeDiagnosticCapacity;
+    private Dictionary<int, MySqlSafeMigrationRuntimeDiagnostic>? _runtimeDiagnostics;
+
+    /// <summary>Gets whether an incomplete analysis capture is active.</summary>
+    public bool IsActive => _expected is not null && !_completed;
+
+    /// <summary>Gets whether runtime SQL generation owns an ordered transition catalog.</summary>
+    public bool HasGenerationContract =>
+        _generationTableConstraints is not null
+        && _generationUniqueIndexes is not null
+        && _generationDatabaseQualifiers is not null;
+
+    /// <summary>Gets every explicit database identity required by runtime generation.</summary>
+    public IReadOnlyList<string> GenerationDatabaseQualifiers =>
+        _generationDatabaseQualifiers
+        ?? throw new InvalidOperationException("No MySQL SafeMigrations runtime generation scope is active.");
+
+    /// <summary>Gets whether the active capture requests detailed diagnostic SQL.</summary>
+    public bool IncludeAnalysisEvidence => IsActive && _includeAnalysisEvidence;
+
+    /// <summary>Gets whether the active capture requests physical transition SQL.</summary>
+    public bool IncludeTransitionEvidence => IsActive && _includeTransitionEvidence;
 
     /// <summary>Records authored native-guard context only while the outer generator owns the stream.</summary>
     /// <param name="diagnostic">The exact handler ordinal and bounded correlation.</param>
@@ -80,26 +104,6 @@ internal sealed class MySqlSafeMigrationPlanCapture
 
         return null;
     }
-
-    /// <summary>Gets whether an incomplete analysis capture is active.</summary>
-    public bool IsActive => _expected is not null && !_completed;
-
-    /// <summary>Gets whether runtime SQL generation owns an ordered transition catalog.</summary>
-    public bool HasGenerationContract =>
-        _generationTableConstraints is not null
-        && _generationUniqueIndexes is not null
-        && _generationDatabaseQualifiers is not null;
-
-    /// <summary>Gets every explicit database identity required by runtime generation.</summary>
-    public IReadOnlyList<string> GenerationDatabaseQualifiers =>
-        _generationDatabaseQualifiers
-        ?? throw new InvalidOperationException("No MySQL SafeMigrations runtime generation scope is active.");
-
-    /// <summary>Gets whether the active capture requests detailed diagnostic SQL.</summary>
-    public bool IncludeAnalysisEvidence => IsActive && _includeAnalysisEvidence;
-
-    /// <summary>Gets whether the active capture requests physical transition SQL.</summary>
-    public bool IncludeTransitionEvidence => IsActive && _includeTransitionEvidence;
 
     /// <summary>Requests independent replacement rows only for a planned old-PK removal in active analysis.</summary>
     /// <param name="operation">The exact immutable target being captured.</param>
@@ -196,7 +200,9 @@ internal sealed class MySqlSafeMigrationPlanCapture
         _plans = new MySqlSafeMigrationRuntimePlan?[_expected.Length];
         _expectedUniqueIndexes = expectedUniqueIndexes;
         _expectedPrimaryKeyReplacements = primaryKeyReplacements
-            ?? CreatePrimaryKeyReplacementTargets(operations, expectedUniqueIndexes.CurrentDatabase,
+            ?? CreatePrimaryKeyReplacementTargets(
+                operations,
+                expectedUniqueIndexes.CurrentDatabase,
                 expectedUniqueIndexes.TableComparer);
 
         _expectedTableConstraints = expectedTableConstraints;
@@ -247,7 +253,10 @@ internal sealed class MySqlSafeMigrationPlanCapture
 
         _runtimeDiagnosticCapacity = safeOperations.Length;
         var databaseQualifiers = MySqlSafeMigrationCatalogSqlBuilder.GetDatabaseQualifiers(operations);
-        var guardedDatabase = databaseQualifiers.Length == 1 ? databaseQualifiers[0] : null;
+        var guardedDatabase = databaseQualifiers.Length == 1
+            ? databaseQualifiers[0]
+            : null;
+
         var tableConstraints = SafeMigrationExpectedTableConstraints.FromOperations(
             operations,
             schema => MySqlTableIdentity.NormalizeDatabase(schema, guardedDatabase),
@@ -356,9 +365,9 @@ internal sealed class MySqlSafeMigrationPlanCapture
             new MySqlTableIdentityComparer(comparer));
 
         foreach (var table in SafeMigrationExpectedCatalog.Create(
-                     operations,
-                     schema => MySqlTableIdentity.NormalizeDatabase(schema, currentDatabase),
-                     comparer))
+            operations,
+            schema => MySqlTableIdentity.NormalizeDatabase(schema, currentDatabase),
+            comparer))
         {
             if (table.UniqueIndexes.Count == 0)
             {
@@ -404,7 +413,9 @@ internal sealed class MySqlSafeMigrationPlanCapture
     /// <returns>Whether complete-stream declarations constrain this backfill.</returns>
     public bool RequiresNullFreeBackfill(
         SafeMigrationOperation operation
-    ) => (IsActive ? _expectedBackfillConstraints : _generationBackfillConstraints)?.RequiresNullFreeRows(operation)
+    ) => (IsActive
+            ? _expectedBackfillConstraints
+            : _generationBackfillConstraints)?.RequiresNullFreeRows(operation)
         == true;
 
     /// <summary>Gets an additional backfill obligation selected only by the actual runtime owner mode.</summary>
@@ -429,7 +440,9 @@ internal sealed class MySqlSafeMigrationPlanCapture
             throw new InvalidOperationException("No MySQL SafeMigrations capture or generation scope is active.");
         }
 
-        var catalog = IsActive ? _expectedGeneratedColumnDependencies : _generationGeneratedColumnDependencies;
+        var catalog = IsActive
+            ? _expectedGeneratedColumnDependencies
+            : _generationGeneratedColumnDependencies;
 
         return catalog?.Get(operation);
     }
@@ -439,7 +452,9 @@ internal sealed class MySqlSafeMigrationPlanCapture
     /// <returns>The folded candidate for native-guarded selection, or null during native-qualified analysis.</returns>
     internal MySqlGeneratedColumnDependencyContract? GetGenerationFoldedGeneratedColumnDependencyContract(
         SafeMigrationOperation operation
-    ) => IsActive ? null : _generationFoldedGeneratedColumnDependencies?.Get(operation);
+    ) => IsActive
+        ? null
+        : _generationFoldedGeneratedColumnDependencies?.Get(operation);
 
     /// <summary>Gets this operation's independent whole model candidate without granting prefix authority.</summary>
     internal MySqlGeneratedColumnDependencyContract? GetGenerationGeneratedColumnModelCandidate(
@@ -452,7 +467,9 @@ internal sealed class MySqlSafeMigrationPlanCapture
             throw new InvalidOperationException("No MySQL SafeMigrations capture or generation scope is active.");
         }
 
-        var catalog = IsActive ? _expectedGeneratedColumnDependencies : _generationGeneratedColumnDependencies;
+        var catalog = IsActive
+            ? _expectedGeneratedColumnDependencies
+            : _generationGeneratedColumnDependencies;
 
         return catalog?.GetModelCandidate(operation);
     }
@@ -460,7 +477,9 @@ internal sealed class MySqlSafeMigrationPlanCapture
     /// <summary>Gets only the folded-owner model alternative for native runtime profile selection.</summary>
     internal MySqlGeneratedColumnDependencyContract? GetGenerationFoldedGeneratedColumnModelCandidate(
         SafeMigrationOperation operation
-    ) => IsActive ? null : _generationFoldedGeneratedColumnDependencies?.GetModelCandidate(operation);
+    ) => IsActive
+        ? null
+        : _generationFoldedGeneratedColumnDependencies?.GetModelCandidate(operation);
 
     /// <summary>Gets the folded strict-table alternative without assuming the executing server's profile.</summary>
     internal MySqlTableContractAlternative? GetGenerationTableAlternative(
@@ -698,15 +717,20 @@ internal sealed class MySqlSafeMigrationPlanCapture
                 case DropPrimaryKeyIntent drop:
                     (dropped ??= new HashSet<MySqlTableIdentity>(new MySqlTableIdentityComparer(tableComparer))).Add(
                         MySqlTableIdentity.Create(drop.Table, drop.Schema, currentDatabase));
+
                     break;
                 case EnsurePrimaryKeyIntent ensure when dropped is not null:
-                    if (dropped.Remove(MySqlTableIdentity.Create(
-                            ensure.Definition.Table, ensure.Definition.Schema, currentDatabase)))
+                    if (dropped.Remove(
+                        MySqlTableIdentity.Create(
+                            ensure.Definition.Table,
+                            ensure.Definition.Schema,
+                            currentDatabase)))
                     {
                         // WHY: This is probe selection, not acceptance. Core
                         // independently requires the actual removal decision
                         // before the captured rows can authorize a new key.
-                        (result ??= new HashSet<SafeMigrationOperation>(ReferenceEqualityComparer.Instance)).Add(operation);
+                        (result ??= new HashSet<SafeMigrationOperation>(ReferenceEqualityComparer.Instance)).Add(
+                            operation);
                     }
 
                     break;
@@ -714,13 +738,21 @@ internal sealed class MySqlSafeMigrationPlanCapture
                     dropped.Remove(MySqlTableIdentity.Create(drop.Table, drop.Schema, currentDatabase));
                     break;
                 case EnsureTableIntent ensure when dropped is not null:
-                    dropped.Remove(MySqlTableIdentity.Create(
-                        ensure.Definition.Table, ensure.Definition.Schema, currentDatabase));
+                    dropped.Remove(
+                        MySqlTableIdentity.Create(
+                            ensure.Definition.Table,
+                            ensure.Definition.Schema,
+                            currentDatabase));
+
                     break;
                 case RenameTableIntent rename when dropped is not null:
                     dropped.Remove(MySqlTableIdentity.Create(rename.Name, rename.Schema, currentDatabase));
-                    dropped.Remove(MySqlTableIdentity.Create(rename.NewName ?? rename.Name,
-                        rename.NewSchema ?? rename.Schema, currentDatabase));
+                    dropped.Remove(
+                        MySqlTableIdentity.Create(
+                            rename.NewName ?? rename.Name,
+                            rename.NewSchema ?? rename.Schema,
+                            currentDatabase));
+
                     break;
             }
         }
@@ -782,6 +814,13 @@ internal sealed class MySqlSafeMigrationPlanCapture
             _owner = owner;
         }
 
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            _owner?.Clear();
+            _owner = null;
+        }
+
         /// <summary>Completes the capture and returns every plan in operation order.</summary>
         /// <returns>The complete ordered runtime-plan batch.</returns>
         public MySqlSafeMigrationRuntimePlan[] Complete()
@@ -789,13 +828,6 @@ internal sealed class MySqlSafeMigrationPlanCapture
             ObjectDisposedException.ThrowIf(_owner is null, this);
 
             return _owner.Complete();
-        }
-
-        /// <inheritdoc />
-        public void Dispose()
-        {
-            _owner?.Clear();
-            _owner = null;
         }
     }
 
@@ -870,7 +902,9 @@ internal sealed class MySqlTableIdentityComparer(StringComparer tableComparer) :
         MySqlTableIdentity identity
     ) => HashCode.Combine(
         tableComparer.GetHashCode(identity.Table),
-        identity.Database is null ? 0 : StringComparer.Ordinal.GetHashCode(identity.Database));
+        identity.Database is null
+            ? 0
+            : StringComparer.Ordinal.GetHashCode(identity.Database));
 }
 
 internal readonly record struct MySqlTableIdentity(
@@ -887,5 +921,7 @@ internal readonly record struct MySqlTableIdentity(
     public static string? NormalizeDatabase(
         string? database,
         string? currentDatabase
-    ) => database is not null && StringComparer.Ordinal.Equals(database, currentDatabase) ? null : database;
+    ) => database is not null && StringComparer.Ordinal.Equals(database, currentDatabase)
+        ? null
+        : database;
 }

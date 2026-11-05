@@ -39,5 +39,7 @@ public sealed class SafeMigrationCollationIdentifier : IEquatable<SafeMigrationC
     /// <inheritdoc />
     public override int GetHashCode() => HashCode.Combine(
         StringComparer.Ordinal.GetHashCode(Name),
-        Schema is null ? 0 : StringComparer.Ordinal.GetHashCode(Schema));
+        Schema is null
+            ? 0
+            : StringComparer.Ordinal.GetHashCode(Schema));
 }

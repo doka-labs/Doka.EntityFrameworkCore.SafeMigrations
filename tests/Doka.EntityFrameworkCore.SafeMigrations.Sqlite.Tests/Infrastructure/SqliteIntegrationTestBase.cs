@@ -5,7 +5,9 @@ public abstract class SqliteIntegrationTestBase
     /// <summary>Opens an owned in-memory connection and disposes it if startup fails.</summary>
     /// <param name="cancellationToken">The caller's cancellation for connection startup.</param>
     /// <returns>The open connection whose disposal belongs to the caller.</returns>
-    internal static async Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken)
+    internal static async Task<SqliteConnection> OpenConnectionAsync(
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 

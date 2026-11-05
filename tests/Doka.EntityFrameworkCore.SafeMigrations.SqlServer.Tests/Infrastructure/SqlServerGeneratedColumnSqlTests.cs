@@ -14,19 +14,37 @@ public sealed class SqlServerGeneratedColumnSqlTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void ComputedCharacterCollationsRetainNativeTokenGrammar(bool declared, bool explicitCollation)
+    public void ComputedCharacterCollationsRetainNativeTokenGrammar(
+        bool declared,
+        bool explicitCollation
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
-        var definition = new ExpectedColumnDefinition("Normalized", typeof(string), true, "nvarchar(80)",
-            collation: explicitCollation ? new SafeMigrationCollationIdentifier("Latin1_General_100_CI_AS") : null,
+        var definition = new ExpectedColumnDefinition(
+            "Normalized",
+            typeof(string),
+            true,
+            "nvarchar(80)",
+            collation: explicitCollation
+                ? new SafeMigrationCollationIdentifier("Latin1_General_100_CI_AS")
+                : null,
             computedColumnSql: "LOWER([Code])");
 
         var intent = declared
-            ? (SafeMigrationIntent)new EnsureTableIntent(new ExpectedTableDefinition("generated_nodes",
-                [new ExpectedColumnDefinition("Code", typeof(string), true, "nvarchar(80)",
-                    collation: new SafeMigrationCollationIdentifier("Latin1_General_100_BIN2")), definition]),
+            ? (SafeMigrationIntent)new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "generated_nodes",
+                    [
+                        new ExpectedColumnDefinition(
+                            "Code",
+                            typeof(string),
+                            true,
+                            "nvarchar(80)",
+                            collation: new SafeMigrationCollationIdentifier("Latin1_General_100_BIN2")),
+                        definition,
+                    ]),
                 SafeMigrationTableMode.StrictDefinition)
             : new EnsureColumnIntent("generated_nodes", definition);
 
@@ -51,17 +69,31 @@ public sealed class SqlServerGeneratedColumnSqlTests
     [InlineData("Latin1 General 100 BIN2", null)]
     [InlineData("Latin1_General_100_BIN2--", null)]
     [InlineData("Latin1_General_100_BIN2", "dbo")]
-    public void ComputedCharacterOperandsRejectUnvalidatedCollationTokens(string name, string? schema)
+    public void ComputedCharacterOperandsRejectUnvalidatedCollationTokens(
+        string name,
+        string? schema
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
-        var definition = new ExpectedColumnDefinition("Normalized", typeof(string), true, "nvarchar(80)",
+        var definition = new ExpectedColumnDefinition(
+            "Normalized",
+            typeof(string),
+            true,
+            "nvarchar(80)",
             computedColumnSql: "LOWER([Code])");
 
-        var authored = new ExpectedTableDefinition("generated_nodes",
-            [new ExpectedColumnDefinition("Code", typeof(string), true, "nvarchar(80)",
-                collation: new SafeMigrationCollationIdentifier(name, schema))]);
+        var authored = new ExpectedTableDefinition(
+            "generated_nodes",
+            [
+                new ExpectedColumnDefinition(
+                    "Code",
+                    typeof(string),
+                    true,
+                    "nvarchar(80)",
+                    collation: new SafeMigrationCollationIdentifier(name, schema)),
+            ]);
 
         // Act
         var sql = catalog.BuildProjectedComputedKeyProofSql("generated_nodes", null, definition, authored, 7);
@@ -77,13 +109,21 @@ public sealed class SqlServerGeneratedColumnSqlTests
     [Theory]
     [InlineData("Latin1_General_100_BIN2;WAITFOR DELAY", null)]
     [InlineData("Latin1_General_100_BIN2", "dbo")]
-    public void ComputedKeyProofRejectsUnvalidatedOutputCollation(string name, string? schema)
+    public void ComputedKeyProofRejectsUnvalidatedOutputCollation(
+        string name,
+        string? schema
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
-        var definition = new ExpectedColumnDefinition("Normalized", typeof(string), true, "nvarchar(80)",
-            collation: new SafeMigrationCollationIdentifier(name, schema), computedColumnSql: "LOWER([Code])");
+        var definition = new ExpectedColumnDefinition(
+            "Normalized",
+            typeof(string),
+            true,
+            "nvarchar(80)",
+            collation: new SafeMigrationCollationIdentifier(name, schema),
+            computedColumnSql: "LOWER([Code])");
 
         // Act
         var sql = catalog.BuildProjectedComputedKeyProofSql("generated_nodes", null, definition, null, 7);
@@ -99,27 +139,47 @@ public sealed class SqlServerGeneratedColumnSqlTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ComputedKeyProofPreservesValidatedCharacterCollations(bool explicitOperandCollation)
+    public void ComputedKeyProofPreservesValidatedCharacterCollations(
+        bool explicitOperandCollation
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
-        var definition = new ExpectedColumnDefinition("Normalized", typeof(string), true, "nvarchar(80)",
+        var definition = new ExpectedColumnDefinition(
+            "Normalized",
+            typeof(string),
+            true,
+            "nvarchar(80)",
             collation: new SafeMigrationCollationIdentifier("Latin1_General_100_CI_AS"),
             computedColumnSql: "LOWER([Code])");
 
-        var authored = new ExpectedTableDefinition("generated_nodes",
-            [new ExpectedColumnDefinition("Code", typeof(string), true, "nvarchar(80)",
-                collation: explicitOperandCollation
-                    ? new SafeMigrationCollationIdentifier("Latin1_General_100_BIN2") : null)]);
+        var authored = new ExpectedTableDefinition(
+            "generated_nodes",
+            [
+                new ExpectedColumnDefinition(
+                    "Code",
+                    typeof(string),
+                    true,
+                    "nvarchar(80)",
+                    collation: explicitOperandCollation
+                        ? new SafeMigrationCollationIdentifier("Latin1_General_100_BIN2")
+                        : null),
+            ]);
 
         // Act
         var sql = catalog.BuildProjectedComputedKeyProofSql("generated_nodes", null, definition, authored, 7);
 
         // Assert
         Assert.Contains("COLLATE Latin1_General_100_CI_AS", sql, StringComparison.Ordinal);
-        Assert.Contains("COLLATE " + (explicitOperandCollation ? "Latin1_General_100_BIN2" : "DATABASE_DEFAULT"),
-            sql, StringComparison.Ordinal);
+        Assert.Contains(
+            "COLLATE "
+            + (explicitOperandCollation
+                ? "Latin1_General_100_BIN2"
+                : "DATABASE_DEFAULT"),
+            sql,
+            StringComparison.Ordinal);
+
         Assert.DoesNotContain("COLLATE [", sql, StringComparison.Ordinal);
     }
 
@@ -128,7 +188,9 @@ public sealed class SqlServerGeneratedColumnSqlTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void GeneratedFlagUsesNativeDefinitionAndStorageComparison(bool stored)
+    public void GeneratedFlagUsesNativeDefinitionAndStorageComparison(
+        bool stored
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
@@ -136,13 +198,22 @@ public sealed class SqlServerGeneratedColumnSqlTests
         var definition = Flag(stored);
 
         // Act
-        var plan = catalog.Build(new SafeMigrationOperation(
-            new EnsureColumnIntent("generated_nodes", definition), SafeMigrationPolicy.ThrowIfDifferent));
+        var plan = catalog.Build(
+            new SafeMigrationOperation(
+                new EnsureColumnIntent("generated_nodes", definition),
+                SafeMigrationPolicy.ThrowIfDifferent));
 
         // Assert
         Assert.False(plan.IsStaticallyUnsupported);
         Assert.Contains("sys.computed_columns", plan.StateExpression, StringComparison.Ordinal);
-        Assert.Contains("is_persisted = " + (stored ? "1" : "0"), plan.StateExpression, StringComparison.Ordinal);
+        Assert.Contains(
+            "is_persisted = "
+            + (stored
+                ? "1"
+                : "0"),
+            plan.StateExpression,
+            StringComparison.Ordinal);
+
         Assert.Contains("Latin1_General_100_BIN2", plan.StateExpression, StringComparison.Ordinal);
         Assert.Contains("STRING_AGG", plan.CatalogPreambleSql, StringComparison.Ordinal);
         Assert.DoesNotContain("SELECT TOP (0)", plan.CatalogPreambleSql, StringComparison.Ordinal);
@@ -163,7 +234,10 @@ public sealed class SqlServerGeneratedColumnSqlTests
     [InlineData("COALESCE([L],1)", "computed_column_nullability_unproven")]
     [InlineData("TRUE", "computed_expression_unproven")]
     [InlineData("FALSE", "computed_expression_unproven")]
-    public void UnprovenRequiredGeneratedExpressionsFailClosed(string sql, string code)
+    public void UnprovenRequiredGeneratedExpressionsFailClosed(
+        string sql,
+        string code
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
@@ -171,8 +245,10 @@ public sealed class SqlServerGeneratedColumnSqlTests
         var definition = new ExpectedColumnDefinition("Flag", typeof(bool), false, "bit", computedColumnSql: sql);
 
         // Act
-        var plan = catalog.Build(new SafeMigrationOperation(
-            new EnsureColumnIntent("generated_nodes", definition), SafeMigrationPolicy.ThrowIfDifferent));
+        var plan = catalog.Build(
+            new SafeMigrationOperation(
+                new EnsureColumnIntent("generated_nodes", definition),
+                SafeMigrationPolicy.ThrowIfDifferent));
 
         // Assert
         Assert.True(plan.IsStaticallyUnsupported);
@@ -186,18 +262,24 @@ public sealed class SqlServerGeneratedColumnSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
-        var definition = new ExpectedIndexDefinition("IX_generated_nodes", "generated_nodes",
+        var definition = new ExpectedIndexDefinition(
+            "IX_generated_nodes",
+            "generated_nodes",
             [new ExpectedIndexKeyDefinition("HasChildren"), new ExpectedIndexKeyDefinition("R")]);
 
         // Act
-        var plan = catalog.Build(new SafeMigrationOperation(
-            new EnsureIndexIntent(definition), SafeMigrationPolicy.ThrowIfDifferent));
+        var plan = catalog.Build(
+            new SafeMigrationOperation(
+                new EnsureIndexIntent(definition),
+                SafeMigrationPolicy.ThrowIfDifferent));
 
         // Assert
         Assert.Contains("IsDeterministic", plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
         Assert.Contains("IsPrecise", plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
         Assert.Contains("IsIndexable", plan.StateEvaluationGuardExpression, StringComparison.Ordinal);
-        Assert.DoesNotContain("MAX(CONVERT(int, c.is_computed)) = 0", plan.StateExpression,
+        Assert.DoesNotContain(
+            "MAX(CONVERT(int, c.is_computed)) = 0",
+            plan.StateExpression,
             StringComparison.Ordinal);
     }
 
@@ -208,13 +290,15 @@ public sealed class SqlServerGeneratedColumnSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
-        var table = new ExpectedTableDefinition("generated_nodes",
+        var table = new ExpectedTableDefinition(
+            "generated_nodes",
             [new ExpectedColumnDefinition("Id", typeof(int), false, "int"), Flag()]);
 
         // Act
-        var plan = catalog.Build(new SafeMigrationOperation(
-            new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition),
-            SafeMigrationPolicy.ThrowIfDifferent));
+        var plan = catalog.Build(
+            new SafeMigrationOperation(
+                new EnsureTableIntent(table, SafeMigrationTableMode.StrictDefinition),
+                SafeMigrationPolicy.ThrowIfDifferent));
 
         // Assert
         Assert.False(plan.IsStaticallyUnsupported);
@@ -251,12 +335,18 @@ public sealed class SqlServerGeneratedColumnSqlTests
         var catalog = CreateCatalog(context);
         const string source = "2147483648 / 2147483647";
         var expression = ParseRequired(source);
-        var definition = new ExpectedColumnDefinition("Ratio", typeof(decimal), true, "decimal(38,0)",
-            computedExpression: expression) { CapturedComputedSql = source, };
+        var definition = new ExpectedColumnDefinition(
+            "Ratio",
+            typeof(decimal),
+            true,
+            "decimal(38,0)",
+            computedExpression: expression) { CapturedComputedSql = source };
 
         // Act
-        var plan = catalog.Build(new SafeMigrationOperation(
-            new EnsureColumnIntent("generated_nodes", definition), SafeMigrationPolicy.ThrowIfDifferent));
+        var plan = catalog.Build(
+            new SafeMigrationOperation(
+                new EnsureColumnIntent("generated_nodes", definition),
+                SafeMigrationPolicy.ThrowIfDifferent));
 
         // Assert
         Assert.False(plan.IsStaticallyUnsupported);
@@ -269,19 +359,27 @@ public sealed class SqlServerGeneratedColumnSqlTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void BooleanKeywordCheckSourcesRemainUnsupported(bool captured)
+    public void BooleanKeywordCheckSourcesRemainUnsupported(
+        bool captured
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
         var definition = captured
-            ? ExpectedCheckConstraintDefinition.FromCapturedExpression("CK_true", "generated_nodes",
-                SafeMigrationSql.Literal(true), "TRUE", null)
+            ? ExpectedCheckConstraintDefinition.FromCapturedExpression(
+                "CK_true",
+                "generated_nodes",
+                SafeMigrationSql.Literal(true),
+                "TRUE",
+                null)
             : new ExpectedCheckConstraintDefinition("CK_true", "generated_nodes", "TRUE");
 
         // Act
-        var plan = catalog.Build(new SafeMigrationOperation(
-            new EnsureCheckConstraintIntent(definition), SafeMigrationPolicy.ThrowIfDifferent));
+        var plan = catalog.Build(
+            new SafeMigrationOperation(
+                new EnsureCheckConstraintIntent(definition),
+                SafeMigrationPolicy.ThrowIfDifferent));
 
         // Assert
         Assert.True(plan.IsStaticallyUnsupported);
@@ -293,23 +391,32 @@ public sealed class SqlServerGeneratedColumnSqlTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void BooleanDefaultProofRespectsSourceProvenance(bool structured)
+    public void BooleanDefaultProofRespectsSourceProvenance(
+        bool structured
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
-        var value = structured ? SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(true))
+        var value = structured
+            ? SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(true))
             : SafeMigrationDefaultValue.Sql("TRUE");
 
         var definition = new ExpectedColumnDefinition("Flag", typeof(bool), false, "bit", defaultValue: value);
 
         // Act
-        var plan = catalog.Build(new SafeMigrationOperation(
-            new EnsureColumnIntent("generated_nodes", definition), SafeMigrationPolicy.ThrowIfDifferent));
+        var plan = catalog.Build(
+            new SafeMigrationOperation(
+                new EnsureColumnIntent("generated_nodes", definition),
+                SafeMigrationPolicy.ThrowIfDifferent));
 
         // Assert
         Assert.Equal(!structured, plan.IsStaticallyUnsupported);
-        Assert.Equal(structured ? null : "default_expression_unproven", plan.UnsupportedCode);
+        Assert.Equal(
+            structured
+                ? null
+                : "default_expression_unproven",
+            plan.UnsupportedCode);
     }
 
     /// <summary>Native floating-point tokens cannot acquire an exact integer projection certificate.</summary>
@@ -321,7 +428,10 @@ public sealed class SqlServerGeneratedColumnSqlTests
     [InlineData("[Value]>=1e0", false)]
     [InlineData("[Value]>=1E0", false)]
     [InlineData("2147483648/2147483647>1", false)]
-    public void IntegerCheckProjectionDoesNotEraseNativeFloatingTokens(string source, bool supported)
+    public void IntegerCheckProjectionDoesNotEraseNativeFloatingTokens(
+        string source,
+        bool supported
+    )
     {
         // Arrange
         var definition = new ExpectedCheckConstraintDefinition("CK_value", "generated_nodes", source);
@@ -335,16 +445,29 @@ public sealed class SqlServerGeneratedColumnSqlTests
         Assert.Equal(supported, actual);
     }
 
-    private static SqlServerSafeMigrationCatalogSqlBuilder CreateCatalog(DbContext context)
+    private static SqlServerSafeMigrationCatalogSqlBuilder CreateCatalog(
+        DbContext context
+    )
         => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
-    private static SafeMigrationSqlExpression ParseRequired(string source)
+    private static SafeMigrationSqlExpression ParseRequired(
+        string source
+    )
         => SafeMigrationSqlExpressionParser.TryParse(source, out var expression)
-            ? expression : throw new InvalidOperationException("The test fixture expression must parse.");
+            ? expression
+            : throw new InvalidOperationException("The test fixture expression must parse.");
 
     /// <summary>Creates the isolated overflow-guarded finite Boolean flag contract.</summary>
-    internal static ExpectedColumnDefinition Flag(bool stored = false)
-        => new("HasChildren", typeof(bool), false, "bit", computedColumnSql:
+    internal static ExpectedColumnDefinition Flag(
+        bool stored = false
+    )
+        => new(
+            "HasChildren",
+            typeof(bool),
+            false,
+            "bit",
+            computedColumnSql:
             "CONVERT(bit, CASE WHEN [R] > CASE WHEN [L] = 9223372036854775807 "
-            + "THEN [L] ELSE [L] + 1 END THEN 1 ELSE 0 END)", isStored: stored);
+            + "THEN [L] ELSE [L] + 1 END THEN 1 ELSE 0 END)",
+            isStored: stored);
 }

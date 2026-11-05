@@ -8,6 +8,7 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
     )
     {
         builder.Append('[');
+
         // WHY: The first member determines separator placement in the generated ordered array.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -157,7 +158,7 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
                 depth++;
             }
             else if (current == ')'
-                     && --depth == 0)
+                && --depth == 0)
             {
                 return index;
             }
@@ -199,7 +200,7 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
 
         var indentStart = index;
         while (index < closeParenthesis
-               && source[index] is ' ' or '\t')
+            && source[index] is ' ' or '\t')
         {
             index++;
         }
@@ -367,6 +368,7 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
     )
     {
         var scratch = new IndentedStringBuilder();
+
         // WHY: Reproduce the exact indentation depth without allocating an enumerable of levels.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery

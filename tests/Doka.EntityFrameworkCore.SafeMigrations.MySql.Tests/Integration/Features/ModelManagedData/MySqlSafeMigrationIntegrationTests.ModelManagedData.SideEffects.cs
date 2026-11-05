@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the ModelManagedDataSideEffects migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlModelManagedDataSideEffectsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlModelManagedDataSideEffectsIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlModelManagedDataSideEffectsIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>
     /// Requires runtime validation when a managed write can invalidate the immutable live row snapshot.
@@ -18,7 +20,9 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
     [InlineData("INSERT")]
     [InlineData("UPDATE")]
     [InlineData("DELETE")]
-    public async Task SideEffects_ManagedWriteTriggerInvalidatesLiveMatchingRow(string writeKind)
+    public async Task SideEffects_ManagedWriteTriggerInvalidatesLiveMatchingRow(
+        string writeKind
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -37,7 +41,8 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER side_effect_trigger AFTER " + writeKind
+            "CREATE TRIGGER side_effect_trigger AFTER "
+            + writeKind
             + " ON side_effect_writes FOR EACH ROW "
             + "UPDATE side_effect_rows SET managed_value = 'trigger-change' WHERE id = 1;",
             cancellationToken: CancellationToken.None);
@@ -55,17 +60,21 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("mysql-managed-trigger-" + writeKind), CancellationToken.None);
+            new SafeMigrationRunOptions("mysql-managed-trigger-" + writeKind),
+            CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [builder.Operations[0]], CancellationToken.None);
 
         var actual = await runner.AnalyzeAsync(
             context,
             [builder.Operations[1]],
-            new SafeMigrationRunOptions("mysql-managed-trigger-actual-" + writeKind), CancellationToken.None);
+            new SafeMigrationRunOptions("mysql-managed-trigger-actual-" + writeKind),
+            CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(
-            () => ExecuteOperationsAsync(context, [builder.Operations[1]], CancellationToken.None));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [builder.Operations[1]],
+            CancellationToken.None));
 
         var changedRows = await ScalarIntAsync(
             connectionString,
@@ -82,7 +91,10 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
         Assert.Equal("projected_model_managed_data_state_unknown", preflight.Assessments[1].AnalysisCode);
         Assert.NotNull(origin);
         Assert.Equal(0, origin.OperationOrdinal);
-        Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(actual.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Different,
+            Assert.Single(actual.Assessments)
+                .ObservedState);
+
         AssertOwnedGuardFailure(exception);
         Assert.Equal(1, changedRows);
     }
@@ -99,7 +111,8 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE side_effect_rows (id int NOT NULL PRIMARY KEY, "
-            + "managed_value varchar(64) NOT NULL) ENGINE=InnoDB;", cancellationToken: CancellationToken.None);
+            + "managed_value varchar(64) NOT NULL) ENGINE=InnoDB;",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
 
@@ -108,17 +121,23 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
         AppendSideEffectEnsure(builder, "side_effect_rows");
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("mysql-managed-immediate-postcondition"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("mysql-managed-immediate-postcondition"),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
-        var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("mysql-managed-executed-replay"), CancellationToken.None);
+        var replay = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("mysql-managed-executed-replay"),
+                CancellationToken.None);
 
         var rowCount = await ScalarIntAsync(
             connectionString,
@@ -129,8 +148,14 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[0].Action);
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(replay.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(replay.Assessments)
+                .Action);
+
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(replay.Assessments)
+                .ObservedState);
+
         Assert.Equal(1, rowCount);
     }
 
@@ -159,10 +184,13 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
         AppendSideEffectEnsure(builder, "side_effect_rows");
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("mysql-managed-fresh-table"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("mysql-managed-fresh-table"),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -207,17 +235,24 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
         AppendSideEffectParentDelete(builder);
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("mysql-managed-two-child-deletes"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("mysql-managed-two-child-deletes"),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
-        var parents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM side_effect_parents;",
+        var parents = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM side_effect_parents;",
             cancellationToken: CancellationToken.None);
 
-        var children = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM side_effect_children;",
+        var children = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM side_effect_children;",
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -259,7 +294,8 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER side_effect_trigger AFTER " + writeKind
+            "CREATE TRIGGER side_effect_trigger AFTER "
+            + writeKind
             + " ON side_effect_writes FOR EACH ROW INSERT INTO side_effect_children (id, parent_id) VALUES (99, 1);",
             cancellationToken: CancellationToken.None);
 
@@ -277,19 +313,25 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("mysql-managed-recreated-child"), CancellationToken.None);
+            new SafeMigrationRunOptions("mysql-managed-recreated-child"),
+            CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [builder.Operations[0], builder.Operations[1]], CancellationToken.None);
 
         var actual = await runner.AnalyzeAsync(
             context,
             [builder.Operations[2]],
-            new SafeMigrationRunOptions("mysql-managed-recreated-child-actual"), CancellationToken.None);
+            new SafeMigrationRunOptions("mysql-managed-recreated-child-actual"),
+            CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(
-            () => ExecuteOperationsAsync(context, [builder.Operations[2]], CancellationToken.None));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [builder.Operations[2]],
+            CancellationToken.None));
 
-        var parents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM side_effect_parents;",
+        var parents = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM side_effect_parents;",
             cancellationToken: CancellationToken.None);
 
         var recreatedChildren = await ScalarIntAsync(
@@ -303,13 +345,19 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
         Assert.Equal("runtime_validation_required", preflight.Assessments[2].Code);
         Assert.Equal("projected_model_managed_data_state_unknown", preflight.Assessments[2].AnalysisCode);
         Assert.NotNull(preflight.Assessments[2].DeferredOrigin);
-        Assert.Equal(SafeMigrationObservedState.DataBlocked, Assert.Single(actual.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.DataBlocked,
+            Assert.Single(actual.Assessments)
+                .ObservedState);
+
         AssertOwnedGuardFailure(exception);
         Assert.Equal(1, parents);
         Assert.Equal(1, recreatedChildren);
     }
 
-    private static void AppendSideEffectEnsure(MigrationBuilder builder, string table)
+    private static void AppendSideEffectEnsure(
+        MigrationBuilder builder,
+        string table
+    )
         => builder.EnsureModelManagedDataFromModel(
             table,
             ["id"],
@@ -318,7 +366,10 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
             ["int", "varchar(64)"],
             new object?[,] { { 1, "expected" } });
 
-    private static void AppendSideEffectWrite(MigrationBuilder builder, string writeKind)
+    private static void AppendSideEffectWrite(
+        MigrationBuilder builder,
+        string writeKind
+    )
     {
         switch (writeKind)
         {
@@ -360,7 +411,10 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
         }
     }
 
-    private static void AppendSideEffectChildDelete(MigrationBuilder builder, int id)
+    private static void AppendSideEffectChildDelete(
+        MigrationBuilder builder,
+        int id
+    )
         => builder.DeleteModelManagedDataFromModel(
             "side_effect_children",
             ["id"],
@@ -370,7 +424,9 @@ public sealed partial class MySqlModelManagedDataSideEffectsIntegrationTests : M
             ["int", "int"],
             new object?[,] { { id, 1 } });
 
-    private static void AppendSideEffectParentDelete(MigrationBuilder builder)
+    private static void AppendSideEffectParentDelete(
+        MigrationBuilder builder
+    )
         => builder.DeleteModelManagedDataFromModel(
             "side_effect_parents",
             ["id"],

@@ -11,9 +11,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations;
 internal sealed class SafeMigrationCSharpMigrationsGenerator : IMigrationsCodeGenerator
 {
     private const string SafeMigrationsNamespace = "Doka.EntityFrameworkCore.SafeMigrations";
+    private readonly SafeMigrationScaffoldingConfiguration _configuration;
 
     private readonly ICSharpHelper _csharpHelper;
-    private readonly SafeMigrationScaffoldingConfiguration _configuration;
     private readonly IMigrationsCodeGenerator _providerGenerator;
 
     /// <summary>Initializes the SafeMigrations migration-file generator.</summary>
@@ -103,43 +103,6 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : IMigrationsCodeGe
             : source;
     }
 
-    private static IReadOnlyList<MigrationOperation> ConsumeDesignTimeServicesGuard(
-        IReadOnlyList<MigrationOperation> operations,
-        string direction
-    )
-    {
-        if (operations.Count == 0)
-        {
-            return operations;
-        }
-
-        if (operations[0] is not SafeMigrationDesignTimeServicesRequiredOperation)
-        {
-            throw new InvalidOperationException(
-                $"SafeMigrations {direction} operations are missing the design-time services guard. "
-                + "The model differ and migrations code generator must be registered together. "
-                + "Register the active provider's SafeMigrations design-time services before scaffolding.");
-        }
-
-        var result = new MigrationOperation[operations.Count - 1];
-        // WHY: Copy only the operation suffix after consuming the single leading design-time guard.
-        // ReSharper disable once ForCanBeConvertedToForeach
-        // ReSharper disable once LoopCanBeConvertedToQuery
-        for (var ordinal = 1; ordinal < operations.Count; ordinal++)
-        {
-            if (operations[ordinal] is SafeMigrationDesignTimeServicesRequiredOperation)
-            {
-                throw new InvalidOperationException(
-                    $"SafeMigrations {direction} operations contain more than one design-time services guard. "
-                    + "Remove duplicate model-differ decoration or design-time service registrations.");
-            }
-
-            result[ordinal - 1] = operations[ordinal];
-        }
-
-        return result;
-    }
-
     /// <inheritdoc />
     public string GenerateMetadata(
         string? migrationNamespace,
@@ -165,6 +128,44 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : IMigrationsCodeGe
         contextType,
         modelSnapshotName,
         model);
+
+    private static IReadOnlyList<MigrationOperation> ConsumeDesignTimeServicesGuard(
+        IReadOnlyList<MigrationOperation> operations,
+        string direction
+    )
+    {
+        if (operations.Count == 0)
+        {
+            return operations;
+        }
+
+        if (operations[0] is not SafeMigrationDesignTimeServicesRequiredOperation)
+        {
+            throw new InvalidOperationException(
+                $"SafeMigrations {direction} operations are missing the design-time services guard. "
+                + "The model differ and migrations code generator must be registered together. "
+                + "Register the active provider's SafeMigrations design-time services before scaffolding.");
+        }
+
+        var result = new MigrationOperation[operations.Count - 1];
+
+        // WHY: Copy only the operation suffix after consuming the single leading design-time guard.
+        // ReSharper disable once ForCanBeConvertedToForeach
+        // ReSharper disable once LoopCanBeConvertedToQuery
+        for (var ordinal = 1; ordinal < operations.Count; ordinal++)
+        {
+            if (operations[ordinal] is SafeMigrationDesignTimeServicesRequiredOperation)
+            {
+                throw new InvalidOperationException(
+                    $"SafeMigrations {direction} operations contain more than one design-time services guard. "
+                    + "Remove duplicate model-differ decoration or design-time service registrations.");
+            }
+
+            result[ordinal - 1] = operations[ordinal];
+        }
+
+        return result;
+    }
 
     /// <summary>
     /// Ensures that a generated migration can resolve SafeMigrations extension
@@ -227,7 +228,10 @@ internal sealed class SafeMigrationCSharpMigrationsGenerator : IMigrationsCodeGe
         while (lineStart <= source.Length)
         {
             var newlineIndex = source.IndexOf(newline, lineStart, StringComparison.Ordinal);
-            var lineEnd = newlineIndex < 0 ? source.Length : newlineIndex;
+            var lineEnd = newlineIndex < 0
+                ? source.Length
+                : newlineIndex;
+
             var line = source.AsSpan(lineStart, lineEnd - lineStart);
 
             if (line.SequenceEqual(expectedLine))

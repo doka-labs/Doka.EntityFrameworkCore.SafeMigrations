@@ -19,44 +19,71 @@ public sealed class SqlServerGuardScopeTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AddColumnIfNotExists<string>("Caption", "O'Brien", type: "varchar(80)", maxLength: 80,
-            nullable: false, defaultValue: "Caption O'Brien",
+        builder.AddColumnIfNotExists<string>(
+            "Caption",
+            "O'Brien",
+            type: "varchar(80)",
+            maxLength: 80,
+            nullable: false,
+            defaultValue: "Caption O'Brien",
             collation: new SafeMigrationCollationIdentifier("Latin1_General_100_CI_AS"));
 
-        builder.EnsureModelManagedDataFromModel("O'Brien", ["Id"], ["int"], ["Id", "Caption"],
-            ["int", "varchar(80)"], new object?[,] { { 7, "O'Brien" } });
+        builder.EnsureModelManagedDataFromModel(
+            "O'Brien",
+            ["Id"],
+            ["int"],
+            ["Id", "Caption"],
+            ["int", "varchar(80)"],
+            new object?[,] { { 7, "O'Brien" } });
+
         var generator = context.GetService<IMigrationsSqlGenerator>();
-        var defaultMapping = context.GetService<IRelationalTypeMappingSource>()
-            .FindMapping(typeof(string), "varchar(80)")
+        var defaultMapping = context
+                .GetService<IRelationalTypeMappingSource>()
+                .FindMapping(typeof(string), "varchar(80)")
             ?? throw new InvalidOperationException("The ANSI fixture default has no SQL Server type mapping.");
 
-        var nestedDefaultLiteral = defaultMapping.GenerateSqlLiteral("Caption O'Brien")
+        var nestedDefaultLiteral = defaultMapping
+            .GenerateSqlLiteral("Caption O'Brien")
             .Replace("'", "''", StringComparison.Ordinal);
 
         // Act
         var commands = separateGeneration
-            ? builder.Operations.SelectMany(operation => generator.Generate([operation], context.Model)).ToArray()
-            : generator.Generate(builder.Operations, context.Model).ToArray();
+            ? builder
+                .Operations
+                .SelectMany(operation => generator.Generate([operation], context.Model))
+                .ToArray()
+            : generator
+                .Generate(builder.Operations, context.Model)
+                .ToArray();
 
-        var scopes = commands.Select(static command =>
-            SqlServerGuardedSqlTestContract.DecodeScope(command.CommandText)).ToArray();
+        var scopes = commands
+            .Select(static command =>
+                SqlServerGuardedSqlTestContract.DecodeScope(command.CommandText))
+            .ToArray();
 
-        var guards = scopes.Where(static body => body.Contains("DECLARE @doka_state", StringComparison.Ordinal))
+        var guards = scopes
+            .Where(static body => body.Contains("DECLARE @doka_state", StringComparison.Ordinal))
             .ToArray();
 
         // Assert
         Assert.Equal(2, guards.Length);
         Assert.All(commands, static command => Assert.False(command.TransactionSuppressed));
-        Assert.All(guards, static body =>
-        {
-            Assert.Equal(1, body.Split("DECLARE @doka_state", StringSplitOptions.None).Length - 1);
-            Assert.Contains("DECLARE @doka_action", body, StringComparison.Ordinal);
-            Assert.Contains("DECLARE @doka_repair_ok", body, StringComparison.Ordinal);
-            Assert.Contains("EXEC sys.sp_executesql", body, StringComparison.Ordinal);
-            Assert.Contains("THROW 51001, N'doka_sm_different:", body, StringComparison.Ordinal);
-            Assert.Contains("THROW 51005, N'doka_sm_postcondition:", body, StringComparison.Ordinal);
-            Assert.DoesNotContain("\nGO\n", body, StringComparison.Ordinal);
-        });
+        Assert.All(
+            guards,
+            static body =>
+            {
+                Assert.Equal(1,
+                    body.Split("DECLARE @doka_state")
+                        .Length
+                    - 1);
+
+                Assert.Contains("DECLARE @doka_action", body, StringComparison.Ordinal);
+                Assert.Contains("DECLARE @doka_repair_ok", body, StringComparison.Ordinal);
+                Assert.Contains("EXEC sys.sp_executesql", body, StringComparison.Ordinal);
+                Assert.Contains("THROW 51001, N'doka_sm_different:", body, StringComparison.Ordinal);
+                Assert.Contains("THROW 51005, N'doka_sm_postcondition:", body, StringComparison.Ordinal);
+                Assert.DoesNotContain("\nGO\n", body, StringComparison.Ordinal);
+            });
 
         Assert.Contains("DECLARE @doka_default_supported", guards[0], StringComparison.Ordinal);
         Assert.Contains("DECLARE @doka_postcondition", guards[1], StringComparison.Ordinal);
@@ -98,7 +125,7 @@ public sealed class SqlServerGuardScopeTests
     )
     {
         // Arrange
-        Func<string> decode = () => SqlServerGuardedSqlTestContract.DecodeScope(command);
+        var decode = () => SqlServerGuardedSqlTestContract.DecodeScope(command);
 
         // Act
         var failure = Record.Exception(() => decode());

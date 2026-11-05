@@ -17,12 +17,15 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
             connectionString,
             "CREATE TABLE accounts (id integer NOT NULL, name character varying(20) NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<string>("name", "accounts", type: "character varying(100)", nullable: true);
 
         var exception =
-            await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(context, builder.Operations,
+            await Assert.ThrowsAsync<PostgresException>(() => ExecuteOperationsAsync(
+                context,
+                builder.Operations,
                 CancellationToken.None));
 
         Assert.Equal("P1001", exception.SqlState);
@@ -38,6 +41,7 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
         builder.CreateTableIfNotExists(
             "must_not_exist",
             table => new { Id = table.Column<int>(type: "integer", nullable: false) });
+
         var generator = context.GetService<IMigrationsSqlGenerator>();
 
         Assert.Throws<InvalidOperationException>(() => generator.Generate(builder.Operations, context.Model));
@@ -54,8 +58,11 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
     public async Task Migrator_MixesStandardAndSafeOperationsAndWritesOneHistoryRow()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE pipeline_state (id integer NOT NULL PRIMARY KEY);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE pipeline_state (id integer NOT NULL PRIMARY KEY);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
 
         await context.Database.MigrateAsync(cancellationToken: CancellationToken.None);
@@ -69,7 +76,9 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
                 connectionString,
                 "SELECT COUNT(*) FROM information_schema.columns "
                 + "WHERE table_schema = current_schema() AND table_name = 'pipeline_state' "
-                + "AND column_name = 'payload';", cancellationToken: CancellationToken.None));
+                + "AND column_name = 'payload';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -83,8 +92,11 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
     public async Task RuntimeGuardFailureAfterStandardDdl_RollsBackAndRetriesWithoutHistoryDrift()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE VIEW pipeline_state AS SELECT 1 AS id;",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE VIEW pipeline_state AS SELECT 1 AS id;",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() => context.Database.MigrateAsync(
@@ -98,6 +110,7 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
                 "SELECT COUNT(*) FROM information_schema.tables "
                 + "WHERE table_schema = current_schema() AND table_name = 'pipeline_probe';",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             0,
             await ScalarIntAsync(
@@ -147,7 +160,8 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
                 connectionString,
                 "SELECT COUNT(*) FROM information_schema.columns "
                 + "WHERE table_schema = current_schema() AND table_name = 'pipeline_state' "
-                + "AND column_name = 'payload';", cancellationToken: CancellationToken.None));
+                + "AND column_name = 'payload';",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Applies one script mode and retains its original replay/history contract.</summary>
@@ -156,14 +170,16 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
     [InlineData("normal")]
     [InlineData("idempotent")]
     [InlineData("idempotent-no-transactions")]
-    public async Task MigrationScripts_ExecuteSelectedMode(string caseId)
+    public async Task MigrationScripts_ExecuteSelectedMode(
+        string caseId
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var options = caseId switch
         {
-            "normal" => default(MigrationsSqlGenerationOptions),
+            "normal" => default,
             "idempotent" => MigrationsSqlGenerationOptions.Idempotent,
             "idempotent-no-transactions" => MigrationsSqlGenerationOptions.Idempotent
                 | MigrationsSqlGenerationOptions.NoTransactions,
@@ -171,19 +187,25 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
         };
 
         // Act
-        var script = context.GetService<IMigrator>().GenerateScript(options: options);
+        var script = context
+            .GetService<IMigrator>()
+            .GenerateScript(options: options);
+
         await ExecuteSqlAsync(connectionString, script, cancellationToken: CancellationToken.None);
         if (caseId != "normal")
         {
             await ExecuteSqlAsync(connectionString, script, cancellationToken: CancellationToken.None);
         }
 
-        var payloadColumns = await ScalarIntAsync(connectionString,
+        var payloadColumns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM information_schema.columns "
             + "WHERE table_schema = current_schema() AND table_name = 'pipeline_state' "
-            + "AND column_name = 'payload';", cancellationToken: CancellationToken.None);
+            + "AND column_name = 'payload';",
+            cancellationToken: CancellationToken.None);
 
-        var historyRows = await ScalarIntAsync(connectionString,
+        var historyRows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM \"__ApplicationDbContextMigrationsHistory\" "
             + $"WHERE \"MigrationId\" = '{CoreConvergenceMigration.MigrationIdentifier}';",
             cancellationToken: CancellationToken.None);
@@ -205,11 +227,13 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
             table => new { Id = table.Column<int>(type: "integer", nullable: false) },
             mode: SafeMigrationTableMode.ConvergenceContainer,
             policy: SafeMigrationPolicy.ExistenceOnly);
+
         var runner = context.GetService<ISafeMigrationRunner>();
         var fingerprint = SafeMigrationModelFingerprint.Create(
             context.GetService<IDesignTimeModel>()
                 .Model,
             context.Database.ProviderName!);
+
         var runOptions = new SafeMigrationRunOptions("test-instance", expectedModelFingerprint: fingerprint);
 
         var preflight = await runner.AnalyzeAsync(context, builder.Operations, runOptions, CancellationToken.None);
@@ -223,6 +247,7 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
             SafeMigrationObservedState.Missing,
             Assert.Single(preflight.Assessments)
                 .ObservedState);
+
         Assert.Equal(
             0,
             await ScalarIntAsync(
@@ -230,6 +255,7 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
                 "SELECT COUNT(*) FROM information_schema.tables "
                 + "WHERE table_schema = current_schema() AND table_name = 'analysis_target';",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             0,
             await ScalarIntAsync(
@@ -256,19 +282,23 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzePendingMigrationsAsync(context, new SafeMigrationRunOptions("test-instance"),
-            CancellationToken.None);
+            .AnalyzePendingMigrationsAsync(
+                context,
+                new SafeMigrationRunOptions("test-instance"),
+                CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, report.Status);
         Assert.Contains(
             report.Assessments,
             assessment => assessment.OperationKind == SafeMigrationOperationKind.EnsureTable
                 && assessment.ObservedState == SafeMigrationObservedState.Missing);
+
         Assert.Contains(
             report.Assessments,
             assessment => assessment.OperationKind == SafeMigrationOperationKind.EnsureColumn
                 && assessment.ObservedState == SafeMigrationObservedState.Missing
                 && assessment.Code == "projected_missing");
+
         Assert.Equal(
             0,
             await ScalarIntAsync(
@@ -288,7 +318,8 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
             "CREATE TABLE mixed_customers (id integer PRIMARY KEY);"
             + "CREATE TABLE mixed_evolution (id integer PRIMARY KEY);"
             + "INSERT INTO mixed_customers (id) VALUES (7);"
-            + "INSERT INTO mixed_evolution (id) VALUES (1);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO mixed_evolution (id) VALUES (1);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -298,11 +329,13 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
             type: "integer",
             nullable: false,
             defaultValue: 0);
+
         _ = builder.CreateIndexIfNotExistsFromModel(
             "ix_mixed_evolution_customer_id",
             "mixed_evolution",
             "customer_id",
             schema: "public");
+
         _ = builder.Sql("UPDATE mixed_evolution SET customer_id = 7;");
         _ = builder.Sql("ALTER TABLE mixed_evolution ALTER COLUMN customer_id DROP DEFAULT;");
         _ = builder.AddForeignKey(
@@ -323,6 +356,7 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
         Assert.All(
             preflight.Assessments.Where(static assessment => !assessment.IsSafeOperation),
             static assessment => Assert.Equal("provider_owned_not_analyzed", assessment.Code));
+
         Assert.Equal(SafeMigrationObservedState.Missing, projectedIndex.ObservedState);
         Assert.Equal(SafeMigrationAction.Apply, projectedIndex.Action);
         Assert.Equal("projected_missing", projectedIndex.Code);
@@ -332,7 +366,8 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
                 connectionString,
                 "SELECT COUNT(*) FROM information_schema.columns "
                 + "WHERE table_schema = current_schema() AND table_name = 'mixed_evolution' "
-                + "AND column_name = 'customer_id';", cancellationToken: CancellationToken.None));
+                + "AND column_name = 'customer_id';",
+                cancellationToken: CancellationToken.None));
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -346,8 +381,13 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
         Assert.True(postflightIndex.PostconditionSatisfied);
         Assert.Equal(SafeMigrationReportStatus.ReadyWithProviderOperations, replay.Status);
         Assert.Equal(SafeMigrationAction.NoOp, replayIndex.Action);
-        Assert.Equal(7, await ScalarIntAsync(connectionString, "SELECT customer_id FROM mixed_evolution;",
-            cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            7,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT customer_id FROM mixed_evolution;",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -355,6 +395,7 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
                 "SELECT COUNT(*) FROM pg_catalog.pg_constraint "
                 + "WHERE conname = 'fk_mixed_evolution_customers_customer_id' AND contype = 'f';",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -363,13 +404,15 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
                 + "WHERE table_schema = current_schema() AND table_name = 'mixed_evolution' "
                 + "AND column_name = 'customer_id' AND column_default IS NULL;",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM pg_catalog.pg_indexes "
                 + "WHERE schemaname = current_schema() AND tablename = 'mixed_evolution' "
-                + "AND indexname = 'ix_mixed_evolution_customer_id';", cancellationToken: CancellationToken.None));
+                + "AND indexname = 'ix_mixed_evolution_customer_id';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -390,7 +433,9 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE lifecycle (id integer NOT NULL, old_name character varying(40) NULL); "
-            + "CREATE INDEX ix_lifecycle_old_name ON lifecycle (old_name);", cancellationToken: CancellationToken.None);
+            + "CREATE INDEX ix_lifecycle_old_name ON lifecycle (old_name);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var rename = new MigrationBuilder(context.Database.ProviderName!);
         rename.RenameColumnIfExists("old_name", "lifecycle", "name");
@@ -448,7 +493,9 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
             connectionString,
             "CREATE TABLE inventory_target (id integer NOT NULL, legacy_column integer NULL); "
             + "CREATE INDEX ix_inventory_legacy ON inventory_target (legacy_column); "
-            + "CREATE TABLE legacy_extra (id integer NOT NULL);", cancellationToken: CancellationToken.None);
+            + "CREATE TABLE legacy_extra (id integer NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -459,18 +506,27 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"),
-            CancellationToken.None);
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("test-instance"),
+                CancellationToken.None);
 
         Assert.Contains(
             report.UnexpectedObjects,
             value => value is { ObjectKind: SafeMigrationDatabaseObjectKind.Table, Name: "legacy_extra" });
+
         Assert.Contains(
             report.UnexpectedObjects,
-            value => value is { ObjectKind: SafeMigrationDatabaseObjectKind.Column, Table: "inventory_target", Name: "legacy_column" });
+            value => value is
+            {
+                ObjectKind: SafeMigrationDatabaseObjectKind.Column, Table: "inventory_target", Name: "legacy_column"
+            });
+
         Assert.Contains(
             report.UnexpectedObjects,
             value => value is { ObjectKind: SafeMigrationDatabaseObjectKind.Index, Name: "ix_inventory_legacy" });
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -500,7 +556,7 @@ public sealed partial class PostgreSqlLifecycleIntegrationTests : PostgreSqlSafe
                 "SELECT COUNT(*) FROM pg_catalog.pg_class c "
                 + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
                 + "WHERE n.nspname = current_schema() "
-                + "AND c.relname IN ('missing_table', 'renamed_table');", cancellationToken: CancellationToken.None));
+                + "AND c.relname IN ('missing_table', 'renamed_table');",
+                cancellationToken: CancellationToken.None));
     }
-
 }

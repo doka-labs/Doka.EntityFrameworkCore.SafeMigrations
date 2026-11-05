@@ -119,12 +119,14 @@ public sealed partial class SafeMigrationScaffoldingTests
         // Act
         if (modeFirst)
         {
-            builder.UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence)
+            builder
+                .UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence)
                 .UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe);
         }
         else
         {
-            builder.UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe)
+            builder
+                .UseLegacyConvergencePolicy(SafeMigrationPolicy.RepairIfSafe)
                 .UseScaffoldingMode(SafeMigrationScaffoldingMode.LegacyConvergence);
         }
 
@@ -167,6 +169,7 @@ public sealed partial class SafeMigrationScaffoldingTests
                 expectedPolicy),
             source,
             StringComparison.Ordinal);
+
         Assert.EndsWith(");", source, StringComparison.Ordinal);
     }
 

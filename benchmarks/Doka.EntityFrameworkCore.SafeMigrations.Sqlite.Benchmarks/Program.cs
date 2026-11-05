@@ -13,8 +13,7 @@ internal sealed class SqliteGenerationContext : DbContext
 {
     private readonly SqliteConnection? _connection;
 
-    public SqliteGenerationContext()
-    { }
+    public SqliteGenerationContext() { }
 
     public SqliteGenerationContext(
         SqliteConnection connection

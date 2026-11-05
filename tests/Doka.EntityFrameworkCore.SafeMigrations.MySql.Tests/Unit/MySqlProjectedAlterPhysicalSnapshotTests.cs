@@ -6,13 +6,24 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     private readonly DbContext _context = CreateContext();
     private ServiceProvider? _nativeServices;
 
+    private IRelationalTypeMappingSource Mappings => _context.GetService<IRelationalTypeMappingSource>();
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        _context.Dispose();
+        _nativeServices?.Dispose();
+    }
+
     /// <summary>Five accepted text conversions preserve an ordinary GUID key and bounded log-like columns.</summary>
     /// <param name="rowFormat">The independently captured InnoDB storage format.</param>
     [Theory]
     [InlineData("Dynamic")]
     [InlineData("Compact")]
     [InlineData("Redundant")]
-    public void MultipleAcceptedTextTransitionsFitWithGuidAndPrefixKeys(string rowFormat)
+    public void MultipleAcceptedTextTransitionsFitWithGuidAndPrefixKeys(
+        string rowFormat
+    )
     {
         var original = new Dictionary<string, MySqlAlterColumnPhysicalShape>(StringComparer.Ordinal)
         {
@@ -24,16 +35,36 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
             ["hash"] = Catalog("longtext"),
         };
 
-        var snapshot = new MySqlProjectedAlterPhysicalSnapshot(original,
+        var snapshot = new MySqlProjectedAlterPhysicalSnapshot(
+            original,
             [new MySqlAlterIndexPhysicalShape(false, [new MySqlAlterIndexPart("id", null)], true)],
-            Environment(rowFormat == "Dynamic" ? 3072 : 767, rowFormat));
+            Environment(
+                rowFormat == "Dynamic"
+                    ? 3072
+                    : 767,
+                rowFormat));
 
         var table = new TableView(
-            Character("id", "char(36)"), Varchar("property", 800), Varchar("context", 800),
-            Varchar("previous", 5000), Varchar("current", 5000), Character("hash", "longtext"))
+            Character("id", "char(36)"),
+            Varchar("property", 800),
+            Varchar("context", 800),
+            Varchar("previous", 5000),
+            Varchar("current", 5000),
+            Character("hash", "longtext"))
         {
-            Indexes = [new ExpectedIndexDefinition("ix_property", "records",
-                [new ExpectedIndexKeyDefinition("property", prefixLength: rowFormat == "Dynamic" ? 768 : 191)])],
+            Indexes =
+            [
+                new ExpectedIndexDefinition(
+                    "ix_property",
+                    "records",
+                    [
+                        new ExpectedIndexKeyDefinition(
+                            "property",
+                            prefixLength: rowFormat == "Dynamic"
+                                ? 768
+                                : 191),
+                    ]),
+            ],
         };
 
         var result = snapshot.IsSafe(Alter("hash", 64), table, Mappings);
@@ -74,14 +105,22 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         bool expected
     )
     {
-        var columns = Enumerable.Range(0, count).ToDictionary(
-            index => $"value_{index.ToString(CultureInfo.InvariantCulture)}",
-            _ => Catalog("longtext"), StringComparer.Ordinal);
+        var columns = Enumerable
+            .Range(0, count)
+            .ToDictionary(
+                index => $"value_{index.ToString(CultureInfo.InvariantCulture)}",
+                _ => Catalog("longtext"),
+                StringComparer.Ordinal);
 
         var snapshot = new MySqlProjectedAlterPhysicalSnapshot(
-            columns, [], Environment(rowFormat: rowFormat, pageSize: pageSize));
+            columns,
+            [],
+            Environment(rowFormat: rowFormat, pageSize: pageSize));
 
-        var table = new TableView(columns.Keys.Select(name => Varchar(name, 63)).ToArray());
+        var table = new TableView(columns
+            .Keys
+            .Select(name => Varchar(name, 63))
+            .ToArray());
 
         var result = snapshot.IsSafe(Alter("value_0", 63), table, Mappings);
 
@@ -92,15 +131,26 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Fact]
     public void PrimaryKeyColumnRetainsItsFullInlineWidth()
     {
-        var columns = Enumerable.Range(0, 21).ToDictionary(
-            index => $"value_{index.ToString(CultureInfo.InvariantCulture)}",
-            _ => Catalog("longtext"), StringComparer.Ordinal);
+        var columns = Enumerable
+            .Range(0, 21)
+            .ToDictionary(
+                index => $"value_{index.ToString(CultureInfo.InvariantCulture)}",
+                _ => Catalog("longtext"),
+                StringComparer.Ordinal);
 
         columns.Add("id", Catalog("varchar", 700));
-        var snapshot = new MySqlProjectedAlterPhysicalSnapshot(columns,
-            [new MySqlAlterIndexPhysicalShape(false, [new MySqlAlterIndexPart("id", null)], true)], Environment());
+        var snapshot = new MySqlProjectedAlterPhysicalSnapshot(
+            columns,
+            [new MySqlAlterIndexPhysicalShape(false, [new MySqlAlterIndexPart("id", null)], true)],
+            Environment());
 
-        var definitions = columns.Keys.Select(name => name == "id" ? Varchar(name, 700) : Varchar(name, 63)).ToArray();
+        var definitions = columns
+            .Keys
+            .Select(name => name == "id"
+                ? Varchar(name, 700)
+                : Varchar(name, 63))
+            .ToArray();
+
         var table = new TableView(definitions);
 
         var result = snapshot.IsSafe(Alter("value_0", 63), table, Mappings);
@@ -120,18 +170,33 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         bool retainedPrimary
     )
     {
-        var columns = Enumerable.Range(0, 750).ToDictionary(
-            index => $"value_{index.ToString(CultureInfo.InvariantCulture)}",
-            _ => Catalog("double"), StringComparer.Ordinal);
+        var columns = Enumerable
+            .Range(0, 750)
+            .ToDictionary(
+                index => $"value_{index.ToString(CultureInfo.InvariantCulture)}",
+                _ => Catalog("double"),
+                StringComparer.Ordinal);
 
         columns.Add("id", Catalog("varchar", 100));
-        var definitions = columns.Keys.Select(name => name == "id" ? Varchar(name, 100)
-            : new ExpectedColumnDefinition(name, typeof(double), false, "double")).ToArray();
+        var definitions = columns
+            .Keys
+            .Select(name => name == "id"
+                ? Varchar(name, 100)
+                : new ExpectedColumnDefinition(name, typeof(double), false, "double"))
+            .ToArray();
 
         var table = new TableView(definitions)
         {
-            Indexes = projected ? [new ExpectedIndexDefinition("uq_id", "records",
-                [new ExpectedIndexKeyDefinition("id")], unique: true)] : [],
+            Indexes = projected
+                ?
+                [
+                    new ExpectedIndexDefinition(
+                        "uq_id",
+                        "records",
+                        [new ExpectedIndexKeyDefinition("id")],
+                        unique: true),
+                ]
+                : [],
         };
 
         var indexes = new List<MySqlAlterIndexPhysicalShape>();
@@ -142,14 +207,19 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
 
         if (retainedPrimary)
         {
-            indexes.Add(new MySqlAlterIndexPhysicalShape(
-                false, [new MySqlAlterIndexPart("value_0", null)], IsPrimary: true));
+            indexes.Add(
+                new MySqlAlterIndexPhysicalShape(
+                    false,
+                    [new MySqlAlterIndexPart("value_0", null)],
+                    IsPrimary: true));
         }
 
         var snapshot = new MySqlProjectedAlterPhysicalSnapshot(columns, indexes, Environment());
 
         var result = snapshot.IsSafe(
-            new AlterColumnIntent("records", Varchar("id", 768), Varchar("id", 100)), table, Mappings);
+            new AlterColumnIntent("records", Varchar("id", 768), Varchar("id", 100)),
+            table,
+            Mappings);
 
         Assert.False(result);
     }
@@ -160,7 +230,8 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     {
         var snapshot = new MySqlProjectedAlterPhysicalSnapshot(
             new Dictionary<string, MySqlAlterColumnPhysicalShape> { ["value"] = Catalog("longtext") },
-            [new MySqlAlterIndexPhysicalShape(true, [new MySqlAlterIndexPart("value", null)])], Environment());
+            [new MySqlAlterIndexPhysicalShape(true, [new MySqlAlterIndexPart("value", null)])],
+            Environment());
 
         var table = new TableView(Character("value", "longtext"));
 
@@ -184,14 +255,27 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     )
     {
         var source = new ExpectedColumnDefinition("value", typeof(string), true, "varchar(4)");
-        var target = new ExpectedColumnDefinition("value", typeof(string), false, "varchar(80)",
+        var target = new ExpectedColumnDefinition(
+            "value",
+            typeof(string),
+            false,
+            "varchar(80)",
             defaultValue: SafeMigrationDefaultValue.Literal(literal));
 
-        var environment = Environment() with { DefaultCharacterSet = "utf8mb4", StrictSqlMode = strict };
+        var environment = Environment() with
+        {
+            DefaultCharacterSet = "utf8mb4",
+            StrictSqlMode = strict,
+        };
+
         var table = new TableView(source);
 
         var result = MySqlProjectedColumnTransition.IsSafe(
-            new AlterColumnIntent("records", target, source), source, table, environment, Mappings,
+            new AlterColumnIntent("records", target, source),
+            source,
+            table,
+            environment,
+            Mappings,
             canReuseCreationCharacterSet: true);
 
         Assert.Equal(expected, result);
@@ -213,15 +297,24 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     {
         // Arrange
         var source = new ExpectedColumnDefinition("value", typeof(string), true, "varchar(4)");
-        var target = new ExpectedColumnDefinition("value", typeof(string), false, "varchar(80)",
-            defaultValue: structured ? SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal("a'b"))
+        var target = new ExpectedColumnDefinition(
+            "value",
+            typeof(string),
+            false,
+            "varchar(80)",
+            defaultValue: structured
+                ? SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal("a'b"))
                 : SafeMigrationDefaultValue.Literal("a'b"));
 
         var environment = Environment() with { SupportsQuotedExpressionDefaults = supported };
 
         // Act
         var result = MySqlProjectedColumnTransition.IsSafe(
-            new AlterColumnIntent("records", target, source), source, new TableView(source), environment, Mappings,
+            new AlterColumnIntent("records", target, source),
+            source,
+            new TableView(source),
+            environment,
+            Mappings,
             canReuseCreationCharacterSet: true);
 
         // Assert
@@ -243,14 +336,22 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     {
         // Arrange
         var source = new ExpectedColumnDefinition("value", typeof(string), true, "varchar(20)");
-        var target = new ExpectedColumnDefinition("value", typeof(string), !backfill, "text",
+        var target = new ExpectedColumnDefinition(
+            "value",
+            typeof(string),
+            !backfill,
+            "text",
             defaultValue: SafeMigrationDefaultValue.Literal("a\\b"));
 
         var environment = Environment() with { SupportsTextExpressionControlCharacters = supported };
 
         // Act
         var result = MySqlProjectedColumnTransition.IsSafe(
-            new AlterColumnIntent("records", target, source), source, new TableView(source), environment, Mappings,
+            new AlterColumnIntent("records", target, source),
+            source,
+            new TableView(source),
+            environment,
+            Mappings,
             canReuseCreationCharacterSet: true);
 
         // Assert
@@ -262,22 +363,35 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void EmptyTableBackfillDoesNotGuessExplicitCollation(bool resolved)
+    public void EmptyTableBackfillDoesNotGuessExplicitCollation(
+        bool resolved
+    )
     {
         var collation = new SafeMigrationCollationIdentifier("latin1_bin");
         var source = new ExpectedColumnDefinition("value", typeof(string), true, "varchar(4)", collation: collation);
-        var target = new ExpectedColumnDefinition("value", typeof(string), false, "varchar(80)", collation: collation,
+        var target = new ExpectedColumnDefinition(
+            "value",
+            typeof(string),
+            false,
+            "varchar(80)",
+            collation: collation,
             defaultValue: SafeMigrationDefaultValue.Literal("seed"));
 
         var environment = Environment() with
         {
             DefaultCharacterSet = "utf8mb4",
             StrictSqlMode = true,
-            CollationCharacterSets = resolved ? new Dictionary<string, string> { ["latin1_bin"] = "latin1" } : null,
+            CollationCharacterSets = resolved
+                ? new Dictionary<string, string> { ["latin1_bin"] = "latin1" }
+                : null,
         };
 
         var result = MySqlProjectedColumnTransition.IsSafe(
-            new AlterColumnIntent("records", target, source), source, new TableView(source), environment, Mappings,
+            new AlterColumnIntent("records", target, source),
+            source,
+            new TableView(source),
+            environment,
+            Mappings,
             canReuseCreationCharacterSet: true);
 
         Assert.Equal(resolved, result);
@@ -304,11 +418,20 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         bool expected
     )
     {
-        var collation = explicitCollation ? new SafeMigrationCollationIdentifier("utf8mb4_bin") : null;
+        var collation = explicitCollation
+            ? new SafeMigrationCollationIdentifier("utf8mb4_bin")
+            : null;
+
         var source = new ExpectedColumnDefinition("value", typeof(string), true, "longtext", collation: collation);
-        var target = new ExpectedColumnDefinition("value", typeof(string), !backfill, "varchar(10)",
+        var target = new ExpectedColumnDefinition(
+            "value",
+            typeof(string),
+            !backfill,
+            "varchar(10)",
             collation: collation,
-            defaultValue: backfill ? SafeMigrationDefaultValue.Literal("\u00E9") : SafeMigrationDefaultValue.None);
+            defaultValue: backfill
+                ? SafeMigrationDefaultValue.Literal("\u00E9")
+                : SafeMigrationDefaultValue.None);
 
         var environment = Environment() with
         {
@@ -316,7 +439,11 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         };
 
         var result = MySqlProjectedColumnTransition.IsSafe(
-            new AlterColumnIntent("records", target, source), source, new TableView(source), environment, Mappings,
+            new AlterColumnIntent("records", target, source),
+            source,
+            new TableView(source),
+            environment,
+            Mappings,
             canReuseCreationCharacterSet: reusableDefault);
 
         Assert.Equal(expected, result);
@@ -349,9 +476,14 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void OriginalUnboundedOrNullableDomainDoesNotProveRequiredTarget(bool nullable)
+    public void OriginalUnboundedOrNullableDomainDoesNotProveRequiredTarget(
+        bool nullable
+    )
     {
-        var original = nullable ? Catalog("varchar", 200) with { IsNullable = true } : Catalog("longtext");
+        var original = nullable
+            ? Catalog("varchar", 200) with { IsNullable = true }
+            : Catalog("longtext");
+
         var snapshot = Snapshot(("value", original));
 
         var result = snapshot.PreservesOriginalValueDomain(Alter("value", 500), Character("value", "longtext"));
@@ -381,14 +513,19 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         bool expected
     )
     {
-        var snapshot = Snapshot(("value", Catalog("varchar", 200, 1) with
-        {
-            CharacterSet = "ascii",
-            Collation = "ascii_bin",
-        }));
+        var snapshot = Snapshot(
+            ("value", Catalog("varchar", 200, 1) with
+            {
+                CharacterSet = "ascii",
+                Collation = "ascii_bin",
+            }));
 
         var source = new ExpectedColumnDefinition("value", typeof(string), true, "longtext");
-        var target = new ExpectedColumnDefinition("value", typeof(string), false, "varchar(500)",
+        var target = new ExpectedColumnDefinition(
+            "value",
+            typeof(string),
+            false,
+            "varchar(500)",
             defaultValue: SafeMigrationDefaultValue.Literal(literal));
 
         var result = snapshot.PreservesOriginalValueDomain(new AlterColumnIntent("records", target, source), source);
@@ -401,7 +538,9 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void EmptyRecreatedTableUsesCreationEnvironment(bool defaultCompact)
+    public void EmptyRecreatedTableUsesCreationEnvironment(
+        bool defaultCompact
+    )
     {
         var source = Varchar("value", 100);
         var target = Varchar("value", 200);
@@ -410,13 +549,29 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
             Indexes = [new ExpectedIndexDefinition("ix_value", "records", [new ExpectedIndexKeyDefinition("value")])],
         };
 
-        var environment = Environment(defaultCompact ? 3072 : 767, defaultCompact ? "Dynamic" : "Compact") with
-        {
-            NewTableEnvironment = Environment(defaultCompact ? 767 : 3072, defaultCompact ? "Compact" : "Dynamic"),
-        };
+        var environment = Environment(
+                defaultCompact
+                    ? 3072
+                    : 767,
+                defaultCompact
+                    ? "Dynamic"
+                    : "Compact") with
+            {
+                NewTableEnvironment = Environment(
+                    defaultCompact
+                        ? 767
+                        : 3072,
+                    defaultCompact
+                        ? "Compact"
+                        : "Dynamic"),
+            };
 
         var result = MySqlProjectedColumnTransition.IsSafe(
-            new AlterColumnIntent("records", target, source), source, table, environment, Mappings,
+            new AlterColumnIntent("records", target, source),
+            source,
+            table,
+            environment,
+            Mappings,
             canReuseCreationCharacterSet: true);
 
         Assert.Equal(!defaultCompact, result);
@@ -431,7 +586,12 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         var environment = Environment() with { StrictSqlMode = false };
 
         var result = MySqlProjectedColumnTransition.IsSafe(
-            Alter("value", 500), source, table, environment, Mappings, canReuseCreationCharacterSet: true);
+            Alter("value", 500),
+            source,
+            table,
+            environment,
+            Mappings,
+            canReuseCreationCharacterSet: true);
 
         Assert.False(result);
     }
@@ -441,14 +601,20 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void EmptyInferredNarrowingUsesResolvedStoreTypes(bool strict)
+    public void EmptyInferredNarrowingUsesResolvedStoreTypes(
+        bool strict
+    )
     {
         var source = new ExpectedColumnDefinition("value", typeof(string), false, maxLength: 1000);
         var target = new ExpectedColumnDefinition("value", typeof(string), false, maxLength: 500);
         var environment = Environment() with { StrictSqlMode = strict };
 
         var result = MySqlProjectedColumnTransition.IsSafe(
-            new AlterColumnIntent("records", target, source), source, new TableView(source), environment, Mappings,
+            new AlterColumnIntent("records", target, source),
+            source,
+            new TableView(source),
+            environment,
+            Mappings,
             canReuseCreationCharacterSet: true);
 
         Assert.Equal(strict, result);
@@ -459,11 +625,14 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Theory]
     [InlineData("Compressed")]
     [InlineData("Unknown")]
-    public void UnprovenInlineEnvironmentRejectsTransition(string rowFormat)
+    public void UnprovenInlineEnvironmentRejectsTransition(
+        string rowFormat
+    )
     {
         var snapshot = new MySqlProjectedAlterPhysicalSnapshot(
             new Dictionary<string, MySqlAlterColumnPhysicalShape> { ["value"] = Catalog("longtext") },
-            [], Environment(rowFormat: rowFormat));
+            [],
+            Environment(rowFormat: rowFormat));
 
         var table = new TableView(Character("value", "longtext"));
 
@@ -498,7 +667,10 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         var shape = Catalog(type, length, characterBytes: 1);
 
         var known = MySqlProjectedAlterPhysicalSnapshot.TryGetInlineBytes(
-            shape, primaryKey, Environment(rowFormat: format), out var bytes);
+            shape,
+            primaryKey,
+            Environment(rowFormat: format),
+            out var bytes);
 
         Assert.True(known);
         Assert.Equal(expected, bytes);
@@ -521,7 +693,9 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void NativeUuidPhysicalShapeUsesSixteenFixedBytes(bool projected)
+    public void NativeUuidPhysicalShapeUsesSixteenFixedBytes(
+        bool projected
+    )
     {
         // Arrange
         using var context = CreateNativeUuidContext();
@@ -533,7 +707,10 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         if (projected)
         {
             known = MySqlProjectedAlterPhysicalSnapshot.TryCreateProjectedColumn(
-                definition, context.GetService<IRelationalTypeMappingSource>(), 4, out shape);
+                definition,
+                context.GetService<IRelationalTypeMappingSource>(),
+                4,
+                out shape);
         }
         else
         {
@@ -593,25 +770,45 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
             original.Add("id", Catalog("uuid"));
         }
 
-        var table = new TableView(projectedUuid
-            ? [NativeUuid("id"), Character("value", "longtext")]
-            : [Character("value", "longtext")])
+        var table = new TableView(
+            projectedUuid
+                ? [NativeUuid("id"), Character("value", "longtext")]
+                : [Character("value", "longtext")])
         {
-            Indexes = kind == 1 ? [new ExpectedIndexDefinition("ix_values", "records",
-                [new ExpectedIndexKeyDefinition("id"), new ExpectedIndexKeyDefinition("value")])] : [],
-            PrimaryKey = kind == 2 ? new ExpectedPrimaryKeyDefinition("pk_records", "records", ["id", "value"]) : null,
+            Indexes = kind == 1
+                ?
+                [
+                    new ExpectedIndexDefinition(
+                        "ix_values",
+                        "records",
+                        [new ExpectedIndexKeyDefinition("id"), new ExpectedIndexKeyDefinition("value")]),
+                ]
+                : [],
+            PrimaryKey = kind == 2
+                ? new ExpectedPrimaryKeyDefinition("pk_records", "records", ["id", "value"])
+                : null,
             UniqueConstraints = kind == 3
-                ? [new ExpectedUniqueConstraintDefinition("uq_records", "records", ["id", "value"])] : [],
+                ? [new ExpectedUniqueConstraintDefinition("uq_records", "records", ["id", "value"])]
+                : [],
         };
 
-        var snapshot = new MySqlProjectedAlterPhysicalSnapshot(original,
-            kind == 0 ? [new MySqlAlterIndexPhysicalShape(false,
-                [new MySqlAlterIndexPart("id", null), new MySqlAlterIndexPart("value", null)])] : [],
+        var snapshot = new MySqlProjectedAlterPhysicalSnapshot(
+            original,
+            kind == 0
+                ?
+                [
+                    new MySqlAlterIndexPhysicalShape(
+                        false,
+                        [new MySqlAlterIndexPart("id", null), new MySqlAlterIndexPart("value", null)]),
+                ]
+                : [],
             Environment(maximumKeyBytes: 768));
 
         // Act
         var result = snapshot.IsSafe(
-            Alter("value", targetLength), table, context.GetService<IRelationalTypeMappingSource>());
+            Alter("value", targetLength),
+            table,
+            context.GetService<IRelationalTypeMappingSource>());
 
         // Assert
         Assert.Equal(expected, result);
@@ -623,10 +820,15 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Theory]
     [InlineData(65515, true)]
     [InlineData(65516, false)]
-    public void NativeUuidSiblingParticipatesInDeclaredRowBoundary(int binaryLength, bool expected)
+    public void NativeUuidSiblingParticipatesInDeclaredRowBoundary(
+        int binaryLength,
+        bool expected
+    )
     {
         // Arrange
-        var snapshot = Snapshot(("id", Catalog("uuid")), ("payload", Catalog("varbinary", binaryLength, 1)),
+        var snapshot = Snapshot(
+            ("id", Catalog("uuid")),
+            ("payload", Catalog("varbinary", binaryLength, 1)),
             ("value", Catalog("longtext", characterBytes: 1)));
 
         var table = new TableView(Character("value", "longtext"));
@@ -644,12 +846,18 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Theory]
     [InlineData(26, true)]
     [InlineData(27, false)]
-    public void NativeUuidSiblingsParticipateInInlineRowBoundary(int targetLength, bool expected)
+    public void NativeUuidSiblingsParticipateInInlineRowBoundary(
+        int targetLength,
+        bool expected
+    )
     {
         // Arrange
-        var columns = Enumerable.Range(0, 98).ToDictionary(
-            index => $"id_{index.ToString(CultureInfo.InvariantCulture)}",
-            _ => Catalog("uuid"), StringComparer.Ordinal);
+        var columns = Enumerable
+            .Range(0, 98)
+            .ToDictionary(
+                index => $"id_{index.ToString(CultureInfo.InvariantCulture)}",
+                _ => Catalog("uuid"),
+                StringComparer.Ordinal);
 
         columns.Add("value", Catalog("longtext", characterBytes: 1));
         var snapshot = new MySqlProjectedAlterPhysicalSnapshot(columns, [], Environment(pageSize: 4096));
@@ -667,7 +875,9 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void NativeUuidSiblingPrefixDoesNotAuthorizeRepair(bool projectedIndex)
+    public void NativeUuidSiblingPrefixDoesNotAuthorizeRepair(
+        bool projectedIndex
+    )
     {
         // Arrange
         var columns = new Dictionary<string, MySqlAlterColumnPhysicalShape>(StringComparer.Ordinal)
@@ -676,14 +886,24 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
             ["value"] = Catalog("longtext"),
         };
 
-        var snapshot = new MySqlProjectedAlterPhysicalSnapshot(columns,
-            projectedIndex ? [] : [new MySqlAlterIndexPhysicalShape(false, [new MySqlAlterIndexPart("id", 1)])],
+        var snapshot = new MySqlProjectedAlterPhysicalSnapshot(
+            columns,
+            projectedIndex
+                ? []
+                : [new MySqlAlterIndexPhysicalShape(false, [new MySqlAlterIndexPart("id", 1)])],
             Environment());
 
         var table = new TableView(Character("value", "longtext"))
         {
-            Indexes = projectedIndex ? [new ExpectedIndexDefinition("ix_id", "records",
-                [new ExpectedIndexKeyDefinition("id", prefixLength: 1)])] : [],
+            Indexes = projectedIndex
+                ?
+                [
+                    new ExpectedIndexDefinition(
+                        "ix_id",
+                        "records",
+                        [new ExpectedIndexKeyDefinition("id", prefixLength: 1)]),
+                ]
+                : [],
         };
 
         // Act
@@ -748,8 +968,13 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         var snapshot = Snapshot(("left_value", Catalog("varchar", 200)), ("right_value", Catalog("varchar", 200)));
         var table = new TableView(Varchar("left_value", 400), Varchar("right_value", 200))
         {
-            Indexes = [new ExpectedIndexDefinition("ix_values", "records",
-                [new ExpectedIndexKeyDefinition("left_value"), new ExpectedIndexKeyDefinition("right_value")])],
+            Indexes =
+            [
+                new ExpectedIndexDefinition(
+                    "ix_values",
+                    "records",
+                    [new ExpectedIndexKeyDefinition("left_value"), new ExpectedIndexKeyDefinition("right_value")]),
+            ],
         };
 
         var result = snapshot.IsSafe(Alter("right_value", 400), table, Mappings);
@@ -762,7 +987,9 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void IncompletePhysicalEvidenceCannotApproveAnAlter(bool missingTarget)
+    public void IncompletePhysicalEvidenceCannotApproveAnAlter(
+        bool missingTarget
+    )
     {
         var snapshot = missingTarget
             ? Snapshot(("other", Catalog("longtext")))
@@ -781,7 +1008,8 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     {
         var snapshot = new MySqlProjectedAlterPhysicalSnapshot(
             new Dictionary<string, MySqlAlterColumnPhysicalShape> { ["value"] = Catalog("longtext") },
-            [new MySqlAlterIndexPhysicalShape(false, [new MySqlAlterIndexPart("value", 128)])], Environment());
+            [new MySqlAlterIndexPhysicalShape(false, [new MySqlAlterIndexPart("value", 128)])],
+            Environment());
 
         var table = new TableView(Character("value", "longtext"));
 
@@ -810,17 +1038,13 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         var definition = Character("value", storeType);
 
         var known = MySqlProjectedAlterPhysicalSnapshot.TryCreateProjectedColumn(
-            definition, Mappings, 4, out var shape);
+            definition,
+            Mappings,
+            4,
+            out var shape);
 
         Assert.True(known);
         Assert.Equal(width, shape.DeclaredRowBytes);
-    }
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        _context.Dispose();
-        _nativeServices?.Dispose();
     }
 
     /// <summary>Sibling signed widenings also share the captured inline-row budget, not just key capacity.</summary>
@@ -831,24 +1055,53 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(true, true)]
-    public void IndexDropWideningsRetainTheCumulativeInlineRowBudget(bool earlierWidening, bool columnAliases)
+    public void IndexDropWideningsRetainTheCumulativeInlineRowBudget(
+        bool earlierWidening,
+        bool columnAliases
+    )
     {
         // Arrange
-        var original = Enumerable.Range(0, 10).ToDictionary(
-            static index => "padding_" + index.ToString(CultureInfo.InvariantCulture),
-            static _ => Catalog("char", 251), StringComparer.OrdinalIgnoreCase);
+        var original = Enumerable
+            .Range(0, 10)
+            .ToDictionary(
+                static index => "padding_" + index.ToString(CultureInfo.InvariantCulture),
+                static _ => Catalog("char", 251),
+                StringComparer.OrdinalIgnoreCase);
 
         original.Add("binary_padding", Catalog("binary", 220, 1));
         original.Add("first", Catalog("int"));
         original.Add("second", Catalog("int"));
         original.Add("third", Catalog("int"));
         var snapshot = new MySqlProjectedAlterPhysicalSnapshot(original, [], Environment());
-        var source = new TableView(new ExpectedColumnDefinition(columnAliases ? "FIRST" : "first",
-            earlierWidening ? typeof(long) : typeof(int), false, earlierWidening ? "bigint" : "int"));
+        var source = new TableView(
+            new ExpectedColumnDefinition(
+                columnAliases
+                    ? "FIRST"
+                    : "first",
+                earlierWidening
+                    ? typeof(long)
+                    : typeof(int),
+                false,
+                earlierWidening
+                    ? "bigint"
+                    : "int"));
 
-        var intent = new AlterColumnIntent("records",
-            new ExpectedColumnDefinition(columnAliases ? "SECOND" : "second", typeof(long), false, "bigint"),
-            new ExpectedColumnDefinition(columnAliases ? "SECOND" : "second", typeof(int), false, "int"));
+        var intent = new AlterColumnIntent(
+            "records",
+            new ExpectedColumnDefinition(
+                columnAliases
+                    ? "SECOND"
+                    : "second",
+                typeof(long),
+                false,
+                "bigint"),
+            new ExpectedColumnDefinition(
+                columnAliases
+                    ? "SECOND"
+                    : "second",
+                typeof(int),
+                false,
+                "int"));
 
         // Act
         var result = snapshot.IsSafeAfterIndexDrops(intent, source, Mappings);
@@ -867,13 +1120,30 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     [InlineData(true, "row")]
     [InlineData(false, "key")]
     [InlineData(true, "key")]
-    public void CompleteProjectedColumnAliasesRetainRowAndKeyBudgets(bool columnAliases, string boundary)
+    public void CompleteProjectedColumnAliasesRetainRowAndKeyBudgets(
+        bool columnAliases,
+        string boundary
+    )
     {
         // Arrange
         var source = Varchar("value", 100);
-        var target = Varchar(columnAliases ? "VALUE" : "value",
-            boundary == "row" ? 8000 : boundary == "key" ? 900 : 200);
-        var table = new TableView(source, Varchar("companion", boundary == "row" ? 9000 : 100))
+        var target = Varchar(
+            columnAliases
+                ? "VALUE"
+                : "value",
+            boundary == "row"
+                ? 8000
+                : boundary == "key"
+                    ? 900
+                    : 200);
+
+        var table = new TableView(
+            source,
+            Varchar(
+                "companion",
+                boundary == "row"
+                    ? 9000
+                    : 100))
         {
             Indexes = boundary == "key"
                 ? [new ExpectedIndexDefinition("ix_value", "records", [new ExpectedIndexKeyDefinition("value")])]
@@ -883,19 +1153,24 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
         var intent = new AlterColumnIntent("records", target, Varchar(target.Name, 100));
 
         // Act
-        var result = MySqlProjectedColumnTransition.IsSafe(intent, source, table, Environment(), Mappings,
+        var result = MySqlProjectedColumnTransition.IsSafe(
+            intent,
+            source,
+            table,
+            Environment(),
+            Mappings,
             canReuseCreationCharacterSet: true);
 
         // Assert
         Assert.Equal(boundary == "fits", result);
     }
 
-    private IRelationalTypeMappingSource Mappings => _context.GetService<IRelationalTypeMappingSource>();
-
     private static MySqlProjectedAlterPhysicalSnapshot Snapshot(
         params (string Name, MySqlAlterColumnPhysicalShape Shape)[] columns
-    ) => new(columns.ToDictionary(static column => column.Name, static column => column.Shape, StringComparer.Ordinal),
-        [], Environment());
+    ) => new(
+        columns.ToDictionary(static column => column.Name, static column => column.Shape, StringComparer.Ordinal),
+        [],
+        Environment());
 
     private static MySqlProjectedAlterPhysicalSnapshot CompositeSnapshot(
         int maximumKeyBytes,
@@ -906,52 +1181,90 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
             ["left_value"] = Catalog("varchar", 200, characterBytes),
             ["right_value"] = Catalog("varchar", 200, characterBytes),
         },
-        [new MySqlAlterIndexPhysicalShape(false,
-            [new MySqlAlterIndexPart("left_value", null), new MySqlAlterIndexPart("right_value", null)])],
-        Environment(maximumKeyBytes, maximumKeyBytes == 767 ? "Compact" : "Dynamic"));
+        [
+            new MySqlAlterIndexPhysicalShape(
+                false,
+                [new MySqlAlterIndexPart("left_value", null), new MySqlAlterIndexPart("right_value", null)]),
+        ],
+        Environment(
+            maximumKeyBytes,
+            maximumKeyBytes == 767
+                ? "Compact"
+                : "Dynamic"));
 
     private static SafeMigrationIndexPhysicalEnvironment Environment(
         int maximumKeyBytes = 3072,
         string rowFormat = "Dynamic",
         int pageSize = 16384
-    ) => new(maximumKeyBytes, StorageRowFormat: rowFormat, StoragePageSize: pageSize,
-        DefaultCharacterSet: "utf8mb4", StrictSqlMode: true);
+    ) => new(
+        maximumKeyBytes,
+        StorageRowFormat: rowFormat,
+        StoragePageSize: pageSize,
+        DefaultCharacterSet: "utf8mb4",
+        StrictSqlMode: true);
 
     private static MySqlAlterColumnPhysicalShape Catalog(
         string type,
         long? length = null,
         int characterBytes = 4
     ) =>
-        MySqlProjectedAlterPhysicalSnapshot.CreateCatalogColumn(type, false, length, length * characterBytes,
-            null, null, null, characterBytes, characterBytes == 1 ? "latin1_bin" : "utf8mb4_bin",
-            characterBytes == 1 ? "latin1" : "utf8mb4");
+        MySqlProjectedAlterPhysicalSnapshot.CreateCatalogColumn(
+            type,
+            false,
+            length,
+            length * characterBytes,
+            null,
+            null,
+            null,
+            characterBytes,
+            characterBytes == 1
+                ? "latin1_bin"
+                : "utf8mb4_bin",
+            characterBytes == 1
+                ? "latin1"
+                : "utf8mb4");
 
     private static ExpectedColumnDefinition Character(
         string name,
         string storeType
     ) => new(
-        name, typeof(string), isNullable: false, storeType: storeType);
+        name,
+        typeof(string),
+        isNullable: false,
+        storeType: storeType);
 
     /// <summary>Describes fixed native UUID storage without character or binary length facets.</summary>
     /// <param name="name">The exact column name.</param>
     /// <returns>A native UUID column with no textual length facets.</returns>
-    private static ExpectedColumnDefinition NativeUuid(string name) => new(
-        name, typeof(Guid), isNullable: false, storeType: "uuid");
+    private static ExpectedColumnDefinition NativeUuid(
+        string name
+    ) => new(
+        name,
+        typeof(Guid),
+        isNullable: false,
+        storeType: "uuid");
 
     private static ExpectedColumnDefinition Varchar(
         string name,
         int length,
         string? collation = null
     ) => new(
-        name, typeof(string), isNullable: false,
-        storeType: $"varchar({length.ToString(CultureInfo.InvariantCulture)})", maxLength: length,
-        collation: collation is null ? null : new SafeMigrationCollationIdentifier(collation));
+        name,
+        typeof(string),
+        isNullable: false,
+        storeType: $"varchar({length.ToString(CultureInfo.InvariantCulture)})",
+        maxLength: length,
+        collation: collation is null
+            ? null
+            : new SafeMigrationCollationIdentifier(collation));
 
     private static AlterColumnIntent Alter(
         string column,
         int length
     ) => new(
-        "renamed_records", Varchar(column, length), Character(column, "longtext"));
+        "renamed_records",
+        Varchar(column, length),
+        Character(column, "longtext"));
 
     private static DbContext CreateContext()
     {
@@ -969,7 +1282,8 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
     {
         // WHY: Capability-profile probes own their provider lifetime instead
         // of retaining additional configurations in EF's process-wide cache.
-        _nativeServices ??= new ServiceCollection().AddEntityFrameworkDokaMySql()
+        _nativeServices ??= new ServiceCollection()
+            .AddEntityFrameworkDokaMySql()
             .BuildServiceProvider(validateScopes: true);
 
         var options = new DbContextOptionsBuilder<DbContext>();
@@ -1000,7 +1314,7 @@ public sealed class MySqlProjectedAlterPhysicalSnapshotTests : IDisposable
             string table,
             string? schema,
             string column,
-            [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ExpectedColumnDefinition? definition
+            [NotNullWhen(true)] out ExpectedColumnDefinition? definition
         ) => _columns.TryGetValue(column, out definition);
     }
 }

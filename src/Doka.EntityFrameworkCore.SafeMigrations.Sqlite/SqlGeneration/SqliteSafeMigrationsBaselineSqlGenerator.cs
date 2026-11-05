@@ -3,10 +3,10 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 /// <summary>Retains explicit physical facets for provider-generated safe table columns.</summary>
 internal sealed class SqliteSafeMigrationsBaselineSqlGenerator : SqliteMigrationsSqlGenerator
 {
-    private bool _preserveGeneratedFacets;
     private List<MigrationOperation>? _capturedOperations;
     private HashSet<CreateTableOperation>? _completeCreators;
     private SqliteGeneratedColumnOwnership? _ownership;
+    private bool _preserveGeneratedFacets;
 
     /// <summary>Initializes the native generator specialization without replacing its operation pipeline.</summary>
     /// <param name="dependencies">The official provider's SQL generation dependencies.</param>
@@ -14,9 +14,7 @@ internal sealed class SqliteSafeMigrationsBaselineSqlGenerator : SqliteMigration
     public SqliteSafeMigrationsBaselineSqlGenerator(
         MigrationsSqlGeneratorDependencies dependencies,
         IRelationalAnnotationProvider annotations
-    ) : base(dependencies, annotations)
-    {
-    }
+    ) : base(dependencies, annotations) { }
 
     /// <summary>Generates a guarded baseline with complete generated-column physical declarations.</summary>
     /// <param name="operations">The ordered standard operations accepted by the safe runtime planner.</param>
@@ -80,7 +78,11 @@ internal sealed class SqliteSafeMigrationsBaselineSqlGenerator : SqliteMigration
     }
 
     /// <inheritdoc />
-    protected override void Generate(MigrationOperation operation, IModel? model, MigrationCommandListBuilder builder)
+    protected override void Generate(
+        MigrationOperation operation,
+        IModel? model,
+        MigrationCommandListBuilder builder
+    )
     {
         if (_capturedOperations is not null)
         {
@@ -113,20 +115,27 @@ internal sealed class SqliteSafeMigrationsBaselineSqlGenerator : SqliteMigration
     }
 
     /// <summary>Avoids capture structures for the ordinary non-generated migration path.</summary>
-    private static bool CouldContainGeneratedColumns(IReadOnlyList<MigrationOperation> operations, IModel? model)
+    private static bool CouldContainGeneratedColumns(
+        IReadOnlyList<MigrationOperation> operations,
+        IModel? model
+    )
     {
         foreach (var operation in operations)
         {
             if (operation is ColumnOperation { ComputedColumnSql: not null }
-                || operation is CreateTableOperation creator
-                && creator.Columns.Any(static column => column.ComputedColumnSql is not null))
+                || (operation is CreateTableOperation creator
+                    && creator.Columns.Any(static column => column.ComputedColumnSql is not null)))
             {
                 return true;
             }
         }
 
-        return model?.GetRelationalModel().Tables.Any(static table =>
-            table.Columns.Any(static column => column.ComputedColumnSql is not null)) == true;
+        return model
+                ?.GetRelationalModel()
+                .Tables
+                .Any(static table =>
+                    table.Columns.Any(static column => column.ComputedColumnSql is not null))
+            == true;
     }
 
     /// <inheritdoc />
@@ -139,7 +148,8 @@ internal sealed class SqliteSafeMigrationsBaselineSqlGenerator : SqliteMigration
         MigrationCommandListBuilder builder
     )
     {
-        if (!_preserveGeneratedFacets || _ownership?.IsProviderOperation(operation) == true)
+        if (!_preserveGeneratedFacets
+            || _ownership?.IsProviderOperation(operation) == true)
         {
             // WHY: Ordinary EF operations remain provider-owned. Only a safe
             // definition promises the explicit physical facets checked afterward.
@@ -154,13 +164,15 @@ internal sealed class SqliteSafeMigrationsBaselineSqlGenerator : SqliteMigration
         var expression = operation.ComputedColumnSql
             ?? throw new InvalidOperationException("A generated column requires its SQL expression.");
 
-        builder.Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(name))
+        builder
+            .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(name))
             .Append(" ")
             .Append(operation.ColumnType ?? GetColumnType(schema, table, name, operation, model));
 
         if (operation.Collation is not null)
         {
-            builder.Append(" COLLATE ")
+            builder
+                .Append(" COLLATE ")
                 .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Collation));
         }
 
@@ -169,8 +181,12 @@ internal sealed class SqliteSafeMigrationsBaselineSqlGenerator : SqliteMigration
             builder.Append(" NOT NULL");
         }
 
-        builder.Append(" GENERATED ALWAYS AS (")
+        builder
+            .Append(" GENERATED ALWAYS AS (")
             .Append(expression)
-            .Append(operation.IsStored == true ? ") STORED" : ") VIRTUAL");
+            .Append(
+                operation.IsStored == true
+                    ? ") STORED"
+                    : ") VIRTUAL");
     }
 }

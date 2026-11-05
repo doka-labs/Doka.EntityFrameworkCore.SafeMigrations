@@ -16,8 +16,8 @@ internal sealed partial class SafeMigrationPreflightProjection
                 && !(allowUntouchedSource && !_projectedStructurallyModifiedTables.Contains(key)))
             || _projectedColumnAnalyzer is not { } provider
             || _hasOpaqueProviderPostcondition
-            || _hasOpaqueSqlPostcondition
-            || _providerDataMutationVersion != 0
+            || HasOpaqueSqlPostcondition
+            || DataMutationVersion != 0
             || HasUnanalyzedDataChanges(intent.Table, intent.Schema)
             || _projectedMissingTables.Contains(key)
             || IsProjectedTableStructureUnknown(intent.Table, intent.Schema)

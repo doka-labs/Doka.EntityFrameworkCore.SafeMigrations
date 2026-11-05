@@ -22,8 +22,8 @@ internal enum CatalogClassificationResultFault
 /// <summary>Counts real classifier statements through the supported sequential connection fallback.</summary>
 internal sealed class CatalogClassificationCountingConnection : DbConnection
 {
-    private readonly DbConnection _inner;
     private readonly CatalogClassificationResultFault _fault;
+    private readonly DbConnection _inner;
     private readonly bool _nativeBatch;
     private bool _innerDisposed;
 
@@ -94,7 +94,7 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
     public bool FaultWasInjected { get; private set; }
 
     /// <inheritdoc />
-    [System.Diagnostics.CodeAnalysis.AllowNull]
+    [AllowNull]
     public override string ConnectionString
     {
         get => _inner.ConnectionString;
@@ -146,29 +146,37 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
     /// <inheritdoc />
     protected override DbBatch CreateDbBatch() => new CountingBatch(this, _inner.CreateBatch());
 
-    private static bool IsNarrowingDataStatement(string commandText) =>
+    private static bool IsNarrowingDataStatement(
+        string commandText
+    ) =>
         commandText.Contains("char_length(", StringComparison.OrdinalIgnoreCase)
         && (commandText.StartsWith("SELECT EXISTS(SELECT 1 FROM ", StringComparison.Ordinal)
             || commandText.StartsWith("SELECT COALESCE(", StringComparison.Ordinal));
 
     /// <summary>Counts fixed safety-fact purposes equally for native batches and sequential readers.</summary>
-    private void CountColumnSafetyFacts(string commandText)
+    private void CountColumnSafetyFacts(
+        string commandText
+    )
     {
-        if (commandText.StartsWith("SELECT @@default_storage_engine, @@SESSION.sql_mode, "
-                + "@@SESSION.explicit_defaults_for_timestamp, ", StringComparison.Ordinal))
+        if (commandText.StartsWith(
+            "SELECT @@default_storage_engine, @@SESSION.sql_mode, "
+            + "@@SESSION.explicit_defaults_for_timestamp, ",
+            StringComparison.Ordinal))
         {
             RequiredAddSessionStatementCount++;
         }
-        else if (commandText.StartsWith("SELECT source_owner.ordinal, EXISTS (SELECT 1 "
-                     + "FROM INFORMATION_SCHEMA.TABLES physical_owner ", StringComparison.Ordinal)
-                 && commandText.Contains("UPPER(physical_owner.ENGINE) = 'INNODB'", StringComparison.Ordinal))
+        else if (commandText.StartsWith(
+                "SELECT source_owner.ordinal, EXISTS (SELECT 1 "
+                + "FROM INFORMATION_SCHEMA.TABLES physical_owner ",
+                StringComparison.Ordinal)
+            && commandText.Contains("UPPER(physical_owner.ENGINE) = 'INNODB'", StringComparison.Ordinal))
         {
             RequiredAddOwnerEngineStatementCount++;
         }
         else if (commandText.Contains(", (CASE WHEN ", StringComparison.Ordinal)
-                 && commandText.Contains("THEN 'complete'", StringComparison.Ordinal)
-                 && commandText.Contains("ELSE 'fresh' END", StringComparison.Ordinal)
-                 && commandText.Contains("ELSE 'staged' END ELSE 'ordinary' END)", StringComparison.Ordinal))
+            && commandText.Contains("THEN 'complete'", StringComparison.Ordinal)
+            && commandText.Contains("ELSE 'fresh' END", StringComparison.Ordinal)
+            && commandText.Contains("ELSE 'staged' END ELSE 'ordinary' END)", StringComparison.Ordinal))
         {
             RequiredAddStatusStatementCount++;
         }
@@ -214,8 +222,8 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
     /// <summary>Forwards a real provider command and observes only its classifier result shape.</summary>
     private sealed class CountingCommand : DbCommand
     {
-        private readonly CatalogClassificationCountingConnection _owner;
         private readonly DbCommand _innerCommand;
+        private readonly CatalogClassificationCountingConnection _owner;
         private bool _innerDisposed;
 
         /// <summary>Creates the command adapter owned by one counting connection.</summary>
@@ -229,7 +237,7 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
         }
 
         /// <inheritdoc />
-        [System.Diagnostics.CodeAnalysis.AllowNull]
+        [AllowNull]
         public override string CommandText
         {
             get => _innerCommand.CommandText;
@@ -433,24 +441,28 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
             {
                 _owner.PrerequisiteStatementCount++;
             }
-            else if (reader.FieldCount == 3 && CommandText.Contains(
-                         "ELSE NULL END, CASE WHEN NOT COALESCE(", StringComparison.Ordinal)
-                     && CommandText.EndsWith("ORDER BY 1;", StringComparison.Ordinal))
+            else if (reader.FieldCount == 3
+                && CommandText.Contains(
+                    "ELSE NULL END, CASE WHEN NOT COALESCE(",
+                    StringComparison.Ordinal)
+                && CommandText.EndsWith("ORDER BY 1;", StringComparison.Ordinal))
             {
                 // WHY: Lazy diagnostics and narrowing eligibility both return
                 // three fields. Their fixed purpose signatures must not alias.
                 _owner.StateEvaluationGuardStatementCount++;
             }
             else if (reader.FieldCount == 3
-                     && CommandText.Contains(", COALESCE((", StringComparison.Ordinal)
-                     && CommandText.Contains("), FALSE), COALESCE((", StringComparison.Ordinal)
-                     && CommandText.Contains(
-                         "narrowing_column.CHARACTER_MAXIMUM_LENGTH", StringComparison.OrdinalIgnoreCase)
-                     && CommandText.EndsWith("ORDER BY 1;", StringComparison.Ordinal))
+                && CommandText.Contains(", COALESCE((", StringComparison.Ordinal)
+                && CommandText.Contains("), FALSE), COALESCE((", StringComparison.Ordinal)
+                && CommandText.Contains(
+                    "narrowing_column.CHARACTER_MAXIMUM_LENGTH",
+                    StringComparison.OrdinalIgnoreCase)
+                && CommandText.EndsWith("ORDER BY 1;", StringComparison.Ordinal))
             {
                 _owner.NarrowingEligibilityStatementCount++;
             }
-            else if (reader.FieldCount == 2 && CommandText.Contains("column_store_type", StringComparison.Ordinal))
+            else if (reader.FieldCount == 2
+                && CommandText.Contains("column_store_type", StringComparison.Ordinal))
             {
                 _owner.ColumnDiagnosticStatementCount++;
             }
@@ -460,7 +472,9 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
             }
         }
 
-        private bool IsPrerequisite(DbDataReader reader) => reader.FieldCount == 2
+        private bool IsPrerequisite(
+            DbDataReader reader
+        ) => reader.FieldCount == 2
             && CommandText.Contains("THEN 'prerequisite_missing'", StringComparison.Ordinal);
 
         /// <inheritdoc />
@@ -500,8 +514,8 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
     /// <summary>Forwards provider batches while counting only statement categories and bounded cardinalities.</summary>
     private sealed class CountingBatch : DbBatch
     {
-        private readonly CatalogClassificationCountingConnection _owner;
         private readonly DbBatch _innerBatch;
+        private readonly CatalogClassificationCountingConnection _owner;
         private bool _innerDisposed;
 
         /// <summary>Creates a counting adapter without recording SQL or values.</summary>
@@ -550,25 +564,33 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
         public override void Prepare() => _innerBatch.Prepare();
 
         /// <inheritdoc />
-        public override Task PrepareAsync(CancellationToken cancellationToken = default)
+        public override Task PrepareAsync(
+            CancellationToken cancellationToken = default
+        )
             => _innerBatch.PrepareAsync(cancellationToken);
 
         /// <inheritdoc />
         public override int ExecuteNonQuery() => _innerBatch.ExecuteNonQuery();
 
         /// <inheritdoc />
-        public override Task<int> ExecuteNonQueryAsync(CancellationToken cancellationToken = default)
+        public override Task<int> ExecuteNonQueryAsync(
+            CancellationToken cancellationToken = default
+        )
             => _innerBatch.ExecuteNonQueryAsync(cancellationToken);
 
         /// <inheritdoc />
         public override object? ExecuteScalar() => _innerBatch.ExecuteScalar();
 
         /// <inheritdoc />
-        public override Task<object?> ExecuteScalarAsync(CancellationToken cancellationToken = default)
+        public override Task<object?> ExecuteScalarAsync(
+            CancellationToken cancellationToken = default
+        )
             => _innerBatch.ExecuteScalarAsync(cancellationToken);
 
         /// <inheritdoc />
-        protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
+        protected override DbDataReader ExecuteDbDataReader(
+            CommandBehavior behavior
+        )
         {
             CountStatements();
 
@@ -590,7 +612,8 @@ internal sealed class CatalogClassificationCountingConnection : DbConnection
         {
             _owner.NativeBatchExecutionCount++;
             _owner.LargestNativeBatchStatementCount = Math.Max(
-                _owner.LargestNativeBatchStatementCount, _innerBatch.BatchCommands.Count);
+                _owner.LargestNativeBatchStatementCount,
+                _innerBatch.BatchCommands.Count);
 
             var narrowing = 0;
             foreach (var command in _innerBatch.BatchCommands)

@@ -20,6 +20,7 @@ internal sealed class MySqlGenerationContext : DbContext
             "Server=127.0.0.1;Port=1;User ID=benchmark;Password=benchmark;Database=benchmark;"
             + "Allow User Variables=true",
             MySqlServerVersion.MySql(new Version(8, 4, 11)));
+
         optionsBuilder.UseMySqlSafeMigrations();
     }
 }

@@ -28,7 +28,8 @@ public sealed class SafeMigrationExecutionException : InvalidOperationException
         int? operationOrdinal,
         Exception innerException,
         string? diagnosticReasonCode = null
-    ) : base(CreateMessage(operation, guardCode, operationOrdinal, innerException, diagnosticReasonCode),
+    ) : base(
+        CreateMessage(operation, guardCode, operationOrdinal, innerException, diagnosticReasonCode),
         innerException)
     {
         // WHY: Capturing only identifiers avoids retaining an entire authored
@@ -38,7 +39,9 @@ public sealed class SafeMigrationExecutionException : InvalidOperationException
         OperationOrdinal = operationOrdinal;
         Policy = operation.Policy;
         var explanation = SafeMigrationDiagnosticMessages.GetRuntimeExplanation(
-            operation.Intent, guardCode, diagnosticReasonCode);
+            operation.Intent,
+            guardCode,
+            diagnosticReasonCode);
 
         ReasonCode = explanation.ReasonCode;
     }
@@ -55,7 +58,8 @@ public sealed class SafeMigrationExecutionException : InvalidOperationException
         int? operationOrdinal,
         Exception innerException,
         string? diagnosticReasonCode = null
-    ) : base(CreateCapturedMessage(context, guardCode, operationOrdinal, innerException, diagnosticReasonCode),
+    ) : base(
+        CreateCapturedMessage(context, guardCode, operationOrdinal, innerException, diagnosticReasonCode),
         innerException)
     {
         Identity = context.Identity;
@@ -63,7 +67,10 @@ public sealed class SafeMigrationExecutionException : InvalidOperationException
         OperationOrdinal = operationOrdinal;
         Policy = context.Policy;
         ReasonCode = SafeMigrationDiagnosticMessages.GetRuntimeExplanation(
-            context, guardCode, diagnosticReasonCode).ReasonCode;
+                context,
+                guardCode,
+                diagnosticReasonCode)
+            .ReasonCode;
     }
 
     /// <summary>Gets the original native guard identity, independent of human-readable text.</summary>
@@ -107,7 +114,10 @@ public sealed class SafeMigrationExecutionException : InvalidOperationException
                 nameof(guardCode));
         }
 
-        return SafeMigrationDiagnosticMessages.FormatRuntime(operation, guardCode, operationOrdinal,
+        return SafeMigrationDiagnosticMessages.FormatRuntime(
+            operation,
+            guardCode,
+            operationOrdinal,
             diagnosticReasonCode);
     }
 
@@ -141,7 +151,10 @@ public sealed class SafeMigrationExecutionException : InvalidOperationException
         }
 
         return SafeMigrationDiagnosticMessages.FormatCapturedRuntime(
-            context, guardCode, operationOrdinal, diagnosticReasonCode);
+            context,
+            guardCode,
+            operationOrdinal,
+            diagnosticReasonCode);
     }
 
     /// <summary>Accepts only the closed native rejection contract, not lookalike provider errors.</summary>
@@ -149,8 +162,11 @@ public sealed class SafeMigrationExecutionException : InvalidOperationException
         string guardCode
     ) => guardCode switch
     {
-        "doka_sm_different" or "doka_sm_unsupported" or "doka_sm_data_blocked"
-            or "doka_sm_prerequisite_missing" or "doka_sm_postcondition" => true,
+        "doka_sm_different"
+            or "doka_sm_unsupported"
+            or "doka_sm_data_blocked"
+            or "doka_sm_prerequisite_missing"
+            or "doka_sm_postcondition" => true,
         _ => false,
     };
 }

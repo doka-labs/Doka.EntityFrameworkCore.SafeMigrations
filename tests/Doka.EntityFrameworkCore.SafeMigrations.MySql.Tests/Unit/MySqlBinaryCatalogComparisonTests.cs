@@ -15,11 +15,14 @@ public sealed class MySqlBinaryCatalogComparisonTests
         var sql = MySqlSafeMigrationCatalogSqlBuilder.BuildRequiredColumnAddOwnerMatches(catalog, expected);
 
         // Assert
-        Assert.Equal("(CASE WHEN @@lower_case_table_names = 0 THEN "
+        Assert.Equal(
+            "(CASE WHEN @@lower_case_table_names = 0 THEN "
             + "CAST(physical_owner.TABLE_NAME AS BINARY) = CAST(source_owner.owner AS BINARY) "
             + "WHEN @@lower_case_table_names IN (1, 2) THEN "
             + "CAST(LOWER(physical_owner.TABLE_NAME) AS BINARY) = CAST(LOWER(source_owner.owner) AS BINARY) "
-            + "ELSE FALSE END)", sql);
+            + "ELSE FALSE END)",
+            sql);
+
         Assert.DoesNotContain("BINARY ", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("AS BINARY(", sql, StringComparison.Ordinal);
     }
@@ -36,14 +39,27 @@ public sealed class MySqlBinaryCatalogComparisonTests
         var sql = MySqlSafeMigrationProviderAnalyzer.BuildColumnDependencyQuery(source);
 
         // Assert
-        Assert.Contains("CAST(primary_column.CONSTRAINT_SCHEMA AS BINARY) = "
-            + "CAST(primary_key.CONSTRAINT_SCHEMA AS BINARY)", sql, StringComparison.Ordinal);
-        Assert.Contains("CAST(primary_column.TABLE_NAME AS BINARY) = CAST(primary_key.TABLE_NAME AS BINARY)", sql,
+        Assert.Contains(
+            "CAST(primary_column.CONSTRAINT_SCHEMA AS BINARY) = "
+            + "CAST(primary_key.CONSTRAINT_SCHEMA AS BINARY)",
+            sql,
             StringComparison.Ordinal);
-        Assert.Contains("CAST(local_key.CONSTRAINT_SCHEMA AS BINARY) = CAST(rc.CONSTRAINT_SCHEMA AS BINARY)", sql,
+
+        Assert.Contains(
+            "CAST(primary_column.TABLE_NAME AS BINARY) = CAST(primary_key.TABLE_NAME AS BINARY)",
+            sql,
             StringComparison.Ordinal);
-        Assert.Contains("CAST(local_key.TABLE_NAME AS BINARY) = CAST(rc.TABLE_NAME AS BINARY)", sql,
+
+        Assert.Contains(
+            "CAST(local_key.CONSTRAINT_SCHEMA AS BINARY) = CAST(rc.CONSTRAINT_SCHEMA AS BINARY)",
+            sql,
             StringComparison.Ordinal);
+
+        Assert.Contains(
+            "CAST(local_key.TABLE_NAME AS BINARY) = CAST(rc.TABLE_NAME AS BINARY)",
+            sql,
+            StringComparison.Ordinal);
+
         Assert.DoesNotContain("BINARY ", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("AS BINARY(", sql, StringComparison.Ordinal);
         Assert.Contains("ELSE FALSE END", sql, StringComparison.Ordinal);

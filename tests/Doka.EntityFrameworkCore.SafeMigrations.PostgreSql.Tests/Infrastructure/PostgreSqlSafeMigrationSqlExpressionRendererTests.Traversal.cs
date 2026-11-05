@@ -10,7 +10,10 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
     [InlineData(SafeMigrationSqlBinaryOperator.And, true)]
     [InlineData(SafeMigrationSqlBinaryOperator.Or, false)]
     [InlineData(SafeMigrationSqlBinaryOperator.Or, true)]
-    public void DeepNativeBooleanSpinesPreserveExactSql(SafeMigrationSqlBinaryOperator operation, bool rightSpine)
+    public void DeepNativeBooleanSpinesPreserveExactSql(
+        SafeMigrationSqlBinaryOperator operation,
+        bool rightSpine
+    )
     {
         // Arrange
         const int depth = 20_000;
@@ -20,11 +23,15 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
         var expression = literal;
         for (var index = 0; index < depth; index++)
         {
-            expression = rightSpine ? SafeMigrationSql.Binary(literal, operation, expression)
+            expression = rightSpine
+                ? SafeMigrationSql.Binary(literal, operation, expression)
                 : SafeMigrationSql.Binary(expression, operation, literal);
         }
 
-        var separator = operation == SafeMigrationSqlBinaryOperator.And ? " AND " : " OR ";
+        var separator = operation == SafeMigrationSqlBinaryOperator.And
+            ? " AND "
+            : " OR ";
+
         var expected = Literal("(" + string.Join(separator, Enumerable.Repeat("true", depth + 1)) + ")");
 
         // Act
@@ -49,7 +56,9 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
         var other = operation == SafeMigrationSqlBinaryOperator.And
-            ? SafeMigrationSqlBinaryOperator.Or : SafeMigrationSqlBinaryOperator.And;
+            ? SafeMigrationSqlBinaryOperator.Or
+            : SafeMigrationSqlBinaryOperator.And;
+
         var child = SafeMigrationSql.Binary(SafeMigrationSql.Literal(true), other, SafeMigrationSql.Literal(false));
         var expression = SafeMigrationSql.Binary(child, operation, SafeMigrationSql.Literal(true));
 
@@ -68,7 +77,10 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void DeepArithmeticPreservesExactOutput(bool rightSpine, bool catalog)
+    public void DeepArithmeticPreservesExactOutput(
+        bool rightSpine,
+        bool catalog
+    )
     {
         // Arrange
         const int depth = 20_000;
@@ -78,20 +90,30 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
         var expected = new StringBuilder();
         for (var index = 0; index < depth; index++)
         {
-            expected.Append(rightSpine ? "(1 + " : "(");
+            expected.Append(
+                rightSpine
+                    ? "(1 + "
+                    : "(");
         }
 
         expected.Append('0');
         for (var index = 0; index < depth; index++)
         {
-            expected.Append(rightSpine ? ")" : " + 1)");
+            expected.Append(
+                rightSpine
+                    ? ")"
+                    : " + 1)");
         }
 
-        var expectedSql = catalog ? Literal(expected.ToString()) : expected.ToString();
+        var expectedSql = catalog
+            ? Literal(expected.ToString())
+            : expected.ToString();
 
         // Act
         var feature = renderer.GetUnsupportedFeature(expression);
-        var sql = catalog ? renderer.RenderCatalogCandidateSql(expression, Literal) : renderer.Render(expression);
+        var sql = catalog
+            ? renderer.RenderCatalogCandidateSql(expression, Literal)
+            : renderer.Render(expression);
 
         // Assert
         Assert.Null(feature);
@@ -103,7 +125,9 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void DeepDeparsedArithmeticPreservesPrecedence(bool rightSpine)
+    public void DeepDeparsedArithmeticPreservesPrecedence(
+        bool rightSpine
+    )
     {
         // Arrange
         const int depth = 20_000;
@@ -113,13 +137,21 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
         var expected = new StringBuilder("(");
         for (var index = 0; index < depth; index++)
         {
-            expected.Append(rightSpine ? index == 0 ? "1 + " : "(1 + " : string.Empty);
+            expected.Append(
+                rightSpine
+                    ? index == 0
+                        ? "1 + "
+                        : "(1 + "
+                    : string.Empty);
         }
 
         expected.Append('0');
         for (var index = 0; index < depth; index++)
         {
-            expected.Append(rightSpine ? ")" : " + 1");
+            expected.Append(
+                rightSpine
+                    ? ")"
+                    : " + 1");
         }
 
         if (!rightSpine)
@@ -150,7 +182,9 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
             expected.Append("(- ");
         }
 
-        expected.Append('1').Append(')', depth);
+        expected
+            .Append('1')
+            .Append(')', depth);
 
         // Act
         var sql = renderer.RenderCatalogNativeDeparsedCandidateSql(expression, Literal);
@@ -165,7 +199,9 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(2)]
-    public void DeepNativeResultTypesRemainProvable(int shape)
+    public void DeepNativeResultTypesRemainProvable(
+        int shape
+    )
     {
         // Arrange
         var expression = SafeMigrationSql.Literal(1);
@@ -175,7 +211,8 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
             {
                 0 => SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Negate, expression),
                 1 => SafeMigrationSql.Function("COALESCE", expression, SafeMigrationSql.Literal(2)),
-                2 => SafeMigrationSql.Case([new(SafeMigrationSql.Opaque("unresolved_condition"), expression)],
+                2 => SafeMigrationSql.Case(
+                    [new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.Opaque("unresolved_condition"), expression)],
                     SafeMigrationSql.Literal(2)),
                 _ => throw new ArgumentOutOfRangeException(nameof(shape)),
             };
@@ -194,7 +231,9 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(2)]
-    public void NativeTypeFailureRetainsOriginalCallbackOrder(int shape)
+    public void NativeTypeFailureRetainsOriginalCallbackOrder(
+        int shape
+    )
     {
         // Arrange
         var calls = new List<string>();
@@ -203,18 +242,29 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
         var expression = shape switch
         {
             0 => SafeMigrationSql.Binary(unknown, SafeMigrationSqlBinaryOperator.Add, typed),
-            1 => SafeMigrationSql.Case([new(SafeMigrationSql.Literal(true), typed)], unknown),
+            1 => SafeMigrationSql.Case(
+                [new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.Literal(true), typed)],
+                unknown),
             2 => SafeMigrationSql.Function("COALESCE", unknown, typed),
             _ => throw new ArgumentOutOfRangeException(nameof(shape)),
         };
 
         // Act
-        var type = PostgreSqlSafeMigrationSqlExpressionRenderer.RenderNativeResultTypeSql(expression,
-            text => { calls.Add(text); return Literal(text); });
+        var type = PostgreSqlSafeMigrationSqlExpressionRenderer.RenderNativeResultTypeSql(
+            expression,
+            text =>
+            {
+                calls.Add(text);
+                return Literal(text);
+            });
 
         // Assert
         Assert.Null(type);
-        Assert.Equal(shape == 0 ? ["integer"] : Array.Empty<string>(), calls);
+        Assert.Equal(
+            shape == 0
+                ? ["integer"]
+                : Array.Empty<string>(),
+            calls);
     }
 
     /// <summary>Native common-type inference inspects ELSE before authored WHEN results.</summary>
@@ -224,12 +274,21 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
         // Arrange
         var calls = new List<string>();
         var expression = SafeMigrationSql.Case(
-            [new(SafeMigrationSql.Literal(true), SafeMigrationSql.Cast(SafeMigrationSql.Literal(1), "integer"))],
+            [
+                new SafeMigrationSqlCaseWhenClause(
+                    SafeMigrationSql.Literal(true),
+                    SafeMigrationSql.Cast(SafeMigrationSql.Literal(1), "integer")),
+            ],
             SafeMigrationSql.Cast(SafeMigrationSql.Literal(2), "bigint"));
 
         // Act
-        var type = PostgreSqlSafeMigrationSqlExpressionRenderer.RenderNativeResultTypeSql(expression,
-            text => { calls.Add(text); return Literal(text); });
+        var type = PostgreSqlSafeMigrationSqlExpressionRenderer.RenderNativeResultTypeSql(
+            expression,
+            text =>
+            {
+                calls.Add(text);
+                return Literal(text);
+            });
 
         // Assert
         Assert.NotNull(type);
@@ -242,15 +301,24 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void DeepSupportValidationRetainsFirstFailure(bool badLeft)
+    public void DeepSupportValidationRetainsFirstFailure(
+        bool badLeft
+    )
     {
         // Arrange
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
         var foreign = SafeMigrationSql.ProviderFragment("foreign", "private_payload");
         var unmapped = SafeMigrationSql.Literal(new object());
-        var expression = SafeMigrationSql.Binary(badLeft ? foreign : unmapped,
-            SafeMigrationSqlBinaryOperator.Equal, badLeft ? unmapped : foreign);
+        var expression = SafeMigrationSql.Binary(
+            badLeft
+                ? foreign
+                : unmapped,
+            SafeMigrationSqlBinaryOperator.Equal,
+            badLeft
+                ? unmapped
+                : foreign);
+
         for (var index = 0; index < 20_000; index++)
         {
             expression = SafeMigrationSql.IsNull(expression);
@@ -260,7 +328,11 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
         var feature = renderer.GetUnsupportedFeature(expression);
 
         // Assert
-        Assert.Equal(badLeft ? "provider_fragment_mismatch" : "structured_literal_mapping", feature);
+        Assert.Equal(
+            badLeft
+                ? "provider_fragment_mismatch"
+                : "structured_literal_mapping",
+            feature);
     }
 
     /// <summary>Captured proofs accept deep finite arithmetic but still reject an unsupported leaf.</summary>
@@ -268,18 +340,27 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void DeepCapturedOperandProofRetainsItsBoundary(bool finite)
+    public void DeepCapturedOperandProofRetainsItsBoundary(
+        bool finite
+    )
     {
         // Arrange
-        var expression = finite ? SafeMigrationSql.Identifier("value")
+        var expression = finite
+            ? SafeMigrationSql.Identifier("value")
             : SafeMigrationSql.Function("unresolved");
+
         for (var index = 0; index < 20_000; index++)
         {
-            expression = SafeMigrationSql.Binary(expression, SafeMigrationSqlBinaryOperator.Add,
+            expression = SafeMigrationSql.Binary(
+                expression,
+                SafeMigrationSqlBinaryOperator.Add,
                 SafeMigrationSql.Literal(1));
         }
 
-        var definition = new ExpectedColumnDefinition("computed", typeof(int), false,
+        var definition = new ExpectedColumnDefinition(
+            "computed",
+            typeof(int),
+            false,
             computedExpression: expression) { CapturedComputedSql = "captured_source" };
 
         // Act
@@ -296,15 +377,21 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
         // Arrange
         var expression = SafeMigrationSql.In(
             SafeMigrationSql.Cast(SafeMigrationSql.Identifier("operand"), "bigint"),
-            [SafeMigrationSql.Cast(SafeMigrationSql.Identifier("first"), "text"),
-                SafeMigrationSql.Cast(SafeMigrationSql.Identifier("second"), "integer")]);
+            [
+                SafeMigrationSql.Cast(SafeMigrationSql.Identifier("first"), "text"),
+                SafeMigrationSql.Cast(SafeMigrationSql.Identifier("second"), "integer"),
+            ]);
+
         for (var index = 0; index < 20_000; index++)
         {
             expression = SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Not, expression);
         }
 
-        var method = typeof(PostgreSqlSafeMigrationCatalogSqlBuilder).GetMethod("CollectCapturedCastTypes",
-            BindingFlags.NonPublic | BindingFlags.Static) ?? throw new InvalidOperationException("Missing collector.");
+        var method = typeof(PostgreSqlSafeMigrationCatalogSqlBuilder).GetMethod(
+                "CollectCapturedCastTypes",
+                BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Missing collector.");
+
         object?[] arguments = [expression, null];
 
         // Act
@@ -324,13 +411,17 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
             SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Negate, SafeMigrationSql.Identifier("value")),
             SafeMigrationSql.Literal(0),
             SafeMigrationSql.In(SafeMigrationSql.Literal(1), [SafeMigrationSql.Literal(2)]));
+
         for (var index = 0; index < 20_000; index++)
         {
             expression = SafeMigrationSql.IsNull(expression);
         }
 
-        var method = typeof(PostgreSqlSafeMigrationCatalogSqlBuilder).GetMethod("CollectCapturedOperators",
-            BindingFlags.NonPublic | BindingFlags.Static) ?? throw new InvalidOperationException("Missing collector.");
+        var method = typeof(PostgreSqlSafeMigrationCatalogSqlBuilder).GetMethod(
+                "CollectCapturedOperators",
+                BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Missing collector.");
+
         object?[] arguments = [expression, null];
 
         // Act
@@ -347,21 +438,31 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
     {
         // Arrange
         using var context = CreateContext();
-        var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
-        var expression = SafeMigrationSql.Function("COALESCE",
+
+        var expression = SafeMigrationSql.Function(
+            "COALESCE",
             SafeMigrationSql.Current(SafeMigrationSqlCurrentValue.Timestamp),
             SafeMigrationSql.Identifier("unrelated", "value"));
+
         for (var index = 0; index < 20_000; index++)
         {
             expression = SafeMigrationSql.Unary(SafeMigrationSqlUnaryOperator.Not, expression);
         }
 
-        var intent = new EnsureCheckConstraintIntent(ExpectedCheckConstraintDefinition.FromExpression(
-            "ck_owner", "expected_owner", expression));
-        var method = typeof(PostgreSqlSafeMigrationCatalogSqlBuilder).GetMethod("CollectCapturedFunctionProofs",
-            BindingFlags.NonPublic | BindingFlags.Instance)
+        var intent = new EnsureCheckConstraintIntent(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_owner",
+                "expected_owner",
+                expression));
+
+        var method = typeof(PostgreSqlSafeMigrationCatalogSqlBuilder).GetMethod(
+                "CollectCapturedFunctionProofs",
+                BindingFlags.NonPublic | BindingFlags.Instance)
             ?? throw new InvalidOperationException("Missing collector.");
+
         object?[] arguments = [expression, intent, true, null, null];
 
         // Act
@@ -380,12 +481,19 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
         var calls = new List<string>();
-        var expression = SafeMigrationSql.Between(SafeMigrationSql.Identifier("value"),
-            SafeMigrationSql.Literal(1), SafeMigrationSql.Literal(2));
+        var expression = SafeMigrationSql.Between(
+            SafeMigrationSql.Identifier("value"),
+            SafeMigrationSql.Literal(1),
+            SafeMigrationSql.Literal(2));
 
         // Act
-        var sql = renderer.RenderCatalogCandidateSql(expression,
-            text => { calls.Add(text); return "@p" + calls.Count.ToString(CultureInfo.InvariantCulture); });
+        var sql = renderer.RenderCatalogCandidateSql(
+            expression,
+            text =>
+            {
+                calls.Add(text);
+                return "@p" + calls.Count.ToString(CultureInfo.InvariantCulture);
+            });
 
         // Assert
         Assert.Equal(["((", "value", " >= 1) AND (", "value", " <= 2))"], calls);
@@ -393,13 +501,22 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
     }
 
     /// <summary>Builds an adversarial authored spine independently of SQL parsing limits.</summary>
-    private static SafeMigrationSqlExpression DeepArithmetic(int depth, bool rightSpine)
+    private static SafeMigrationSqlExpression DeepArithmetic(
+        int depth,
+        bool rightSpine
+    )
     {
         var expression = SafeMigrationSql.Literal(0);
         for (var index = 0; index < depth; index++)
         {
-            expression = SafeMigrationSql.Binary(rightSpine ? SafeMigrationSql.Literal(1) : expression,
-                SafeMigrationSqlBinaryOperator.Add, rightSpine ? expression : SafeMigrationSql.Literal(1));
+            expression = SafeMigrationSql.Binary(
+                rightSpine
+                    ? SafeMigrationSql.Literal(1)
+                    : expression,
+                SafeMigrationSqlBinaryOperator.Add,
+                rightSpine
+                    ? expression
+                    : SafeMigrationSql.Literal(1));
         }
 
         return expression;

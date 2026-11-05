@@ -10,6 +10,7 @@ public sealed partial class SafeMigrationScaffoldingTests
         var generator = CreateOperationGenerator(
             SafeMigrationScaffoldingMode.Strict,
             providerOperationAdapters: [new TestProviderOperationAdapter()]);
+
         var builder = new IndentedStringBuilder();
         var operation = new AlterDatabaseOperation { Collation = "utf8mb4_bin" };
 
@@ -28,6 +29,7 @@ public sealed partial class SafeMigrationScaffoldingTests
         var generator = CreateOperationGenerator(
             SafeMigrationScaffoldingMode.Strict,
             providerOperationAdapters: [new TestProviderOperationAdapter()]);
+
         var builder = new IndentedStringBuilder();
         var index = new CreateIndexOperation
         {
@@ -35,9 +37,15 @@ public sealed partial class SafeMigrationScaffoldingTests
             Table = "items",
             Columns = ["caption"],
         };
+
         index["Test:ProviderMetadata"] = 1;
 
-        var drop = new DropColumnOperation { Name = "legacy", Table = "items" };
+        var drop = new DropColumnOperation
+        {
+            Name = "legacy",
+            Table = "items",
+        };
+
         drop["Test:ProviderMetadata"] = 1;
 
         // Act
@@ -88,6 +96,7 @@ public sealed partial class SafeMigrationScaffoldingTests
         services.AddSingleton<IDbContextOptions>(new DbContextOptionsBuilder().Options);
 
         using var provider = services.BuildServiceProvider();
+
         // Act
         var generator = provider
             .GetRequiredService<IMigrationsCodeGeneratorSelector>()
@@ -131,9 +140,11 @@ public sealed partial class SafeMigrationScaffoldingTests
         services.AddEntityFrameworkDesignTimeServices();
         services.Replace(
             ServiceDescriptor.Singleton<IMigrationsCodeGenerator, TestMigrationsCodeGenerator>());
+
         services.AddSingleton<IDbContextOptions>(new DbContextOptionsBuilder().Options);
 
         using var provider = services.BuildServiceProvider();
+
         // Act
         var generator = provider
             .GetRequiredService<IMigrationsCodeGeneratorSelector>()
@@ -184,6 +195,7 @@ public sealed partial class SafeMigrationScaffoldingTests
 
         using var provider = services.BuildServiceProvider();
         var selector = provider.GetRequiredService<IMigrationsCodeGeneratorSelector>();
+
         // Act
         var generator = selector.Select("F#");
 
@@ -224,6 +236,7 @@ public sealed partial class SafeMigrationScaffoldingTests
             "using Doka.EntityFrameworkCore.SafeMigrations;",
             source,
             StringComparison.Ordinal);
+
         Assert.Collection(providerGenerator.LastUpOperations!, operation => Assert.Same(upOperation, operation));
         Assert.Collection(providerGenerator.LastDownOperations!, operation => Assert.Same(downOperation, operation));
     }
@@ -250,8 +263,11 @@ public sealed partial class SafeMigrationScaffoldingTests
         var generator = CreateMigrationsGenerator(providerGenerator, isEnabled: true);
         var operation = new SqlOperation { Sql = "SELECT 1;" };
         MigrationOperation[] invalidOperations = repeated
-            ? [new SafeMigrationDesignTimeServicesRequiredOperation(), operation,
-                new SafeMigrationDesignTimeServicesRequiredOperation()]
+            ?
+            [
+                new SafeMigrationDesignTimeServicesRequiredOperation(), operation,
+                new SafeMigrationDesignTimeServicesRequiredOperation(),
+            ]
             : [operation];
 
         MigrationOperation[] validOperations = [new SafeMigrationDesignTimeServicesRequiredOperation()];
@@ -259,14 +275,26 @@ public sealed partial class SafeMigrationScaffoldingTests
         // Act
         var exception = Record.Exception(() => generator.GenerateMigration(
             "Company.Migrations",
-            repeated ? "RepeatedGuard" : "MissingGuard",
-            down ? validOperations : invalidOperations,
-            down ? invalidOperations : validOperations));
+            repeated
+                ? "RepeatedGuard"
+                : "MissingGuard",
+            down
+                ? validOperations
+                : invalidOperations,
+            down
+                ? invalidOperations
+                : validOperations));
 
         // Assert
         var invalid = Assert.IsType<InvalidOperationException>(exception);
 
-        Assert.Contains(down ? "Down operations" : "Up operations", invalid.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            down
+                ? "Down operations"
+                : "Up operations",
+            invalid.Message,
+            StringComparison.Ordinal);
+
         Assert.Contains(expectedMessage, invalid.Message, StringComparison.Ordinal);
         Assert.Equal(0, providerGenerator.MigrationCallCount);
     }
@@ -337,9 +365,11 @@ public sealed partial class SafeMigrationScaffoldingTests
         services.AddEntityFrameworkDesignTimeServices();
         services.Replace(
             ServiceDescriptor.Singleton<IMigrationsCodeGenerator, TestMigrationsCodeGenerator>());
+
         services.AddSingleton<IDbContextOptions>(new DbContextOptionsBuilder().Options);
 
         using var provider = services.BuildServiceProvider();
+
         // Act
         var generator = provider
             .GetRequiredService<IMigrationsCodeGeneratorSelector>()
@@ -373,6 +403,7 @@ public sealed partial class SafeMigrationScaffoldingTests
         services.AddSingleton<IDbContextOptions>(new DbContextOptionsBuilder().Options);
 
         using var provider = services.BuildServiceProvider();
+
         // Act
         var generator = provider
             .GetRequiredService<IMigrationsCodeGeneratorSelector>()
@@ -406,6 +437,7 @@ public sealed partial class SafeMigrationScaffoldingTests
         services.AddSingleton<IDbContextOptions>(new DbContextOptionsBuilder().Options);
 
         using var provider = services.BuildServiceProvider();
+
         // Act
         var generator = provider
             .GetRequiredService<IMigrationsCodeGeneratorSelector>()
@@ -436,7 +468,9 @@ public sealed partial class SafeMigrationScaffoldingTests
         designTimeServices.ConfigureDesignTimeServices(services);
 
         // Assert
-        Assert.Single(services, static descriptor =>
-            descriptor.ServiceType == typeof(IMigrationsCodeGeneratorSelector));
+        Assert.Single(
+            services,
+            static descriptor =>
+                descriptor.ServiceType == typeof(IMigrationsCodeGeneratorSelector));
     }
 }

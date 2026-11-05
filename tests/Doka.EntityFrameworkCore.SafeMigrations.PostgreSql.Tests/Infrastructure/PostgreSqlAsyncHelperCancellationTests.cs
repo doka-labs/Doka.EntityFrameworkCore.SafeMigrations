@@ -10,7 +10,9 @@ public sealed class PostgreSqlAsyncHelperCancellationTests
     [InlineData("integer")]
     [InlineData("text")]
     [InlineData("check")]
-    public async Task SqlHelpersObserveCancellationBeforeConnectionParsing(string helper)
+    public async Task SqlHelpersObserveCancellationBeforeConnectionParsing(
+        string helper
+    )
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
@@ -18,7 +20,9 @@ public sealed class PostgreSqlAsyncHelperCancellationTests
 
         // Act
         var exception = await Record.ExceptionAsync(() => InvokeSqlHelperAsync(
-            helper, "not a connection string", cancellation.Token));
+            helper,
+            "not a connection string",
+            cancellation.Token));
 
         // Assert
         var canceled = Assert.IsAssignableFrom<OperationCanceledException>(exception);
@@ -34,14 +38,18 @@ public sealed class PostgreSqlAsyncHelperCancellationTests
     [InlineData("integer")]
     [InlineData("text")]
     [InlineData("check")]
-    public async Task SqlHelpersWithNoneRetainConnectionValidation(string helper)
+    public async Task SqlHelpersWithNoneRetainConnectionValidation(
+        string helper
+    )
     {
         // Arrange
         const string invalidConnection = "not a connection string";
 
         // Act
         var exception = await Record.ExceptionAsync(() => InvokeSqlHelperAsync(
-            helper, invalidConnection, CancellationToken.None));
+            helper,
+            invalidConnection,
+            CancellationToken.None));
 
         // Assert
         Assert.IsAssignableFrom<ArgumentException>(exception);
@@ -52,7 +60,9 @@ public sealed class PostgreSqlAsyncHelperCancellationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task CanceledObserverDoesNotStartSharedInitialization(bool legacy)
+    public async Task CanceledObserverDoesNotStartSharedInitialization(
+        bool legacy
+    )
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
@@ -193,7 +203,11 @@ public sealed class PostgreSqlAsyncHelperCancellationTests
             new string('b', 64),
             []);
 
-        return new GeneratedInitialMigrationObservation(report, report, report, 0,
+        return new GeneratedInitialMigrationObservation(
+            report,
+            report,
+            report,
+            0,
             static () => new DbContext(new DbContextOptionsBuilder().Options));
     }
 
@@ -206,28 +220,40 @@ public sealed class PostgreSqlAsyncHelperCancellationTests
         /// <param name="connectionString">The isolated connection configuration.</param>
         /// <param name="cancellationToken">The caller's cancellation scope.</param>
         /// <returns>The source-controlled SQL execution task.</returns>
-        public static Task ExecuteFixtureSqlAsync(string connectionString, CancellationToken cancellationToken)
+        public static Task ExecuteFixtureSqlAsync(
+            string connectionString,
+            CancellationToken cancellationToken
+        )
             => ExecuteSqlAsync(connectionString, "SELECT 1;", cancellationToken);
 
         /// <summary>Forwards cancellation to real integer scalar reading.</summary>
         /// <param name="connectionString">The isolated connection configuration.</param>
         /// <param name="cancellationToken">The caller's cancellation scope.</param>
         /// <returns>The native integer scalar task.</returns>
-        public static Task<int> ReadIntegerAsync(string connectionString, CancellationToken cancellationToken)
+        public static Task<int> ReadIntegerAsync(
+            string connectionString,
+            CancellationToken cancellationToken
+        )
             => ScalarIntAsync(connectionString, "SELECT 1;", cancellationToken);
 
         /// <summary>Forwards cancellation to real text scalar reading.</summary>
         /// <param name="connectionString">The isolated connection configuration.</param>
         /// <param name="cancellationToken">The caller's cancellation scope.</param>
         /// <returns>The native text scalar task.</returns>
-        public static Task<string> ReadTextAsync(string connectionString, CancellationToken cancellationToken)
+        public static Task<string> ReadTextAsync(
+            string connectionString,
+            CancellationToken cancellationToken
+        )
             => ScalarStringAsync(connectionString, "SELECT 'value';", cancellationToken);
 
         /// <summary>Forwards cancellation to real CHECK catalog reading.</summary>
         /// <param name="connectionString">The isolated connection configuration.</param>
         /// <param name="cancellationToken">The caller's cancellation scope.</param>
         /// <returns>The native CHECK catalog task.</returns>
-        public static Task<string> ReadCheckAsync(string connectionString, CancellationToken cancellationToken)
+        public static Task<string> ReadCheckAsync(
+            string connectionString,
+            CancellationToken cancellationToken
+        )
             => ReadCheckExpressionAsync(connectionString, "ck_probe", cancellationToken);
     }
 }

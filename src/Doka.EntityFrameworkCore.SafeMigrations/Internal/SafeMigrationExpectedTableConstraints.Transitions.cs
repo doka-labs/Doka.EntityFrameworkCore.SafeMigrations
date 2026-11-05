@@ -20,6 +20,7 @@ internal sealed partial class SafeMigrationExpectedTableConstraints
                     capturedSqlIdentifierDelimiter,
                     foldUnquotedCapturedSqlIdentifiers,
                     columnComparer);
+
                 break;
             case DropTableIntent value:
                 tables.Remove((value.Schema, value.Table));
@@ -126,17 +127,17 @@ internal sealed partial class SafeMigrationExpectedTableConstraints
 
     private sealed class MutableConstraints
     {
-        private readonly Func<string?, string?> _normalizeSchema;
-        private readonly char? _capturedSqlIdentifierDelimiter;
-        private readonly bool _foldUnquotedCapturedSqlIdentifiers;
-        private readonly IEqualityComparer<string> _columnComparer;
-        private readonly List<ExpectedPrimaryKeyDefinition> _allowedPrimaryKeys = [];
-        private readonly List<ExpectedUniqueConstraintDefinition> _allowedUniqueConstraints = [];
         private readonly List<ExpectedCheckConstraintDefinition> _allowedCheckConstraints = [];
         private readonly List<ExpectedForeignKeyDefinition> _allowedForeignKeys = [];
-        private readonly Dictionary<string, ExpectedUniqueConstraintDefinition> _requiredUniqueConstraints;
+        private readonly List<ExpectedPrimaryKeyDefinition> _allowedPrimaryKeys = [];
+        private readonly List<ExpectedUniqueConstraintDefinition> _allowedUniqueConstraints = [];
+        private readonly char? _capturedSqlIdentifierDelimiter;
+        private readonly IEqualityComparer<string> _columnComparer;
+        private readonly bool _foldUnquotedCapturedSqlIdentifiers;
+        private readonly Func<string?, string?> _normalizeSchema;
         private readonly Dictionary<string, ExpectedCheckConstraintDefinition> _requiredCheckConstraints;
         private readonly Dictionary<string, ExpectedForeignKeyDefinition> _requiredForeignKeys;
+        private readonly Dictionary<string, ExpectedUniqueConstraintDefinition> _requiredUniqueConstraints;
         private bool _primaryKeyMayBeAbsent;
 
         private MutableConstraints(
@@ -167,7 +168,10 @@ internal sealed partial class SafeMigrationExpectedTableConstraints
                 .Select(Normalize)
                 .ToArray();
 
-            PrimaryKey = primaryKey is null ? null : Normalize(primaryKey);
+            PrimaryKey = primaryKey is null
+                ? null
+                : Normalize(primaryKey);
+
             _primaryKeyMayBeAbsent = primaryKey is null;
             if (PrimaryKey is not null)
             {
@@ -535,14 +539,14 @@ internal sealed partial class SafeMigrationExpectedTableConstraints
                 // rewrites only terminal member tokens; absent native quote
                 // authority or opaque source retains the fail-closed boundary.
                 if (!SafeMigrationSqlExpressionParser.TryRenameColumnIdentifier(
-                        source,
-                        column,
-                        newColumn,
-                        _columnComparer,
-                        out var renamedSql,
-                        out var renamedExpression,
-                        _capturedSqlIdentifierDelimiter,
-                        _foldUnquotedCapturedSqlIdentifiers))
+                    source,
+                    column,
+                    newColumn,
+                    _columnComparer,
+                    out var renamedSql,
+                    out var renamedExpression,
+                    _capturedSqlIdentifierDelimiter,
+                    _foldUnquotedCapturedSqlIdentifiers))
                 {
                     throw CheckColumnRenameUnproven(definition, column, newColumn);
                 }
@@ -676,7 +680,9 @@ internal sealed partial class SafeMigrationExpectedTableConstraints
             string column,
             string newColumn
         ) => columns
-            .Select(value => StringComparer.Ordinal.Equals(value, column) ? newColumn : value)
+            .Select(value => StringComparer.Ordinal.Equals(value, column)
+                ? newColumn
+                : value)
             .ToArray();
 
         private static bool ContainsColumn(

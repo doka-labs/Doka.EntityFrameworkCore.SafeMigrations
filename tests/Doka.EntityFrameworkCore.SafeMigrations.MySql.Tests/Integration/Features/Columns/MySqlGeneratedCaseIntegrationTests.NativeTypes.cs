@@ -7,44 +7,78 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task CapturedNativeCastTargetCannotBorrowPortableAlias(bool check)
+    public async Task CapturedNativeCastTargetCannotBorrowPortableAlias(
+        bool check
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL, "
+        await ExecuteSqlAsync(
+            connectionString,
+            $"CREATE TABLE `{Table}` (`id` int NOT NULL, "
             + "native_result bigint GENERATED ALWAYS AS (CAST(id AS SIGNED)) VIRTUAL, "
-            + "CONSTRAINT ck_source_cast CHECK(CAST(id AS SIGNED) > 0));", cancellationToken: CancellationToken.None);
+            + "CONSTRAINT ck_source_cast CHECK(CAST(id AS SIGNED) > 0));",
+            cancellationToken: CancellationToken.None);
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (check)
         {
-            builder.EnsureCheckConstraint(SafeMigrationExpectedDefinitionFactory.From(new AddCheckConstraintOperation
-            {
-                Name = "ck_source_cast", Table = Table, Sql = "CAST(id AS bigint) > 0",
-            }), SafeMigrationPolicy.ThrowIfDifferent);
+            builder.EnsureCheckConstraint(
+                SafeMigrationExpectedDefinitionFactory.From(
+                    new AddCheckConstraintOperation
+                    {
+                        Name = "ck_source_cast",
+                        Table = Table,
+                        Sql = "CAST(id AS bigint) > 0",
+                    }),
+                SafeMigrationPolicy.ThrowIfDifferent);
         }
         else
         {
-            builder.EnsureColumn(Table, SafeMigrationExpectedDefinitionFactory.From(new AddColumnOperation
-            {
-                Name = "native_result", Table = Table, ClrType = typeof(long), ColumnType = "bigint",
-                ComputedColumnSql = "CAST(id AS bigint)", IsStored = false, IsNullable = true,
-            }), SafeMigrationPolicy.ThrowIfDifferent);
+            builder.EnsureColumn(
+                Table,
+                SafeMigrationExpectedDefinitionFactory.From(
+                    new AddColumnOperation
+                    {
+                        Name = "native_result",
+                        Table = Table,
+                        ClrType = typeof(long),
+                        ColumnType = "bigint",
+                        ComputedColumnSql = "CAST(id AS bigint)",
+                        IsStored = false,
+                        IsNullable = true,
+                    }),
+                SafeMigrationPolicy.ThrowIfDifferent);
         }
 
         // Act
-        var nativeFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString,
+        var nativeFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(
+            connectionString,
             $"PREPARE source_cast_probe FROM 'SELECT CAST(id AS bigint) FROM {Table}';",
             cancellationToken: CancellationToken.None));
 
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("captured-native-cast-target"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("captured-native-cast-target"),
+                CancellationToken.None);
 
         // Assert
-        Assert.Equal(1064, Assert.IsType<MySqlException>(nativeFailure).Number);
+        Assert.Equal(1064,
+            Assert.IsType<MySqlException>(nativeFailure)
+                .Number);
+
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Unsupported, Assert.Single(report.Assessments).ObservedState);
-        Assert.Equal("captured_expression_cast_target_unverified", Assert.Single(report.Assessments).AnalysisCode);
+        Assert.Equal(SafeMigrationObservedState.Unsupported,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
+        Assert.Equal("captured_expression_cast_target_unverified",
+            Assert.Single(report.Assessments)
+                .AnalysisCode);
     }
 
     /// <summary>Native CAST spellings and explicitly typed portable aliases retain successful replay.</summary>
@@ -53,28 +87,50 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [InlineData("CAST(id AS SIGNED)")]
     [InlineData("CAST(id AS SIGNED INTEGER)")]
     [InlineData(null)]
-    public async Task NativeCastSourceAndExplicitPortableAliasRemainSupported(string? source)
+    public async Task NativeCastSourceAndExplicitPortableAliasRemainSupported(
+        string? source
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL); "
-            + $"INSERT INTO `{Table}` VALUES (-1);", cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            $"CREATE TABLE `{Table}` (`id` int NOT NULL); "
+            + $"INSERT INTO `{Table}` VALUES (-1);",
+            cancellationToken: CancellationToken.None);
+
         var definition = source is null
-            ? new ExpectedColumnDefinition("native_result", typeof(long), true, "bigint",
-                computedExpression: SafeMigrationSql.Cast(SqlColumn("id"), "bigint"), isStored: false)
-            : SafeMigrationExpectedDefinitionFactory.From(new AddColumnOperation
-            {
-                Name = "native_result", Table = Table, ClrType = typeof(long), ColumnType = "bigint",
-                ComputedColumnSql = source, IsStored = false, IsNullable = true,
-            });
+            ? new ExpectedColumnDefinition(
+                "native_result",
+                typeof(long),
+                true,
+                "bigint",
+                computedExpression: SafeMigrationSql.Cast(SqlColumn("id"), "bigint"),
+                isStored: false)
+            : SafeMigrationExpectedDefinitionFactory.From(
+                new AddColumnOperation
+                {
+                    Name = "native_result",
+                    Table = Table,
+                    ClrType = typeof(long),
+                    ColumnType = "bigint",
+                    ComputedColumnSql = source,
+                    IsStored = false,
+                    IsNullable = true,
+                });
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn(Table, definition, SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-cast-source"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("native-cast-source"),
+                CancellationToken.None);
 
         var failure = await Record.ExceptionAsync(async () =>
         {
@@ -83,8 +139,11 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         });
 
         var result = failure is null
-            ? await ScalarIntAsync(connectionString, $"SELECT native_result FROM `{Table}`;",
-                cancellationToken: CancellationToken.None) : int.MinValue;
+            ? await ScalarIntAsync(
+                connectionString,
+                $"SELECT native_result FROM `{Table}`;",
+                cancellationToken: CancellationToken.None)
+            : int.MinValue;
 
         // Assert
         Assert.True(preflight.Status == SafeMigrationReportStatus.Ready, DescribeGeneratedReport(preflight));

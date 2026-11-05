@@ -40,7 +40,7 @@ internal sealed class SafeMigrationProviderAnnotation
     /// <summary>Captures and ordinally orders every provider annotation.</summary>
     /// <param name="annotatable">The EF Core metadata source.</param>
     /// <returns>An immutable, deterministically ordered annotation snapshot.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="annotatable"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="annotatable" /> is null.</exception>
     /// <exception cref="NotSupportedException">
     /// An annotation value cannot be captured as an immutable supported value shape.
     /// </exception>
@@ -108,6 +108,7 @@ internal sealed class SafeMigrationProviderAnnotation
             ?? throw new NotSupportedException($"The {context} array has no element type.");
 
         var snapshot = Array.CreateInstance(elementType, source.Length);
+
         // WHY: Clone each array entry into the same index of the owned annotation snapshot.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -138,22 +139,22 @@ internal sealed class SafeMigrationProviderAnnotation
                 writer.Add(text);
                 break;
             case char character:
-                writer.Add((int)character);
+                writer.Add(character);
                 break;
             case bool boolean:
                 writer.Add(boolean);
                 break;
             case byte number:
-                writer.Add((int)number);
+                writer.Add(number);
                 break;
             case sbyte number:
-                writer.Add((int)number);
+                writer.Add(number);
                 break;
             case short number:
-                writer.Add((int)number);
+                writer.Add(number);
                 break;
             case ushort number:
-                writer.Add((int)number);
+                writer.Add(number);
                 break;
             case int number:
                 writer.Add(number);
@@ -210,6 +211,7 @@ internal sealed class SafeMigrationProviderAnnotation
                             Enum.GetUnderlyingType(enumeration.GetType()),
                             CultureInfo.InvariantCulture),
                         CultureInfo.InvariantCulture));
+
                 break;
             case Array values:
                 writer.Add(values.Length);

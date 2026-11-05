@@ -11,7 +11,8 @@ internal static class SharedContainerFixtureMappings
     public static IDictionary<Type, object> Merge<TFixture>(
         IDictionary<Type, object> collectionFixtures,
         TFixture? sharedFixture
-    ) where TFixture : class
+    )
+        where TFixture : class
     {
         var mappings = new Dictionary<Type, object>(collectionFixtures);
 

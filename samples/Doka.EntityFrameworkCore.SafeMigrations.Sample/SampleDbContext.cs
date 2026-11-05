@@ -29,10 +29,12 @@ internal sealed class SampleDbContext : DbContext
             entity
                 .HasKey(x => x.Id)
                 .HasName("pk_users");
+
             entity
                 .Property(x => x.Email)
                 .HasMaxLength(320)
                 .IsRequired();
+
             entity
                 .Property(x => x.DisplayName)
                 .HasMaxLength(200);
@@ -44,6 +46,7 @@ internal sealed class SampleDbContext : DbContext
             entity
                 .HasKey(x => x.Id)
                 .HasName("pk_orders");
+
             entity
                 .Property(x => x.Total)
                 .HasPrecision(18, 2);

@@ -26,9 +26,7 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
         var repairBaseline = CreateBaselineCommands(context, repairSql);
         var expectedTag = scenario switch
         {
-            3 or 4 => "$doka_safe_migration_1$",
-            5 => "$doka_safe_migration_2$",
-            _ => "$doka_safe_migration$",
+            3 or 4 => "$doka_safe_migration_1$", 5 => "$doka_safe_migration_2$", _ => "$doka_safe_migration$",
         };
 
         // Act
@@ -37,18 +35,32 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
         var legacyRepair = RenderLegacyActionSql(repairBaseline);
 
         // Assert
-        Assert.Contains("        IF doka_action OPERATOR(pg_catalog.=) 'apply' THEN\n" + legacyApply
-            + "        ELSE\n" + legacyRepair + "        END IF;\n", guarded, StringComparison.Ordinal);
+        Assert.Contains(
+            "        IF doka_action OPERATOR(pg_catalog.=) 'apply' THEN\n"
+            + legacyApply
+            + "        ELSE\n"
+            + legacyRepair
+            + "        END IF;\n",
+            guarded,
+            StringComparison.Ordinal);
+
         Assert.StartsWith("DO " + expectedTag + "\nDECLARE\n", guarded, StringComparison.Ordinal);
         Assert.EndsWith("END\n" + expectedTag + ";", guarded, StringComparison.Ordinal);
         Assert.Equal(2, CountOccurrences(guarded, expectedTag));
         Assert.Contains("FOR doka_evaluation_pass IN 1..2 LOOP", guarded, StringComparison.Ordinal);
-        Assert.Contains("EXIT WHEN doka_action OPERATOR(pg_catalog.<>) 'repair' "
-            + "OR doka_evaluation_pass OPERATOR(pg_catalog.=) 2;", guarded,
+        Assert.Contains(
+            "EXIT WHEN doka_action OPERATOR(pg_catalog.<>) 'repair' "
+            + "OR doka_evaluation_pass OPERATOR(pg_catalog.=) 2;",
+            guarded,
             StringComparison.Ordinal);
+
         Assert.Contains(" IN ACCESS EXCLUSIVE MODE;", guarded, StringComparison.Ordinal);
-        Assert.Contains("        IF NOT COALESCE((\n            " + plan.Postcondition
-            + "\n        ), FALSE) THEN\n", guarded, StringComparison.Ordinal);
+        Assert.Contains(
+            "        IF NOT COALESCE((\n            "
+            + plan.Postcondition
+            + "\n        ), FALSE) THEN\n",
+            guarded,
+            StringComparison.Ordinal);
     }
 
     /// <summary>Retains every canonical decision arm and the exact catalog binding guard.</summary>
@@ -79,7 +91,8 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
         if (plan.StateEvaluationGuardFailureExpression is not null)
         {
             Assert.Contains(legacyGuard, guarded, StringComparison.Ordinal);
-            Assert.True(guarded.IndexOf(legacyGuard, StringComparison.Ordinal)
+            Assert.True(
+                guarded.IndexOf(legacyGuard, StringComparison.Ordinal)
                 < guarded.IndexOf("doka_nullability_repair_eligible := COALESCE((", StringComparison.Ordinal));
         }
         else
@@ -101,25 +114,48 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
         using var context = CreateOfflineContext();
         var operation = CreateOperation(varchar: true, policy: SafeMigrationPolicy.RepairIfSafe);
         var plan = CreatePlan(context, operation);
-        var baseline = CreateBaselineCommands(context,
-            ["ALTER TABLE proof_rows ADD COLUMN value varchar(800) NOT NULL;",
-                "COMMENT ON COLUMN proof_rows.value IS 'canonical';"]);
-        var repairBaseline = CreateBaselineCommands(context,
-            ["ALTER TABLE proof_rows ALTER COLUMN value TYPE varchar(800);",
+        var baseline = CreateBaselineCommands(
+            context,
+            [
+                "ALTER TABLE proof_rows ADD COLUMN value varchar(800) NOT NULL;",
+                "COMMENT ON COLUMN proof_rows.value IS 'canonical';",
+            ]);
+
+        var repairBaseline = CreateBaselineCommands(
+            context,
+            [
+                "ALTER TABLE proof_rows ALTER COLUMN value TYPE varchar(800);",
                 "ALTER TABLE proof_rows ALTER COLUMN value SET NOT NULL;",
-                "COMMENT ON COLUMN proof_rows.value IS 'canonical';"]);
+                "COMMENT ON COLUMN proof_rows.value IS 'canonical';",
+            ]);
+
         var appendActionCase = BindPrivateRenderer<
             Action<StringBuilder, SafeMigrationOperation, SafeMigrationRepairCapability>>("AppendActionCase");
+
         var appendActionSql = BindPrivateRenderer<
             Action<StringBuilder, IReadOnlyList<MigrationCommand>, string>>("AppendActionSql");
+
         var appendDataProbe = BindPrivateRenderer<
             Action<StringBuilder, PostgreSqlSafeMigrationDataProbe, string, string>>("AppendDataProbeEvaluationSql");
 
-        Func<string> direct = () => RenderPreparedComponents(
-            operation, plan, baseline, repairBaseline, appendActionCase, appendActionSql, appendDataProbe,
+        var direct = () => RenderPreparedComponents(
+            operation,
+            plan,
+            baseline,
+            repairBaseline,
+            appendActionCase,
+            appendActionSql,
+            appendDataProbe,
             legacyCopies: false);
-        Func<string> legacy = () => RenderPreparedComponents(
-            operation, plan, baseline, repairBaseline, appendActionCase, appendActionSql, appendDataProbe,
+
+        var legacy = () => RenderPreparedComponents(
+            operation,
+            plan,
+            baseline,
+            repairBaseline,
+            appendActionCase,
+            appendActionSql,
+            appendDataProbe,
             legacyCopies: true);
 
         var directSamples = new long[sampleCount];
@@ -155,9 +191,12 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
         Assert.Equal(legacySql, directSql);
         Assert.Equal((long)directSql.Length * iterations * sampleCount, directChecksum);
         Assert.Equal((long)legacySql.Length * iterations * sampleCount, legacyChecksum);
-        Assert.True(directMedian < legacyMedian,
-            "Prepared direct samples: " + string.Join(",", directSamples)
-            + "; legacy copy samples: " + string.Join(",", legacySamples));
+        Assert.True(
+            directMedian < legacyMedian,
+            "Prepared direct samples: "
+            + string.Join(",", directSamples)
+            + "; legacy copy samples: "
+            + string.Join(",", legacySamples));
     }
 
     /// <summary>Exercises the expression-only delimiter caller through actual custom-index generation.</summary>
@@ -179,26 +218,48 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
             2 => "ix_$doka_safe_migration$$doka_safe_migration_1$",
             _ => throw new ArgumentOutOfRangeException(nameof(collisionDepth)),
         };
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureIndex(new ExpectedIndexDefinition(
-            indexName, "proof_rows", [new ExpectedIndexKeyDefinition(column: "value")],
-            unique: true, nullsDistinct: false), SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                indexName,
+                "proof_rows",
+                [new ExpectedIndexKeyDefinition(column: "value")],
+                unique: true,
+                nullsDistinct: false),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
         var helper = context.GetService<ISqlGenerationHelper>();
-        var expectedIndexSql = "CREATE UNIQUE INDEX " + helper.DelimitIdentifier(indexName)
-            + " ON " + helper.DelimitIdentifier("proof_rows") + " (" + helper.DelimitIdentifier("value")
+        var expectedIndexSql = "CREATE UNIQUE INDEX "
+            + helper.DelimitIdentifier(indexName)
+            + " ON "
+            + helper.DelimitIdentifier("proof_rows")
+            + " ("
+            + helper.DelimitIdentifier("value")
             + ") NULLS NOT DISTINCT;";
-        var innerTag = collisionDepth == 0 ? "$doka_safe_migration$"
+
+        var innerTag = collisionDepth == 0
+            ? "$doka_safe_migration$"
             : "$doka_safe_migration_" + collisionDepth.ToString(CultureInfo.InvariantCulture) + "$";
+
         var outerTag = "$doka_safe_migration_"
-            + (collisionDepth + 1).ToString(CultureInfo.InvariantCulture) + "$";
+            + (collisionDepth + 1).ToString(CultureInfo.InvariantCulture)
+            + "$";
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
 
         // Assert
-        var guarded = Assert.Single(commands).CommandText;
-        Assert.Contains("EXECUTE " + innerTag + expectedIndexSql + innerTag + ";", guarded,
+        var guarded = Assert.Single(commands)
+            .CommandText;
+
+        Assert.Contains(
+            "EXECUTE " + innerTag + expectedIndexSql + innerTag + ";",
+            guarded,
             StringComparison.Ordinal);
+
         Assert.StartsWith("DO " + outerTag + "\nDECLARE\n", guarded, StringComparison.Ordinal);
         Assert.EndsWith("END\n" + outerTag + ";" + Environment.NewLine, guarded, StringComparison.Ordinal);
         Assert.Equal(2, CountOccurrences(guarded, outerTag));
@@ -218,19 +279,35 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
         var operation = CreateOperation(varchar: true, policy: SafeMigrationPolicy.RepairIfSafe);
         var helper = context.GetService<ISqlGenerationHelper>();
         var table = helper.DelimitIdentifier("proof_rows");
-        var dataProbe = hasDataProbe ? new PostgreSqlSafeMigrationDataProbe(
-            "proof_rows", null, "$doka_safe_migration$", 800, table,
-            helper.DelimitIdentifier("$doka_safe_migration$"), "TRUE", "TRUE") : null;
+        var dataProbe = hasDataProbe
+            ? new PostgreSqlSafeMigrationDataProbe(
+                "proof_rows",
+                null,
+                "$doka_safe_migration$",
+                800,
+                table,
+                helper.DelimitIdentifier("$doka_safe_migration$"),
+                "TRUE",
+                "TRUE")
+            : null;
+
         var nullQuery = "EXISTS (SELECT 1 FROM " + table + " WHERE value IS NULL LIMIT 1)";
         var plan = new PostgreSqlSafeMigrationRuntimePlan(
-            "'matching'", "TRUE", SafeMigrationRepairCapability.Safe, "TRUE")
+            "'matching'",
+            "TRUE",
+            SafeMigrationRepairCapability.Safe,
+            "TRUE")
         {
             DataProbe = dataProbe,
             NullabilityDataProbe = new PostgreSqlSafeMigrationNullabilityDataProbe("TRUE", "TRUE", nullQuery, table),
         };
+
         var render = BindPrivateRenderer<Func<SafeMigrationOperation, PostgreSqlSafeMigrationRuntimePlan,
             IReadOnlyList<MigrationCommand>, IReadOnlyList<MigrationCommand>, string>>("BuildGuardedSql");
-        var expectedTag = hasDataProbe ? "$doka_safe_migration_1$" : "$doka_safe_migration$";
+
+        var expectedTag = hasDataProbe
+            ? "$doka_safe_migration_1$"
+            : "$doka_safe_migration$";
 
         // Act
         var guarded = render(operation, plan, [], []);
@@ -242,9 +319,11 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
         Assert.Equal(2, CountOccurrences(guarded, expectedTag));
         Assert.Equal(1, CountOccurrences(guarded, nullQuery));
         Assert.Contains("doka_complete_not_null := COALESCE((TRUE), FALSE);", guarded, StringComparison.Ordinal);
-        Assert.Contains("IF doka_nullability_repair_eligible AND NOT COALESCE((doka_complete_not_null), FALSE) THEN",
+        Assert.Contains(
+            "IF doka_nullability_repair_eligible AND NOT COALESCE((doka_complete_not_null), FALSE) THEN",
             guarded,
             StringComparison.Ordinal);
+
         if (hasDataProbe)
         {
             Assert.NotNull(blockedExpression);
@@ -267,10 +346,22 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
     private static SafeMigrationOperation CreateOperation(
         bool varchar,
         SafeMigrationPolicy policy
-    ) => new(new EnsureColumnIntent("proof_rows", new ExpectedColumnDefinition(
-        "value", varchar ? typeof(string) : typeof(DateTime), false,
-        storeType: varchar ? "character varying(800)" : "timestamp without time zone",
-        maxLength: varchar ? 800 : null)), policy);
+    ) => new(
+        new EnsureColumnIntent(
+            "proof_rows",
+            new ExpectedColumnDefinition(
+                "value",
+                varchar
+                    ? typeof(string)
+                    : typeof(DateTime),
+                false,
+                storeType: varchar
+                    ? "character varying(800)"
+                    : "timestamp without time zone",
+                maxLength: varchar
+                    ? 800
+                    : null)),
+        policy);
 
     /// <summary>Builds the same catalog plan used by the production guard generator.</summary>
     private static PostgreSqlSafeMigrationRuntimePlan CreatePlan(
@@ -279,22 +370,31 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
     ) => new PostgreSqlSafeMigrationCatalogSqlBuilder(
         context.GetService<IRelationalTypeMappingSource>(),
         context.GetService<ISqlGenerationHelper>()).Build(
-            operation, includeAnalysisEvidence: false, includeTransitionEvidence: true);
+        operation,
+        includeAnalysisEvidence: false,
+        includeTransitionEvidence: true);
 
     /// <summary>Creates real provider commands without executing the fixture SQL.</summary>
     private static IReadOnlyList<MigrationCommand> CreateBaselineCommands(
         DbContext context,
         string[] sqlParts
-    ) => context.GetService<IPostgreSqlSafeMigrationsBaselineGenerator>().Generate(
-        sqlParts.Select(static sql => new SqlOperation { Sql = sql }).ToArray(), context.Model);
+    ) => context
+        .GetService<IPostgreSqlSafeMigrationsBaselineGenerator>()
+        .Generate(
+            sqlParts
+                .Select(static sql => new SqlOperation { Sql = sql })
+                .ToArray(),
+            context.Model);
 
     /// <summary>Binds a typed private renderer before allocation measurement begins.</summary>
     private static TDelegate BindPrivateRenderer<TDelegate>(
         string methodName
-    ) where TDelegate : Delegate
+    )
+        where TDelegate : Delegate
     {
         var renderer = typeof(PostgreSqlSafeMigrationsSqlGenerator).GetMethod(
-            methodName, BindingFlags.NonPublic | BindingFlags.Static)
+                methodName,
+                BindingFlags.NonPublic | BindingFlags.Static)
             ?? throw new InvalidOperationException("The PostgreSQL renderer was not found: " + methodName + ".");
 
         return renderer.CreateDelegate<TDelegate>();
@@ -315,10 +415,17 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
         const string indentation = "            ";
         var probe = plan.DataProbe
             ?? throw new InvalidOperationException("The prepared allocation fixture requires a narrowing probe.");
+
         var probeForTag = probe.BuildBlockedExpression();
         var tag = probeForTag.Contains("$doka_safe_migration$", StringComparison.Ordinal)
-            ? "$doka_safe_migration_1$" : "$doka_safe_migration$";
-        var builder = new StringBuilder().Append("DO ").Append(tag).Append("\nBEGIN\n");
+            ? "$doka_safe_migration_1$"
+            : "$doka_safe_migration$";
+
+        var builder = new StringBuilder()
+            .Append("DO ")
+            .Append(tag)
+            .Append("\nBEGIN\n");
+
         if (legacyCopies)
         {
             builder.Append(RenderLegacyBindingGuard(plan));
@@ -328,7 +435,14 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
             AppendPreparedBindingGuard(builder, plan);
         }
 
-        appendDataProbe(builder, probe, legacyCopies ? probe.BuildBlockedExpression() : probeForTag, indentation);
+        appendDataProbe(
+            builder,
+            probe,
+            legacyCopies
+                ? probe.BuildBlockedExpression()
+                : probeForTag,
+            indentation);
+
         builder.Append("        doka_action := ");
         if (legacyCopies)
         {
@@ -359,7 +473,11 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
             appendActionSql(builder, repairBaseline, indentation);
         }
 
-        return builder.Append("        END IF;\nEND\n").Append(tag).Append(';').ToString();
+        return builder
+            .Append("        END IF;\nEND\n")
+            .Append(tag)
+            .Append(';')
+            .ToString();
     }
 
     /// <summary>Isolates the production inlined branch's append pattern without a complete branch string.</summary>
@@ -375,7 +493,9 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
             return;
         }
 
-        builder.Append("        ELSIF NOT COALESCE((").Append(plan.StateEvaluationGuardExpression)
+        builder
+            .Append("        ELSIF NOT COALESCE((")
+            .Append(plan.StateEvaluationGuardExpression)
             .Append("), FALSE) THEN\n            doka_state := (")
             .Append(plan.StateEvaluationGuardFailureExpression)
             .Append(");\n            doka_repair_ok := FALSE;\n");
@@ -396,9 +516,14 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
                 copied.Append('\n');
             }
 
-            var command = commands[index].CommandText.AsSpan().TrimEnd();
+            var command = commands[index]
+                .CommandText
+                .AsSpan()
+                .TrimEnd();
+
             copied.Append(command);
-            if (command.IsEmpty || command[^1] != ';')
+            if (command.IsEmpty
+                || command[^1] != ';')
             {
                 copied.Append(';');
             }
@@ -407,7 +532,9 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
         var flattened = copied.ToString();
         if (flattened.Length == 0)
         {
-            builder.Append(indentation).Append("NULL;\n");
+            builder
+                .Append(indentation)
+                .Append("NULL;\n");
 
             return;
         }
@@ -416,8 +543,15 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
         while (start <= flattened.Length)
         {
             var newline = flattened.IndexOf('\n', start);
-            var length = newline < 0 ? flattened.Length - start : newline - start;
-            builder.Append(indentation).Append(flattened, start, length).Append('\n');
+            var length = newline < 0
+                ? flattened.Length - start
+                : newline - start;
+
+            builder
+                .Append(indentation)
+                .Append(flattened, start, length)
+                .Append('\n');
+
             if (newline < 0)
             {
                 return;
@@ -437,7 +571,8 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
         var before = GC.GetAllocatedBytesForCurrentThread();
         for (var iteration = 0; iteration < iterations; iteration++)
         {
-            checksum += render().Length;
+            checksum += render()
+                .Length;
         }
 
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
@@ -456,7 +591,8 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
         // WHY: Script fragments are test inputs, not new migration contracts.
         // Reflection preserves the renderer's private production boundary.
         var renderer = typeof(PostgreSqlSafeMigrationsSqlGenerator).GetMethod(
-            "BuildGuardedSql", BindingFlags.NonPublic | BindingFlags.Static)
+                "BuildGuardedSql",
+                BindingFlags.NonPublic | BindingFlags.Static)
             ?? throw new InvalidOperationException("The PostgreSQL guard renderer was not found.");
 
         return (string)(renderer.Invoke(null, [operation, plan, baseline, repairBaseline])
@@ -485,16 +621,22 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
     )
     {
         const string indentation = "            ";
-        var flattened = string.Join("\n", commands.Select(static command =>
-        {
-            var sql = command.CommandText.TrimEnd();
+        var flattened = string.Join(
+            "\n",
+            commands.Select(static command =>
+            {
+                var sql = command.CommandText.TrimEnd();
 
-            return sql.EndsWith(';') ? sql : sql + ";";
-        }));
+                return sql.EndsWith(';')
+                    ? sql
+                    : sql + ";";
+            }));
 
         return flattened.Length == 0
             ? indentation + "NULL;\n"
-            : string.Concat(flattened.Split('\n').Select(static line => indentation + line + "\n"));
+            : string.Concat(flattened
+                .Split('\n')
+                .Select(static line => indentation + line + "\n"));
     }
 
     /// <summary>Reproduces the previous complete binding-guard string for exact output comparison.</summary>
@@ -503,15 +645,24 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
     )
     {
         var proofTable = plan.DataProbe?.QualifiedTable ?? plan.NullabilityDataProbe?.QualifiedTable;
-        var indentation = proofTable is null ? "    " : "        ";
+        var indentation = proofTable is null
+            ? "    "
+            : "        ";
+
         var bodyIndentation = indentation + "    ";
 
         return plan.StateEvaluationGuardFailureExpression is null
             ? string.Empty
-            : indentation + "ELSIF NOT COALESCE((" + plan.StateEvaluationGuardExpression
-                + "), FALSE) THEN\n" + bodyIndentation + "doka_state := ("
-                + plan.StateEvaluationGuardFailureExpression + ");\n"
-                + bodyIndentation + "doka_repair_ok := FALSE;\n";
+            : indentation
+            + "ELSIF NOT COALESCE(("
+            + plan.StateEvaluationGuardExpression
+            + "), FALSE) THEN\n"
+            + bodyIndentation
+            + "doka_state := ("
+            + plan.StateEvaluationGuardFailureExpression
+            + ");\n"
+            + bodyIndentation
+            + "doka_repair_ok := FALSE;\n";
     }
 
     /// <summary>Uses the legacy-buffer strategy with current native-safe canonical policy syntax.</summary>
@@ -524,7 +675,11 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
         foreach (var state in Enum.GetValues<SafeMigrationObservedState>())
         {
             var action = SafeMigrationDecisionPlanner.PlanAction(
-                operation.Intent.Kind, state, operation.Policy, repairCapability);
+                operation.Intent.Kind,
+                state,
+                operation.Policy,
+                repairCapability);
+
             var stateCode = state switch
             {
                 SafeMigrationObservedState.Missing => "missing",
@@ -537,7 +692,11 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
                 _ => throw new InvalidOperationException("The legacy oracle encountered an unknown observed state."),
             };
 
-            builder.Append("WHEN doka_state OPERATOR(pg_catalog.=) '").Append(stateCode).Append("' THEN ");
+            builder
+                .Append("WHEN doka_state OPERATOR(pg_catalog.=) '")
+                .Append(stateCode)
+                .Append("' THEN ");
+
             if (action == SafeMigrationAction.Repair)
             {
                 builder.Append("CASE WHEN doka_repair_ok THEN 'repair' ELSE 'reject_different' END ");
@@ -555,11 +714,16 @@ public sealed class PostgreSqlGuardRenderingAllocationTests
                     _ => throw new InvalidOperationException("The legacy oracle encountered an unexpected action."),
                 };
 
-                builder.Append('\'').Append(actionCode).Append("' ");
+                builder
+                    .Append('\'')
+                    .Append(actionCode)
+                    .Append("' ");
             }
         }
 
-        return builder.Append("ELSE 'reject_unsupported' END").ToString();
+        return builder
+            .Append("ELSE 'reject_unsupported' END")
+            .ToString();
     }
 
     /// <summary>Counts exact tag appearances without interpreting provider SQL.</summary>

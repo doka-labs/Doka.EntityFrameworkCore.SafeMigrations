@@ -9,11 +9,13 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 }
 
 /// <summary>Exercises the ColumnsNullProof migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlColumnsNullProofIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlColumnsNullProofIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlColumnsNullProofIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>Repairs nullable scalar columns without NULL rows and safely replays on the same session.</summary>
     /// <param name="textColumn">Whether the live column contains strings rather than integers.</param>
@@ -26,11 +28,17 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var storeType = textColumn ? "varchar(40)" : "int";
-        var values = textColumn ? "(1, 'preserved'), (2, '')" : "(1, 7), (2, 0)";
+        var storeType = textColumn
+            ? "varchar(40)"
+            : "int";
+
+        var values = textColumn
+            ? "(1, 'preserved'), (2, '')"
+            : "(1, 7), (2, 0)";
+
         var preservedPredicate = textColumn
             ? "(`id` = 1 AND BINARY `value` = BINARY 'preserved') "
-                + "OR (`id` = 2 AND OCTET_LENGTH(`value`) = 0)"
+            + "OR (`id` = 2 AND OCTET_LENGTH(`value`) = 0)"
             : "(`id` = 1 AND `value` = 7) OR (`id` = 2 AND `value` = 0)";
 
         await ExecuteSqlAsync(
@@ -42,9 +50,12 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
 
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
+
         // WHY: Analysis must use its inline live proof; runtime must initialize rather than trust stale session state.
         await context.Database.ExecuteSqlRawAsync("SET @doka_sm_nullability_blocked = TRUE;");
-        var sessionBefore = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();",
+        var sessionBefore = await ContextScalarIntAsync(
+            context,
+            "SELECT CONNECTION_ID();",
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -52,10 +63,14 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
             "null_proof_rows",
             new ExpectedColumnDefinition(
                 "value",
-                textColumn ? typeof(string) : typeof(int),
+                textColumn
+                    ? typeof(string)
+                    : typeof(int),
                 isNullable: false,
                 storeType: storeType,
-                maxLength: textColumn ? 40 : null,
+                maxLength: textColumn
+                    ? 40
+                    : null,
                 comment: "canonical"),
             SafeMigrationPolicy.RepairIfSafe);
 
@@ -65,43 +80,73 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("null-proof-repair"), CancellationToken.None);
-
-        var providerAnalysis = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
-            context,
-            builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
+            new SafeMigrationRunOptions("null-proof-repair"),
             CancellationToken.None);
 
+        var providerAnalysis = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                builder
+                    .Operations
+                    .Cast<SafeMigrationOperation>()
+                    .ToArray(),
+                CancellationToken.None);
+
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var cleanedAfterRepair = await ContextScalarIntAsync(context, NullProofVariablesClearedSql,
+        var cleanedAfterRepair = await ContextScalarIntAsync(
+            context,
+            NullProofVariablesClearedSql,
             cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var cleanedAfterReplay = await ContextScalarIntAsync(context, NullProofVariablesClearedSql,
+        var cleanedAfterReplay = await ContextScalarIntAsync(
+            context,
+            NullProofVariablesClearedSql,
             cancellationToken: CancellationToken.None);
 
-        var sessionAfter = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();",
+        var sessionAfter = await ContextScalarIntAsync(
+            context,
+            "SELECT CONNECTION_ID();",
             cancellationToken: CancellationToken.None);
 
         var replay = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("null-proof-replay"), CancellationToken.None);
+            new SafeMigrationRunOptions("null-proof-replay"),
+            CancellationToken.None);
 
         var postflight = await runner.VerifyAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("null-proof-postflight"), CancellationToken.None);
+            new SafeMigrationRunOptions("null-proof-postflight"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
-        Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(preflight.Assessments).ObservedState);
-        Assert.Equal(SafeMigrationAction.Repair, Assert.Single(preflight.Assessments).Action);
-        Assert.True(Assert.Single(providerAnalysis).RequiresLiveDataProof);
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(replay.Assessments).ObservedState);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
+        Assert.Equal(SafeMigrationObservedState.Different,
+            Assert.Single(preflight.Assessments)
+                .ObservedState);
+
+        Assert.Equal(SafeMigrationAction.Repair,
+            Assert.Single(preflight.Assessments)
+                .Action);
+
+        Assert.True(Assert.Single(providerAnalysis)
+            .RequiresLiveDataProof);
+
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(replay.Assessments)
+                .ObservedState);
+
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(replay.Assessments)
+                .Action);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
-        Assert.True(Assert.Single(postflight.Assessments).PostconditionSatisfied);
+        Assert.True(Assert.Single(postflight.Assessments)
+            .PostconditionSatisfied);
+
         Assert.Equal(1, cleanedAfterRepair);
         Assert.Equal(1, cleanedAfterReplay);
         Assert.Equal(sessionBefore, sessionAfter);
@@ -113,8 +158,14 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'null_proof_rows' "
                 + "AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO' AND COLUMN_COMMENT = 'canonical';",
                 cancellationToken: CancellationToken.None));
-        Assert.Equal(2, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `null_proof_rows`;",
-            cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `null_proof_rows`;",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             2,
             await ScalarIntAsync(
@@ -134,8 +185,14 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var storeType = textColumn ? "varchar(40)" : "int";
-        var firstValue = textColumn ? "'preserved'" : "7";
+        var storeType = textColumn
+            ? "varchar(40)"
+            : "int";
+
+        var firstValue = textColumn
+            ? "'preserved'"
+            : "7";
+
         var preservedPredicate = textColumn
             ? "(`id` = 1 AND BINARY `value` = BINARY 'preserved') OR (`id` = 2 AND `value` IS NULL)"
             : "(`id` = 1 AND `value` = 7) OR (`id` = 2 AND `value` IS NULL)";
@@ -149,9 +206,12 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
 
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
+
         // WHY: A stale successful proof must neither influence inline analysis nor admit a later runtime repair.
         await context.Database.ExecuteSqlRawAsync("SET @doka_sm_nullability_blocked = FALSE;");
-        var sessionBefore = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();",
+        var sessionBefore = await ContextScalarIntAsync(
+            context,
+            "SELECT CONNECTION_ID();",
             cancellationToken: CancellationToken.None);
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -159,31 +219,49 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
             "null_proof_rows",
             new ExpectedColumnDefinition(
                 "value",
-                textColumn ? typeof(string) : typeof(int),
+                textColumn
+                    ? typeof(string)
+                    : typeof(int),
                 isNullable: false,
                 storeType: storeType,
-                maxLength: textColumn ? 40 : null,
+                maxLength: textColumn
+                    ? 40
+                    : null,
                 comment: "canonical"),
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("null-proof-blocked"),
+                CancellationToken.None);
+
+        var providerAnalysis = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                builder
+                    .Operations
+                    .Cast<SafeMigrationOperation>()
+                    .ToArray(),
+                CancellationToken.None);
+
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("null-proof-blocked"), CancellationToken.None);
-
-        var providerAnalysis = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(
-            context,
-            builder.Operations.Cast<SafeMigrationOperation>().ToArray(),
-            CancellationToken.None);
-
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
             CancellationToken.None));
 
-        var cleaned = await ContextScalarIntAsync(context, NullProofVariablesClearedSql,
+        var cleaned = await ContextScalarIntAsync(
+            context,
+            NullProofVariablesClearedSql,
             cancellationToken: CancellationToken.None);
 
-        var sessionAfter = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();",
+        var sessionAfter = await ContextScalarIntAsync(
+            context,
+            "SELECT CONNECTION_ID();",
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -193,7 +271,9 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationObservedState.DataBlocked, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDataBlocked, assessment.Action);
-        Assert.True(Assert.Single(providerAnalysis).RequiresLiveDataProof);
+        Assert.True(Assert.Single(providerAnalysis)
+            .RequiresLiveDataProof);
+
         Assert.Contains("doka_sm_data_blocked", providerException.Message, StringComparison.Ordinal);
         Assert.Equal(1, cleaned);
         Assert.Equal(sessionBefore, sessionAfter);
@@ -205,8 +285,14 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'null_proof_rows' "
                 + "AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'YES' AND COLUMN_COMMENT = 'legacy';",
                 cancellationToken: CancellationToken.None));
-        Assert.Equal(2, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `null_proof_rows`;",
-            cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `null_proof_rows`;",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             2,
             await ScalarIntAsync(
@@ -237,22 +323,38 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("null-proof-matching"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("null-proof-matching"),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var cleaned = await ContextScalarIntAsync(context, NullProofVariablesClearedSql,
+        var cleaned = await ContextScalarIntAsync(
+            context,
+            NullProofVariablesClearedSql,
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(report.Assessments).ObservedState);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(report.Assessments).Action);
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(report.Assessments)
+                .Action);
+
         Assert.Equal(1, cleaned);
-        Assert.Equal(2, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `null_proof_rows`;",
-            cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `null_proof_rows`;",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             2,
             await ScalarIntAsync(
@@ -268,8 +370,11 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `null_proof_rows` (`id` int NOT NULL);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `null_proof_rows` (`id` int NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync("SET @doka_sm_nullability_blocked = TRUE;");
@@ -280,19 +385,30 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("null-proof-missing"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("null-proof-missing"),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var cleaned = await ContextScalarIntAsync(context, NullProofVariablesClearedSql,
+        var cleaned = await ContextScalarIntAsync(
+            context,
+            NullProofVariablesClearedSql,
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Missing, Assert.Single(report.Assessments).ObservedState);
-        Assert.Equal(SafeMigrationAction.Apply, Assert.Single(report.Assessments).Action);
+        Assert.Equal(SafeMigrationObservedState.Missing,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
+        Assert.Equal(SafeMigrationAction.Apply,
+            Assert.Single(report.Assessments)
+                .Action);
+
         Assert.Equal(1, cleaned);
         Assert.Equal(
             1,
@@ -300,9 +416,15 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
                 connectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'null_proof_rows' "
-                + "AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';", cancellationToken: CancellationToken.None));
-        Assert.Equal(0, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `null_proof_rows`;",
-            cancellationToken: CancellationToken.None));
+                + "AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `null_proof_rows`;",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Preserves independent length and NULL blockers during one combined varchar repair.</summary>
@@ -320,10 +442,19 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var firstValue = containsOverlength ? "'too-long'" : "'fits'";
-        var secondValue = containsNull ? "NULL" : "''";
+        var firstValue = containsOverlength
+            ? "'too-long'"
+            : "'fits'";
+
+        var secondValue = containsNull
+            ? "NULL"
+            : "''";
+
         var blocked = containsNull || containsOverlength;
-        var secondPredicate = containsNull ? "`value` IS NULL" : "OCTET_LENGTH(`value`) = 0";
+        var secondPredicate = containsNull
+            ? "`value` IS NULL"
+            : "OCTET_LENGTH(`value`) = 0";
+
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `null_proof_rows` (`id` int NOT NULL, `value` varchar(20) NULL COMMENT 'legacy', "
@@ -351,30 +482,52 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
         var report = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("null-proof-combined"), CancellationToken.None);
+            new SafeMigrationRunOptions("null-proof-combined"),
+            CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
-        var cleaned = await ContextScalarIntAsync(context, NullProofVariablesClearedSql,
+        var cleaned = await ContextScalarIntAsync(
+            context,
+            NullProofVariablesClearedSql,
             cancellationToken: CancellationToken.None);
 
         var replay = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("null-proof-combined-replay"), CancellationToken.None);
+            new SafeMigrationRunOptions("null-proof-combined-replay"),
+            CancellationToken.None);
 
         // Assert
-        Assert.Equal(blocked ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(
-            blocked ? SafeMigrationObservedState.DataBlocked : SafeMigrationObservedState.Different,
-            Assert.Single(report.Assessments).ObservedState);
+            blocked
+                ? SafeMigrationReportStatus.Blocked
+                : SafeMigrationReportStatus.Ready,
+            report.Status);
+
         Assert.Equal(
-            blocked ? SafeMigrationAction.RejectDataBlocked : SafeMigrationAction.Repair,
-            Assert.Single(report.Assessments).Action);
+            blocked
+                ? SafeMigrationObservedState.DataBlocked
+                : SafeMigrationObservedState.Different,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
         Assert.Equal(
-            blocked ? SafeMigrationObservedState.DataBlocked : SafeMigrationObservedState.Matching,
-            Assert.Single(replay.Assessments).ObservedState);
+            blocked
+                ? SafeMigrationAction.RejectDataBlocked
+                : SafeMigrationAction.Repair,
+            Assert.Single(report.Assessments)
+                .Action);
+
+        Assert.Equal(
+            blocked
+                ? SafeMigrationObservedState.DataBlocked
+                : SafeMigrationObservedState.Matching,
+            Assert.Single(replay.Assessments)
+                .ObservedState);
 
         if (blocked)
         {
@@ -385,39 +538,56 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
         else
         {
             Assert.Null(exception);
-            Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
+            Assert.Equal(SafeMigrationAction.NoOp,
+                Assert.Single(replay.Assessments)
+                    .Action);
         }
 
         Assert.Equal(1, cleaned);
         Assert.Equal(
-            blocked ? 20 : 5,
+            blocked
+                ? 20
+                : 5,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'null_proof_rows' AND COLUMN_NAME = 'value';",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
-            blocked ? 1 : 0,
+            blocked
+                ? 1
+                : 0,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT IS_NULLABLE = 'YES' FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'null_proof_rows' AND COLUMN_NAME = 'value';",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
-            blocked ? "legacy" : "canonical",
+            blocked
+                ? "legacy"
+                : "canonical",
             await ScalarStringAsync(
                 connectionString,
                 "SELECT COLUMN_COMMENT FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'null_proof_rows' AND COLUMN_NAME = 'value';",
                 cancellationToken: CancellationToken.None));
-        Assert.Equal(2, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `null_proof_rows`;",
-            cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `null_proof_rows`;",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             2,
             await ScalarIntAsync(
                 connectionString,
                 $"SELECT COUNT(*) FROM `null_proof_rows` WHERE (`id` = 1 AND BINARY `value` = BINARY {firstValue}) "
-                + $"OR (`id` = 2 AND {secondPredicate});", cancellationToken: CancellationToken.None));
+                + $"OR (`id` = 2 AND {secondPredicate});",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Rechecks live rows after earlier repairs and intervening raw DDL or DML.</summary>
@@ -440,10 +610,15 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync("SET @null_proof_after_rejection = NULL;");
-        var sessionBefore = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();",
+        var sessionBefore = await ContextScalarIntAsync(
+            context,
+            "SELECT CONNECTION_ID();",
             cancellationToken: CancellationToken.None);
 
-        var secondColumn = sameColumn ? "first_value" : "second_value";
+        var secondColumn = sameColumn
+            ? "first_value"
+            : "second_value";
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn(
             "null_proof_rows",
@@ -452,7 +627,9 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
 
         // WHY: The first operation materializes a successful proof; later raw SQL invalidates it before the next owner.
         _ = builder.Sql(
-            (sameColumn ? "ALTER TABLE `null_proof_rows` MODIFY COLUMN `first_value` int NULL; " : string.Empty)
+            (sameColumn
+                ? "ALTER TABLE `null_proof_rows` MODIFY COLUMN `first_value` int NULL; "
+                : string.Empty)
             + $"UPDATE `null_proof_rows` SET `{secondColumn}` = NULL WHERE `id` = 1;");
 
         builder.EnsureColumn(
@@ -463,17 +640,24 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
         _ = builder.Sql("SET @null_proof_after_rejection = 1;");
 
         // Act
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
-        var cleaned = await ContextScalarIntAsync(context, NullProofVariablesClearedSql,
+        var cleaned = await ContextScalarIntAsync(
+            context,
+            NullProofVariablesClearedSql,
             cancellationToken: CancellationToken.None);
 
         var laterStatementExecuted = await ContextScalarIntAsync(
             context,
-            "SELECT @null_proof_after_rejection IS NOT NULL;", cancellationToken: CancellationToken.None);
+            "SELECT @null_proof_after_rejection IS NOT NULL;",
+            cancellationToken: CancellationToken.None);
 
-        var sessionAfter = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();",
+        var sessionAfter = await ContextScalarIntAsync(
+            context,
+            "SELECT CONNECTION_ID();",
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -484,27 +668,39 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
         Assert.Equal(0, laterStatementExecuted);
         Assert.Equal(sessionBefore, sessionAfter);
         Assert.Equal(
-            sameColumn ? 1 : 0,
+            sameColumn
+                ? 1
+                : 0,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT IS_NULLABLE = 'YES' FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'null_proof_rows' "
-                + "AND COLUMN_NAME = 'first_value';", cancellationToken: CancellationToken.None));
+                + "AND COLUMN_NAME = 'first_value';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT IS_NULLABLE = 'YES' FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'null_proof_rows' "
-                + $"AND COLUMN_NAME = '{secondColumn}';", cancellationToken: CancellationToken.None));
-        Assert.Equal(2, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `null_proof_rows`;",
-            cancellationToken: CancellationToken.None));
+                + $"AND COLUMN_NAME = '{secondColumn}';",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `null_proof_rows`;",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
                 $"SELECT COUNT(*) FROM `null_proof_rows` WHERE `id` = 1 AND `{secondColumn}` IS NULL;",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -534,23 +730,36 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
             SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("null-proof-ineligible"),
+                CancellationToken.None);
+
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("null-proof-ineligible"), CancellationToken.None);
-
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
             CancellationToken.None));
 
-        var cleaned = await ContextScalarIntAsync(context, NullProofVariablesClearedSql,
+        var cleaned = await ContextScalarIntAsync(
+            context,
+            NullProofVariablesClearedSql,
             cancellationToken: CancellationToken.None);
 
         // Assert
         var providerException = AssertOwnedGuardFailure(exception);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(report.Assessments).ObservedState);
-        Assert.Equal(SafeMigrationAction.RejectDifferent, Assert.Single(report.Assessments).Action);
+        Assert.Equal(SafeMigrationObservedState.Different,
+            Assert.Single(report.Assessments)
+                .ObservedState);
+
+        Assert.Equal(SafeMigrationAction.RejectDifferent,
+            Assert.Single(report.Assessments)
+                .Action);
+
         Assert.Contains("doka_sm_different", providerException.Message, StringComparison.Ordinal);
         Assert.Equal(1, cleaned);
         Assert.Equal(
@@ -560,9 +769,16 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS "
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'null_proof_rows' AND COLUMN_NAME = 'value' "
                 + "AND DATA_TYPE = 'varchar' AND CHARACTER_MAXIMUM_LENGTH = 40 "
-                + "AND IS_NULLABLE = 'YES' AND COLUMN_COMMENT = 'legacy';", cancellationToken: CancellationToken.None));
-        Assert.Equal(2, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `null_proof_rows`;",
-            cancellationToken: CancellationToken.None));
+                + "AND IS_NULLABLE = 'YES' AND COLUMN_COMMENT = 'legacy';",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `null_proof_rows`;",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             2,
             await ScalarIntAsync(
@@ -584,11 +800,15 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var database = new MySqlConnectionStringBuilder(connectionString).Database;
-        var qualifier = caseMismatch ? database.ToUpperInvariant() : "foreign_null_proof_database";
+        var qualifier = caseMismatch
+            ? database.ToUpperInvariant()
+            : "foreign_null_proof_database";
+
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE `null_proof_rows` (`id` int NOT NULL, `value` int NULL COMMENT 'legacy'); "
-            + "INSERT INTO `null_proof_rows` VALUES (1, NULL), (2, 7);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO `null_proof_rows` VALUES (1, NULL), (2, 7);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
@@ -600,15 +820,22 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
             schema: qualifier);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("null-proof-qualifier"),
+                CancellationToken.None);
+
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("null-proof-qualifier"), CancellationToken.None);
-
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
             CancellationToken.None));
 
-        var cleaned = await ContextScalarIntAsync(context, NullProofVariablesClearedSql,
+        var cleaned = await ContextScalarIntAsync(
+            context,
+            NullProofVariablesClearedSql,
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -630,8 +857,14 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
                 + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'null_proof_rows' "
                 + "AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'YES' AND COLUMN_COMMENT = 'legacy';",
                 cancellationToken: CancellationToken.None));
-        Assert.Equal(2, await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `null_proof_rows`;",
-            cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            2,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM `null_proof_rows`;",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             2,
             await ScalarIntAsync(
@@ -666,6 +899,7 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
 
         using var cancellation = new CancellationTokenSource();
         var observer = new MySqlRuntimeCommandInterceptor();
+
         // WHY: An interrupted row-lock wait errors on both engines; an interrupted SLEEP can return normally.
         var probe = failureMode == "error"
             ? "SELECT * FROM `runtime_missing_nullability_probe`;"
@@ -673,10 +907,16 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
 
         observer.InjectFirstCompactedNullabilityProbeGroup(
             "SET @null_proof_prepared = 1; " + probe + " SET @null_proof_after_failure = 1;",
-            failureMode == "cancellation" ? () => cancellation.CancelAfter(TimeSpan.FromMilliseconds(500)) : null);
+            failureMode == "cancellation"
+                ? () => cancellation.CancelAfter(TimeSpan.FromMilliseconds(500))
+                : null);
 
         await using var context = CreateRuntimeContext(connectionString, observer);
-        context.Database.SetCommandTimeout(failureMode == "timeout" ? 1 : 60);
+        context.Database.SetCommandTimeout(
+            failureMode == "timeout"
+                ? 1
+                : 60);
+
         await context.Database.OpenConnectionAsync(CancellationToken.None);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn(
@@ -750,7 +990,9 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
             + "WHERE (`id` = 1 AND BINARY `value` = BINARY 'preserved') "
             + "OR (`id` = 2 AND OCTET_LENGTH(`value`) = 0);";
 
-        var sessionBefore = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();",
+        var sessionBefore = await ContextScalarIntAsync(
+            context,
+            "SELECT CONNECTION_ID();",
             cancellationToken: cancellationToken);
 
         var exception = await Record.ExceptionAsync(() =>
@@ -760,13 +1002,18 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
         // remain independent so cancellation cannot hide failed cleanup or poison the same-session retry.
 
         var bodiesBefore = observer.GuardedBodyCount;
-        var cleanup = await ReadRuntimeCleanupProofAsync(context.Database.GetDbConnection(),
+        var cleanup = await ReadRuntimeCleanupProofAsync(
+            context.Database.GetDbConnection(),
             cancellationToken: CancellationToken.None);
 
-        var preparedMarker = await ContextScalarIntAsync(context, "SELECT @null_proof_prepared IS NOT NULL;",
+        var preparedMarker = await ContextScalarIntAsync(
+            context,
+            "SELECT @null_proof_prepared IS NOT NULL;",
             cancellationToken: CancellationToken.None);
 
-        var sentinel = await ContextScalarIntAsync(context, "SELECT @null_proof_after_failure IS NOT NULL;",
+        var sentinel = await ContextScalarIntAsync(
+            context,
+            "SELECT @null_proof_after_failure IS NOT NULL;",
             cancellationToken: CancellationToken.None);
 
         var legacySchema = await ContextScalarIntAsync(
@@ -776,23 +1023,33 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
             + "AND CHARACTER_MAXIMUM_LENGTH = 40 AND IS_NULLABLE = 'YES' AND COLUMN_COMMENT = 'legacy';",
             cancellationToken: CancellationToken.None);
 
-        var rowsBefore = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `null_proof_rows`;",
+        var rowsBefore = await ContextScalarIntAsync(
+            context,
+            "SELECT COUNT(*) FROM `null_proof_rows`;",
             cancellationToken: CancellationToken.None);
 
-        var preservedBefore = await ContextScalarIntAsync(context, preservedRowsSql,
+        var preservedBefore = await ContextScalarIntAsync(
+            context,
+            preservedRowsSql,
             cancellationToken: CancellationToken.None);
 
         context.Database.SetCommandTimeout(60);
         await ExecuteOperationsAsync(context, operations, CancellationToken.None);
         var bodiesAfterRecovery = observer.GuardedBodyCount;
-        var cleanedAfterRecovery = await ContextScalarIntAsync(context, NullProofVariablesClearedSql,
+        var cleanedAfterRecovery = await ContextScalarIntAsync(
+            context,
+            NullProofVariablesClearedSql,
             cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, operations, CancellationToken.None);
-        var cleanedAfterReplay = await ContextScalarIntAsync(context, NullProofVariablesClearedSql,
+        var cleanedAfterReplay = await ContextScalarIntAsync(
+            context,
+            NullProofVariablesClearedSql,
             cancellationToken: CancellationToken.None);
 
-        var sessionAfter = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();",
+        var sessionAfter = await ContextScalarIntAsync(
+            context,
+            "SELECT CONNECTION_ID();",
             cancellationToken: CancellationToken.None);
 
         var canonicalSchema = await ContextScalarIntAsync(
@@ -802,10 +1059,14 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
             + "AND CHARACTER_MAXIMUM_LENGTH = 40 AND IS_NULLABLE = 'NO' AND COLUMN_COMMENT = 'canonical';",
             cancellationToken: CancellationToken.None);
 
-        var rowsAfterReplay = await ContextScalarIntAsync(context, "SELECT COUNT(*) FROM `null_proof_rows`;",
+        var rowsAfterReplay = await ContextScalarIntAsync(
+            context,
+            "SELECT COUNT(*) FROM `null_proof_rows`;",
             cancellationToken: CancellationToken.None);
 
-        var preservedAfterReplay = await ContextScalarIntAsync(context, preservedRowsSql,
+        var preservedAfterReplay = await ContextScalarIntAsync(
+            context,
+            preservedRowsSql,
             cancellationToken: CancellationToken.None);
 
         return new RuntimeNullProofRecovery(
@@ -830,7 +1091,6 @@ public sealed partial class MySqlColumnsNullProofIntegrationTests : MySqlSafeMig
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-
     /// <summary>Carries immutable interrupted-proof evidence and successful same-session retry and replay.</summary>
     protected sealed record RuntimeNullProofRecovery(
         Exception? Exception,

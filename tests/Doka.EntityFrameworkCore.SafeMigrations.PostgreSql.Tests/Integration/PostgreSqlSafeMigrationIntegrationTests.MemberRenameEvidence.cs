@@ -30,63 +30,123 @@ public sealed class PostgreSqlMemberRenameEvidenceIntegrationTests : PostgreSqlS
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var source = index ? "source_index" : "source_value";
-        var target = index ? "target_index" : "target_value";
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE member_rows (id integer NOT NULL, decoy integer NULL"
-            + (!index && sourceExists ? ", source_value integer NULL" : string.Empty)
-            + (!index && targetExists ? ", target_value integer NULL" : string.Empty) + "); "
+        var source = index
+            ? "source_index"
+            : "source_value";
+
+        var target = index
+            ? "target_index"
+            : "target_value";
+
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE member_rows (id integer NOT NULL, decoy integer NULL"
+            + (!index && sourceExists
+                ? ", source_value integer NULL"
+                : string.Empty)
+            + (!index && targetExists
+                ? ", target_value integer NULL"
+                : string.Empty)
+            + "); "
             + "INSERT INTO member_rows (id) VALUES (7); "
-            + (index && sourceExists ? "CREATE INDEX source_index ON member_rows (id); " : string.Empty)
-            + (index && targetExists ? "CREATE INDEX target_index ON member_rows (decoy); " : string.Empty),
+            + (index && sourceExists
+                ? "CREATE INDEX source_index ON member_rows (id); "
+                : string.Empty)
+            + (index && targetExists
+                ? "CREATE INDEX target_index ON member_rows (decoy); "
+                : string.Empty),
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (index)
         {
-            builder.EnsureIndex(new ExpectedIndexDefinition(source, "member_rows",
-                [new ExpectedIndexKeyDefinition("id")]), SafeMigrationPolicy.ThrowIfDifferent);
+            builder.EnsureIndex(
+                new ExpectedIndexDefinition(
+                    source,
+                    "member_rows",
+                    [new ExpectedIndexKeyDefinition("id")]),
+                SafeMigrationPolicy.ThrowIfDifferent);
+
             builder.RenameIndexIfExists(source, "member_rows", target);
         }
         else
         {
-            builder.EnsureColumn("member_rows", new ExpectedColumnDefinition(source, typeof(int), true, "integer"),
+            builder.EnsureColumn(
+                "member_rows",
+                new ExpectedColumnDefinition(source, typeof(int), true, "integer"),
                 policy: SafeMigrationPolicy.ThrowIfDifferent);
+
             builder.RenameColumnIfExists(source, "member_rows", target);
         }
 
         var rename = (SafeMigrationOperation)builder.Operations[^1];
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename],
-            CancellationToken.None);
+        var analyses = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                [rename],
+                CancellationToken.None);
 
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("member-rename-brownfield"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("member-rename-brownfield"),
+                CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
-        var targetCount = await ScalarIntAsync(connectionString, index
-            ? "SELECT COUNT(*) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
+        var targetCount = await ScalarIntAsync(
+            connectionString,
+            index
+                ? "SELECT COUNT(*) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
                 + "WHERE n.nspname = 'public' AND c.relname = 'target_index';"
-            : "SELECT COUNT(*) FROM pg_catalog.pg_attribute a "
+                : "SELECT COUNT(*) FROM pg_catalog.pg_attribute a "
                 + "WHERE a.attrelid = 'public.member_rows'::regclass AND a.attname = 'target_value' "
-                + "AND a.attnum > 0 AND NOT a.attisdropped;", cancellationToken: CancellationToken.None);
+                + "AND a.attnum > 0 AND NOT a.attisdropped;",
+            cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM member_rows WHERE id = 7;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM member_rows WHERE id = 7;",
             cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);
         Assert.Equal(targetExists, analysis.RenameTargetExists);
-        Assert.Equal(index ? sourceExists : (bool?)null, analysis.RenameSourceSupported);
-        Assert.Equal(!sourceExists ? SafeMigrationObservedState.Missing
-            : targetExists ? SafeMigrationObservedState.Different : SafeMigrationObservedState.Matching,
+        Assert.Equal(
+            index
+                ? sourceExists
+                : null,
+            analysis.RenameSourceSupported);
+
+        Assert.Equal(
+            !sourceExists
+                ? SafeMigrationObservedState.Missing
+                : targetExists
+                    ? SafeMigrationObservedState.Different
+                    : SafeMigrationObservedState.Matching,
             analysis.ObservedState);
-        Assert.Equal(targetExists ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Equal(targetExists ? SafeMigrationAction.RejectDifferent : SafeMigrationAction.Apply,
+
+        Assert.Equal(
+            targetExists
+                ? SafeMigrationReportStatus.Blocked
+                : SafeMigrationReportStatus.Ready,
+            report.Status);
+
+        Assert.Equal(
+            targetExists
+                ? SafeMigrationAction.RejectDifferent
+                : SafeMigrationAction.Apply,
             report.Assessments[^1].Action);
+
         if (targetExists)
         {
             Assert.IsType<PostgresException>(failure);
@@ -105,41 +165,69 @@ public sealed class PostgreSqlMemberRenameEvidenceIntegrationTests : PostgreSqlS
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task MemberRename_IndexDestinationUsesSchemaGlobalNamespace(bool tableOccupant)
+    public async Task MemberRename_IndexDestinationUsesSchemaGlobalNamespace(
+        bool tableOccupant
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE member_rows (id integer NOT NULL); "
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE member_rows (id integer NOT NULL); "
             + "CREATE TABLE other_rows (id integer NOT NULL); "
-            + (tableOccupant ? "CREATE TABLE target_index (id integer NOT NULL);"
-                : "CREATE INDEX target_index ON other_rows (id);"), cancellationToken: CancellationToken.None);
+            + (tableOccupant
+                ? "CREATE TABLE target_index (id integer NOT NULL);"
+                : "CREATE INDEX target_index ON other_rows (id);"),
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureIndex(new ExpectedIndexDefinition("source_index", "member_rows",
-            [new ExpectedIndexKeyDefinition("id")]), SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                "source_index",
+                "member_rows",
+                [new ExpectedIndexKeyDefinition("id")]),
+            SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.RenameIndexIfExists("source_index", "member_rows", "target_index");
         var rename = (SafeMigrationOperation)builder.Operations[^1];
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename],
-            CancellationToken.None);
+        var analyses = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                [rename],
+                CancellationToken.None);
 
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("member-rename-schema-global"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("member-rename-schema-global"),
+                CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
-        var ownerExists = await ScalarIntAsync(connectionString,
+        var ownerExists = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_class WHERE oid = 'public.other_rows'::regclass;",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.True(Assert.Single(analyses).RenameTargetExists);
+        Assert.True(Assert.Single(analyses)
+            .RenameTargetExists);
+
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[^1].Action);
-        Assert.Equal("P1001", Assert.IsType<PostgresException>(failure).SqlState);
+        Assert.Equal("P1001",
+            Assert.IsType<PostgresException>(failure)
+                .SqlState);
+
         Assert.Equal(1, ownerExists);
     }
 
@@ -148,11 +236,14 @@ public sealed class PostgreSqlMemberRenameEvidenceIntegrationTests : PostgreSqlS
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task MemberRename_AbsentSourceReplayPreservesDestination(bool index)
+    public async Task MemberRename_AbsentSourceReplayPreservesDestination(
+        bool index
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE member_rows (id integer NOT NULL, target_value integer NULL); "
             + "INSERT INTO member_rows VALUES (7, 29); CREATE INDEX target_index ON member_rows (id);",
             cancellationToken: CancellationToken.None);
@@ -169,16 +260,26 @@ public sealed class PostgreSqlMemberRenameEvidenceIntegrationTests : PostgreSqlS
         }
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("member-rename-replay"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("member-rename-replay"),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM member_rows WHERE target_value = 29;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM member_rows WHERE target_value = 29;",
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(report.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(report.Assessments)
+                .Action);
+
         Assert.Equal(1, rows);
     }
 
@@ -187,42 +288,69 @@ public sealed class PostgreSqlMemberRenameEvidenceIntegrationTests : PostgreSqlS
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task MemberRename_DifferentIdentifierCaseDoesNotOccupyDestination(bool index)
+    public async Task MemberRename_DifferentIdentifierCaseDoesNotOccupyDestination(
+        bool index
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE member_rows (id integer NOT NULL, decoy integer NULL, \"Target_Value\" integer NULL); "
-            + "CREATE INDEX \"Target_Index\" ON member_rows (decoy);", cancellationToken: CancellationToken.None);
+            + "CREATE INDEX \"Target_Index\" ON member_rows (decoy);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (index)
         {
-            builder.EnsureIndex(new ExpectedIndexDefinition("source_index", "member_rows",
-                [new ExpectedIndexKeyDefinition("id")]), SafeMigrationPolicy.ThrowIfDifferent);
+            builder.EnsureIndex(
+                new ExpectedIndexDefinition(
+                    "source_index",
+                    "member_rows",
+                    [new ExpectedIndexKeyDefinition("id")]),
+                SafeMigrationPolicy.ThrowIfDifferent);
+
             builder.RenameIndexIfExists("source_index", "member_rows", "target_index");
         }
         else
         {
-            builder.EnsureColumn("member_rows", new ExpectedColumnDefinition("source_value", typeof(int), true,
-                "integer"), policy: SafeMigrationPolicy.ThrowIfDifferent);
+            builder.EnsureColumn(
+                "member_rows",
+                new ExpectedColumnDefinition(
+                    "source_value",
+                    typeof(int),
+                    true,
+                    "integer"),
+                policy: SafeMigrationPolicy.ThrowIfDifferent);
+
             builder.RenameColumnIfExists("source_value", "member_rows", "target_value");
         }
 
         var rename = (SafeMigrationOperation)builder.Operations[^1];
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename],
-            CancellationToken.None);
+        var analyses = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                [rename],
+                CancellationToken.None);
 
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("member-rename-native-case"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("member-rename-native-case"),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Assert
-        Assert.False(Assert.Single(analyses).RenameTargetExists);
+        Assert.False(Assert.Single(analyses)
+            .RenameTargetExists);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[^1].Action);
     }
@@ -233,19 +361,30 @@ public sealed class PostgreSqlMemberRenameEvidenceIntegrationTests : PostgreSqlS
     [InlineData("independent")]
     [InlineData("foreign-owner")]
     [InlineData("constraint")]
-    public async Task MemberRename_TargetDropRequiresIndependentlySupportedSource(string kind)
+    public async Task MemberRename_TargetDropRequiresIndependentlySupportedSource(
+        string kind
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         var supported = kind == "independent";
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE member_rows (id integer NOT NULL, decoy integer NULL"
-            + (kind == "constraint" ? ", CONSTRAINT source_index PRIMARY KEY (id)" : string.Empty)
+            + (kind == "constraint"
+                ? ", CONSTRAINT source_index PRIMARY KEY (id)"
+                : string.Empty)
             + "); CREATE TABLE other_rows (id integer NOT NULL); "
             + "INSERT INTO member_rows (id) VALUES (7); "
-            + (kind == "constraint" ? string.Empty : "CREATE INDEX source_index ON "
-                + (kind == "foreign-owner" ? "other_rows" : "member_rows") + " (id); ")
-            + "CREATE INDEX target_index ON member_rows (decoy);", cancellationToken: CancellationToken.None);
+            + (kind == "constraint"
+                ? string.Empty
+                : "CREATE INDEX source_index ON "
+                + (kind == "foreign-owner"
+                    ? "other_rows"
+                    : "member_rows")
+                + " (id); ")
+            + "CREATE INDEX target_index ON member_rows (decoy);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -254,20 +393,35 @@ public sealed class PostgreSqlMemberRenameEvidenceIntegrationTests : PostgreSqlS
         var rename = (SafeMigrationOperation)builder.Operations[^1];
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [rename],
-            CancellationToken.None);
+        var analyses = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                [rename],
+                CancellationToken.None);
 
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("member-rename-source-kind"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("member-rename-source-kind"),
+                CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
-        var sourceCount = await ScalarIntAsync(connectionString,
+        var sourceCount = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
-            + "WHERE n.nspname = 'public' AND c.relname = 'source_index';", cancellationToken: CancellationToken.None);
+            + "WHERE n.nspname = 'public' AND c.relname = 'source_index';",
+            cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM member_rows WHERE id = 7;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM member_rows WHERE id = 7;",
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -275,20 +429,35 @@ public sealed class PostgreSqlMemberRenameEvidenceIntegrationTests : PostgreSqlS
         Assert.Equal(SafeMigrationObservedState.Different, analysis.ObservedState);
         Assert.True(analysis.RenameTargetExists);
         Assert.Equal(supported, analysis.RenameSourceSupported);
-        Assert.Equal(supported ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(supported ? SafeMigrationAction.Apply : SafeMigrationAction.RejectDifferent,
+        Assert.Equal(
+            supported
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
+            report.Status);
+
+        Assert.Equal(
+            supported
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectDifferent,
             report.Assessments[^1].Action);
+
         if (supported)
         {
             Assert.Null(failure);
         }
         else
         {
-            Assert.Equal("P1001", Assert.IsType<PostgresException>(failure).SqlState);
+            Assert.Equal("P1001",
+                Assert.IsType<PostgresException>(failure)
+                    .SqlState);
         }
 
-        Assert.Equal(supported ? 0 : 1, sourceCount);
+        Assert.Equal(
+            supported
+                ? 0
+                : 1,
+            sourceCount);
+
         Assert.Equal(1, rows);
     }
-
 }

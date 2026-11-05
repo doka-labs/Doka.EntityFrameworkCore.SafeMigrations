@@ -92,7 +92,9 @@ internal static partial class SqliteSafeMigrationCatalog
             transaction,
             "SELECT t.name, c.cid, c.name, c.type, c.\"notnull\", c.dflt_value, c.pk, c.hidden "
             + "FROM main.sqlite_schema AS t LEFT JOIN pragma_table_xinfo(t.name, 'main') AS c ON 1 = 1 "
-            + "WHERE " + MainTablesPredicate + "ORDER BY t.name, c.cid;");
+            + "WHERE "
+            + MainTablesPredicate
+            + "ORDER BY t.name, c.cid;");
 
         using var reader = command.ExecuteReader();
         var seen = new HashSet<string>(s_identifierComparer);
@@ -111,9 +113,13 @@ internal static partial class SqliteSafeMigrationCatalog
             var column = new SqliteColumnSnapshot(
                 reader.GetInt32(1),
                 name,
-                reader.IsDBNull(3) ? string.Empty : reader.GetString(3),
+                reader.IsDBNull(3)
+                    ? string.Empty
+                    : reader.GetString(3),
                 reader.GetInt32(4) == 0,
-                reader.IsDBNull(5) ? null : reader.GetString(5),
+                reader.IsDBNull(5)
+                    ? null
+                    : reader.GetString(5),
                 reader.GetInt32(6),
                 hiddenKind,
                 ReadCollation(columnSql),
@@ -146,7 +152,9 @@ internal static partial class SqliteSafeMigrationCatalog
             + "FROM main.sqlite_schema AS t LEFT JOIN pragma_index_list(t.name, 'main') AS i ON 1 = 1 "
             + "LEFT JOIN main.sqlite_schema AS s ON s.type = 'index' AND s.name = i.name "
             + "LEFT JOIN pragma_index_xinfo(i.name, 'main') AS k ON 1 = 1 "
-            + "WHERE " + MainTablesPredicate + "ORDER BY t.name, i.seq, k.seqno;");
+            + "WHERE "
+            + MainTablesPredicate
+            + "ORDER BY t.name, i.seq, k.seqno;");
 
         using var reader = command.ExecuteReader();
         var seen = new HashSet<string>(s_identifierComparer);
@@ -189,7 +197,9 @@ internal static partial class SqliteSafeMigrationCatalog
                     reader.GetInt32(3) != 0,
                     reader.GetString(4),
                     reader.GetInt32(5) != 0,
-                    reader.IsDBNull(8) ? string.Empty : reader.GetString(8));
+                    reader.IsDBNull(8)
+                        ? string.Empty
+                        : reader.GetString(8));
             }
 
             if (!s_identifierComparer.Equals(currentIndex.Name, name)
@@ -197,7 +207,10 @@ internal static partial class SqliteSafeMigrationCatalog
                 || currentIndex.Origin != reader.GetString(4)
                 || currentIndex.Partial != (reader.GetInt32(5) != 0)
                 || (!reader.IsDBNull(6) && !s_identifierComparer.Equals(reader.GetString(7), table.Name))
-                || currentIndex.Sql != (reader.IsDBNull(8) ? string.Empty : reader.GetString(8))
+                || currentIndex.Sql
+                != (reader.IsDBNull(8)
+                    ? string.Empty
+                    : reader.GetString(8))
                 || reader.IsDBNull(9)
                 || reader.GetInt32(9) != currentIndex.Keys.Count)
             {
@@ -206,7 +219,10 @@ internal static partial class SqliteSafeMigrationCatalog
 
             var ordinal = reader.GetInt32(9);
             var columnId = reader.GetInt32(10);
-            var column = reader.IsDBNull(11) ? null : reader.GetString(11);
+            var column = reader.IsDBNull(11)
+                ? null
+                : reader.GetString(11);
+
             var isKey = reader.GetInt32(14) != 0;
             if (column is not null
                 && (!table.Columns.TryGetValue(column, out var ownedColumn) || ownedColumn.Ordinal != columnId))
@@ -223,7 +239,9 @@ internal static partial class SqliteSafeMigrationCatalog
                         ? ReadIndexExpression(currentIndex.KeyClauses[ordinal])
                         : null,
                     reader.GetInt32(12) != 0,
-                    reader.IsDBNull(13) ? "BINARY" : reader.GetString(13),
+                    reader.IsDBNull(13)
+                        ? "BINARY"
+                        : reader.GetString(13),
                     isKey));
         }
 
@@ -247,7 +265,8 @@ internal static partial class SqliteSafeMigrationCatalog
         IndexBuilder? index
     )
     {
-        if (table is null || index is null)
+        if (table is null
+            || index is null)
         {
             return;
         }
@@ -281,7 +300,9 @@ internal static partial class SqliteSafeMigrationCatalog
             "SELECT t.name, f.id, f.seq, f.\"table\", f.\"from\", f.\"to\", "
             + "f.on_update, f.on_delete, f.\"match\" "
             + "FROM main.sqlite_schema AS t LEFT JOIN pragma_foreign_key_list(t.name, 'main') AS f ON 1 = 1 "
-            + "WHERE " + MainTablesPredicate + "ORDER BY t.name, f.id, f.seq;");
+            + "WHERE "
+            + MainTablesPredicate
+            + "ORDER BY t.name, f.id, f.seq;");
 
         using var reader = command.ExecuteReader();
         var seen = new HashSet<string>(s_identifierComparer);
@@ -333,7 +354,10 @@ internal static partial class SqliteSafeMigrationCatalog
             }
 
             currentForeignKey.Columns.Add(column);
-            currentForeignKey.PrincipalColumns.Add(reader.IsDBNull(5) ? string.Empty : reader.GetString(5));
+            currentForeignKey.PrincipalColumns.Add(
+                reader.IsDBNull(5)
+                    ? string.Empty
+                    : reader.GetString(5));
         }
 
         PublishForeignKey(currentTable, currentForeignKey);
@@ -352,7 +376,8 @@ internal static partial class SqliteSafeMigrationCatalog
         ForeignKeyBuilder? foreignKey
     )
     {
-        if (table is null || foreignKey is null)
+        if (table is null
+            || foreignKey is null)
         {
             return;
         }
@@ -365,16 +390,17 @@ internal static partial class SqliteSafeMigrationCatalog
         // WHY: SQLite assigns foreign-key IDs in reverse declaration order.
         // Consume each declaration once, including unnamed and repeated keys.
         var declaration = table.DeclaredForeignKeys.LastOrDefault(value =>
-                !table.MatchedForeignKeys.Contains(value)
-                && s_identifierComparer.Equals(value.PrincipalTable, foreignKey.PrincipalTable)
-                && IdentifiersEqual(value.Columns, columns)
-                && (value.PrincipalColumns.Length == 0
-                    ? principalColumns.All(static column => column.Length == 0)
-                    : IdentifiersEqual(value.PrincipalColumns, principalColumns))
-                && value.OnUpdate == onUpdate
-                && value.OnDelete == onDelete);
+            !table.MatchedForeignKeys.Contains(value)
+            && s_identifierComparer.Equals(value.PrincipalTable, foreignKey.PrincipalTable)
+            && IdentifiersEqual(value.Columns, columns)
+            && (value.PrincipalColumns.Length == 0
+                ? principalColumns.All(static column => column.Length == 0)
+                : IdentifiersEqual(value.PrincipalColumns, principalColumns))
+            && value.OnUpdate == onUpdate
+            && value.OnDelete == onDelete);
 
-        if (declaration is null || !table.MatchedForeignKeys.Add(declaration))
+        if (declaration is null
+            || !table.MatchedForeignKeys.Add(declaration))
         {
             throw InvalidMetadata();
         }
@@ -433,6 +459,7 @@ internal static partial class SqliteSafeMigrationCatalog
             Sql = RemoveComments(sql);
             Clauses = ReadTableClauses(Sql);
             ColumnClauses = ReadColumnClauses(Clauses);
+
             // WHY: SQLite passes virtual-table module arguments to the module;
             // keywords in those arguments are not ordinary column constraints.
             DeclaredForeignKeys = s_virtualTableDefinitionPattern.IsMatch(Sql)

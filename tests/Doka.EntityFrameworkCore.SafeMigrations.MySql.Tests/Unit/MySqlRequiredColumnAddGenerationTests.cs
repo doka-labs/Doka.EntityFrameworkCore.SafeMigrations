@@ -19,19 +19,30 @@ public sealed class MySqlRequiredColumnAddGenerationTests
     [InlineData(true, "SET SESSION check_constraint_checks = OFF;")]
     [InlineData(false, "DO 0; /*M! SET SESSION check_constraint_checks = OFF */")]
     [InlineData(true, "DO 0; /*M! SET SESSION check_constraint_checks = OFF */")]
-    public void RequiredAddRejectsStatefulSetupWithInertCleanup(bool isMariaDb, string setupSql)
+    public void RequiredAddRejectsStatefulSetupWithInertCleanup(
+        bool isMariaDb,
+        string setupSql
+    )
     {
         // Arrange
         using var context = CreateContext(isMariaDb);
         var handler = CreateHandler(context);
         var operation = RequiredOperation(SafeMigrationPolicy.ThrowIfDifferent);
-        var operationContext = CreateOperationContext(context, handler, operation, isMariaDb, standard =>
-        [
-            MySqlMigrationCommandSpec.CreateScoped([setupSql], standard is AlterColumnOperation
-                    ? "ALTER TABLE `items` MODIFY COLUMN `value` int NOT NULL"
-                    : "ALTER TABLE `items` ADD `value` int NULL",
-                ["DO 0;"], transactionSuppressed: true),
-        ]);
+        var operationContext = CreateOperationContext(
+            context,
+            handler,
+            operation,
+            isMariaDb,
+            standard =>
+            [
+                MySqlMigrationCommandSpec.CreateScoped(
+                    [setupSql],
+                    standard is AlterColumnOperation
+                        ? "ALTER TABLE `items` MODIFY COLUMN `value` int NOT NULL"
+                        : "ALTER TABLE `items` ADD `value` int NULL",
+                    ["DO 0;"],
+                    transactionSuppressed: true),
+            ]);
 
         // Act
         var exception = Record.Exception(() => handler.Generate(operationContext));
@@ -47,7 +58,9 @@ public sealed class MySqlRequiredColumnAddGenerationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void RequiredAddAcceptsNonMutatingSetupAndCleanup(bool isMariaDb)
+    public void RequiredAddAcceptsNonMutatingSetupAndCleanup(
+        bool isMariaDb
+    )
     {
         // Arrange
         using var context = CreateContext(isMariaDb);
@@ -55,13 +68,21 @@ public sealed class MySqlRequiredColumnAddGenerationTests
         const string inertSetup = "DO 11; /* immutable native setup */";
         const string inertCleanup = "DO 0; /* immutable native cleanup */";
         var operation = RequiredOperation(SafeMigrationPolicy.ThrowIfDifferent);
-        var operationContext = CreateOperationContext(context, handler, operation, isMariaDb, standard =>
-        [
-            MySqlMigrationCommandSpec.CreateScoped([inertSetup], standard is AlterColumnOperation
-                    ? "ALTER TABLE `items` MODIFY COLUMN `value` int NOT NULL"
-                    : "ALTER TABLE `items` ADD `value` int NULL",
-                [inertCleanup], transactionSuppressed: true),
-        ]);
+        var operationContext = CreateOperationContext(
+            context,
+            handler,
+            operation,
+            isMariaDb,
+            standard =>
+            [
+                MySqlMigrationCommandSpec.CreateScoped(
+                    [inertSetup],
+                    standard is AlterColumnOperation
+                        ? "ALTER TABLE `items` MODIFY COLUMN `value` int NOT NULL"
+                        : "ALTER TABLE `items` ADD `value` int NULL",
+                    [inertCleanup],
+                    transactionSuppressed: true),
+            ]);
 
         // Act
         var result = handler.Generate(operationContext);
@@ -103,7 +124,10 @@ public sealed class MySqlRequiredColumnAddGenerationTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void RequiredAddRetainsImmutableNativeMetadataAndAtomicBodies(bool isMariaDb, bool guidColumn)
+    public void RequiredAddRetainsImmutableNativeMetadataAndAtomicBodies(
+        bool isMariaDb,
+        bool guidColumn
+    )
     {
         // Arrange
         using var context = CreateContext(isMariaDb);
@@ -111,10 +135,18 @@ public sealed class MySqlRequiredColumnAddGenerationTests
         {
             Name = "value",
             Table = "items",
-            ClrType = guidColumn ? typeof(Guid) : typeof(int),
-            ColumnType = guidColumn ? "char(36)" : "int",
-            MaxLength = guidColumn ? 36 : null,
-            IsFixedLength = guidColumn ? true : null,
+            ClrType = guidColumn
+                ? typeof(Guid)
+                : typeof(int),
+            ColumnType = guidColumn
+                ? "char(36)"
+                : "int",
+            MaxLength = guidColumn
+                ? 36
+                : null,
+            IsFixedLength = guidColumn
+                ? true
+                : null,
             IsNullable = false,
             Comment = "keep; 'quoted'\\path",
         };
@@ -134,38 +166,71 @@ public sealed class MySqlRequiredColumnAddGenerationTests
         // Act
         var first = Assert.Single(generator.Generate([operation], context.Model));
         var second = Assert.Single(generator.Generate([operation], context.Model));
-        var alterations = Payloads(first.CommandText).Where(static sql => sql.StartsWith("ALTER TABLE ",
-            StringComparison.Ordinal)).ToArray();
+        var alterations = Payloads(first.CommandText)
+            .Where(static sql => sql.StartsWith(
+                "ALTER TABLE ",
+                StringComparison.Ordinal))
+            .ToArray();
 
         // Assert
         var guard = MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(intent);
 
         Assert.Equal(2, alterations.Length);
-        Assert.Contains(", ADD CONSTRAINT `" + guard + "` CHECK (`value` IS NOT NULL)", alterations[0],
+        Assert.Contains(
+            ", ADD CONSTRAINT `" + guard + "` CHECK (`value` IS NOT NULL)",
+            alterations[0],
             StringComparison.Ordinal);
-        Assert.DoesNotContain(" NOT NULL", alterations[0][..alterations[0].IndexOf(", ADD CONSTRAINT",
-            StringComparison.Ordinal)], StringComparison.Ordinal);
-        Assert.Contains(" MODIFY COLUMN `value` ", alterations[1], StringComparison.Ordinal);
-        Assert.EndsWith((isMariaDb ? ", DROP CONSTRAINT `" : ", DROP CHECK `") + guard + "`", alterations[1],
-            StringComparison.Ordinal);
-        Assert.All(alterations, sql =>
-        {
-            Assert.Contains(" COMMENT ", sql, StringComparison.Ordinal);
-            Assert.DoesNotContain(" DEFAULT ", sql, StringComparison.Ordinal);
-            Assert.Equal(1, Count(sql, "ALTER TABLE "));
-        });
 
-        Assert.DoesNotContain(Payloads(first.CommandText), static sql => sql.StartsWith("UPDATE ",
-            StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            " NOT NULL",
+            alterations[0][..alterations[0]
+                .IndexOf(
+                    ", ADD CONSTRAINT",
+                    StringComparison.Ordinal)],
+            StringComparison.Ordinal);
+
+        Assert.Contains(" MODIFY COLUMN `value` ", alterations[1], StringComparison.Ordinal);
+        Assert.EndsWith(
+            (isMariaDb
+                ? ", DROP CONSTRAINT `"
+                : ", DROP CHECK `")
+            + guard
+            + "`",
+            alterations[1],
+            StringComparison.Ordinal);
+
+        Assert.All(
+            alterations,
+            sql =>
+            {
+                Assert.Contains(" COMMENT ", sql, StringComparison.Ordinal);
+                Assert.DoesNotContain(" DEFAULT ", sql, StringComparison.Ordinal);
+                Assert.Equal(1, Count(sql, "ALTER TABLE "));
+            });
+
+        Assert.DoesNotContain(
+            Payloads(first.CommandText),
+            static sql => sql.StartsWith(
+                "UPDATE ",
+                StringComparison.Ordinal));
+
         Assert.DoesNotContain("LOCK TABLES", first.CommandText, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(MySqlRuntimeSqlCanonicalizer.NormalizeOwnedCorrelation(first.CommandText),
+        Assert.Equal(
+            MySqlRuntimeSqlCanonicalizer.NormalizeOwnedCorrelation(first.CommandText),
             MySqlRuntimeSqlCanonicalizer.NormalizeOwnedCorrelation(second.CommandText));
+
         Assert.False(authored.IsNullable);
         Assert.False(definition.IsNullable);
         Assert.Equal("keep; 'quoted'\\path", authored.Comment);
         Assert.True(Assert.IsType<bool>(authored["Doka:MySql:RequiresExplicitBackfill"]));
-        Assert.True(Assert.IsType<bool>(Assert.Single(definition.ProviderAnnotations,
-            static annotation => annotation.Name == "Doka:MySql:RequiresExplicitBackfill").CreateValueSnapshot()));
+        Assert.True(
+            Assert.IsType<bool>(
+                Assert
+                    .Single(
+                        definition.ProviderAnnotations,
+                        static annotation => annotation.Name == "Doka:MySql:RequiresExplicitBackfill")
+                    .CreateValueSnapshot()));
+
         Assert.Equal(SafeMigrationDefaultValueKind.None, definition.DefaultValue.Kind);
     }
 
@@ -174,19 +239,26 @@ public sealed class MySqlRequiredColumnAddGenerationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void RequiredAddUsesOneSharedProviderScope(bool isMariaDb)
+    public void RequiredAddUsesOneSharedProviderScope(
+        bool isMariaDb
+    )
     {
         // Arrange
         using var context = CreateContext(isMariaDb);
         var handler = CreateHandler(context);
         var operation = RequiredOperation(SafeMigrationPolicy.ThrowIfDifferent);
         var rendered = new List<MigrationOperation>();
-        var operationContext = CreateOperationContext(context, handler, operation, isMariaDb, standard =>
-        {
-            rendered.Add(standard);
+        var operationContext = CreateOperationContext(
+            context,
+            handler,
+            operation,
+            isMariaDb,
+            standard =>
+            {
+                rendered.Add(standard);
 
-            return NativeScopedBody(standard);
-        });
+                return NativeScopedBody(standard);
+            });
 
         // Act
         var result = handler.Generate(operationContext);
@@ -208,8 +280,10 @@ public sealed class MySqlRequiredColumnAddGenerationTests
         Assert.Equal(2, Count(body, PrepareSql));
         Assert.Equal(2, Count(body, ExecuteSql));
         Assert.Equal(2, Count(body, DeallocateSql));
-        Assert.True(body.LastIndexOf(DeallocateSql, StringComparison.Ordinal)
+        Assert.True(
+            body.LastIndexOf(DeallocateSql, StringComparison.Ordinal)
             < body.IndexOf("SET @doka_sm_post_ok", StringComparison.Ordinal));
+
         Assert.Contains("@doka_sm_required_add_resume = NULL", string.Concat(cleanup), StringComparison.Ordinal);
         Assert.DoesNotContain("DROP CHECK", string.Concat(cleanup), StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("DROP CONSTRAINT", string.Concat(cleanup), StringComparison.OrdinalIgnoreCase);
@@ -221,13 +295,19 @@ public sealed class MySqlRequiredColumnAddGenerationTests
     [InlineData(SafeMigrationPolicy.ThrowIfDifferent)]
     [InlineData(SafeMigrationPolicy.ExistenceOnly)]
     [InlineData(SafeMigrationPolicy.RepairIfSafe)]
-    public void RequiredAddApplyResumeAndMatchingRespectEveryPolicy(SafeMigrationPolicy policy)
+    public void RequiredAddApplyResumeAndMatchingRespectEveryPolicy(
+        SafeMigrationPolicy policy
+    )
     {
         // Arrange
         using var context = CreateContext(isMariaDb: false);
         var handler = CreateHandler(context);
         var operation = RequiredOperation(policy);
-        var operationContext = CreateOperationContext(context, handler, operation, isMariaDb: false,
+        var operationContext = CreateOperationContext(
+            context,
+            handler,
+            operation,
+            isMariaDb: false,
             NativeScopedBody);
 
         // Act
@@ -240,13 +320,23 @@ public sealed class MySqlRequiredColumnAddGenerationTests
 
         Assert.Contains("WHEN 'missing' THEN 'apply'", setup, StringComparison.Ordinal);
         Assert.Contains("WHEN 'matching' THEN 'no_op'", setup, StringComparison.Ordinal);
-        Assert.Contains("SET @doka_sm_required_add_resume = CASE WHEN @doka_sm_action = 'apply' THEN COALESCE((",
-            setup, StringComparison.Ordinal);
-        Assert.StartsWith("SET @doka_sm_sql = CASE WHEN @doka_sm_action = 'apply' "
-            + "AND NOT @doka_sm_required_add_resume THEN CONVERT(0x", body, StringComparison.Ordinal);
-        Assert.Contains("ELSE 'DO 0' END;", body, StringComparison.Ordinal);
-        Assert.Contains("SET @doka_sm_sql = CASE WHEN @doka_sm_action = 'apply' THEN CONVERT(0x", body,
+        Assert.Contains(
+            "SET @doka_sm_required_add_resume = CASE WHEN @doka_sm_action = 'apply' THEN COALESCE((",
+            setup,
             StringComparison.Ordinal);
+
+        Assert.StartsWith(
+            "SET @doka_sm_sql = CASE WHEN @doka_sm_action = 'apply' "
+            + "AND NOT @doka_sm_required_add_resume THEN CONVERT(0x",
+            body,
+            StringComparison.Ordinal);
+
+        Assert.Contains("ELSE 'DO 0' END;", body, StringComparison.Ordinal);
+        Assert.Contains(
+            "SET @doka_sm_sql = CASE WHEN @doka_sm_action = 'apply' THEN CONVERT(0x",
+            body,
+            StringComparison.Ordinal);
+
         Assert.Contains("THEN COALESCE((", body, StringComparison.Ordinal);
     }
 
@@ -258,40 +348,58 @@ public sealed class MySqlRequiredColumnAddGenerationTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void RequiredAddDirectBodyCompositionPreservesExactOriginalTransport(bool isMariaDb, bool repairRequested)
+    public void RequiredAddDirectBodyCompositionPreservesExactOriginalTransport(
+        bool isMariaDb,
+        bool repairRequested
+    )
     {
         // Arrange
         using var context = CreateContext(isMariaDb);
         var handler = CreateHandler(context);
-        var operation = RequiredOperation(repairRequested
-            ? SafeMigrationPolicy.RepairIfSafe
-            : SafeMigrationPolicy.ThrowIfDifferent);
+        var operation = RequiredOperation(
+            repairRequested
+                ? SafeMigrationPolicy.RepairIfSafe
+                : SafeMigrationPolicy.ThrowIfDifferent);
 
         var operationContext = CreateOperationContext(context, handler, operation, isMariaDb, NativeScopedBody);
-        var builder = new MySqlSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var builder = new MySqlSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
         var plan = builder.Build(operation, operationContext, parameterizeValues: false);
         var guard = plan.RequiredColumnAddPlan?.GuardName
             ?? throw new InvalidOperationException("The expected atomic fixture must have an owned guard.");
 
-        var stageOne = "ALTER TABLE `items` ADD `value` int NULL, ADD CONSTRAINT `" + guard
+        var stageOne = "ALTER TABLE `items` ADD `value` int NULL, ADD CONSTRAINT `"
+            + guard
             + "` CHECK (`value` IS NOT NULL)";
+
         var plainModify = "ALTER TABLE `items` MODIFY COLUMN `value` int NOT NULL";
-        var stageTwo = plainModify + (isMariaDb ? ", DROP CONSTRAINT `" : ", DROP CHECK `") + guard + "`";
+        var stageTwo = plainModify
+            + (isMariaDb
+                ? ", DROP CONSTRAINT `"
+                : ", DROP CHECK `")
+            + guard
+            + "`";
+
         var controls = PrepareSql + ExecuteSql + DeallocateSql + Environment.NewLine;
         var repairBranch = repairRequested
             ? " USING utf8mb4) WHEN @doka_sm_action = 'repair' THEN CONVERT(0x"
-                + Convert.ToHexString(Encoding.UTF8.GetBytes(plainModify))
+            + Convert.ToHexString(Encoding.UTF8.GetBytes(plainModify))
             : string.Empty;
 
         var expected = "SET @doka_sm_sql = CASE WHEN @doka_sm_action = 'apply' "
             + "AND NOT @doka_sm_required_add_resume THEN CONVERT(0x"
             + Convert.ToHexString(Encoding.UTF8.GetBytes(stageOne))
-            + " USING utf8mb4) ELSE 'DO 0' END;" + Environment.NewLine + controls
+            + " USING utf8mb4) ELSE 'DO 0' END;"
+            + Environment.NewLine
+            + controls
             + "SET @doka_sm_sql = CASE WHEN @doka_sm_action = 'apply' THEN CONVERT(0x"
-            + Convert.ToHexString(Encoding.UTF8.GetBytes(stageTwo)) + repairBranch
-            + " USING utf8mb4) ELSE 'DO 0' END;" + Environment.NewLine + controls
+            + Convert.ToHexString(Encoding.UTF8.GetBytes(stageTwo))
+            + repairBranch
+            + " USING utf8mb4) ELSE 'DO 0' END;"
+            + Environment.NewLine
+            + controls
             + "SET @doka_sm_post_ok = CASE WHEN @doka_sm_action IN ('apply', 'repair') THEN COALESCE(("
             + plan.RenderPreparedExecutionPostcondition([])
             + "), FALSE) ELSE TRUE END;\nINSERT INTO `__doka_sm_assert` "
@@ -311,16 +419,24 @@ public sealed class MySqlRequiredColumnAddGenerationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void RequiredAddMaterializesStatusOnceAfterIdentityBeforeRuntimeGuards(bool isMariaDb)
+    public void RequiredAddMaterializesStatusOnceAfterIdentityBeforeRuntimeGuards(
+        bool isMariaDb
+    )
     {
         // Arrange
         using var context = CreateContext(isMariaDb);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items",
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "items",
                 new ExpectedColumnDefinition("value", typeof(int), isNullable: false, storeType: "int"),
-                schema: "scope"), SafeMigrationPolicy.ThrowIfDifferent);
+                schema: "scope"),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var command = Assert.Single(context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+        var command = Assert.Single(context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model));
+
         var sql = command.CommandText;
 
         // Assert
@@ -333,27 +449,40 @@ public sealed class MySqlRequiredColumnAddGenerationTests
         var resumeEnd = sql.IndexOf(';', resumeOffset);
         var postconditionOffset = sql.LastIndexOf("SET @doka_sm_post_ok", StringComparison.Ordinal);
         var assertionOffset = sql.LastIndexOf("SELECT 4, 5, 6, 7, @doka_sm_diag", StringComparison.Ordinal);
-        var state = Assert.Single(Payloads(sql), static payload => payload.StartsWith("SELECT (",
-            StringComparison.Ordinal) && payload.Contains("INTO @doka_sm_state", StringComparison.Ordinal));
+        var state = Assert.Single(
+            Payloads(sql),
+            static payload => payload.StartsWith(
+                    "SELECT (",
+                    StringComparison.Ordinal)
+                && payload.Contains("INTO @doka_sm_state", StringComparison.Ordinal));
 
         Assert.Equal(1, Count(sql, statusPrefix));
         Assert.Equal(1, Count(sql, complete));
         Assert.True(sql.IndexOf("ELSE 'unsupported' END;", StringComparison.Ordinal) < statusOffset);
         Assert.True(sql.IndexOf("WHEN NOT @doka_sm_prerequisite_ok", StringComparison.Ordinal) < statusOffset);
         Assert.True(completeOffset > statusOffset);
-        Assert.True(sql.IndexOf("SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x",
-            StringComparison.Ordinal) > completeOffset);
+        Assert.True(
+            sql.IndexOf(
+                "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x",
+                StringComparison.Ordinal)
+            > completeOffset);
+
         Assert.Contains("@doka_sm_add_status", state, StringComparison.Ordinal);
         Assert.DoesNotContain("INFORMATION_SCHEMA.CHECK_CONSTRAINTS", state, StringComparison.Ordinal);
-        Assert.DoesNotContain("SET @doka_sm_state = CASE WHEN @doka_sm_state IS NULL THEN CASE WHEN COALESCE((",
-            sql, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "SET @doka_sm_state = CASE WHEN @doka_sm_state IS NULL THEN CASE WHEN COALESCE((",
+            sql,
+            StringComparison.Ordinal);
+
         Assert.True(resumeOffset > completeOffset);
         Assert.True(resumeEnd > resumeOffset);
         Assert.Contains("'staged'", sql[resumeOffset..resumeEnd], StringComparison.Ordinal);
         Assert.DoesNotContain("INFORMATION_SCHEMA", sql[resumeOffset..resumeEnd], StringComparison.Ordinal);
         Assert.Contains("@doka_sm_add_status = NULL", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("__DOKA_SM_", sql, StringComparison.Ordinal);
-        Assert.DoesNotContain("@doka_sm_add_status", sql[postconditionOffset..assertionOffset],
+        Assert.DoesNotContain(
+            "@doka_sm_add_status",
+            sql[postconditionOffset..assertionOffset],
             StringComparison.Ordinal);
     }
 
@@ -362,7 +491,9 @@ public sealed class MySqlRequiredColumnAddGenerationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void RequiredAddSeparatesOrdinaryRepairFromOwnedBarrierRemoval(bool isMariaDb)
+    public void RequiredAddSeparatesOrdinaryRepairFromOwnedBarrierRemoval(
+        bool isMariaDb
+    )
     {
         // Arrange
         using var context = CreateContext(isMariaDb);
@@ -376,14 +507,20 @@ public sealed class MySqlRequiredColumnAddGenerationTests
         // Assert
         var body = Assert.Single(Fragments(Assert.Single(result.Commands), MySqlMigrationCommandFragmentKind.Body));
         var alterations = Payloads(body);
-        var plainRepair = Assert.Single(alterations, static sql => sql ==
-            "ALTER TABLE `items` MODIFY COLUMN `value` int NOT NULL");
+        var plainRepair = Assert.Single(
+            alterations,
+            static sql => sql == "ALTER TABLE `items` MODIFY COLUMN `value` int NOT NULL");
 
-        Assert.Contains("WHEN @doka_sm_action = 'repair' THEN CONVERT(0x"
-            + Convert.ToHexString(Encoding.UTF8.GetBytes(plainRepair)), body, StringComparison.Ordinal);
+        Assert.Contains(
+            "WHEN @doka_sm_action = 'repair' THEN CONVERT(0x"
+            + Convert.ToHexString(Encoding.UTF8.GetBytes(plainRepair)),
+            body,
+            StringComparison.Ordinal);
+
         Assert.Equal(3, alterations.Length);
         Assert.DoesNotContain("DROP", plainRepair, StringComparison.OrdinalIgnoreCase);
-        Assert.True(body.IndexOf(DeallocateSql, StringComparison.Ordinal)
+        Assert.True(
+            body.IndexOf(DeallocateSql, StringComparison.Ordinal)
             < body.IndexOf("WHEN @doka_sm_action = 'repair'", StringComparison.Ordinal));
     }
 
@@ -392,24 +529,44 @@ public sealed class MySqlRequiredColumnAddGenerationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void RequiredAddQuotesQualifiedIdentifiersAndPreservesCommentLiteral(bool isMariaDb)
+    public void RequiredAddQuotesQualifiedIdentifiersAndPreservesCommentLiteral(
+        bool isMariaDb
+    )
     {
         // Arrange
         using var context = CreateContext(isMariaDb);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("it`ems",
-                new ExpectedColumnDefinition("va`lue", typeof(int), isNullable: false, storeType: "int",
-                    comment: "ALTER TABLE fake; 'literal'\\suffix"), schema: "sc`ope"),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "it`ems",
+                new ExpectedColumnDefinition(
+                    "va`lue",
+                    typeof(int),
+                    isNullable: false,
+                    storeType: "int",
+                    comment: "ALTER TABLE fake; 'literal'\\suffix"),
+                schema: "sc`ope"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var command = Assert.Single(context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
-        var alterations = Payloads(command.CommandText).Where(static sql => sql.StartsWith("ALTER TABLE ",
-            StringComparison.Ordinal)).ToArray();
+        var command = Assert.Single(context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model));
+
+        var alterations = Payloads(command.CommandText)
+            .Where(static sql => sql.StartsWith(
+                "ALTER TABLE ",
+                StringComparison.Ordinal))
+            .ToArray();
 
         // Assert
         Assert.Equal(2, alterations.Length);
-        Assert.All(alterations, static sql => Assert.StartsWith("ALTER TABLE `sc``ope`.`it``ems` ", sql,
-            StringComparison.Ordinal));
+        Assert.All(
+            alterations,
+            static sql => Assert.StartsWith(
+                "ALTER TABLE `sc``ope`.`it``ems` ",
+                sql,
+                StringComparison.Ordinal));
+
         Assert.Contains("CHECK (`va``lue` IS NOT NULL)", alterations[0], StringComparison.Ordinal);
         Assert.All(alterations, static sql => Assert.Contains("ALTER TABLE fake;", sql, StringComparison.Ordinal));
         Assert.DoesNotContain("UPDATE ", command.CommandText, StringComparison.OrdinalIgnoreCase);
@@ -432,16 +589,24 @@ public sealed class MySqlRequiredColumnAddGenerationTests
         };
 
         authored["Doka:MySql:RequiresExplicitBackfill"] = true;
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items",
-            SafeMigrationExpectedDefinitionFactory.From(authored)), SafeMigrationPolicy.RepairIfSafe);
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "items",
+                SafeMigrationExpectedDefinitionFactory.From(authored)),
+            SafeMigrationPolicy.RepairIfSafe);
 
         var rendered = new List<MigrationOperation>();
-        var operationContext = CreateOperationContext(context, handler, operation, isMariaDb: false, standard =>
-        {
-            rendered.Add(standard);
+        var operationContext = CreateOperationContext(
+            context,
+            handler,
+            operation,
+            isMariaDb: false,
+            standard =>
+            {
+                rendered.Add(standard);
 
-            return NativeScopedBody(standard);
-        });
+                return NativeScopedBody(standard);
+            });
 
         // Act
         var result = handler.Generate(operationContext);
@@ -451,15 +616,23 @@ public sealed class MySqlRequiredColumnAddGenerationTests
         var sql = command.CommandText;
 
         Assert.Equal(2, rendered.Count);
-        Assert.True(Assert.IsType<AddColumnOperation>(rendered[0]).IsNullable);
-        Assert.False(Assert.IsType<AlterColumnOperation>(rendered[1]).IsNullable);
+        Assert.True(Assert.IsType<AddColumnOperation>(rendered[0])
+            .IsNullable);
+
+        Assert.False(Assert.IsType<AlterColumnOperation>(rendered[1])
+            .IsNullable);
+
         Assert.False(authored.IsNullable);
         Assert.True(Assert.IsType<bool>(authored["Doka:MySql:RequiresExplicitBackfill"]));
         Assert.Contains("WHEN 'matching' THEN 'no_op'", sql, StringComparison.Ordinal);
         Assert.Contains("WHEN @doka_sm_action = 'repair'", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("@doka_sm_required_add_resume", sql, StringComparison.Ordinal);
-        Assert.DoesNotContain(Payloads(sql), static payload => payload.Contains("ADD CONSTRAINT",
-            StringComparison.Ordinal) || payload.Contains("DROP CHECK", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            Payloads(sql),
+            static payload => payload.Contains(
+                    "ADD CONSTRAINT",
+                    StringComparison.Ordinal)
+                || payload.Contains("DROP CHECK", StringComparison.Ordinal));
     }
 
     /// <summary>Declared server-side identity generation keeps its original native required ADD and metadata.</summary>
@@ -481,16 +654,24 @@ public sealed class MySqlRequiredColumnAddGenerationTests
 
         authored["Doka:MySql:ValueGenerationStrategy"] = MySqlValueGenerationStrategy.AutoIncrement;
         authored["Doka:MySql:RequiresExplicitBackfill"] = true;
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items",
-            SafeMigrationExpectedDefinitionFactory.From(authored)), SafeMigrationPolicy.ThrowIfDifferent);
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "items",
+                SafeMigrationExpectedDefinitionFactory.From(authored)),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         var rendered = new List<MigrationOperation>();
-        var operationContext = CreateOperationContext(context, handler, operation, isMariaDb: false, standard =>
-        {
-            rendered.Add(standard);
+        var operationContext = CreateOperationContext(
+            context,
+            handler,
+            operation,
+            isMariaDb: false,
+            standard =>
+            {
+                rendered.Add(standard);
 
-            return NativeScopedBody(standard);
-        });
+                return NativeScopedBody(standard);
+            });
 
         // Act
         var result = handler.Generate(operationContext);
@@ -501,10 +682,15 @@ public sealed class MySqlRequiredColumnAddGenerationTests
         Assert.False(capture.IsActive);
         Assert.False(capture.HasGenerationContract);
         Assert.False(add.IsNullable);
-        Assert.Equal(MySqlValueGenerationStrategy.AutoIncrement,
+        Assert.Equal(
+            MySqlValueGenerationStrategy.AutoIncrement,
             Assert.IsType<MySqlValueGenerationStrategy>(add["Doka:MySql:ValueGenerationStrategy"]));
+
         Assert.True(Assert.IsType<bool>(add["Doka:MySql:RequiresExplicitBackfill"]));
-        Assert.DoesNotContain("@doka_sm_required_add_resume", Assert.Single(result.Commands).CommandText,
+        Assert.DoesNotContain(
+            "@doka_sm_required_add_resume",
+            Assert.Single(result.Commands)
+                .CommandText,
             StringComparison.Ordinal);
     }
 
@@ -518,26 +704,45 @@ public sealed class MySqlRequiredColumnAddGenerationTests
     [InlineData(true, "set('quo\\'te','semi;colon','a,b')")]
     [InlineData(false, "enum(\"quo\\\"te\")")]
     [InlineData(true, "enum(\"quo\\\"te\")")]
-    public void RequiredAddAcceptsCertifiedStandardModeEscapedMembers(bool isMariaDb, string storeType)
+    public void RequiredAddAcceptsCertifiedStandardModeEscapedMembers(
+        bool isMariaDb,
+        string storeType
+    )
     {
         // Arrange
         using var context = CreateContext(isMariaDb);
         var definition = new ExpectedColumnDefinition("value", typeof(string), isNullable: false, storeType: storeType);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items", definition),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", definition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var command = Assert.Single(context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
-        var alterations = Payloads(command.CommandText).Where(static sql => sql.StartsWith("ALTER TABLE ",
-            StringComparison.Ordinal)).ToArray();
+        var command = Assert.Single(context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model));
+
+        var alterations = Payloads(command.CommandText)
+            .Where(static sql => sql.StartsWith(
+                "ALTER TABLE ",
+                StringComparison.Ordinal))
+            .ToArray();
 
         // Assert
         Assert.Equal(2, alterations.Length);
         Assert.All(alterations, sql => Assert.Contains(storeType, sql, StringComparison.Ordinal));
-        Assert.Contains("FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) = 0", command.CommandText,
+        Assert.Contains(
+            "FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) = 0",
+            command.CommandText,
             StringComparison.Ordinal);
+
         Assert.Contains("ADD CONSTRAINT", alterations[0], StringComparison.Ordinal);
-        Assert.Contains(isMariaDb ? "DROP CONSTRAINT" : "DROP CHECK", alterations[1], StringComparison.Ordinal);
+        Assert.Contains(
+            isMariaDb
+                ? "DROP CONSTRAINT"
+                : "DROP CHECK",
+            alterations[1],
+            StringComparison.Ordinal);
+
         Assert.DoesNotContain("SET SESSION sql_mode", command.CommandText, StringComparison.OrdinalIgnoreCase);
         Assert.False(definition.IsNullable);
         Assert.Equal(storeType, definition.StoreType);
@@ -562,29 +767,43 @@ public sealed class MySqlRequiredColumnAddGenerationTests
         using var context = CreateContext(isMariaDb: false);
         var handler = CreateHandler(context);
         const string storeType = "enum('quo\\'te')";
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items",
-            new ExpectedColumnDefinition("value", typeof(string), isNullable: false, storeType: storeType)),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "items",
+                new ExpectedColumnDefinition("value", typeof(string), isNullable: false, storeType: storeType)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var operationContext = CreateOperationContext(context, handler, operation, isMariaDb: false, standard =>
-        {
-            var modify = standard is AlterColumnOperation;
-            var body = "ALTER TABLE `items` " + (modify ? "MODIFY COLUMN" : "ADD") + " `value` " + storeType
-                + (modify ? " NOT NULL" : " NULL");
-
-            if (modify == corruptModify)
+        var operationContext = CreateOperationContext(
+            context,
+            handler,
+            operation,
+            isMariaDb: false,
+            standard =>
             {
-                body += invalidBoundary switch
-                {
-                    "second_statement" => "; DROP TABLE `items`",
-                    "extra_clause" => ", DROP COLUMN `id`",
-                    "terminal_escape" => " COMMENT 'unfinished\\",
-                    _ => throw new ArgumentOutOfRangeException(nameof(invalidBoundary)),
-                };
-            }
+                var modify = standard is AlterColumnOperation;
+                var body = "ALTER TABLE `items` "
+                    + (modify
+                        ? "MODIFY COLUMN"
+                        : "ADD")
+                    + " `value` "
+                    + storeType
+                    + (modify
+                        ? " NOT NULL"
+                        : " NULL");
 
-            return [MySqlMigrationCommandSpec.Create(body, transactionSuppressed: true)];
-        });
+                if (modify == corruptModify)
+                {
+                    body += invalidBoundary switch
+                    {
+                        "second_statement" => "; DROP TABLE `items`",
+                        "extra_clause" => ", DROP COLUMN `id`",
+                        "terminal_escape" => " COMMENT 'unfinished\\",
+                        _ => throw new ArgumentOutOfRangeException(nameof(invalidBoundary)),
+                    };
+                }
+
+                return [MySqlMigrationCommandSpec.Create(body, transactionSuppressed: true)];
+            });
 
         // Act
         var exception = Record.Exception(() => handler.Generate(operationContext));
@@ -600,19 +819,32 @@ public sealed class MySqlRequiredColumnAddGenerationTests
         // Arrange
         using var context = CreateContext(isMariaDb: false);
         const string storeType = "enum('quo\\'te')";
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("it'ems",
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "it'ems",
                 new ExpectedColumnDefinition("va\\l'`ue", typeof(string), isNullable: false, storeType: storeType)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var command = Assert.Single(context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
-        var alterations = Payloads(command.CommandText).Where(static sql => sql.StartsWith("ALTER TABLE ",
-            StringComparison.Ordinal)).ToArray();
+        var command = Assert.Single(context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model));
+
+        var alterations = Payloads(command.CommandText)
+            .Where(static sql => sql.StartsWith(
+                "ALTER TABLE ",
+                StringComparison.Ordinal))
+            .ToArray();
 
         // Assert
         Assert.Equal(2, alterations.Length);
-        Assert.All(alterations, static sql => Assert.StartsWith("ALTER TABLE `it'ems` ", sql,
-            StringComparison.Ordinal));
+        Assert.All(
+            alterations,
+            static sql => Assert.StartsWith(
+                "ALTER TABLE `it'ems` ",
+                sql,
+                StringComparison.Ordinal));
+
         Assert.All(alterations, sql => Assert.Contains("`va\\l'``ue` " + storeType, sql, StringComparison.Ordinal));
         Assert.Contains("CHECK (`va\\l'``ue` IS NOT NULL)", alterations[0], StringComparison.Ordinal);
     }
@@ -622,39 +854,59 @@ public sealed class MySqlRequiredColumnAddGenerationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void RequiredAddKnownCommentModeKeepsMissingUnsupportedAndMatchingNoOp(bool isMariaDb)
+    public void RequiredAddKnownCommentModeKeepsMissingUnsupportedAndMatchingNoOp(
+        bool isMariaDb
+    )
     {
         // Arrange
         using var context = CreateContext(isMariaDb);
-        var definition = new ExpectedColumnDefinition("value", typeof(string), isNullable: false,
-            storeType: "enum('quo\\'te')", comment: "mode\\guard");
+        var definition = new ExpectedColumnDefinition(
+            "value",
+            typeof(string),
+            isNullable: false,
+            storeType: "enum('quo\\'te')",
+            comment: "mode\\guard");
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items", definition),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", definition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var command = Assert.Single(context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+        var command = Assert.Single(context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model));
+
         var payloads = Payloads(command.CommandText);
 
         // Assert
         Assert.False(MySqlSafeMigrationCatalogSqlBuilder.CanUseRequiredColumnAddProtocol(definition));
         Assert.True(MySqlSafeMigrationCatalogSqlBuilder.RequiresUnsupportedMissingRequiredAdd(definition));
-        var missingGuard = Assert.Single(payloads, static sql => sql.EndsWith(
-            " ELSE NULL END INTO @doka_sm_state", StringComparison.Ordinal));
+        var missingGuard = Assert.Single(
+            payloads,
+            static sql => sql.EndsWith(
+                " ELSE NULL END INTO @doka_sm_state",
+                StringComparison.Ordinal));
 
         // WHY: Native mode qualification wraps the missing-only refusal but
         // must retain both matching precedence and its unconditional fallback.
-        Assert.Contains("THEN 'matching' WHEN NOT (FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) > 0) "
+        Assert.Contains(
+            "THEN 'matching' WHEN NOT (FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) > 0) "
             + "THEN 'unsupported' ELSE ('unsupported') END) ELSE NULL END INTO @doka_sm_state",
-            missingGuard, StringComparison.Ordinal);
+            missingGuard,
+            StringComparison.Ordinal);
+
         Assert.Contains("WHEN 'matching' THEN 'no_op'", command.CommandText, StringComparison.Ordinal);
         Assert.DoesNotContain("@doka_sm_required_add_resume", command.CommandText, StringComparison.Ordinal);
         Assert.DoesNotContain(payloads, static sql => sql.Contains("ADD CONSTRAINT", StringComparison.Ordinal));
         Assert.Contains("SET SESSION sql_mode = IF(", command.CommandText, StringComparison.Ordinal);
-        Assert.Contains("SET SESSION sql_mode = IF(COALESCE(@doka_sm_provider_setup_entered = 1, FALSE), "
-            + "@__doka_previous_sql_mode, @@SESSION.sql_mode)", command.CommandText,
+        Assert.Contains(
+            "SET SESSION sql_mode = IF(COALESCE(@doka_sm_provider_setup_entered = 1, FALSE), "
+            + "@__doka_previous_sql_mode, @@SESSION.sql_mode)",
+            command.CommandText,
             StringComparison.Ordinal);
-        Assert.True(command.CommandText.LastIndexOf("SET SESSION sql_mode", StringComparison.Ordinal)
+
+        Assert.True(
+            command.CommandText.LastIndexOf("SET SESSION sql_mode", StringComparison.Ordinal)
             > command.CommandText.IndexOf("EXECUTE doka_sm_statement", StringComparison.Ordinal));
     }
 
@@ -663,24 +915,43 @@ public sealed class MySqlRequiredColumnAddGenerationTests
     [Theory]
     [InlineData("SET SESSION sql_mode = 'NO_BACKSLASH_ESCAPES';")]
     [InlineData("DO 11;")]
-    public void RequiredAddRejectsCertifiedEscapesWithUnknownOpaqueNativeSetup(string setupSql)
+    public void RequiredAddRejectsCertifiedEscapesWithUnknownOpaqueNativeSetup(
+        string setupSql
+    )
     {
         // Arrange
         using var context = CreateContext(isMariaDb: false);
         var handler = CreateHandler(context);
         const string storeType = "enum('quo\\'te')";
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items",
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "items",
                 new ExpectedColumnDefinition("value", typeof(string), isNullable: false, storeType: storeType)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var operationContext = CreateOperationContext(context, handler, operation, isMariaDb: false, standard =>
-        {
-            var modify = standard is AlterColumnOperation;
-            var body = "ALTER TABLE `items` " + (modify ? "MODIFY COLUMN" : "ADD") + " `value` " + storeType
-                + (modify ? " NOT NULL" : " NULL");
+        var operationContext = CreateOperationContext(
+            context,
+            handler,
+            operation,
+            isMariaDb: false,
+            standard =>
+            {
+                var modify = standard is AlterColumnOperation;
+                var body = "ALTER TABLE `items` "
+                    + (modify
+                        ? "MODIFY COLUMN"
+                        : "ADD")
+                    + " `value` "
+                    + storeType
+                    + (modify
+                        ? " NOT NULL"
+                        : " NULL");
 
-            return [MySqlMigrationCommandSpec.CreateScoped([setupSql], body, ["DO 0;"], transactionSuppressed: true)];
-        });
+                return
+                [
+                    MySqlMigrationCommandSpec.CreateScoped([setupSql], body, ["DO 0;"], transactionSuppressed: true)
+                ];
+            });
 
         // Act
         var exception = Record.Exception(() => handler.Generate(operationContext));
@@ -702,36 +973,51 @@ public sealed class MySqlRequiredColumnAddGenerationTests
     [InlineData("different_cleanup")]
     [InlineData("different_transaction")]
     [InlineData("multiple_commands")]
-    public void RequiredAddRejectsUnverifiedNativeBodyOrScope(string invalidShape)
+    public void RequiredAddRejectsUnverifiedNativeBodyOrScope(
+        string invalidShape
+    )
     {
         // Arrange
         using var context = CreateContext(isMariaDb: false);
         var handler = CreateHandler(context);
         var operation = RequiredOperation(SafeMigrationPolicy.ThrowIfDifferent);
-        var operationContext = CreateOperationContext(context, handler, operation, isMariaDb: false, standard =>
-        {
-            var isModify = standard is AlterColumnOperation;
-            var body = isModify
-                ? "ALTER TABLE `items` MODIFY COLUMN `value` int NOT NULL"
-                : invalidShape switch
-                {
-                    "second_statement" => "ALTER TABLE `items` ADD `value` int NULL; DROP TABLE `items`",
-                    "extra_clause" => "ALTER TABLE `items` ADD `value` int NULL, DROP COLUMN `id`",
-                    "wrong_owner" => "ALTER TABLE `other_items` ADD `value` int NULL",
-                    "unclosed_literal" => "ALTER TABLE `items` ADD `value` int NULL COMMENT 'unclosed",
-                    _ => "ALTER TABLE `items` ADD `value` int NULL",
-                };
+        var operationContext = CreateOperationContext(
+            context,
+            handler,
+            operation,
+            isMariaDb: false,
+            standard =>
+            {
+                var isModify = standard is AlterColumnOperation;
+                var body = isModify
+                    ? "ALTER TABLE `items` MODIFY COLUMN `value` int NOT NULL"
+                    : invalidShape switch
+                    {
+                        "second_statement" => "ALTER TABLE `items` ADD `value` int NULL; DROP TABLE `items`",
+                        "extra_clause" => "ALTER TABLE `items` ADD `value` int NULL, DROP COLUMN `id`",
+                        "wrong_owner" => "ALTER TABLE `other_items` ADD `value` int NULL",
+                        "unclosed_literal" => "ALTER TABLE `items` ADD `value` int NULL COMMENT 'unclosed",
+                        _ => "ALTER TABLE `items` ADD `value` int NULL",
+                    };
 
-            var command = MySqlMigrationCommandSpec.CreateScoped(
-                [isModify && invalidShape == "different_setup" ? "DO 13;" : ProviderSetup],
-                body,
-                [isModify && invalidShape == "different_cleanup" ? "DO 14;" : ProviderCleanup],
-                transactionSuppressed: !isModify || invalidShape != "different_transaction");
+                var command = MySqlMigrationCommandSpec.CreateScoped(
+                    [
+                        isModify && invalidShape == "different_setup"
+                            ? "DO 13;"
+                            : ProviderSetup,
+                    ],
+                    body,
+                    [
+                        isModify && invalidShape == "different_cleanup"
+                            ? "DO 14;"
+                            : ProviderCleanup,
+                    ],
+                    transactionSuppressed: !isModify || invalidShape != "different_transaction");
 
-            return invalidShape == "multiple_commands" && !isModify
-                ? [command, MySqlMigrationCommandSpec.Create("DO 0;", transactionSuppressed: true)]
-                : [command];
-        });
+                return invalidShape == "multiple_commands" && !isModify
+                    ? [command, MySqlMigrationCommandSpec.Create("DO 0;", transactionSuppressed: true)]
+                    : [command];
+            });
 
         // Act
         var exception = Record.Exception(() => handler.Generate(operationContext));
@@ -742,21 +1028,34 @@ public sealed class MySqlRequiredColumnAddGenerationTests
 
     /// <summary>Creates the exact required no-default target consumed by the catalog protocol.</summary>
     /// <param name="policy">The independently selected ordinary difference policy.</param>
-    private static SafeMigrationOperation RequiredOperation(SafeMigrationPolicy policy) => new(
-        new EnsureColumnIntent("items", new ExpectedColumnDefinition("value", typeof(int), isNullable: false,
-            storeType: "int")), policy);
+    private static SafeMigrationOperation RequiredOperation(
+        SafeMigrationPolicy policy
+    ) => new(
+        new EnsureColumnIntent(
+            "items",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(int),
+                isNullable: false,
+                storeType: "int")),
+        policy);
 
     /// <summary>Renders deterministic single-column native bodies with one opaque resource scope.</summary>
     /// <param name="operation">The native ADD or MODIFY operation cloned by the handler.</param>
-    private static IReadOnlyList<MySqlMigrationCommandSpec> NativeScopedBody(MigrationOperation operation) =>
+    private static IReadOnlyList<MySqlMigrationCommandSpec> NativeScopedBody(
+        MigrationOperation operation
+    ) =>
     [
-        MySqlMigrationCommandSpec.CreateScoped([ProviderSetup], operation switch
+        MySqlMigrationCommandSpec.CreateScoped(
+            [ProviderSetup],
+            operation switch
             {
                 AddColumnOperation { IsNullable: true } => "ALTER TABLE `items` ADD `value` int NULL",
                 AddColumnOperation => "ALTER TABLE `items` ADD `value` int NOT NULL",
                 _ => "ALTER TABLE `items` MODIFY COLUMN `value` int NOT NULL",
             },
-            [ProviderCleanup], transactionSuppressed: true),
+            [ProviderCleanup],
+            transactionSuppressed: true),
     ];
 
     /// <summary>Creates the real handler with a bounded substitution of the standard SQL renderer.</summary>
@@ -774,52 +1073,76 @@ public sealed class MySqlRequiredColumnAddGenerationTests
     )
     {
         var version = ServerVersion(isMariaDb);
-        var profile = typeof(MySqlServerVersion).GetProperty("Profile", BindingFlags.Instance | BindingFlags.NonPublic)
-            ?.GetValue(version) ?? throw new InvalidOperationException("The provider's canonical profile is missing.");
+        var profile = typeof(MySqlServerVersion)
+                .GetProperty("Profile", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?.GetValue(version)
+            ?? throw new InvalidOperationException("The provider's canonical profile is missing.");
 
-        var featureConstructor = Assert.Single(typeof(MySqlMigrationFeatureSet)
-            .GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic));
+        var featureConstructor = Assert.Single(
+            typeof(MySqlMigrationFeatureSet)
+                .GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic));
 
         var features = Assert.IsType<MySqlMigrationFeatureSet>(featureConstructor.Invoke([profile]));
-        var constructor = Assert.Single(typeof(MySqlMigrationOperationContext)
-            .GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic));
+        var constructor = Assert.Single(
+            typeof(MySqlMigrationOperationContext)
+                .GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic));
 
-        return Assert.IsType<MySqlMigrationOperationContext>(constructor.Invoke(
-        [
-            operation, context.Model, MigrationsSqlGenerationOptions.Default, version, features, 0,
-            handler.HandlerId, renderer,
-        ]));
+        return Assert.IsType<MySqlMigrationOperationContext>(
+            constructor.Invoke(
+            [
+                operation, context.Model, MigrationsSqlGenerationOptions.Default, version, features, 0,
+                handler.HandlerId, renderer,
+            ]));
     }
 
     /// <summary>Creates a handler using only real provider services.</summary>
     /// <param name="context">The offline provider scope.</param>
-    private static MySqlSafeMigrationOperationHandler CreateHandler(DbContext context) => new(
-        context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>(),
-        context.GetService<MySqlSafeMigrationPlanCapture>(), context.GetService<IDesignTimeModel>());
+    private static MySqlSafeMigrationOperationHandler CreateHandler(
+        DbContext context
+    ) => new(
+        context.GetService<IRelationalTypeMappingSource>(),
+        context.GetService<ISqlGenerationHelper>(),
+        context.GetService<MySqlSafeMigrationPlanCapture>(),
+        context.GetService<IDesignTimeModel>());
 
     /// <summary>Creates an offline provider context without opening its connection.</summary>
     /// <param name="isMariaDb">Whether the configured canonical server profile uses MariaDB.</param>
-    private static DbContext CreateContext(bool isMariaDb) => new(new DbContextOptionsBuilder()
-        .UseMySql("Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
-            ServerVersion(isMariaDb))
-        .UseMySqlSafeMigrations().Options);
+    private static DbContext CreateContext(
+        bool isMariaDb
+    ) => new(
+        new DbContextOptionsBuilder()
+            .UseMySql(
+                "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
+                ServerVersion(isMariaDb))
+            .UseMySqlSafeMigrations()
+            .Options);
 
     /// <summary>Selects one of the independently qualified native server grammars.</summary>
     /// <param name="isMariaDb">Whether to use MariaDB rather than MySQL.</param>
-    private static MySqlServerVersion ServerVersion(bool isMariaDb) => isMariaDb
+    private static MySqlServerVersion ServerVersion(
+        bool isMariaDb
+    ) => isMariaDb
         ? MySqlServerVersion.MariaDb(new Version(10, 11, 19))
         : MySqlServerVersion.MySql(new Version(8, 4, 11));
 
     /// <summary>Reads original provider-validated scoped fragments.</summary>
     /// <param name="command">The single generated logical scope.</param>
     /// <param name="kind">The exact resource role to inspect.</param>
-    private static string[] Fragments(MySqlMigrationCommandSpec command, MySqlMigrationCommandFragmentKind kind) =>
-        command.Fragments.Where(fragment => fragment.Kind == kind)
-            .Select(static fragment => fragment.CommandText.ToString()).ToArray();
+    private static string[] Fragments(
+        MySqlMigrationCommandSpec command,
+        MySqlMigrationCommandFragmentKind kind
+    ) =>
+        command
+            .Fragments
+            .Where(fragment => fragment.Kind == kind)
+            .Select(static fragment => fragment.CommandText.ToString())
+            .ToArray();
 
     /// <summary>Decodes actual prepared bodies without interpreting their SQL.</summary>
     /// <param name="sql">The complete prepared transport.</param>
-    private static string[] Payloads(string sql)
+    private static string[] Payloads(
+        string sql
+    )
     {
         const string prefix = "CONVERT(0x";
         const string suffix = " USING utf8mb4)";
@@ -844,7 +1167,10 @@ public sealed class MySqlRequiredColumnAddGenerationTests
     /// <summary>Counts exact transport controls without interpreting literal payloads.</summary>
     /// <param name="sql">The transport or native body to inspect.</param>
     /// <param name="fragment">The exact control or clause to count.</param>
-    private static int Count(string sql, string fragment)
+    private static int Count(
+        string sql,
+        string fragment
+    )
     {
         var count = 0;
         var offset = 0;

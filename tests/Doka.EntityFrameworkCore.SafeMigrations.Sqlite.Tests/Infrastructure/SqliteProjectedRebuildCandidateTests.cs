@@ -14,8 +14,11 @@ public sealed class SqliteProjectedRebuildCandidateTests
         var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.Sqlite");
         for (var index = 0; index < count; index++)
         {
-            builder.AddColumnIfNotExists<int>("source", "owner_" + index.ToString(CultureInfo.InvariantCulture),
-                type: "INTEGER", nullable: true);
+            builder.AddColumnIfNotExists<int>(
+                "source",
+                "owner_" + index.ToString(CultureInfo.InvariantCulture),
+                type: "INTEGER",
+                nullable: true);
         }
 
         var drops = new List<SafeMigrationOperation>(count);
@@ -30,7 +33,10 @@ public sealed class SqliteProjectedRebuildCandidateTests
         copied.DropColumnIfExists("source", "owner_0");
 
         // Act
-        var recognized = drops.Select(contract.MayRebuildMissingColumn).ToArray();
+        var recognized = drops
+            .Select(contract.MayRebuildMissingColumn)
+            .ToArray();
+
         var copiedRecognized = contract.MayRebuildMissingColumn((SafeMigrationOperation)copied.Operations[0]);
 
         // Assert
@@ -63,7 +69,10 @@ public sealed class SqliteProjectedRebuildCandidateTests
     [InlineData("accepted_column_alias", true)]
     [InlineData("conditional_column_source", true)]
     [InlineData("ordinary_column_alias", true)]
-    public void CandidateWishesNeverAuthorizeExecution(string scenario, bool expected)
+    public void CandidateWishesNeverAuthorizeExecution(
+        string scenario,
+        bool expected
+    )
     {
         // Arrange
         var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.Sqlite");
@@ -86,18 +95,26 @@ public sealed class SqliteProjectedRebuildCandidateTests
             }
             else
             {
-                builder.AddColumnIfNotExists<int>("source", scenario == "other_owner" ? "other_nodes" : owner,
-                    type: "INTEGER", nullable: true);
+                builder.AddColumnIfNotExists<int>(
+                    "source",
+                    scenario == "other_owner"
+                        ? "other_nodes"
+                        : owner,
+                    type: "INTEGER",
+                    nullable: true);
             }
 
             switch (scenario)
             {
                 case "new_owner":
                     builder.DropTableIfExists(owner);
-                    builder.CreateTableIfNotExists(owner, table => new
-                    {
-                        id = table.Column<int>(type: "INTEGER", nullable: false),
-                    }, constraints: table => table.PrimaryKey("pk_nodes", value => value.id));
+                    builder.CreateTableIfNotExists(
+                        owner,
+                        table => new
+                        {
+                            id = table.Column<int>(type: "INTEGER", nullable: false),
+                        },
+                        constraints: table => table.PrimaryKey("pk_nodes", value => value.id));
 
                     break;
                 case "opaque":
@@ -128,23 +145,25 @@ public sealed class SqliteProjectedRebuildCandidateTests
                     column = "renamed_source";
                     break;
                 case "typed_insert":
-                    builder.Operations.Add(new InsertDataOperation
-                    {
-                        Table = "writes",
-                        Columns = ["id"],
-                        Values = new object[,] { { 1 } },
-                    });
+                    builder.Operations.Add(
+                        new InsertDataOperation
+                        {
+                            Table = "writes",
+                            Columns = ["id"],
+                            Values = new object[,] { { 1 } },
+                        });
 
                     break;
                 case "typed_update":
-                    builder.Operations.Add(new UpdateDataOperation
-                    {
-                        Table = "writes",
-                        KeyColumns = ["id"],
-                        KeyValues = new object[,] { { 1 } },
-                        Columns = ["value"],
-                        Values = new object[,] { { 2 } },
-                    });
+                    builder.Operations.Add(
+                        new UpdateDataOperation
+                        {
+                            Table = "writes",
+                            KeyColumns = ["id"],
+                            KeyValues = new object[,] { { 1 } },
+                            Columns = ["value"],
+                            Values = new object[,] { { 2 } },
+                        });
 
                     break;
                 case "typed_delete":
@@ -154,8 +173,10 @@ public sealed class SqliteProjectedRebuildCandidateTests
                     builder.RenameIndexIfExists("absent_index", owner, "absent_target");
                     break;
                 case "safe_schema_boundary":
-                    builder.Operations.Add(new SafeMigrationOperation(
-                        new EnsureSchemaIntent("main"), SafeMigrationPolicy.ThrowIfDifferent));
+                    builder.Operations.Add(
+                        new SafeMigrationOperation(
+                            new EnsureSchemaIntent("main"),
+                            SafeMigrationPolicy.ThrowIfDifferent));
 
                     break;
             }
@@ -163,7 +184,11 @@ public sealed class SqliteProjectedRebuildCandidateTests
             builder.DropColumnIfExists(column, owner);
         }
 
-        var drop = builder.Operations.OfType<SafeMigrationOperation>().Last(value => value.Intent is DropColumnIntent);
+        var drop = builder
+            .Operations
+            .OfType<SafeMigrationOperation>()
+            .Last(value => value.Intent is DropColumnIntent);
+
         var contract = SqliteRebuildArtifactContract.FromOperations(builder.Operations);
 
         // Act

@@ -39,7 +39,9 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
             "SET @doka_sm_sql = CASE WHEN @doka_sm_state IS NULL THEN CONVERT(0x",
             statement,
             " USING utf8mb4) ELSE 'DO 0' END;" + EvaluatePreparedStatementSql,
-            repairPrecondition: canRepair ? repairPrecondition : null,
+            repairPrecondition: canRepair
+                ? repairPrecondition
+                : null,
             matchingPrecondition: matchingPrecondition);
     }
 
@@ -57,9 +59,13 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         // WHY: Keep constituent strings until grouping so classification and transition are
         // copied directly into the final transport string, not an intermediate assignment.
         return MySqlSafeMigrationSetupFragment.Compose(
-            matchingPrecondition is null ? string.Empty : MatchingStatePrefix,
+            matchingPrecondition is null
+                ? string.Empty
+                : MatchingStatePrefix,
             matchingPrecondition ?? string.Empty,
-            matchingPrecondition is null ? string.Empty : MatchingStateSuffix,
+            matchingPrecondition is null
+                ? string.Empty
+                : MatchingStateSuffix,
             prefix,
             transition,
             suffix);
@@ -156,14 +162,18 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         bool prepareInSetup = false
     )
     {
-        var suffix = prepareInSetup ? PreparedSqlAssignmentSuffix + PrepareStatementSql : PreparedSqlAssignmentSuffix;
+        var suffix = prepareInSetup
+            ? PreparedSqlAssignmentSuffix + PrepareStatementSql
+            : PreparedSqlAssignmentSuffix;
 
         // WHY: PREPARE still receives one SQL string. Retaining the source values lets the
         // compactor encode into that final string without an intermediate hexadecimal assignment.
         return MySqlSafeMigrationSetupFragment.Compose(
             PreparedApplySqlPrefix,
             MySqlSafeMigrationSetupFragment.Part.Hex(applyDdl),
-            repairDdl is null ? string.Empty : PreparedRepairSqlPrefix,
+            repairDdl is null
+                ? string.Empty
+                : PreparedRepairSqlPrefix,
             MySqlSafeMigrationSetupFragment.Part.Hex(repairDdl ?? string.Empty),
             suffix);
     }
@@ -198,18 +208,30 @@ internal sealed partial class MySqlSafeMigrationOperationHandler
         // retain their exact order. Only their storage changes; no row proof or catalog result
         // escapes this operation, and the original logical fragment count still gates admission.
         return MySqlSafeMigrationSetupFragment.Compose(
-            matchingPrecondition is null ? string.Empty : MatchingStatePrefix,
+            matchingPrecondition is null
+                ? string.Empty
+                : MatchingStatePrefix,
             matchingPrecondition ?? string.Empty,
-            matchingPrecondition is null ? string.Empty : MatchingStateSuffix,
+            matchingPrecondition is null
+                ? string.Empty
+                : MatchingStateSuffix,
             prefix,
             nullabilityEligibility?.RepairInvariant ?? string.Empty,
-            nullabilityEligibility is null ? string.Empty : nullabilityPrefix,
+            nullabilityEligibility is null
+                ? string.Empty
+                : nullabilityPrefix,
             nullabilityEligibility?.NullableColumn ?? string.Empty,
-            nullabilityEligibility is null ? string.Empty : eligibilitySuffix,
+            nullabilityEligibility is null
+                ? string.Empty
+                : eligibilitySuffix,
             MySqlSafeMigrationSetupFragment.Part.Hex(statement),
             suffix,
-            repairPrecondition is null ? string.Empty : repairPrefix,
+            repairPrecondition is null
+                ? string.Empty
+                : repairPrefix,
             repairPrecondition ?? string.Empty,
-            repairPrecondition is null ? string.Empty : repairSuffix);
+            repairPrecondition is null
+                ? string.Empty
+                : repairSuffix);
     }
 }

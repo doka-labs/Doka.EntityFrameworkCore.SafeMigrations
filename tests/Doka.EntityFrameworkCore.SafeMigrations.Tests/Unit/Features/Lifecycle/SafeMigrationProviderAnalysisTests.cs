@@ -42,12 +42,14 @@ public sealed class SafeMigrationProviderAnalysisTests
         Assert.Equal(existingProof || additionalProof, copy.RequiresLiveDataProof);
         Assert.Equal(existingProof, original.RequiresLiveDataProof);
         Assert.Equal(differences, copy.Differences);
-        Assert.Equal("column_max_length", Assert.Single(original.Differences).Facet);
+        Assert.Equal("column_max_length",
+            Assert.Single(original.Differences)
+                .Facet);
 
         // WHY: Checking every property makes future analysis metadata part of
         // this preservation contract without another manually curated list.
         foreach (var property in typeof(SafeMigrationProviderAnalysis).GetProperties(
-                     BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
         {
             if (property.Name is nameof(SafeMigrationProviderAnalysis.Differences)
                 or nameof(SafeMigrationProviderAnalysis.RequiresLiveDataProof))

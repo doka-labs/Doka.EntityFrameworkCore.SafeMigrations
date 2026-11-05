@@ -42,6 +42,7 @@ public sealed class SafeMigrationDiagnosticsEvidenceTests
             "column_store_type",
             value,
             "actual"));
+
         Assert.Throws<ArgumentException>(() => new SafeMigrationFacetDifference(
             "column_store_type",
             "expected",
@@ -55,10 +56,12 @@ public sealed class SafeMigrationDiagnosticsEvidenceTests
             new string('f', 65),
             "expected",
             "actual"));
+
         Assert.Throws<ArgumentException>(() => new SafeMigrationFacetDifference(
             "column_store_type",
             new string('e', 257),
             "actual"));
+
         Assert.Throws<ArgumentException>(() => new SafeMigrationFacetDifference(
             "column_store_type",
             "expected",
@@ -208,8 +211,13 @@ public sealed class SafeMigrationDiagnosticsEvidenceTests
         Assert.Equal(objectName, assessment.ObjectName);
         Assert.Equal(analysisCode, assessment.AnalysisCode);
         Assert.Equal(decisionCode, assessment.DecisionCode);
-        Assert.Equal(expected, Assert.Single(assessment.Differences).Expected);
-        Assert.Equal(actual, Assert.Single(assessment.Differences).Actual);
+        Assert.Equal(expected,
+            Assert.Single(assessment.Differences)
+                .Expected);
+
+        Assert.Equal(actual,
+            Assert.Single(assessment.Differences)
+                .Actual);
     }
 
     [Fact]

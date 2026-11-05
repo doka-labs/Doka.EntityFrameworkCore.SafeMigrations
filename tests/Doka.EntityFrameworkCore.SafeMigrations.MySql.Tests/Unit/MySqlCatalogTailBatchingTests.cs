@@ -10,28 +10,45 @@ public sealed class MySqlCatalogTailBatchingTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task PhysicalOwner_ConsumesQualifiedNativeMode(bool fold)
+    public async Task PhysicalOwner_ConsumesQualifiedNativeMode(
+        bool fold
+    )
     {
         // Arrange
         await using var connection = new CatalogStatementTestConnection(true, PhysicalResults);
-        var comparer = fold ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var comparer = fold
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
 
         // Act
         var result = await MySqlSafeMigrationProviderAnalyzer.ReadIndexPhysicalEnvironmentsAsync(
-            connection, PhysicalOperations(1), 4 * 1024 * 1024, 71, CancellationToken.None, comparer);
+            connection,
+            PhysicalOperations(1),
+            4 * 1024 * 1024,
+            71,
+            CancellationToken.None,
+            comparer);
 
         // Assert
         Assert.Single(result);
         var statement = connection.Submissions[1].Sql;
-        Assert.Contains(fold
+        Assert.Contains(
+            fold
                 ? "CAST(LOWER(t.TABLE_NAME) AS BINARY) IN (LOWER(@table_0))"
                 : "CAST(t.TABLE_NAME AS BINARY) IN (@table_0)",
-            statement, StringComparison.Ordinal);
+            statement,
+            StringComparison.Ordinal);
+
         Assert.DoesNotContain("@@lower_case_table_names", statement, StringComparison.Ordinal);
-        Assert.Contains("CAST(c.TABLE_NAME AS BINARY) = CAST(t.TABLE_NAME AS BINARY)",
-            statement, StringComparison.Ordinal);
-        Assert.Contains("CAST(t.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
-            statement, StringComparison.Ordinal);
+        Assert.Contains(
+            "CAST(c.TABLE_NAME AS BINARY) = CAST(t.TABLE_NAME AS BINARY)",
+            statement,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "CAST(t.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+            statement,
+            StringComparison.Ordinal);
     }
 
     /// <summary>The environment result preserves engine-qualified default capabilities without extra queries.</summary>
@@ -52,24 +69,35 @@ public sealed class MySqlCatalogTailBatchingTests
     )
     {
         // Arrange
-        await using var connection = new CatalogStatementTestConnection(true, (sql, parameters) =>
-        {
-            var rows = PhysicalResults(sql, parameters);
-            if (sql.StartsWith("SELECT @@default_storage_engine", StringComparison.Ordinal))
+        await using var connection = new CatalogStatementTestConnection(
+            true,
+            (sql, parameters) =>
             {
-                rows.Rows[0][4] = sqlMode;
-                rows.Rows[0][5] = version;
-            }
+                var rows = PhysicalResults(sql, parameters);
+                if (sql.StartsWith("SELECT @@default_storage_engine", StringComparison.Ordinal))
+                {
+                    rows
+                        .Rows[0][4] = sqlMode;
 
-            return rows;
-        });
+                    rows
+                        .Rows[0][5] = version;
+                }
+
+                return rows;
+            });
 
         // Act
         var result = await MySqlSafeMigrationProviderAnalyzer.ReadIndexPhysicalEnvironmentsAsync(
-            connection, PhysicalOperations(1), 4 * 1024 * 1024, 71, CancellationToken.None);
+            connection,
+            PhysicalOperations(1),
+            4 * 1024 * 1024,
+            71,
+            CancellationToken.None);
 
         // Assert
-        var environment = Assert.Single(result).Value;
+        var environment = Assert.Single(result)
+            .Value;
+
         Assert.Equal(quoted, environment.SupportsQuotedExpressionDefaults);
         Assert.Equal(controls, environment.SupportsTextExpressionControlCharacters);
         Assert.True(environment.StrictSqlMode);
@@ -82,7 +110,9 @@ public sealed class MySqlCatalogTailBatchingTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task PhysicalEnvironments_PackWholeChunksAndPreserveRequestedColumns(bool native)
+    public async Task PhysicalEnvironments_PackWholeChunksAndPreserveRequestedColumns(
+        bool native
+    )
     {
         // Arrange
         await using var connection = new CatalogStatementTestConnection(native, PhysicalResults);
@@ -90,20 +120,41 @@ public sealed class MySqlCatalogTailBatchingTests
 
         // Act
         var result = await MySqlSafeMigrationProviderAnalyzer.ReadIndexPhysicalEnvironmentsAsync(
-            connection, operations, 4 * 1024 * 1024, 71, CancellationToken.None);
+            connection,
+            operations,
+            4 * 1024 * 1024,
+            71,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(4097, result.Count);
         Assert.All(result, pair => Assert.Equal(["id"], pair.Value.Columns!.Keys));
         Assert.Equal(10, connection.Submissions.Count);
-        int[] expectedCounts = native ? [8, 1] : [];
+        int[] expectedCounts = native
+            ? [8, 1]
+            : [];
 
         Assert.Equal(expectedCounts, connection.BatchCounts);
-        Assert.All(connection.Submissions.Skip(1).Take(8), statement => Assert.Equal(512, statement.Parameters.Count));
+        Assert.All(connection
+                .Submissions
+                .Skip(1)
+                .Take(8),
+            statement => Assert.Equal(512, statement.Parameters.Count));
+
         Assert.Single(connection.Submissions[^1].Parameters);
         Assert.All(connection.Submissions, statement => Assert.Equal(71, statement.Timeout));
-        Assert.Equal(native ? 2 : 0, connection.BatchesDisposed);
-        Assert.Equal(native ? 3 : 10, connection.ReadersDisposed);
+        Assert.Equal(
+            native
+                ? 2
+                : 0,
+            connection.BatchesDisposed);
+
+        Assert.Equal(
+            native
+                ? 3
+                : 10,
+            connection.ReadersDisposed);
+
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 
@@ -117,15 +168,22 @@ public sealed class MySqlCatalogTailBatchingTests
 
         // Act
         var result = await MySqlSafeMigrationProviderAnalyzer.ReadIndexPhysicalEnvironmentsAsync(
-            connection, operations, 90_000, 71, CancellationToken.None);
+            connection,
+            operations,
+            90_000,
+            71,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(1024, result.Count);
         Assert.Equal([1, 1], connection.BatchCounts);
-        Assert.All(connection.Submissions.Skip(1), statement => Assert.InRange(
-            Encoding.UTF8.GetByteCount(statement.Sql)
+        Assert.All(
+            connection.Submissions.Skip(1),
+            statement => Assert.InRange(
+                Encoding.UTF8.GetByteCount(statement.Sql)
                 + statement.Parameters.Sum(parameter => Encoding.UTF8.GetByteCount((string)parameter.Value!) + 32),
-            1, 90_000));
+                1,
+                90_000));
     }
 
     /// <summary>Whole chunks reject evidence from another chunk and duplicate requested columns.</summary>
@@ -134,26 +192,31 @@ public sealed class MySqlCatalogTailBatchingTests
     [InlineData("reversed")]
     [InlineData("duplicate")]
     [InlineData("foreign")]
-    public async Task PhysicalOwnership_RejectsMalformedEvidence(string fault)
+    public async Task PhysicalOwnership_RejectsMalformedEvidence(
+        string fault
+    )
     {
         // Arrange
-        await using var connection = new CatalogStatementTestConnection(true, (sql, parameters) =>
-        {
-            var rows = PhysicalResults(sql, parameters);
-            if (parameters.Count != 0)
+        await using var connection = new CatalogStatementTestConnection(
+            true,
+            (sql, parameters) =>
             {
-                if (fault == "duplicate")
+                var rows = PhysicalResults(sql, parameters);
+                if (parameters.Count != 0)
                 {
-                    rows.Rows.Add(rows.Rows[0].ItemArray);
+                    if (fault == "duplicate")
+                    {
+                        rows.Rows.Add(rows.Rows[0].ItemArray);
+                    }
+                    else if (fault == "foreign")
+                    {
+                        rows
+                            .Rows[0][0] = "not_requested";
+                    }
                 }
-                else if (fault == "foreign")
-                {
-                    rows.Rows[0][0] = "not_requested";
-                }
-            }
 
-            return rows;
-        })
+                return rows;
+            })
         {
             ReverseResults = fault == "reversed",
         };
@@ -161,7 +224,11 @@ public sealed class MySqlCatalogTailBatchingTests
         // Act
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             MySqlSafeMigrationProviderAnalyzer.ReadIndexPhysicalEnvironmentsAsync(
-                connection, PhysicalOperations(513), 4 * 1024 * 1024, 71, CancellationToken.None));
+                connection,
+                PhysicalOperations(513),
+                4 * 1024 * 1024,
+                71,
+                CancellationToken.None));
 
         // Assert
         Assert.Equal(1, connection.BatchesDisposed);
@@ -174,7 +241,9 @@ public sealed class MySqlCatalogTailBatchingTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task PhysicalCancellation_ReturnsNoPartialMap(bool native)
+    public async Task PhysicalCancellation_ReturnsNoPartialMap(
+        bool native
+    )
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
@@ -193,11 +262,20 @@ public sealed class MySqlCatalogTailBatchingTests
         // Act
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             MySqlSafeMigrationProviderAnalyzer.ReadIndexPhysicalEnvironmentsAsync(
-                connection, PhysicalOperations(513), 4 * 1024 * 1024, 71, cancellation.Token));
+                connection,
+                PhysicalOperations(513),
+                4 * 1024 * 1024,
+                71,
+                cancellation.Token));
 
         // Assert
         Assert.Equal(2, connection.ReadersDisposed);
-        Assert.Equal(native ? 1 : 0, connection.BatchesDisposed);
+        Assert.Equal(
+            native
+                ? 1
+                : 0,
+            connection.BatchesDisposed);
+
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 
@@ -215,31 +293,51 @@ public sealed class MySqlCatalogTailBatchingTests
     )
     {
         // Arrange
-        await using var connection = new CatalogStatementTestConnection(native, (sql, parameters) =>
-            InventoryResults(sql, parameters, mariaDb));
+        await using var connection = new CatalogStatementTestConnection(
+            native,
+            (sql, parameters) =>
+                InventoryResults(sql, parameters, mariaDb));
 
         var expected = Inventory(4097);
 
         // Act
         var result = await MySqlSafeMigrationProviderAnalyzer.ReadUnexpectedInventoryAsync(
-            connection, expected, mariaDb, 4 * 1024 * 1024, 71, CancellationToken.None);
+            connection,
+            expected,
+            mariaDb,
+            4 * 1024 * 1024,
+            71,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(4098, result.Count);
         Assert.Equal("unexpected_table", result[0].Code);
-        Assert.All(result.Skip(1), finding =>
-        {
-            Assert.Equal("unexpected_column", finding.Code);
-            Assert.Equal("ID", finding.Name);
-        });
+        Assert.All(
+            result.Skip(1),
+            finding =>
+            {
+                Assert.Equal("unexpected_column", finding.Code);
+                Assert.Equal("ID", finding.Name);
+            });
 
         Assert.Equal(10, connection.Submissions.Count);
-        int[] expectedCounts = native ? [8, 2] : [];
+        int[] expectedCounts = native
+            ? [8, 2]
+            : [];
 
         Assert.Equal(expectedCounts, connection.BatchCounts);
-        Assert.All(connection.Submissions.Skip(1).Take(8), statement => Assert.Equal(512, statement.Parameters.Count));
+        Assert.All(connection
+                .Submissions
+                .Skip(1)
+                .Take(8),
+            statement => Assert.Equal(512, statement.Parameters.Count));
+
         Assert.Single(connection.Submissions[^1].Parameters);
-        Assert.Equal(native ? 2 : 10, connection.ReadersDisposed);
+        Assert.Equal(
+            native
+                ? 2
+                : 10,
+            connection.ReadersDisposed);
     }
 
     /// <summary>Foreign chunk objects and reversed table/child results are not inventory evidence.</summary>
@@ -255,16 +353,20 @@ public sealed class MySqlCatalogTailBatchingTests
     )
     {
         // Arrange
-        await using var connection = new CatalogStatementTestConnection(native, (sql, parameters) =>
-        {
-            var rows = InventoryResults(sql, parameters, false);
-            if (!reverse && parameters.Count != 0)
+        await using var connection = new CatalogStatementTestConnection(
+            native,
+            (sql, parameters) =>
             {
-                rows.Rows[0][1] = "foreign_table";
-            }
+                var rows = InventoryResults(sql, parameters, false);
+                if (!reverse
+                    && parameters.Count != 0)
+                {
+                    rows
+                        .Rows[0][1] = "foreign_table";
+                }
 
-            return rows;
-        })
+                return rows;
+            })
         {
             ReverseResults = reverse,
         };
@@ -272,10 +374,20 @@ public sealed class MySqlCatalogTailBatchingTests
         // Act
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             MySqlSafeMigrationProviderAnalyzer.ReadUnexpectedInventoryAsync(
-                connection, Inventory(513), false, 4 * 1024 * 1024, 71, CancellationToken.None));
+                connection,
+                Inventory(513),
+                false,
+                4 * 1024 * 1024,
+                71,
+                CancellationToken.None));
 
         // Assert
-        Assert.Equal(native ? 1 : 2, connection.ReadersDisposed);
+        Assert.Equal(
+            native
+                ? 1
+                : 2,
+            connection.ReadersDisposed);
+
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 
@@ -284,23 +396,32 @@ public sealed class MySqlCatalogTailBatchingTests
     public async Task InventoryPayload_SplitsWholeScopesAtPacketBudget()
     {
         // Arrange
-        await using var connection = new CatalogStatementTestConnection(true,
+        await using var connection = new CatalogStatementTestConnection(
+            true,
             (sql, parameters) => InventoryResults(sql, parameters, false));
 
         var expected = Inventory(1024, new string('x', 100));
 
         // Act
         var result = await MySqlSafeMigrationProviderAnalyzer.ReadUnexpectedInventoryAsync(
-            connection, expected, false, 150_000, 71, CancellationToken.None);
+            connection,
+            expected,
+            false,
+            150_000,
+            71,
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(1025, result.Count);
         Assert.Equal([2, 1], connection.BatchCounts);
         Assert.All(connection.Submissions.Skip(1), statement => Assert.Equal(512, statement.Parameters.Count));
-        Assert.All(connection.Submissions, statement => Assert.InRange(
-            Encoding.UTF8.GetByteCount(statement.Sql)
+        Assert.All(
+            connection.Submissions,
+            statement => Assert.InRange(
+                Encoding.UTF8.GetByteCount(statement.Sql)
                 + statement.Parameters.Sum(parameter => Encoding.UTF8.GetByteCount((string)parameter.Value!) + 32),
-            1, 150_000));
+                1,
+                150_000));
     }
 
     /// <summary>Inventory cancellation after a row releases native and fallback transport ownership.</summary>
@@ -308,12 +429,15 @@ public sealed class MySqlCatalogTailBatchingTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task InventoryCancellation_DisposesWithoutReturningEvidence(bool native)
+    public async Task InventoryCancellation_DisposesWithoutReturningEvidence(
+        bool native
+    )
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
         var reads = 0;
-        await using var connection = new CatalogStatementTestConnection(native,
+        await using var connection = new CatalogStatementTestConnection(
+            native,
             (sql, parameters) => InventoryResults(sql, parameters, false))
         {
             BeforeRead = () =>
@@ -328,30 +452,56 @@ public sealed class MySqlCatalogTailBatchingTests
         // Act
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             MySqlSafeMigrationProviderAnalyzer.ReadUnexpectedInventoryAsync(
-                connection, Inventory(513), false, 4 * 1024 * 1024, 71, cancellation.Token));
+                connection,
+                Inventory(513),
+                false,
+                4 * 1024 * 1024,
+                71,
+                cancellation.Token));
 
         // Assert
         Assert.Equal(1, connection.ReadersDisposed);
-        Assert.Equal(native ? 1 : 0, connection.BatchesDisposed);
+        Assert.Equal(
+            native
+                ? 1
+                : 0,
+            connection.BatchesDisposed);
+
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 
     private static SafeMigrationOperation[] PhysicalOperations(
         int count,
         string prefix = ""
-    ) => Enumerable.Range(0, count).Select(index => new SafeMigrationOperation(
-        new EnsureIndexIntent(new ExpectedIndexDefinition("ix_id", $"{prefix}tail_{index:D4}",
-            [new ExpectedIndexKeyDefinition("id")])),
-        SafeMigrationPolicy.ThrowIfDifferent)).ToArray();
+    ) => Enumerable
+        .Range(0, count)
+        .Select(index => new SafeMigrationOperation(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "ix_id",
+                    $"{prefix}tail_{index:D4}",
+                    [new ExpectedIndexKeyDefinition("id")])),
+            SafeMigrationPolicy.ThrowIfDifferent))
+        .ToArray();
 
     private static Dictionary<string, SafeMigrationExpectedTableInventory> Inventory(
         int count,
         string prefix = ""
     )
-        => Enumerable.Range(0, count).Select(index => new SafeMigrationExpectedTableInventory(
-            $"{prefix}tail_{index:D4}", null,
-            [new KeyValuePair<string, string?>("id", "int"), new KeyValuePair<string, string?>("json_data", "json")],
-            [], [], [], [])).ToDictionary(static table => table.Table, StringComparer.Ordinal);
+        => Enumerable
+            .Range(0, count)
+            .Select(index => new SafeMigrationExpectedTableInventory(
+                $"{prefix}tail_{index:D4}",
+                null,
+                [
+                    new KeyValuePair<string, string?>("id", "int"),
+                    new KeyValuePair<string, string?>("json_data", "json")
+                ],
+                [],
+                [],
+                [],
+                []))
+            .ToDictionary(static table => table.Table, StringComparer.Ordinal);
 
     private static DataTable PhysicalResults(
         string sql,
@@ -360,7 +510,12 @@ public sealed class MySqlCatalogTailBatchingTests
     {
         if (sql.StartsWith("SELECT @@default_storage_engine", StringComparison.Ordinal))
         {
-            var defaults = Table(typeof(string), typeof(string), typeof(int), typeof(string), typeof(string),
+            var defaults = Table(
+                typeof(string),
+                typeof(string),
+                typeof(int),
+                typeof(string),
+                typeof(string),
                 typeof(string));
 
             defaults.Rows.Add("InnoDB", "Dynamic", 16384, "utf8mb4", "STRICT_TRANS_TABLES", "8.4.11");
@@ -368,15 +523,43 @@ public sealed class MySqlCatalogTailBatchingTests
             return defaults;
         }
 
-        var result = Table(typeof(string), typeof(string), typeof(string), typeof(string), typeof(string),
-            typeof(long), typeof(long), typeof(int), typeof(int), typeof(int));
+        var result = Table(
+            typeof(string),
+            typeof(string),
+            typeof(string),
+            typeof(string),
+            typeof(string),
+            typeof(long),
+            typeof(long),
+            typeof(int),
+            typeof(int),
+            typeof(int));
 
         foreach (var parameter in parameters)
         {
-            result.Rows.Add(parameter.Value!, "InnoDB", "Dynamic", "id", "int", DBNull.Value,
-                DBNull.Value, 10, 0, DBNull.Value);
-            result.Rows.Add(parameter.Value!, "InnoDB", "Dynamic", "not_requested", "int", DBNull.Value,
-                DBNull.Value, 10, 0, DBNull.Value);
+            result.Rows.Add(
+                parameter.Value!,
+                "InnoDB",
+                "Dynamic",
+                "id",
+                "int",
+                DBNull.Value,
+                DBNull.Value,
+                10,
+                0,
+                DBNull.Value);
+
+            result.Rows.Add(
+                parameter.Value!,
+                "InnoDB",
+                "Dynamic",
+                "not_requested",
+                "int",
+                DBNull.Value,
+                DBNull.Value,
+                10,
+                0,
+                DBNull.Value);
         }
 
         return result;
@@ -409,7 +592,9 @@ public sealed class MySqlCatalogTailBatchingTests
         return result;
     }
 
-    private static DataTable Table(params Type[] columns)
+    private static DataTable Table(
+        params Type[] columns
+    )
     {
         var result = new DataTable();
         foreach (var column in columns)

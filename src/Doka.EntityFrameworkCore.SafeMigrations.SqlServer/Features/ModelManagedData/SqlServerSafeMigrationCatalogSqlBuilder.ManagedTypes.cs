@@ -12,7 +12,7 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
         // WHY: A derived VALUES relation avoids compiling one correlated
         // metadata EXISTS per column in both delayed guard scopes. Duplicate
         // requirements remain rows, so every original conjunction is preserved.
-        var sql = new StringBuilder(768 + (columns.Count * 96))
+        var sql = new StringBuilder(768 + columns.Count * 96)
             .Append("NOT EXISTS (SELECT 1 FROM (VALUES ");
 
         // WHY: Retain authored column order while placing VALUES separators.
@@ -31,7 +31,8 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
                 sql.Append(", ");
             }
 
-            sql.Append('(')
+            sql
+                .Append('(')
                 .Append(Literal(column.Column))
                 .Append(", ")
                 .Append(Literal(type.Name))
@@ -45,11 +46,13 @@ internal sealed partial class SqlServerSafeMigrationCatalogSqlBuilder
             sql.Append(')');
         }
 
-        sql.Append(") expected(name, type_name, max_length, precision_value, scale_value) ")
+        sql
+            .Append(") expected(name, type_name, max_length, precision_value, scale_value) ")
             .Append("LEFT JOIN sys.columns c ON c.object_id = ")
             .Append(TableId(table, schema))
             .Append(" AND c.name = expected.name ")
             .Append("LEFT JOIN sys.types ty ON ty.user_type_id = c.user_type_id ")
+
             // WHY: NOT(predicate) loses UNKNOWN rows from absent columns or
             // unavailable metadata. A positive CASE accepts only the complete
             // original EXISTS proof, including builtin type provenance.

@@ -39,7 +39,7 @@ internal sealed class MySqlCatalogParameterValueComparer : IEqualityComparer<MyS
         MySqlCatalogParameterValue left,
         MySqlCatalogParameterValue right
     ) => StringComparer.OrdinalIgnoreCase.Equals(left.StoreType, right.StoreType)
-        && (left.Value?.GetType() == right.Value?.GetType())
+        && left.Value?.GetType() == right.Value?.GetType()
         && SafeMigrationModelManagedValue.AreEqual(left.Value, right.Value);
 
     public int GetHashCode(

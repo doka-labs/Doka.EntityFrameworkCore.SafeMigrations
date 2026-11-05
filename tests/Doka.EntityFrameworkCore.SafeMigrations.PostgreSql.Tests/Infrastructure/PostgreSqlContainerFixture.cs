@@ -8,13 +8,13 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime, IDisposable
     private const string Username = "postgres";
 
     private static readonly TimeSpan s_startupTimeout = TimeSpan.FromMinutes(3);
+    private readonly PostgreSqlContainer? _container;
+    private readonly Func<string, CancellationToken, Task> _createDatabase;
 
     private readonly Dictionary<string, string> _createdDatabases = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _databaseLifecycleLock = new(1, 1);
-    private readonly PostgreSqlContainer? _container;
-    private readonly Func<string, CancellationToken, Task> _createDatabase;
-    private readonly Func<string, CancellationToken, Task> _dropDatabase;
     private readonly Func<Task> _disposeContainer;
+    private readonly Func<string, CancellationToken, Task> _dropDatabase;
     private readonly Func<string, string> _testConnectionString;
     private readonly string _version;
     private bool _disposed;
@@ -31,7 +31,10 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime, IDisposable
         var configuredImage = Environment
             .GetEnvironmentVariable("SAFE_MIGRATIONS_POSTGRES_IMAGE")
             ?.Trim();
-        var image = string.IsNullOrWhiteSpace(configuredImage) ? $"postgres:{_version}" : configuredImage;
+
+        var image = string.IsNullOrWhiteSpace(configuredImage)
+            ? $"postgres:{_version}"
+            : configuredImage;
 
         _container = new PostgreSqlBuilder(image)
             .WithDatabase(BootstrapDatabase)
@@ -81,28 +84,6 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime, IDisposable
             return connectionString.ConnectionString;
         }
     }
-
-    /// <summary>
-    /// Builds a connection string scoped to one test database.
-    /// </summary>
-    /// <remarks>
-    /// WHY: Pooling stays off although every analysis opens its own connection. Each test
-    /// owns a distinct database, so Npgsql would keep one pool per test instead of reusing
-    /// sessions, and the retained backends exhaust the server's connection limit long
-    /// before the suite ends. A local PostgreSQL login is cheap enough to pay per open.
-    /// </remarks>
-    /// <param name="database">The isolated database name.</param>
-    /// <returns>The connection string for that database.</returns>
-    private string TestConnectionString(
-        string database
-    ) => new NpgsqlConnectionStringBuilder(
-        (_container ?? throw new InvalidOperationException("This fixture has no native container."))
-        .GetConnectionString())
-    {
-        IncludeErrorDetail = true,
-        Pooling = false,
-        Database = database,
-    }.ConnectionString;
 
     /// <summary>Starts the native container when the assembly runner selects live fixture consumers.</summary>
     /// <returns>A task completing at native readiness, or immediately for callback-only fixtures.</returns>
@@ -161,7 +142,8 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime, IDisposable
 
         if (cleanupFailures.Count != 0)
         {
-            throw new InvalidOperationException("PostgreSQL test-container cleanup failed.",
+            throw new InvalidOperationException(
+                "PostgreSQL test-container cleanup failed.",
                 new AggregateException("Retained PostgreSQL fixture cleanup failures.", cleanupFailures));
         }
     }
@@ -177,6 +159,28 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime, IDisposable
         _databaseLifecycleLock.Dispose();
         _disposed = true;
     }
+
+    /// <summary>
+    /// Builds a connection string scoped to one test database.
+    /// </summary>
+    /// <remarks>
+    /// WHY: Pooling stays off although every analysis opens its own connection. Each test
+    /// owns a distinct database, so Npgsql would keep one pool per test instead of reusing
+    /// sessions, and the retained backends exhaust the server's connection limit long
+    /// before the suite ends. A local PostgreSQL login is cheap enough to pay per open.
+    /// </remarks>
+    /// <param name="database">The isolated database name.</param>
+    /// <returns>The connection string for that database.</returns>
+    private string TestConnectionString(
+        string database
+    ) => new NpgsqlConnectionStringBuilder(
+        (_container ?? throw new InvalidOperationException("This fixture has no native container."))
+        .GetConnectionString())
+    {
+        IncludeErrorDetail = true,
+        Pooling = false,
+        Database = database,
+    }.ConnectionString;
 
     /// <summary>Creates a GUID-named database with provisional ownership for uncertain acknowledgements.</summary>
     /// <param name="cancellationToken">The token for lifecycle acquisition and physical creation.</param>
@@ -271,6 +275,7 @@ public sealed class PostgreSqlContainerFixture : IAsyncLifetime, IDisposable
         await using var terminate = connection.CreateCommand();
         terminate.CommandText = "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
             + "WHERE datname = @database AND pid <> pg_backend_pid();";
+
         terminate.Parameters.AddWithValue("database", database);
         await terminate.ExecuteNonQueryAsync(cancellationToken);
 

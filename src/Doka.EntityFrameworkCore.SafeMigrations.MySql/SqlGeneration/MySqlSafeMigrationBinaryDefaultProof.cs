@@ -17,7 +17,9 @@ internal sealed record MySqlSafeMigrationBinaryDefaultProof(
     /// <summary>Gets the closed operation-local session variable for one proof.</summary>
     /// <param name="ordinal">The zero-based proof position in this operation.</param>
     /// <returns>A provider-owned variable that never includes an authored identifier.</returns>
-    internal static string Variable(int ordinal) =>
+    internal static string Variable(
+        int ordinal
+    ) =>
         "@doka_sm_binary_default_" + ordinal.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>Builds one guarded prepared SELECT for all native literal defaults of an operation.</summary>
@@ -45,13 +47,19 @@ internal sealed record MySqlSafeMigrationBinaryDefaultProof(
         if (proofs.Count != eligibility.Count)
         {
             throw new ArgumentException(
-                "Every binary-default query requires its own catalog barrier.", nameof(eligibility));
+                "Every binary-default query requires its own catalog barrier.",
+                nameof(eligibility));
         }
 
         var builder = new StringBuilder();
         builder.Append(BuildResetSql(proofs.Count, variableOffset, clear: false));
-        builder.Append("SET ").Append(sqlVariable).Append(" = CASE WHEN ").Append(executionGuard)
+        builder
+            .Append("SET ")
+            .Append(sqlVariable)
+            .Append(" = CASE WHEN ")
+            .Append(executionGuard)
             .Append(" THEN CONCAT('SELECT '");
+
         // WHY: Preserve binary-proof variable slots and their ordered bounded selection ranges.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -68,14 +76,20 @@ internal sealed record MySqlSafeMigrationBinaryDefaultProof(
             // first, and prepare only qualified identifiers. The seed's
             // impossible LEFT JOIN keeps NOT NULL defaults observable without
             // reading rows, unlike a direct null-extended HEX projection.
-            builder.Append(ordinal == 0 ? ", " : ", ', ', ")
-                .Append("CASE WHEN COALESCE((").Append(eligibility[ordinal])
+            builder
+                .Append(
+                    ordinal == 0
+                        ? ", "
+                        : ", ', ', ")
+                .Append("CASE WHEN COALESCE((")
+                .Append(eligibility[ordinal])
                 .Append("), FALSE) THEN CONVERT(0x")
                 .Append(Convert.ToHexString(Encoding.UTF8.GetBytes(query[7..])))
                 .Append(" USING utf8mb4) ELSE 'FALSE' END");
         }
 
         builder.Append(", ' INTO ");
+
         // WHY: Preserve binary-proof variable slots and their ordered bounded selection ranges.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -89,9 +103,16 @@ internal sealed record MySqlSafeMigrationBinaryDefaultProof(
             builder.Append(Variable(variableOffset + ordinal));
         }
 
-        builder.Append("') ELSE 'DO 0' END;PREPARE ").Append(statementName)
-            .Append(" FROM ").Append(sqlVariable).Append(";EXECUTE ").Append(statementName)
-            .Append(";DEALLOCATE PREPARE ").Append(statementName).Append(';');
+        builder
+            .Append("') ELSE 'DO 0' END;PREPARE ")
+            .Append(statementName)
+            .Append(" FROM ")
+            .Append(sqlVariable)
+            .Append(";EXECUTE ")
+            .Append(statementName)
+            .Append(";DEALLOCATE PREPARE ")
+            .Append(statementName)
+            .Append(';');
 
         return builder.ToString();
     }
@@ -101,7 +122,11 @@ internal sealed record MySqlSafeMigrationBinaryDefaultProof(
     /// <param name="offset">The scope's first result-variable ordinal.</param>
     /// <param name="clear">Whether cleanup must release values instead of initializing FALSE.</param>
     /// <returns>The owned SET statement, or the shared empty string when no proof exists.</returns>
-    internal static string BuildResetSql(int count, int offset, bool clear)
+    internal static string BuildResetSql(
+        int count,
+        int offset,
+        bool clear
+    )
     {
         if (count == 0)
         {
@@ -109,6 +134,7 @@ internal sealed record MySqlSafeMigrationBinaryDefaultProof(
         }
 
         var builder = new StringBuilder("SET ");
+
         // WHY: Preserve binary-proof variable slots and their ordered bounded selection ranges.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -119,17 +145,27 @@ internal sealed record MySqlSafeMigrationBinaryDefaultProof(
                 builder.Append(", ");
             }
 
-            builder.Append(Variable(offset + ordinal)).Append(clear ? " = NULL" : " = FALSE");
+            builder
+                .Append(Variable(offset + ordinal))
+                .Append(
+                    clear
+                        ? " = NULL"
+                        : " = FALSE");
         }
 
-        return builder.Append(';').ToString();
+        return builder
+            .Append(';')
+            .ToString();
     }
 
     /// <summary>Expands only structural proof tokens, never marker-shaped names or literal payloads.</summary>
     /// <param name="sql">The rendered catalog expression.</param>
     /// <param name="proofs">The owning operation's immutable proof contracts.</param>
     /// <returns>The expression with materialized results, or FALSE for an unmaterialized proof.</returns>
-    internal static string Bind(string sql, IReadOnlyList<MySqlSafeMigrationBinaryDefaultProof> proofs)
+    internal static string Bind(
+        string sql,
+        IReadOnlyList<MySqlSafeMigrationBinaryDefaultProof> proofs
+    )
     {
         if (!sql.Contains(MarkerPrefix, StringComparison.Ordinal))
         {
@@ -149,10 +185,14 @@ internal sealed record MySqlSafeMigrationBinaryDefaultProof(
             }
 
             var digits = marker.Index + MarkerPrefix.Length;
-            if (!int.TryParse(sql.AsSpan(digits, marker.Length - MarkerPrefix.Length - 2),
-                    CultureInfo.InvariantCulture, out var ordinal)
+            if (!int.TryParse(
+                    sql.AsSpan(digits, marker.Length - MarkerPrefix.Length - 2),
+                    CultureInfo.InvariantCulture,
+                    out var ordinal)
                 || (uint)ordinal >= (uint)proofs.Count
-                || !sql.AsSpan(marker.Index, marker.Length).SequenceEqual(proofs[ordinal].Marker))
+                || !sql
+                    .AsSpan(marker.Index, marker.Length)
+                    .SequenceEqual(proofs[ordinal].Marker))
             {
                 throw new InvalidOperationException("The MySQL binary-default proof token has no owning contract.");
             }

@@ -6,8 +6,10 @@ internal sealed class SqlServerCatalogParameterBindings
     /// <summary>Leaves room below SQL Server's 2,100-parameter RPC limit.</summary>
     internal const int MaximumParameters = 2_000;
 
-    private readonly IRelationalTypeMappingSource _mappings;
     private readonly string _externalPrefix;
+
+    private readonly IRelationalTypeMappingSource _mappings;
+
     private readonly Dictionary<(object Value, string StoreType), SqlServerCatalogParameterValue> _names
         = new(SourceIdentityComparer.Instance);
 
@@ -16,7 +18,10 @@ internal sealed class SqlServerCatalogParameterBindings
     /// <summary>Creates one operation-local binding capture.</summary>
     /// <param name="mappings">The active SQL Server source mappings.</param>
     /// <param name="ordinal">The original operation ordinal owning the outer bindings.</param>
-    public SqlServerCatalogParameterBindings(IRelationalTypeMappingSource mappings, int ordinal)
+    public SqlServerCatalogParameterBindings(
+        IRelationalTypeMappingSource mappings,
+        int ordinal
+    )
     {
         ArgumentNullException.ThrowIfNull(mappings);
         ArgumentOutOfRangeException.ThrowIfNegative(ordinal);
@@ -32,7 +37,10 @@ internal sealed class SqlServerCatalogParameterBindings
     /// <param name="value">The non-null authored scalar before destination conversion.</param>
     /// <param name="external">Whether the marker is used before the delayed classifier binds.</param>
     /// <returns>A stable local name or its uniquely owned outer transport marker.</returns>
-    public string Add(object value, bool external = false)
+    public string Add(
+        object value,
+        bool external = false
+    )
     {
         ArgumentNullException.ThrowIfNull(value);
 
@@ -40,7 +48,9 @@ internal sealed class SqlServerCatalogParameterBindings
         var identity = (value, mapping.StoreType);
         if (_names.TryGetValue(identity, out var existing))
         {
-            return external ? existing.ExternalName : existing.Name;
+            return external
+                ? existing.ExternalName
+                : existing.Name;
         }
 
         var name = "@doka_value" + _values.Count.ToString(CultureInfo.InvariantCulture);
@@ -49,10 +59,14 @@ internal sealed class SqlServerCatalogParameterBindings
         _values.Add(captured);
         _names.Add(identity, captured);
 
-        return external ? externalName : name;
+        return external
+            ? externalName
+            : name;
     }
 
-    private RelationalTypeMapping SourceMapping(object value)
+    private RelationalTypeMapping SourceMapping(
+        object value
+    )
     {
         // WHY: A target varchar/decimal/datetime parameter can lose information before TRY_CAST
         // or ANSI round-trip validation. Wide Unicode/binary, full temporal precision and the
@@ -64,16 +78,22 @@ internal sealed class SqlServerCatalogParameterBindings
             DateTime => "datetime2(7)",
             DateTimeOffset => "datetimeoffset(7)",
             TimeOnly or TimeSpan => "time(7)",
-            decimal number => "decimal(38," + DecimalScale(number).ToString(CultureInfo.InvariantCulture) + ")",
+            decimal number => "decimal(38,"
+                + DecimalScale(number)
+                    .ToString(CultureInfo.InvariantCulture)
+                + ")",
             _ => null,
         };
 
-        return (storeType is null ? _mappings.FindMapping(value.GetType())
+        return (storeType is null
+                ? _mappings.FindMapping(value.GetType())
                 : _mappings.FindMapping(value.GetType(), storeType))
             ?? throw new NotSupportedException("SQL Server has no lossless catalog source mapping.");
     }
 
-    private static int DecimalScale(decimal value)
+    private static int DecimalScale(
+        decimal value
+    )
     {
         Span<int> bits = stackalloc int[4];
         decimal.GetBits(value, bits);
@@ -81,7 +101,9 @@ internal sealed class SqlServerCatalogParameterBindings
         return (bits[3] >> 16) & 0xff;
     }
 
-    private static int PayloadBytes(object value) => value switch
+    private static int PayloadBytes(
+        object value
+    ) => value switch
     {
         string text => checked(Math.Max(Encoding.UTF8.GetByteCount(text), text.Length * 2) + 64),
         byte[] bytes => checked(bytes.Length + 64),
@@ -95,7 +117,10 @@ internal sealed class SqlServerCatalogParameterBindings
         internal static readonly SourceIdentityComparer Instance = new();
 
         /// <inheritdoc />
-        public bool Equals((object Value, string StoreType) left, (object Value, string StoreType) right)
+        public bool Equals(
+            (object Value, string StoreType) left,
+            (object Value, string StoreType) right
+        )
         {
             if (!StringComparer.Ordinal.Equals(left.StoreType, right.StoreType))
             {
@@ -112,17 +137,21 @@ internal sealed class SqlServerCatalogParameterBindings
                     == BitConverter.DoubleToInt64Bits(second),
                 (float first, float second) => BitConverter.SingleToInt32Bits(first)
                     == BitConverter.SingleToInt32Bits(second),
-                _ => object.Equals(left.Value, right.Value),
+                _ => Equals(left.Value, right.Value),
             };
         }
 
         /// <inheritdoc />
-        public int GetHashCode((object Value, string StoreType) identity)
+        public int GetHashCode(
+            (object Value, string StoreType) identity
+        )
         {
             var sourceHash = identity.Value switch
             {
                 DateTimeOffset value => HashCode.Combine(value.Ticks, value.Offset.Ticks),
-                double value => BitConverter.DoubleToInt64Bits(value).GetHashCode(),
+                double value => BitConverter
+                    .DoubleToInt64Bits(value)
+                    .GetHashCode(),
                 float value => BitConverter.SingleToInt32Bits(value),
                 _ => identity.Value.GetHashCode(),
             };

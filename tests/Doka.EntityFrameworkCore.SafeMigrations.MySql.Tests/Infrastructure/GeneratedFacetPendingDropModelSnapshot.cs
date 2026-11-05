@@ -5,6 +5,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 public sealed class GeneratedFacetPendingDropModelSnapshot : ModelSnapshot
 {
     /// <inheritdoc />
-    protected override void BuildModel(ModelBuilder modelBuilder)
+    protected override void BuildModel(
+        ModelBuilder modelBuilder
+    )
         => GeneratedFacetPendingDropDbContext.ConfigureModel(modelBuilder);
 }

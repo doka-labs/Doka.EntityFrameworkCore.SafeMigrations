@@ -21,6 +21,7 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         var name = MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(intent);
         var repeated = MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(
             new EnsureColumnIntent("items", Column()));
+
         var different = differentContracts.Select(MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName);
 
         // Assert
@@ -28,7 +29,7 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         Assert.StartsWith("doka_sm_add1_nn_", name, StringComparison.Ordinal);
         Assert.Equal(64, name.Length);
         Assert.NotEqual(name, name.ToUpperInvariant());
-        Assert.All(name, character => Assert.InRange((int)character, 0, 127));
+        Assert.All(name, character => Assert.InRange(character, 0, 127));
         Assert.All(different, candidate => Assert.NotEqual(name, candidate));
     }
 
@@ -40,6 +41,7 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         const string prefix = "doka_sm_add1_nn_";
         var actual = MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(
             new EnsureColumnIntent("items", Column()));
+
         string[] valid = [actual, prefix + new string('0', 48), prefix + new string('f', 48)];
         string[] invalid =
         [
@@ -72,7 +74,10 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     [InlineData("timestamp", false)]
     [InlineData("timestamp(6)", false)]
     [InlineData(" TIMESTAMP(3)", false)]
-    public void NativeTimestampIsNotAnIntrinsicNoDefaultAddition(string storeType, bool supported)
+    public void NativeTimestampIsNotAnIntrinsicNoDefaultAddition(
+        string storeType,
+        bool supported
+    )
     {
         // Arrange
         var definition = new ExpectedColumnDefinition("id", typeof(DateTime), false, storeType);
@@ -93,7 +98,10 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     [InlineData("enum('a','b')", true)]
     [InlineData(" ENUM('a','b')", true)]
     [InlineData("set('a','b')", true)]
-    public void EnumAndSetRemainEligibleAfterVerifiedAtomicStages(string storeType, bool eligible)
+    public void EnumAndSetRemainEligibleAfterVerifiedAtomicStages(
+        string storeType,
+        bool eligible
+    )
     {
         // Arrange
         var definition = new ExpectedColumnDefinition("id", typeof(string), false, storeType);
@@ -116,16 +124,24 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     [InlineData("enum('quo''te','a,b','a b','')", "enum('quo''te','a,b','a b','')")]
     [InlineData("enum('a' 'b')", "enum('ab')")]
     [InlineData("enum('Alpha  ',' Beta ','  ')", "enum('Alpha',' Beta','')")]
-    public void EnumSetCatalogDisplayPreservesExactMembers(string storeType, string expected)
+    public void EnumSetCatalogDisplayPreservesExactMembers(
+        string storeType,
+        string expected
+    )
     {
         // Arrange
         var original = storeType;
 
         // Act
         var escaped = MySqlSafeMigrationCatalogSqlBuilder.BuildEnumSetCatalogDisplay(
-            storeType, backslashEscapes: true, out var escapedDoubleQuotes);
+            storeType,
+            backslashEscapes: true,
+            out var escapedDoubleQuotes);
+
         var literal = MySqlSafeMigrationCatalogSqlBuilder.BuildEnumSetCatalogDisplay(
-            storeType, backslashEscapes: false, out var literalDoubleQuotes);
+            storeType,
+            backslashEscapes: false,
+            out var literalDoubleQuotes);
 
         // Assert
         Assert.Equal(expected, escaped);
@@ -146,20 +162,32 @@ public sealed class MySqlRequiredColumnAddCatalogTests
 
         // Act
         var escaped = MySqlSafeMigrationCatalogSqlBuilder.BuildEnumSetCatalogDisplay(
-            source, backslashEscapes: true, out _);
+            source,
+            backslashEscapes: true,
+            out _);
+
         var literal = MySqlSafeMigrationCatalogSqlBuilder.BuildEnumSetCatalogDisplay(
-            source, backslashEscapes: false, out _);
+            source,
+            backslashEscapes: false,
+            out _);
 
         // Assert
         Assert.Equal(escapedExpected, escaped);
         Assert.Equal(literalExpected, literal);
         Assert.NotEqual(escaped, literal);
-        Assert.Equal("656E756D282741272C2771756F27277465272C27736C6173685C5C7461696C272C"
-            + "276261636B5C5C736C6173685C5C2729", Convert.ToHexString(Encoding.UTF8.GetBytes(
-                Assert.IsType<string>(escaped))));
-        Assert.Equal("656E756D282741272C2771756F27277465272C27736C6173685C5C5C5C7461696C272C"
-            + "276261636B5C5C5C5C736C6173685C5C5C5C2729", Convert.ToHexString(Encoding.UTF8.GetBytes(
-                Assert.IsType<string>(literal))));
+        Assert.Equal(
+            "656E756D282741272C2771756F27277465272C27736C6173685C5C7461696C272C"
+            + "276261636B5C5C736C6173685C5C2729",
+            Convert.ToHexString(
+                Encoding.UTF8.GetBytes(
+                    Assert.IsType<string>(escaped))));
+
+        Assert.Equal(
+            "656E756D282741272C2771756F27277465272C27736C6173685C5C5C5C7461696C272C"
+            + "276261636B5C5C5C5C736C6173685C5C5C5C2729",
+            Convert.ToHexString(
+                Encoding.UTF8.GetBytes(
+                    Assert.IsType<string>(literal))));
     }
 
     /// <summary>Native control display distinguishes escaped values from literal backslash sequences.</summary>
@@ -169,16 +197,20 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         // Arrange
         const string source = "ENUM('nul\\0','line\\n','return\\r','tab\\t','back\\b','eof\\Z',"
             + "'percent\\%','under\\_','unknown\\q')";
+
         const string expected = "enum('nul\\0','line\\n','return\\r','tab\t','back\b','eof\u001a',"
             + "'percent\\\\%','under\\\\_','unknownq')";
 
         // Act
         var display = MySqlSafeMigrationCatalogSqlBuilder.BuildEnumSetCatalogDisplay(
-            source, backslashEscapes: true, out _);
+            source,
+            backslashEscapes: true,
+            out _);
 
         // Assert
         Assert.Equal(expected, display);
-        Assert.Equal("656E756D28276E756C5C30272C276C696E655C6E272C2772657475726E5C72272C2774616209272C"
+        Assert.Equal(
+            "656E756D28276E756C5C30272C276C696E655C6E272C2772657475726E5C72272C2774616209272C"
             + "276261636B08272C27656F661A272C2770657263656E745C5C25272C27756E6465725C5C5F272C27756E6B6E6F776E712729",
             Convert.ToHexString(Encoding.UTF8.GetBytes(Assert.IsType<string>(display))));
     }
@@ -192,14 +224,18 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     [InlineData("enum(a)")]
     [InlineData("enum('a') trailing")]
     [InlineData("enum\u00a0('a')")]
-    public void MalformedEnumSetDisplayFailsClosed(string storeType)
+    public void MalformedEnumSetDisplayFailsClosed(
+        string storeType
+    )
     {
         // Arrange
         var original = storeType;
 
         // Act
         var display = MySqlSafeMigrationCatalogSqlBuilder.BuildEnumSetCatalogDisplay(
-            storeType, backslashEscapes: true, out _);
+            storeType,
+            backslashEscapes: true,
+            out _);
 
         // Assert
         Assert.Null(display);
@@ -214,14 +250,18 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     [InlineData(false, "SET")]
     [InlineData(true, "ENUM")]
     [InlineData(true, "SET")]
-    public void EnumSetMatchingAndStagingUseBinaryMemberIdentity(bool mariaDb, string keyword)
+    public void EnumSetMatchingAndStagingUseBinaryMemberIdentity(
+        bool mariaDb,
+        string keyword
+    )
     {
         // Arrange
         using var context = CreateContext(mariaDb);
         var definition = new ExpectedColumnDefinition("id", typeof(string), false, keyword + " ('Alpha', 'Beta')");
         var plan = Capture(context, new EnsureColumnIntent("items", definition), SafeMigrationPolicy.ThrowIfDifferent);
         var values = RenderValues(context, plan);
-        var expected = "CAST(c.COLUMN_TYPE AS BINARY) = CAST('" + keyword.ToLowerInvariant()
+        var expected = "CAST(c.COLUMN_TYPE AS BINARY) = CAST('"
+            + keyword.ToLowerInvariant()
             + "(''Alpha'',''Beta'')' AS BINARY)";
 
         // Act
@@ -251,8 +291,12 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         var terminal = plan.RenderPreparedExecutionPostcondition(values);
 
         // Assert
-        Assert.Contains("CASE WHEN FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) > 0 THEN "
-            + "(CAST(c.COLUMN_TYPE AS BINARY) = CAST(", terminal, StringComparison.Ordinal);
+        Assert.Contains(
+            "CASE WHEN FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) > 0 THEN "
+            + "(CAST(c.COLUMN_TYPE AS BINARY) = CAST(",
+            terminal,
+            StringComparison.Ordinal);
+
         Assert.Contains("ELSE (CAST(c.COLUMN_TYPE AS BINARY) = CAST(", terminal, StringComparison.Ordinal);
         Assert.DoesNotContain("c.COLUMN_TYPE IN (", terminal, StringComparison.Ordinal);
         Assert.DoesNotContain("LOWER(c.COLUMN_TYPE)", terminal, StringComparison.Ordinal);
@@ -289,15 +333,22 @@ public sealed class MySqlRequiredColumnAddCatalogTests
 
         // Assert
         Assert.Equal(backslashEscapes, protocol.BackslashEscapes);
-        Assert.Equal(backslashEscapes,
-            environment.Contains("FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) = 0",
+        Assert.Equal(
+            backslashEscapes,
+            environment.Contains(
+                "FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) = 0",
                 StringComparison.Ordinal));
-        Assert.Equal(doubleQuotes,
+
+        Assert.Equal(
+            doubleQuotes,
             environment.Contains("FIND_IN_SET('ANSI_QUOTES', @@SESSION.sql_mode) = 0", StringComparison.Ordinal));
+
         Assert.DoesNotContain("STRICT_TRANS_TABLES", terminal, StringComparison.Ordinal);
         Assert.DoesNotContain("UPPER(atomic_table.ENGINE)", terminal, StringComparison.Ordinal);
-        Assert.True(status.IndexOf("THEN 'complete'", StringComparison.Ordinal)
+        Assert.True(
+            status.IndexOf("THEN 'complete'", StringComparison.Ordinal)
             < status.IndexOf("UPPER(atomic_table.ENGINE)", StringComparison.Ordinal));
+
         Assert.Equal(storeType, definition.StoreType);
     }
 
@@ -306,17 +357,25 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     [Theory]
     [InlineData("enum")]
     [InlineData("set")]
-    public void StandardOnlyEscapedCommentUsesMissingOnlyRefusal(string keyword)
+    public void StandardOnlyEscapedCommentUsesMissingOnlyRefusal(
+        string keyword
+    )
     {
         // Arrange
         using var context = CreateContext(mariaDb: true);
         var storeType = keyword + "('quo\\'te')";
         var ordinary = new ExpectedColumnDefinition("id", typeof(string), false, storeType);
-        var commented = new ExpectedColumnDefinition("id", typeof(string), false, storeType,
+        var commented = new ExpectedColumnDefinition(
+            "id",
+            typeof(string),
+            false,
+            storeType,
             comment: "mode\\guard");
+
         var plan = Capture(context, new EnsureColumnIntent("items", commented), SafeMigrationPolicy.RepairIfSafe);
         var values = RenderValues(context, plan);
-        var commentLiteral = values[Array.FindIndex(plan.ParameterValues,
+        var commentLiteral = values[Array.FindIndex(
+            plan.ParameterValues,
             value => Equals(value.Value, commented.Comment))];
 
         // Act
@@ -335,12 +394,20 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         Assert.False(MySqlSafeMigrationCatalogSqlBuilder.RequiresUnsupportedMissingRequiredAdd(ordinary));
         Assert.Null(plan.RequiredColumnAddPlan);
         Assert.False(plan.IsStaticallyUnsupported);
-        Assert.Contains("CAST(c.COLUMN_TYPE AS BINARY) = CAST('" + keyword + "(''quo''''te'')' AS BINARY)", matching,
+        Assert.Contains(
+            "CAST(c.COLUMN_TYPE AS BINARY) = CAST('" + keyword + "(''quo''''te'')' AS BINARY)",
+            matching,
             StringComparison.Ordinal);
-        Assert.Contains("CAST(COALESCE(c.COLUMN_COMMENT, '') AS BINARY) = " + commentLiteral,
-            matching, StringComparison.Ordinal);
-        Assert.True(state.IndexOf("THEN 'matching'", StringComparison.Ordinal)
+
+        Assert.Contains(
+            "CAST(COALESCE(c.COLUMN_COMMENT, '') AS BINARY) = " + commentLiteral,
+            matching,
+            StringComparison.Ordinal);
+
+        Assert.True(
+            state.IndexOf("THEN 'matching'", StringComparison.Ordinal)
             < state.IndexOf("THEN 'unsupported'", StringComparison.Ordinal));
+
         Assert.Contains("ELSE ('unsupported') END", missing, StringComparison.Ordinal);
         Assert.DoesNotContain("EXISTS (SELECT 1 FROM `items`", missing, StringComparison.Ordinal);
         Assert.Equal(storeType, commented.StoreType);
@@ -384,7 +451,10 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(false, false)]
-    public void NativeEnumCommentQualificationPreservesMatchingAndGatesRepair(bool ensure, bool nullable)
+    public void NativeEnumCommentQualificationPreservesMatchingAndGatesRepair(
+        bool ensure,
+        bool nullable
+    )
     {
         // Arrange
         using var context = CreateContext(mariaDb: true);
@@ -394,14 +464,17 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         SafeMigrationIntent intent = ensure
             ? new EnsureColumnIntent("items", target)
             : new AlterColumnIntent("items", target, source);
+
         var original = Capture(context, intent, SafeMigrationPolicy.RepairIfSafe);
         var plan = original.RequiredColumnAddPlan is { } protocol
             ? original with { RequiredColumnAddPlan = protocol with { StatusBinding = "@atomic_status" } }
             : original;
+
         var values = RenderValues(context, plan);
         using var command = new MySqlCommand();
         var parameterizer = new MySqlCatalogQueryParameterizer(
-            command, context.GetService<IRelationalTypeMappingSource>());
+            command,
+            context.GetService<IRelationalTypeMappingSource>());
 
         // Act
         var state = plan.RenderPreparedStateExpression(values, "FALSE", "TRUE");
@@ -411,23 +484,31 @@ public sealed class MySqlRequiredColumnAddCatalogTests
 
         // Assert
         Assert.Contains("THEN 'prerequisite_missing'", state, StringComparison.Ordinal);
-        Assert.True(state.IndexOf("THEN 'matching'", StringComparison.Ordinal)
+        Assert.True(
+            state.IndexOf("THEN 'matching'", StringComparison.Ordinal)
             < state.IndexOf("THEN 'unsupported'", StringComparison.Ordinal));
-        Assert.Contains("FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) > 0", repair,
+
+        Assert.Contains(
+            "FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) > 0",
+            repair,
             StringComparison.Ordinal);
+
         Assert.Contains("column_native_enum_mode_conflict", code, StringComparison.Ordinal);
         Assert.DoesNotContain("column_native_enum_mode_conflict", matching, StringComparison.Ordinal);
         if (plan.NullabilityDataProbe is not null)
         {
-            Assert.Contains("FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) > 0",
-                plan.RenderPreparedNullabilityRepairInvariantExpression(values), StringComparison.Ordinal);
+            Assert.Contains(
+                "FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) > 0",
+                plan.RenderPreparedNullabilityRepairInvariantExpression(values),
+                StringComparison.Ordinal);
         }
 
         if (ensure && plan.StateEvaluationGuardFailureExpression is not null)
         {
             var missing = plan.RenderPreparedStateEvaluationGuardFailureExpression(values);
 
-            Assert.True(missing.IndexOf("THEN 'unsupported'", StringComparison.Ordinal)
+            Assert.True(
+                missing.IndexOf("THEN 'unsupported'", StringComparison.Ordinal)
                 < missing.LastIndexOf("'missing'", StringComparison.Ordinal));
         }
     }
@@ -437,17 +518,34 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void NativeEnumTableCommentScopeQualifiesEveryColumn(bool tableComment)
+    public void NativeEnumTableCommentScopeQualifiesEveryColumn(
+        bool tableComment
+    )
     {
         // Arrange
         using var context = CreateContext(mariaDb: true);
         var member = new ExpectedColumnDefinition("id", typeof(string), false, "enum('slash\\\\tail')");
-        var sibling = new ExpectedColumnDefinition("other", typeof(int), false, "int",
-            comment: tableComment ? null : "comment\\tail");
-        var definition = new ExpectedTableDefinition("items", [member, sibling],
-            comment: tableComment ? "comment\\tail" : null);
-        var plan = Capture(context, new EnsureTableIntent(definition, SafeMigrationTableMode.StrictDefinition),
+        var sibling = new ExpectedColumnDefinition(
+            "other",
+            typeof(int),
+            false,
+            "int",
+            comment: tableComment
+                ? null
+                : "comment\\tail");
+
+        var definition = new ExpectedTableDefinition(
+            "items",
+            [member, sibling],
+            comment: tableComment
+                ? "comment\\tail"
+                : null);
+
+        var plan = Capture(
+            context,
+            new EnsureTableIntent(definition, SafeMigrationTableMode.StrictDefinition),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var values = RenderValues(context, plan);
 
         // Act
@@ -457,11 +555,18 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         // Assert
         Assert.True(qualification);
         Assert.False(MySqlSafeMigrationCatalogSqlBuilder.RequiresNativeEnumNoBackslashEscapes(member));
-        Assert.Contains("FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) > 0", state,
+        Assert.Contains(
+            "FIND_IN_SET('NO_BACKSLASH_ESCAPES', @@SESSION.sql_mode) > 0",
+            state,
             StringComparison.Ordinal);
-        Assert.True(state.IndexOf("THEN 'matching'", StringComparison.Ordinal)
+
+        Assert.True(
+            state.IndexOf("THEN 'matching'", StringComparison.Ordinal)
             < state.IndexOf("THEN 'unsupported'", StringComparison.Ordinal));
-        Assert.Contains("column_native_enum_mode_conflict", plan.ClassificationCodeExpression!,
+
+        Assert.Contains(
+            "column_native_enum_mode_conflict",
+            plan.ClassificationCodeExpression!,
             StringComparison.Ordinal);
     }
 
@@ -473,29 +578,45 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     [InlineData(false, "SET")]
     [InlineData(true, "ENUM")]
     [InlineData(true, "SET")]
-    public void EnumSetDiagnosticsPreserveLiteralCaseAndMemberOrder(bool mariaDb, string keyword)
+    public void EnumSetDiagnosticsPreserveLiteralCaseAndMemberOrder(
+        bool mariaDb,
+        string keyword
+    )
     {
         // Arrange
         using var context = CreateContext(mariaDb);
         var definition = new ExpectedColumnDefinition("id", typeof(string), true, keyword + "('Alpha','Beta')");
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items", definition),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", definition),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var capture = context.GetService<MySqlSafeMigrationPlanCapture>();
-        using var lease = capture.Begin([operation],
-            MySqlSafeMigrationPlanCapture.CreateExpectedUniqueIndexes([operation]), includeAnalysisEvidence: true);
+        using var lease = capture.Begin(
+            [operation],
+            MySqlSafeMigrationPlanCapture.CreateExpectedUniqueIndexes([operation]),
+            includeAnalysisEvidence: true);
 
         // Act
-        _ = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        _ = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
+
         var plan = Assert.Single(lease.Complete());
         var values = RenderValues(context, plan);
         var evidence = MySqlCatalogSqlTemplate.RenderPrepared(
             plan.DiagnosticEvidenceExpression
-                ?? throw new InvalidOperationException("The diagnostic fixture has no detailed evidence."),
+            ?? throw new InvalidOperationException("The diagnostic fixture has no detailed evidence."),
             values);
 
         // Assert
-        Assert.Contains("'column_store_type', '" + keyword + "(''Alpha'',''Beta'')', "
-            + "LEFT(COALESCE(c.COLUMN_TYPE, 'none'), 256)", evidence, StringComparison.Ordinal);
+        Assert.Contains(
+            "'column_store_type', '"
+            + keyword
+            + "(''Alpha'',''Beta'')', "
+            + "LEFT(COALESCE(c.COLUMN_TYPE, 'none'), 256)",
+            evidence,
+            StringComparison.Ordinal);
+
         Assert.DoesNotContain("LOWER(c.COLUMN_TYPE)", evidence, StringComparison.Ordinal);
         Assert.DoesNotContain("(''alpha'',''beta'')", evidence, StringComparison.Ordinal);
         Assert.Equal(keyword + "('Alpha','Beta')", definition.StoreType);
@@ -552,14 +673,18 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void MissingGuardRequiresEngineModesAndCollisionAbsence(bool mariaDb)
+    public void MissingGuardRequiresEngineModesAndCollisionAbsence(
+        bool mariaDb
+    )
     {
         // Arrange
         using var context = CreateContext(mariaDb);
         var plan = Capture(context, new EnsureColumnIntent("items", Column()), SafeMigrationPolicy.ThrowIfDifferent);
         using var command = new MySqlCommand();
         var parameterizer = new MySqlCatalogQueryParameterizer(
-            command, context.GetService<IRelationalTypeMappingSource>());
+            command,
+            context.GetService<IRelationalTypeMappingSource>());
+
         var protocol = Assert.IsType<MySqlSafeMigrationRequiredColumnAddPlan>(plan.RequiredColumnAddPlan);
         var bound = plan with
         {
@@ -578,12 +703,17 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         Assert.Contains("STRICT_ALL_TABLES", status, StringComparison.Ordinal);
         Assert.Equal(mariaDb, status.Contains("@@SESSION.check_constraint_checks = 1", StringComparison.Ordinal));
         Assert.Contains("INFORMATION_SCHEMA.TABLE_CONSTRAINTS", status, StringComparison.Ordinal);
-        Assert.Contains("CASE WHEN (EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS", status,
+        Assert.Contains(
+            "CASE WHEN (EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS",
+            status,
             StringComparison.Ordinal);
+
         Assert.StartsWith("CASE WHEN (@atomic_status) <> 'fresh' THEN 'unsupported'", guard, StringComparison.Ordinal);
         Assert.DoesNotContain("INFORMATION_SCHEMA.TABLE_CONSTRAINTS", guard, StringComparison.Ordinal);
-        Assert.True(guard.IndexOf("THEN 'unsupported'", StringComparison.Ordinal)
+        Assert.True(
+            guard.IndexOf("THEN 'unsupported'", StringComparison.Ordinal)
             < guard.IndexOf("THEN 'data_blocked'", StringComparison.Ordinal));
+
         Assert.Contains("column_atomic_add_unavailable", codes, StringComparison.Ordinal);
         Assert.Contains("column_atomic_add_guard_conflict", codes, StringComparison.Ordinal);
         Assert.Contains("column_set_null_dependency", codes, StringComparison.Ordinal);
@@ -594,7 +724,9 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ResumeRequiresExactNullableTargetAndOwnedEnforcedCheck(bool mariaDb)
+    public void ResumeRequiresExactNullableTargetAndOwnedEnforcedCheck(
+        bool mariaDb
+    )
     {
         // Arrange
         using var context = CreateContext(mariaDb);
@@ -602,13 +734,16 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         var definition = SafeMigrationExpectedDefinitionFactory.From(operation);
         var fingerprint = SafeMigrationContractFingerprint.Create(
         [
-            new SafeMigrationOperation(new EnsureColumnIntent("items", definition),
+            new SafeMigrationOperation(
+                new EnsureColumnIntent("items", definition),
                 SafeMigrationPolicy.ThrowIfDifferent),
         ]);
+
         var plan = Capture(context, new EnsureColumnIntent("items", definition), SafeMigrationPolicy.ThrowIfDifferent);
         using var command = new MySqlCommand();
         var parameterizer = new MySqlCatalogQueryParameterizer(
-            command, context.GetService<IRelationalTypeMappingSource>());
+            command,
+            context.GetService<IRelationalTypeMappingSource>());
 
         // Act
         var resume = plan.RenderRequiredColumnAddResumeExpression(parameterizer.Add);
@@ -624,21 +759,35 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         Assert.Contains("CAST(tc.CONSTRAINT_NAME AS BINARY) = CAST(", resume, StringComparison.Ordinal);
         Assert.Contains("CAST(tc.TABLE_NAME AS BINARY) = CAST(", resume, StringComparison.Ordinal);
         Assert.Contains(
-            "CAST(tc.CONSTRAINT_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)", resume, StringComparison.Ordinal);
+            "CAST(tc.CONSTRAINT_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+            resume,
+            StringComparison.Ordinal);
+
         Assert.Contains("CAST(c.TABLE_NAME AS BINARY) = CAST(", resume, StringComparison.Ordinal);
         Assert.Contains("CAST(c.COLUMN_NAME AS BINARY) = CAST(", resume, StringComparison.Ordinal);
         Assert.Contains(
-            "CAST(c.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)", resume, StringComparison.Ordinal);
+            "CAST(c.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+            resume,
+            StringComparison.Ordinal);
+
         Assert.Contains(
             "CAST(cc.CONSTRAINT_NAME AS BINARY) = CAST(tc.CONSTRAINT_NAME AS BINARY)",
-            resume, StringComparison.Ordinal);
+            resume,
+            StringComparison.Ordinal);
+
         Assert.DoesNotContain("UPPER(tc.CONSTRAINT_NAME)", resume, StringComparison.Ordinal);
         Assert.DoesNotContain("LOWER(tc.CONSTRAINT_NAME)", resume, StringComparison.Ordinal);
-        Assert.Contains("nullable_fk.DELETE_RULE = 'SET NULL' OR nullable_fk.UPDATE_RULE = 'SET NULL'", resume,
+        Assert.Contains(
+            "nullable_fk.DELETE_RULE = 'SET NULL' OR nullable_fk.UPDATE_RULE = 'SET NULL'",
+            resume,
             StringComparison.Ordinal);
+
         Assert.DoesNotContain("nullable_fk.DELETE_RULE = 'CASCADE'", resume, StringComparison.Ordinal);
-        Assert.Contains("CAST(LOWER(CONVERT(cc.CHECK_CLAUSE USING utf8mb4)) AS BINARY)", resume,
+        Assert.Contains(
+            "CAST(LOWER(CONVERT(cc.CHECK_CLAUSE USING utf8mb4)) AS BINARY)",
+            resume,
             StringComparison.Ordinal);
+
         Assert.Contains("CAST(cc.CHECK_CLAUSE AS BINARY) IN (", resume, StringComparison.Ordinal);
         Assert.Equal(mariaDb, resume.Contains("UPPER(c.COLUMN_DEFAULT) = 'NULL'", StringComparison.Ordinal));
         Assert.Equal(!mariaDb, resume.Contains("tc.ENFORCED = 'YES'", StringComparison.Ordinal));
@@ -646,18 +795,26 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         Assert.DoesNotContain("tc.CONSTRAINT_NAME <>", resume, StringComparison.Ordinal);
         Assert.DoesNotContain(" LIKE ", resume, StringComparison.Ordinal);
         Assert.DoesNotContain("EXISTS (SELECT 1 FROM `items`", resume, StringComparison.Ordinal);
-        Assert.Contains(command.Parameters.Cast<DbParameter>(),
+        Assert.Contains(
+            command.Parameters.Cast<DbParameter>(),
             parameter => Equals(parameter.Value, "`id` IS NOT NULL"));
-        Assert.Contains("NOT (EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS", postcondition,
+
+        Assert.Contains(
+            "NOT (EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS",
+            postcondition,
             StringComparison.Ordinal);
+
         Assert.DoesNotContain("STRICT_TRANS_TABLES", postcondition, StringComparison.Ordinal);
         Assert.False(operation.IsNullable);
         Assert.True(Assert.IsType<bool>(operation["Doka:MySql:RequiresExplicitBackfill"]));
-        Assert.Equal(fingerprint, SafeMigrationContractFingerprint.Create(
-        [
-            new SafeMigrationOperation(new EnsureColumnIntent("items", definition),
-                SafeMigrationPolicy.ThrowIfDifferent),
-        ]));
+        Assert.Equal(
+            fingerprint,
+            SafeMigrationContractFingerprint.Create(
+            [
+                new SafeMigrationOperation(
+                    new EnsureColumnIntent("items", definition),
+                    SafeMigrationPolicy.ThrowIfDifferent),
+            ]));
     }
 
     /// <summary>Every policy retains a separate resume certificate and bounded NULL rejection.</summary>
@@ -670,20 +827,29 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         var policies = Enum.GetValues<SafeMigrationPolicy>();
 
         // Act
-        var plans = policies.Select(policy => Capture(context, intent, policy)).ToArray();
+        var plans = policies
+            .Select(policy => Capture(context, intent, policy))
+            .ToArray();
 
         // Assert
-        Assert.All(plans, plan =>
-        {
-            Assert.IsType<MySqlSafeMigrationRequiredColumnAddPlan>(plan.RequiredColumnAddPlan);
-            var probe = Assert.IsType<MySqlSafeMigrationNullabilityDataProbe>(plan.NullabilityDataProbe);
+        Assert.All(
+            plans,
+            plan =>
+            {
+                Assert.IsType<MySqlSafeMigrationRequiredColumnAddPlan>(plan.RequiredColumnAddPlan);
+                var probe = Assert.IsType<MySqlSafeMigrationNullabilityDataProbe>(plan.NullabilityDataProbe);
 
-            Assert.Contains("THEN 'data_blocked' ELSE 'missing'", plan.StateExpression, StringComparison.Ordinal);
-            Assert.Contains("column_atomic_add_resume", plan.ClassificationCodeExpression!, StringComparison.Ordinal);
-            Assert.Contains(" IS NULL LIMIT 1)", probe.BlockedExpression, StringComparison.Ordinal);
-            Assert.DoesNotContain(" IS NULL LIMIT 1)", MySqlSafeMigrationRequiredColumnAddPlan.ResumeExpression,
-                StringComparison.Ordinal);
-        });
+                Assert.Contains("THEN 'data_blocked' ELSE 'missing'", plan.StateExpression, StringComparison.Ordinal);
+                Assert.Contains("column_atomic_add_resume",
+                    plan.ClassificationCodeExpression!,
+                    StringComparison.Ordinal);
+
+                Assert.Contains(" IS NULL LIMIT 1)", probe.BlockedExpression, StringComparison.Ordinal);
+                Assert.DoesNotContain(
+                    " IS NULL LIMIT 1)",
+                    MySqlSafeMigrationRequiredColumnAddPlan.ResumeExpression,
+                    StringComparison.Ordinal);
+            });
     }
 
     /// <summary>Excluded native TIMESTAMP rejects only missing work, retaining exact existing contracts.</summary>
@@ -717,8 +883,13 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         var plan = Capture(context, new EnsureColumnIntent("items", definition), SafeMigrationPolicy.ThrowIfDifferent);
         using var command = new MySqlCommand();
         var parameterizer = new MySqlCatalogQueryParameterizer(
-            command, context.GetService<IRelationalTypeMappingSource>());
-        var expected = context.GetService<ISqlGenerationHelper>().DelimitIdentifier(name) + " IS NOT NULL";
+            command,
+            context.GetService<IRelationalTypeMappingSource>());
+
+        var expected = context
+                .GetService<ISqlGenerationHelper>()
+                .DelimitIdentifier(name)
+            + " IS NOT NULL";
 
         // Act
         var resume = plan.RenderRequiredColumnAddResumeExpression(parameterizer.Add);
@@ -734,7 +905,9 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void MixedCaseProtocolOwnerUsesNativeTableNameModes(bool mariaDb)
+    public void MixedCaseProtocolOwnerUsesNativeTableNameModes(
+        bool mariaDb
+    )
     {
         // Arrange
         using var context = CreateContext(mariaDb);
@@ -748,35 +921,56 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         var terminal = plan.RenderPreparedExecutionPostcondition(values);
 
         // Assert
-        Assert.Contains("CASE WHEN @@lower_case_table_names = 0 THEN "
+        Assert.Contains(
+            "CASE WHEN @@lower_case_table_names = 0 THEN "
             + "CAST(tc.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY) "
             + "WHEN @@lower_case_table_names IN (1, 2) THEN "
-            + "CAST(LOWER(tc.TABLE_NAME) AS BINARY) = CAST(LOWER('MixedItems') AS BINARY) ELSE FALSE END", status,
+            + "CAST(LOWER(tc.TABLE_NAME) AS BINARY) = CAST(LOWER('MixedItems') AS BINARY) ELSE FALSE END",
+            status,
             StringComparison.Ordinal);
-        Assert.Contains("CASE WHEN @@lower_case_table_names = 0 THEN "
+
+        Assert.Contains(
+            "CASE WHEN @@lower_case_table_names = 0 THEN "
             + "CAST(c.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY) "
             + "WHEN @@lower_case_table_names IN (1, 2) THEN "
-            + "CAST(LOWER(c.TABLE_NAME) AS BINARY) = CAST(LOWER('MixedItems') AS BINARY) ELSE FALSE END", status,
+            + "CAST(LOWER(c.TABLE_NAME) AS BINARY) = CAST(LOWER('MixedItems') AS BINARY) ELSE FALSE END",
+            status,
             StringComparison.Ordinal);
-        Assert.Contains("CAST(tc.CONSTRAINT_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY) "
+
+        Assert.Contains(
+            "CAST(tc.CONSTRAINT_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY) "
             + "WHEN @@lower_case_table_names IN (1, 2) THEN "
-            + "CAST(LOWER(tc.CONSTRAINT_SCHEMA) AS BINARY) = CAST(LOWER(DATABASE()) AS BINARY) ELSE FALSE END", status,
+            + "CAST(LOWER(tc.CONSTRAINT_SCHEMA) AS BINARY) = CAST(LOWER(DATABASE()) AS BINARY) ELSE FALSE END",
+            status,
             StringComparison.Ordinal);
-        Assert.Contains("CAST(c.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY) "
+
+        Assert.Contains(
+            "CAST(c.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY) "
             + "WHEN @@lower_case_table_names IN (1, 2) THEN "
-            + "CAST(LOWER(c.TABLE_SCHEMA) AS BINARY) = CAST(LOWER(DATABASE()) AS BINARY) ELSE FALSE END", status,
+            + "CAST(LOWER(c.TABLE_SCHEMA) AS BINARY) = CAST(LOWER(DATABASE()) AS BINARY) ELSE FALSE END",
+            status,
             StringComparison.Ordinal);
-        Assert.Contains("CAST(tc.CONSTRAINT_NAME AS BINARY) = CAST('" + guard + "' AS BINARY)", status,
+
+        Assert.Contains(
+            "CAST(tc.CONSTRAINT_NAME AS BINARY) = CAST('" + guard + "' AS BINARY)",
+            status,
             StringComparison.Ordinal);
+
         Assert.Contains("CAST(c.COLUMN_NAME AS BINARY) = CAST('id' AS BINARY)", status, StringComparison.Ordinal);
         Assert.Contains("CAST(cc.CHECK_CLAUSE AS BINARY) IN (", status, StringComparison.Ordinal);
         Assert.DoesNotContain("LOWER(tc.CONSTRAINT_NAME)", status, StringComparison.Ordinal);
         Assert.DoesNotContain("LOWER(c.COLUMN_NAME)", status, StringComparison.Ordinal);
         Assert.DoesNotContain("LOWER(cc.CHECK_CLAUSE)", status, StringComparison.Ordinal);
         Assert.Contains(
-            "CAST(c.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY)", terminal, StringComparison.Ordinal);
-        Assert.Contains("CAST(LOWER(c.TABLE_NAME) AS BINARY) = CAST(LOWER('MixedItems') AS BINARY)", terminal,
+            "CAST(c.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY)",
+            terminal,
             StringComparison.Ordinal);
+
+        Assert.Contains(
+            "CAST(LOWER(c.TABLE_NAME) AS BINARY) = CAST(LOWER('MixedItems') AS BINARY)",
+            terminal,
+            StringComparison.Ordinal);
+
         Assert.Equal("MixedItems", intent.Table);
     }
 
@@ -785,17 +979,23 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ProtocolPresenceAndCompletionKeepNativeOwnerIdentity(bool mariaDb)
+    public void ProtocolPresenceAndCompletionKeepNativeOwnerIdentity(
+        bool mariaDb
+    )
     {
         // Arrange
         using var context = CreateContext(mariaDb);
-        var original = Capture(context, new EnsureColumnIntent("MixedItems", Column()),
+        var original = Capture(
+            context,
+            new EnsureColumnIntent("MixedItems", Column()),
             SafeMigrationPolicy.RepairIfSafe);
+
         var protocol = Assert.IsType<MySqlSafeMigrationRequiredColumnAddPlan>(original.RequiredColumnAddPlan);
         var plan = original with
         {
             RequiredColumnAddPlan = protocol with { StatusBinding = "@atomic_status" },
         };
+
         var values = RenderValues(context, plan);
 
         // Act
@@ -807,27 +1007,51 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         var status = plan.RenderPreparedRequiredColumnAddStatusExpression(values);
 
         // Assert
-        Assert.All(new[] { presence, nullable, state, terminal }, expression =>
-        {
-            Assert.Contains(
-                "CAST(c.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY)", expression, StringComparison.Ordinal);
-            Assert.Contains("CAST(LOWER(c.TABLE_NAME) AS BINARY) = CAST(LOWER('MixedItems') AS BINARY)", expression,
-                StringComparison.Ordinal);
-            Assert.Contains(
-                "CAST(c.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)", expression, StringComparison.Ordinal);
-            Assert.Contains("ELSE FALSE END", expression, StringComparison.Ordinal);
-            Assert.DoesNotContain("CAST(c.COLUMN_NAME AS BINARY)", expression, StringComparison.Ordinal);
-        });
+        Assert.All(
+            new[] { presence, nullable, state, terminal },
+            expression =>
+            {
+                Assert.Contains(
+                    "CAST(c.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY)",
+                    expression,
+                    StringComparison.Ordinal);
+
+                Assert.Contains(
+                    "CAST(LOWER(c.TABLE_NAME) AS BINARY) = CAST(LOWER('MixedItems') AS BINARY)",
+                    expression,
+                    StringComparison.Ordinal);
+
+                Assert.Contains(
+                    "CAST(c.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+                    expression,
+                    StringComparison.Ordinal);
+
+                Assert.Contains("ELSE FALSE END", expression, StringComparison.Ordinal);
+                Assert.DoesNotContain("CAST(c.COLUMN_NAME AS BINARY)", expression, StringComparison.Ordinal);
+            });
+
         Assert.Contains("CAST(t.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY)", state, StringComparison.Ordinal);
         Assert.Contains("CAST(t.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)", state, StringComparison.Ordinal);
         Assert.Contains(
-            "CAST(t.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY)", prerequisite, StringComparison.Ordinal);
+            "CAST(t.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY)",
+            prerequisite,
+            StringComparison.Ordinal);
+
         Assert.Contains(
-            "CAST(t.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)", prerequisite, StringComparison.Ordinal);
+            "CAST(t.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+            prerequisite,
+            StringComparison.Ordinal);
+
         Assert.Contains(
-            "CAST(atomic_table.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY)", status, StringComparison.Ordinal);
+            "CAST(atomic_table.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY)",
+            status,
+            StringComparison.Ordinal);
+
         Assert.Contains(
-            "CAST(atomic_table.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)", status, StringComparison.Ordinal);
+            "CAST(atomic_table.TABLE_SCHEMA AS BINARY) = CAST(DATABASE() AS BINARY)",
+            status,
+            StringComparison.Ordinal);
+
         Assert.Contains("CAST(c.COLUMN_NAME AS BINARY) = CAST('id' AS BINARY)", status, StringComparison.Ordinal);
         Assert.DoesNotContain("@atomic_status", terminal, StringComparison.Ordinal);
     }
@@ -837,16 +1061,26 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void OtherQualifiedRequiredAddsKeepNativeOwnerIdentity(bool sqlDefault)
+    public void OtherQualifiedRequiredAddsKeepNativeOwnerIdentity(
+        bool sqlDefault
+    )
     {
         // Arrange
         using var context = CreateContext(mariaDb: false);
         var definition = sqlDefault
-            ? new ExpectedColumnDefinition("id", typeof(int), false, "int",
+            ? new ExpectedColumnDefinition(
+                "id",
+                typeof(int),
+                false,
+                "int",
                 defaultValue: SafeMigrationDefaultValue.Sql(new SafeMigrationSqlLiteralExpression(null)))
             : new ExpectedColumnDefinition("id", typeof(DateTime), false, "timestamp(6)");
-        var plan = Capture(context, new EnsureColumnIntent("MixedItems", definition),
+
+        var plan = Capture(
+            context,
+            new EnsureColumnIntent("MixedItems", definition),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         var values = RenderValues(context, plan);
 
         // Act
@@ -857,18 +1091,34 @@ public sealed class MySqlRequiredColumnAddCatalogTests
 
         // Assert
         Assert.Null(plan.RequiredColumnAddPlan);
-        Assert.All(new[] { presence, matching, state }, expression =>
-        {
-            Assert.Contains(
-                "CAST(c.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY)", expression, StringComparison.Ordinal);
-            Assert.Contains("CAST(LOWER(c.TABLE_NAME) AS BINARY) = CAST(LOWER('MixedItems') AS BINARY)", expression,
-                StringComparison.Ordinal);
-            Assert.DoesNotContain("CAST(c.COLUMN_NAME AS BINARY)", expression, StringComparison.Ordinal);
-        });
+        Assert.All(
+            new[] { presence, matching, state },
+            expression =>
+            {
+                Assert.Contains(
+                    "CAST(c.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY)",
+                    expression,
+                    StringComparison.Ordinal);
+
+                Assert.Contains(
+                    "CAST(LOWER(c.TABLE_NAME) AS BINARY) = CAST(LOWER('MixedItems') AS BINARY)",
+                    expression,
+                    StringComparison.Ordinal);
+
+                Assert.DoesNotContain("CAST(c.COLUMN_NAME AS BINARY)", expression, StringComparison.Ordinal);
+            });
+
         Assert.Contains(
-            "CAST(t.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY)", prerequisite, StringComparison.Ordinal);
-        Assert.Contains(sqlDefault ? "column_required_sql_add_unavailable" : "column_atomic_add_unavailable",
-            plan.ClassificationCodeExpression!, StringComparison.Ordinal);
+            "CAST(t.TABLE_NAME AS BINARY) = CAST('MixedItems' AS BINARY)",
+            prerequisite,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            sqlDefault
+                ? "column_required_sql_add_unavailable"
+                : "column_atomic_add_unavailable",
+            plan.ClassificationCodeExpression!,
+            StringComparison.Ordinal);
     }
 
     /// <summary>Native owner aliases do not merge raw authored guard identities or ordinary comparisons.</summary>
@@ -879,7 +1129,8 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         using var context = CreateContext(mariaDb: true);
         var upper = new EnsureColumnIntent("MixedItems", Column());
         var lower = new EnsureColumnIntent("mixeditems", Column());
-        var nullable = new EnsureColumnIntent("MixedItems",
+        var nullable = new EnsureColumnIntent(
+            "MixedItems",
             new ExpectedColumnDefinition("id", typeof(int), true, "int"));
 
         // Act
@@ -900,7 +1151,9 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void BoundStatusDoesNotRepeatOwnedCheckProof(bool mariaDb)
+    public void BoundStatusDoesNotRepeatOwnedCheckProof(
+        bool mariaDb
+    )
     {
         // Arrange
         using var context = CreateContext(mariaDb);
@@ -910,10 +1163,12 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         {
             RequiredColumnAddPlan = protocol with { StatusBinding = "@atomic_status" },
         };
+
         var values = RenderValues(context, plan);
         using var command = new MySqlCommand();
         var parameterizer = new MySqlCatalogQueryParameterizer(
-            command, context.GetService<IRelationalTypeMappingSource>());
+            command,
+            context.GetService<IRelationalTypeMappingSource>());
 
         // Act
         var status = plan.RenderPreparedRequiredColumnAddStatusExpression(values);
@@ -925,27 +1180,41 @@ public sealed class MySqlRequiredColumnAddCatalogTests
             plan.RenderPreparedNullabilityRepairInvariantExpression(values),
             plan.RenderPreparedRequiredColumnAddResumeExpression(values),
         ];
+
         var terminal = plan.RenderPreparedExecutionPostcondition(values);
 
         // Assert
         Assert.Contains("INFORMATION_SCHEMA.CHECK_CONSTRAINTS", status, StringComparison.Ordinal);
         Assert.DoesNotContain("@atomic_status", status, StringComparison.Ordinal);
-        Assert.DoesNotContain(MySqlSafeMigrationRuntimePlan.RequiredColumnAddStatusPlaceholder, status,
+        Assert.DoesNotContain(
+            MySqlSafeMigrationRuntimePlan.RequiredColumnAddStatusPlaceholder,
+            status,
             StringComparison.Ordinal);
+
         Assert.DoesNotContain("EXISTS (SELECT 1 FROM `items`", status, StringComparison.Ordinal);
-        Assert.True(status.IndexOf("THEN 'complete'", StringComparison.Ordinal)
+        Assert.True(
+            status.IndexOf("THEN 'complete'", StringComparison.Ordinal)
             < status.IndexOf("UPPER(atomic_table.ENGINE)", StringComparison.Ordinal));
-        Assert.All(consumers, expression =>
-        {
-            Assert.Contains("@atomic_status", expression, StringComparison.Ordinal);
-            Assert.DoesNotContain("INFORMATION_SCHEMA.CHECK_CONSTRAINTS", expression, StringComparison.Ordinal);
-            Assert.DoesNotContain(MySqlSafeMigrationRuntimePlan.RequiredColumnAddStatusPlaceholder, expression,
-                StringComparison.Ordinal);
-        });
+
+        Assert.All(
+            consumers,
+            expression =>
+            {
+                Assert.Contains("@atomic_status", expression, StringComparison.Ordinal);
+                Assert.DoesNotContain("INFORMATION_SCHEMA.CHECK_CONSTRAINTS", expression, StringComparison.Ordinal);
+                Assert.DoesNotContain(
+                    MySqlSafeMigrationRuntimePlan.RequiredColumnAddStatusPlaceholder,
+                    expression,
+                    StringComparison.Ordinal);
+            });
+
         Assert.Equal("(@atomic_status) = 'staged'", consumers[^1]);
         Assert.Contains("c.IS_NULLABLE = 'NO'", terminal, StringComparison.Ordinal);
-        Assert.Contains("NOT (EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS", terminal,
+        Assert.Contains(
+            "NOT (EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS",
+            terminal,
             StringComparison.Ordinal);
+
         Assert.DoesNotContain("@atomic_status", terminal, StringComparison.Ordinal);
         Assert.Null(protocol.StatusBinding);
     }
@@ -965,8 +1234,11 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         {
             RequiredColumnAddPlan = protocol with { StatusBinding = "@atomic_status" },
         };
+
         var values = RenderValues(context, plan);
-        var identifier = context.GetService<ISqlGenerationHelper>().DelimitIdentifier(name);
+        var identifier = context
+            .GetService<ISqlGenerationHelper>()
+            .DelimitIdentifier(name);
 
         // Act
         var status = plan.RenderPreparedRequiredColumnAddStatusExpression(values);
@@ -974,10 +1246,16 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         var rows = plan.RenderPreparedNullabilityDataProbeBlockedExpression(values);
 
         // Assert
-        Assert.Contains("CAST(COALESCE(c.COLUMN_COMMENT, '') AS BINARY) = '" + token + "'",
-            status, StringComparison.Ordinal);
-        Assert.Contains("CAST(COALESCE(c.COLUMN_COMMENT, '') AS BINARY) = '" + token + "'",
-            state, StringComparison.Ordinal);
+        Assert.Contains(
+            "CAST(COALESCE(c.COLUMN_COMMENT, '') AS BINARY) = '" + token + "'",
+            status,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "CAST(COALESCE(c.COLUMN_COMMENT, '') AS BINARY) = '" + token + "'",
+            state,
+            StringComparison.Ordinal);
+
         Assert.Contains("@atomic_status", state, StringComparison.Ordinal);
         Assert.Equal("EXISTS (SELECT 1 FROM `items` WHERE " + identifier + " IS NULL LIMIT 1)", rows);
         Assert.DoesNotContain("@atomic_status", rows, StringComparison.Ordinal);
@@ -993,8 +1271,13 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         using var context = CreateContext(mariaDb: false);
         const string token = MySqlSafeMigrationRuntimePlan.RequiredColumnAddStatusPlaceholder;
         var expression = new SafeMigrationSqlLiteralExpression(token);
-        var definition = new ExpectedColumnDefinition("id", typeof(string), true, "varchar(100)",
+        var definition = new ExpectedColumnDefinition(
+            "id",
+            typeof(string),
+            true,
+            "varchar(100)",
             defaultValue: SafeMigrationDefaultValue.Sql(expression));
+
         var plan = Capture(context, new EnsureColumnIntent("items", definition), SafeMigrationPolicy.ThrowIfDifferent);
         var values = RenderValues(context, plan);
 
@@ -1018,12 +1301,14 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         var plan = new MySqlSafeMigrationRuntimePlan("'matching'", "TRUE", SafeMigrationRepairCapability.None, "FALSE")
         {
             RequiredColumnAddPlan = new MySqlSafeMigrationRequiredColumnAddPlan(
-                "guard", MySqlSafeMigrationRuntimePlan.RequiredColumnAddStatusPlaceholder, false),
+                "guard",
+                MySqlSafeMigrationRuntimePlan.RequiredColumnAddStatusPlaceholder,
+                false),
         };
 
         // Act
-        var error = Assert.Throws<InvalidOperationException>(
-            () => plan.RenderPreparedRequiredColumnAddStatusExpression([]));
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            plan.RenderPreparedRequiredColumnAddStatusExpression([]));
 
         // Assert
         Assert.Contains("cannot depend on its own status marker", error.Message, StringComparison.Ordinal);
@@ -1054,12 +1339,21 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     {
         // Arrange
         using var context = CreateContext(mariaDb);
-        var target = new ExpectedColumnDefinition("id", typeof(DateTime), false, "timestamp(6)", comment: "target",
-            defaultValue: realDefault ? SafeMigrationDefaultValue.Literal(new DateTime(2026, 1, 1)) : null);
+        var target = new ExpectedColumnDefinition(
+            "id",
+            typeof(DateTime),
+            false,
+            "timestamp(6)",
+            comment: "target",
+            defaultValue: realDefault
+                ? SafeMigrationDefaultValue.Literal(new DateTime(2026, 1, 1))
+                : null);
+
         var source = new ExpectedColumnDefinition("id", typeof(DateTime), sourceNullable, "timestamp(6)");
         SafeMigrationIntent intent = ensure
             ? new EnsureColumnIntent("items", target)
             : new AlterColumnIntent("items", target, source);
+
         var plan = Capture(context, intent, SafeMigrationPolicy.RepairIfSafe);
         var values = RenderValues(context, plan);
 
@@ -1086,12 +1380,23 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     [InlineData(true, false, "timestamp(6)")]
     [InlineData(false, true, "timestamp(6)")]
     [InlineData(false, false, "datetime(6)")]
-    public void ExplicitTimestampSemanticsDoNotExpandToOtherTargets(bool nullable, bool realDefault, string storeType)
+    public void ExplicitTimestampSemanticsDoNotExpandToOtherTargets(
+        bool nullable,
+        bool realDefault,
+        string storeType
+    )
     {
         // Arrange
         using var context = CreateContext(mariaDb: true);
-        var target = new ExpectedColumnDefinition("id", typeof(DateTime), nullable, storeType,
-            defaultValue: realDefault ? SafeMigrationDefaultValue.Literal(new DateTime(2026, 1, 1)) : null);
+        var target = new ExpectedColumnDefinition(
+            "id",
+            typeof(DateTime),
+            nullable,
+            storeType,
+            defaultValue: realDefault
+                ? SafeMigrationDefaultValue.Literal(new DateTime(2026, 1, 1))
+                : null);
+
         var source = new ExpectedColumnDefinition("id", typeof(DateTime), true, storeType);
         var plan = Capture(context, new AlterColumnIntent("items", target, source), SafeMigrationPolicy.RepairIfSafe);
         var values = RenderValues(context, plan);
@@ -1105,9 +1410,13 @@ public sealed class MySqlRequiredColumnAddCatalogTests
             ? plan.RenderPreparedNullabilityRepairInvariantExpression(values)
             : repair;
 
-        Assert.Equal(!nullable && storeType.StartsWith("timestamp", StringComparison.Ordinal),
+        Assert.Equal(
+            !nullable && storeType.StartsWith("timestamp", StringComparison.Ordinal),
             eligibility.Contains("@@SESSION.explicit_defaults_for_timestamp = 1", StringComparison.Ordinal));
-        Assert.DoesNotContain("@@SESSION.explicit_defaults_for_timestamp", plan.RenderPreparedPostcondition(values),
+
+        Assert.DoesNotContain(
+            "@@SESSION.explicit_defaults_for_timestamp",
+            plan.RenderPreparedPostcondition(values),
             StringComparison.Ordinal);
     }
 
@@ -1133,6 +1442,7 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         var defaultValue = structured
             ? SafeMigrationDefaultValue.Sql(new SafeMigrationSqlLiteralExpression(null))
             : SafeMigrationDefaultValue.Sql("(NULL)");
+
         var definition = new ExpectedColumnDefinition("id", typeof(int), nullable, "int", defaultValue: defaultValue);
 
         // Act
@@ -1141,7 +1451,9 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         // Assert
         var expectedCode = !structured
             ? "opaque_sql_expression"
-            : mariaDb && !nullable ? "literal_default_catalog_representation" : null;
+            : mariaDb && !nullable
+                ? "literal_default_catalog_representation"
+                : null;
 
         Assert.Equal(expectedCode is not null, plan.IsStaticallyUnsupported);
         Assert.Equal(expectedCode, plan.UnsupportedCode);
@@ -1153,13 +1465,20 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ParsedNullDefaultRetainsEngineSpecificTargetQualification(bool mariaDb)
+    public void ParsedNullDefaultRetainsEngineSpecificTargetQualification(
+        bool mariaDb
+    )
     {
         // Arrange
         using var context = CreateContext(mariaDb);
         var parsed = SafeMigrationSqlExpressionParser.TryParse("NULL", out var expression);
-        var definition = new ExpectedColumnDefinition("id", typeof(int), false, "int",
-            defaultValue: SafeMigrationDefaultValue.Sql(expression
+        var definition = new ExpectedColumnDefinition(
+            "id",
+            typeof(int),
+            false,
+            "int",
+            defaultValue: SafeMigrationDefaultValue.Sql(
+                expression
                 ?? throw new InvalidOperationException("The SQL NULL fixture did not parse.")));
 
         // Act
@@ -1167,9 +1486,15 @@ public sealed class MySqlRequiredColumnAddCatalogTests
 
         // Assert
         Assert.True(parsed);
-        Assert.Null(Assert.IsType<SafeMigrationSqlLiteralExpression>(expression).Value);
+        Assert.Null(Assert.IsType<SafeMigrationSqlLiteralExpression>(expression)
+            .Value);
+
         Assert.Equal(mariaDb, plan.IsStaticallyUnsupported);
-        Assert.Equal(mariaDb ? "literal_default_catalog_representation" : null, plan.UnsupportedCode);
+        Assert.Equal(
+            mariaDb
+                ? "literal_default_catalog_representation"
+                : null,
+            plan.UnsupportedCode);
     }
 
     /// <summary>Uncast ISO temporal literals retain exact values while catalog precision adds zeros.</summary>
@@ -1216,7 +1541,10 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     [InlineData("timestamp(7)", "2001-01-02 03:04:05")]
     [InlineData("time(6)", "2001-01-02 03:04:05")]
     [InlineData("varchar(40)", "2001-01-02 03:04:05")]
-    public void StructuredTemporalSqlLiteralCatalogValueDoesNotNormalizeOtherDomains(string storeType, string value)
+    public void StructuredTemporalSqlLiteralCatalogValueDoesNotNormalizeOtherDomains(
+        string storeType,
+        string value
+    )
     {
         // Arrange
         var original = value;
@@ -1234,34 +1562,53 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void StructuredTimestampDefaultMatchingIncludesExactNativePrecision(bool mariaDb)
+    public void StructuredTimestampDefaultMatchingIncludesExactNativePrecision(
+        bool mariaDb
+    )
     {
         // Arrange
         using var context = CreateContext(mariaDb);
         var literal = SafeMigrationSql.Literal("2001-01-02 03:04:05");
         var defaultValue = SafeMigrationDefaultValue.Sql(literal);
-        var target = new ExpectedColumnDefinition("id", typeof(DateTime), false, "timestamp(6)",
+        var target = new ExpectedColumnDefinition(
+            "id",
+            typeof(DateTime),
+            false,
+            "timestamp(6)",
             defaultValue: defaultValue);
+
         var plan = Capture(context, new EnsureColumnIntent("items", target), SafeMigrationPolicy.RepairIfSafe);
         using var command = new MySqlCommand();
         var parameterizer = new MySqlCatalogQueryParameterizer(
-            command, context.GetService<IRelationalTypeMappingSource>());
+            command,
+            context.GetService<IRelationalTypeMappingSource>());
 
         // Act
         var matching = plan.RenderPostcondition(parameterizer.Add);
 
         // Assert
         Assert.False(plan.IsStaticallyUnsupported);
-        Assert.Contains(mariaDb ? "c.COLUMN_DEFAULT IN (" : "ELSE CAST(c.COLUMN_DEFAULT AS BINARY) IN (",
-            matching, StringComparison.Ordinal);
-        Assert.Contains(command.Parameters.Cast<DbParameter>(),
+        Assert.Contains(
+            mariaDb
+                ? "c.COLUMN_DEFAULT IN ("
+                : "ELSE CAST(c.COLUMN_DEFAULT AS BINARY) IN (",
+            matching,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            command.Parameters.Cast<DbParameter>(),
             parameter => Equals(parameter.Value, "'2001-01-02 03:04:05.000000'"));
-        Assert.DoesNotContain(command.Parameters.Cast<DbParameter>(),
+
+        Assert.DoesNotContain(
+            command.Parameters.Cast<DbParameter>(),
             parameter => Equals(parameter.Value, "'2001-01-02 03:04:06.000000'"));
+
         Assert.Equal(SafeMigrationDefaultValueKind.Sql, target.DefaultValue.Kind);
         Assert.Same(defaultValue, target.DefaultValue);
         Assert.Same(literal, target.DefaultValue.StructuredExpression);
-        Assert.Equal("2001-01-02 03:04:05", Assert.IsType<SafeMigrationSqlLiteralExpression>(literal).Value);
+        Assert.Equal("2001-01-02 03:04:05",
+            Assert.IsType<SafeMigrationSqlLiteralExpression>(literal)
+                .Value);
     }
 
     /// <summary>Generated temporal defaults require an exact expression display.</summary>
@@ -1272,31 +1619,55 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         using var context = CreateContext(mariaDb: false);
         const string value = "2001-01-02 03:04:05";
         const string expressionDisplay = "_utf8mb4\\'2001-01-02 03:04:05\\'";
-        var target = new ExpectedColumnDefinition("id", typeof(DateTime), false, "timestamp(6)",
+        var target = new ExpectedColumnDefinition(
+            "id",
+            typeof(DateTime),
+            false,
+            "timestamp(6)",
             defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(value)));
+
         var plan = Capture(context, new EnsureColumnIntent("items", target), SafeMigrationPolicy.RepairIfSafe);
         var values = RenderValues(context, plan);
-        var expressionLiteral = values[Array.FindIndex(plan.ParameterValues,
+        var expressionLiteral = values[Array.FindIndex(
+            plan.ParameterValues,
             parameter => Equals(parameter.Value, expressionDisplay))];
-        var stableLiteral = values[Array.FindIndex(plan.ParameterValues,
+
+        var stableLiteral = values[Array.FindIndex(
+            plan.ParameterValues,
             parameter => Equals(parameter.Value, "convert(0x323030312d30312d30322030333a30343a3035 using utf8mb4)"))];
 
         // Act
         var matching = plan.RenderPreparedPostcondition(values);
 
         // Assert
-        Assert.Contains("CASE WHEN LOCATE('DEFAULT_GENERATED', UPPER(COALESCE(c.EXTRA, ''))) > 0 "
-            + "THEN CAST(c.COLUMN_DEFAULT AS BINARY) IN (" + expressionLiteral + ", " + stableLiteral + ")"
-            + " ELSE CAST(c.COLUMN_DEFAULT AS BINARY) IN (", matching, StringComparison.Ordinal);
+        Assert.Contains(
+            "CASE WHEN LOCATE('DEFAULT_GENERATED', UPPER(COALESCE(c.EXTRA, ''))) > 0 "
+            + "THEN CAST(c.COLUMN_DEFAULT AS BINARY) IN ("
+            + expressionLiteral
+            + ", "
+            + stableLiteral
+            + ")"
+            + " ELSE CAST(c.COLUMN_DEFAULT AS BINARY) IN (",
+            matching,
+            StringComparison.Ordinal);
+
         Assert.Contains(plan.ParameterValues, parameter => Equals(parameter.Value, "2001-01-02 03:04:05.000000"));
-        Assert.Contains(plan.ParameterValues,
+        Assert.Contains(
+            plan.ParameterValues,
             parameter => Equals(parameter.Value, "'2001-01-02 03:04:05.000000'"));
-        Assert.DoesNotContain(plan.ParameterValues,
+
+        Assert.DoesNotContain(
+            plan.ParameterValues,
             parameter => Equals(parameter.Value, "_utf8mb4\\'2001-01-02 03:04:05.000000\\'"));
-        Assert.DoesNotContain(plan.ParameterValues,
+
+        Assert.DoesNotContain(
+            plan.ParameterValues,
             parameter => Equals(parameter.Value, "_latin1\\'2001-01-02 03:04:05\\'"));
-        Assert.DoesNotContain(plan.ParameterValues,
+
+        Assert.DoesNotContain(
+            plan.ParameterValues,
             parameter => Equals(parameter.Value, "_utf8mb4\\'2001-01-02 03:04:06\\'"));
+
         Assert.DoesNotContain(" OR CAST(c.COLUMN_DEFAULT AS BINARY)", matching, StringComparison.Ordinal);
     }
 
@@ -1307,8 +1678,13 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         // Arrange
         using var context = CreateContext(mariaDb: false);
         const string value = "2001-01-02 03:04:05'payload";
-        var target = new ExpectedColumnDefinition("id", typeof(DateTime), false, "timestamp(6)",
+        var target = new ExpectedColumnDefinition(
+            "id",
+            typeof(DateTime),
+            false,
+            "timestamp(6)",
             defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(value)));
+
         var plan = Capture(context, new EnsureColumnIntent("items", target), SafeMigrationPolicy.RepairIfSafe);
         var values = RenderValues(context, plan);
 
@@ -1318,10 +1694,15 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         // Assert
         Assert.Null(MySqlSafeMigrationCatalogSqlBuilder.BuildTemporalSqlLiteralCatalogValue("timestamp(6)", value));
         Assert.DoesNotContain("THEN CAST(c.COLUMN_DEFAULT AS BINARY)", matching, StringComparison.Ordinal);
-        Assert.DoesNotContain(plan.ParameterValues, parameter => parameter.Value is string text
-            && text.StartsWith("_utf8mb4", StringComparison.Ordinal));
-        Assert.Equal(value,
-            Assert.IsType<SafeMigrationSqlLiteralExpression>(target.DefaultValue.StructuredExpression).Value);
+        Assert.DoesNotContain(
+            plan.ParameterValues,
+            parameter => parameter.Value is string text
+                && text.StartsWith("_utf8mb4", StringComparison.Ordinal));
+
+        Assert.Equal(
+            value,
+            Assert.IsType<SafeMigrationSqlLiteralExpression>(target.DefaultValue.StructuredExpression)
+                .Value);
     }
 
     /// <summary>Required SQL-default missing work qualifies its actual engine and mode on both state paths.</summary>
@@ -1345,16 +1726,36 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     {
         // Arrange
         using var context = CreateContext(mariaDb: false);
-        object? value = nullDefault ? null : timestamp ? new DateTime(2026, 1, 1) : 7;
+        object? value = nullDefault
+            ? null
+            : timestamp
+                ? new DateTime(2026, 1, 1)
+                : 7;
+
         var defaultValue = SafeMigrationDefaultValue.Sql(new SafeMigrationSqlLiteralExpression(value));
-        var definition = new ExpectedColumnDefinition("id", timestamp ? typeof(DateTime) : typeof(int), false,
-            timestamp ? "timestamp(6)" : "int", defaultValue: defaultValue);
-        var plan = Capture(context, new EnsureColumnIntent("items", definition),
-            repair ? SafeMigrationPolicy.RepairIfSafe : SafeMigrationPolicy.ThrowIfDifferent);
+        var definition = new ExpectedColumnDefinition(
+            "id",
+            timestamp
+                ? typeof(DateTime)
+                : typeof(int),
+            false,
+            timestamp
+                ? "timestamp(6)"
+                : "int",
+            defaultValue: defaultValue);
+
+        var plan = Capture(
+            context,
+            new EnsureColumnIntent("items", definition),
+            repair
+                ? SafeMigrationPolicy.RepairIfSafe
+                : SafeMigrationPolicy.ThrowIfDifferent);
+
         var values = RenderValues(context, plan);
         using var command = new MySqlCommand();
         var parameterizer = new MySqlCatalogQueryParameterizer(
-            command, context.GetService<IRelationalTypeMappingSource>());
+            command,
+            context.GetService<IRelationalTypeMappingSource>());
 
         // Act
         var state = plan.RenderPreparedStateExpression(values);
@@ -1367,30 +1768,50 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         Assert.False(MySqlSafeMigrationCatalogSqlBuilder.RequiresUnsupportedMissingRequiredAdd(definition));
         Assert.Null(plan.RequiredColumnAddPlan);
         Assert.False(plan.IsStaticallyUnsupported);
-        Assert.StartsWith("CASE WHEN NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES", state,
+        Assert.StartsWith(
+            "CASE WHEN NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES",
+            state,
             StringComparison.Ordinal);
+
         Assert.Contains("THEN 'prerequisite_missing'", state, StringComparison.Ordinal);
-        Assert.All(new[] { state, missing }, expression =>
-        {
-            Assert.Contains("UPPER(sql_default_table.ENGINE) = 'INNODB'", expression, StringComparison.Ordinal);
-            Assert.Contains("FIND_IN_SET('STRICT_TRANS_TABLES', @@SESSION.sql_mode) > 0", expression,
-                StringComparison.Ordinal);
-            Assert.Contains("FIND_IN_SET('STRICT_ALL_TABLES', @@SESSION.sql_mode) > 0", expression,
-                StringComparison.Ordinal);
-            Assert.Equal(timestamp,
-                expression.Contains("@@SESSION.explicit_defaults_for_timestamp = 1", StringComparison.Ordinal));
-        });
+        Assert.All(
+            new[] { state, missing },
+            expression =>
+            {
+                Assert.Contains("UPPER(sql_default_table.ENGINE) = 'INNODB'", expression, StringComparison.Ordinal);
+                Assert.Contains(
+                    "FIND_IN_SET('STRICT_TRANS_TABLES', @@SESSION.sql_mode) > 0",
+                    expression,
+                    StringComparison.Ordinal);
+
+                Assert.Contains(
+                    "FIND_IN_SET('STRICT_ALL_TABLES', @@SESSION.sql_mode) > 0",
+                    expression,
+                    StringComparison.Ordinal);
+
+                Assert.Equal(
+                    timestamp,
+                    expression.Contains("@@SESSION.explicit_defaults_for_timestamp = 1", StringComparison.Ordinal));
+            });
+
         Assert.Contains("column_required_sql_add_unavailable", codes, StringComparison.Ordinal);
-        Assert.Equal(nullDefault,
+        Assert.Equal(
+            nullDefault,
             missing.Contains("EXISTS (SELECT 1 FROM `items` LIMIT 1)", StringComparison.Ordinal));
+
         Assert.Equal(nullDefault, missing.Contains("'data_blocked'", StringComparison.Ordinal));
         if (nullDefault)
         {
-            Assert.Contains("THEN (CASE WHEN EXISTS (SELECT 1 FROM `items` LIMIT 1) "
-                + "THEN 'data_blocked' ELSE 'missing' END) ELSE 'unsupported' END", missing,
+            Assert.Contains(
+                "THEN (CASE WHEN EXISTS (SELECT 1 FROM `items` LIMIT 1) "
+                + "THEN 'data_blocked' ELSE 'missing' END) ELSE 'unsupported' END",
+                missing,
                 StringComparison.Ordinal);
-            Assert.True(missing.IndexOf("UPPER(sql_default_table.ENGINE)", StringComparison.Ordinal)
+
+            Assert.True(
+                missing.IndexOf("UPPER(sql_default_table.ENGINE)", StringComparison.Ordinal)
                 < missing.IndexOf("EXISTS (SELECT 1 FROM `items` LIMIT 1)", StringComparison.Ordinal));
+
             Assert.Contains("EXISTS (SELECT 1 FROM `items` LIMIT 1)", state, StringComparison.Ordinal);
         }
 
@@ -1406,13 +1827,17 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     [Theory]
     [InlineData(true, true)]
     [InlineData(false, false)]
-    public void SqlDefaultQualificationDoesNotBroadenOtherAddContracts(bool nullable, bool sqlDefault)
+    public void SqlDefaultQualificationDoesNotBroadenOtherAddContracts(
+        bool nullable,
+        bool sqlDefault
+    )
     {
         // Arrange
         using var context = CreateContext(mariaDb: false);
         var defaultValue = sqlDefault
             ? SafeMigrationDefaultValue.Sql(new SafeMigrationSqlLiteralExpression(null))
             : SafeMigrationDefaultValue.Literal(7);
+
         var definition = new ExpectedColumnDefinition("id", typeof(int), nullable, "int", defaultValue: defaultValue);
 
         // Act
@@ -1434,7 +1859,11 @@ public sealed class MySqlRequiredColumnAddCatalogTests
 
         // Act
         var error = Assert.Throws<ArgumentException>(() => new ExpectedColumnDefinition(
-            "id", typeof(int), false, "int", defaultValue: defaultValue));
+            "id",
+            typeof(int),
+            false,
+            "int",
+            defaultValue: defaultValue));
 
         // Assert
         Assert.Equal("defaultValue", error.ParamName);
@@ -1446,14 +1875,25 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ApprovedDefaultStillRequiresStrictNullableAlter(bool transition)
+    public void ApprovedDefaultStillRequiresStrictNullableAlter(
+        bool transition
+    )
     {
         // Arrange
         using var context = CreateContext(mariaDb: false);
         var source = new ExpectedColumnDefinition("id", typeof(string), true, "varchar(40)", maxLength: 40);
-        var target = new ExpectedColumnDefinition("id", typeof(string), false,
-            transition ? "varchar(20)" : "varchar(40)", maxLength: transition ? 20 : 40,
+        var target = new ExpectedColumnDefinition(
+            "id",
+            typeof(string),
+            false,
+            transition
+                ? "varchar(20)"
+                : "varchar(40)",
+            maxLength: transition
+                ? 20
+                : 40,
             defaultValue: SafeMigrationDefaultValue.Literal("approved"));
+
         var plan = Capture(context, new AlterColumnIntent("items", target, source), SafeMigrationPolicy.RepairIfSafe);
         var values = RenderValues(context, plan);
 
@@ -1470,8 +1910,11 @@ public sealed class MySqlRequiredColumnAddCatalogTests
         // Assert
         Assert.Equal(SafeMigrationRepairCapability.Safe, plan.RepairCapability);
         Assert.Equal(transition, plan.DataProbe is not null);
-        Assert.Contains("FIND_IN_SET('STRICT_TRANS_TABLES', @@SESSION.sql_mode) > 0", physical,
+        Assert.Contains(
+            "FIND_IN_SET('STRICT_TRANS_TABLES', @@SESSION.sql_mode) > 0",
+            physical,
             StringComparison.Ordinal);
+
         Assert.Contains("FIND_IN_SET('STRICT_ALL_TABLES', @@SESSION.sql_mode) > 0", physical, StringComparison.Ordinal);
         Assert.DoesNotContain("STRICT_TRANS_TABLES", matching, StringComparison.Ordinal);
         Assert.Equal("approved", target.DefaultValue.GetLiteralValue());
@@ -1490,8 +1933,13 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     )
     {
         var operation = new SafeMigrationOperation(intent, policy);
-        using var lease = context.GetService<MySqlSafeMigrationPlanCapture>().Begin([operation]);
-        _ = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        using var lease = context
+            .GetService<MySqlSafeMigrationPlanCapture>()
+            .Begin([operation]);
+
+        _ = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
 
         return Assert.Single(lease.Complete());
     }
@@ -1500,29 +1948,39 @@ public sealed class MySqlRequiredColumnAddCatalogTests
     /// <param name="context">The offline provider context.</param>
     /// <param name="plan">The captured parameterized catalog plan.</param>
     /// <returns>The typed literals in captured placeholder order.</returns>
-    private static string[] RenderValues(DbContext context, MySqlSafeMigrationRuntimePlan plan)
+    private static string[] RenderValues(
+        DbContext context,
+        MySqlSafeMigrationRuntimePlan plan
+    )
     {
         var source = context.GetService<IRelationalTypeMappingSource>();
 
-        return plan.ParameterValues.Select(value => value.Value is null
-            ? "NULL"
-            : (value.StoreType is { } storeType
-                ? MySqlCatalogTypeMapping.Resolve(source, value.Value, storeType)
-                : source.FindMapping(value.Value.GetType())
+        return plan
+            .ParameterValues
+            .Select(value => value.Value is null
+                ? "NULL"
+                : (value.StoreType is { } storeType
+                    ? MySqlCatalogTypeMapping.Resolve(source, value.Value, storeType)
+                    : source.FindMapping(value.Value.GetType())
                     ?? throw new InvalidOperationException("The catalog value has no provider mapping."))
-            .GenerateSqlLiteral(value.Value)).ToArray();
+                .GenerateSqlLiteral(value.Value))
+            .ToArray();
     }
 
     /// <summary>Creates a server-free context with pinned CHECK-capable feature metadata.</summary>
     /// <param name="mariaDb">Whether MariaDB catalog semantics apply.</param>
     /// <returns>The offline SQL-generation context.</returns>
-    private static DbContext CreateContext(bool mariaDb)
+    private static DbContext CreateContext(
+        bool mariaDb
+    )
     {
         var version = mariaDb
             ? MySqlServerVersion.MariaDb(new Version(11, 8, 8))
             : MySqlServerVersion.MySql(new Version(8, 4, 11));
+
         var options = new DbContextOptionsBuilder<DbContext>()
-            .UseMySql("Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
+            .UseMySql(
+                "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
                 version)
             .UseMySqlSafeMigrations()
             .Options;

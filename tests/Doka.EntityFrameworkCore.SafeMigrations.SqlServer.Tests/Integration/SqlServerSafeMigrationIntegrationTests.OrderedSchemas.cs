@@ -27,18 +27,34 @@ public sealed class SqlServerSafeMigrationOrderedSchemasIntegrationTests : SqlSe
             builder.EnsureSchemaExists("new_application");
         }
 
-        builder.EnsureTable(new ExpectedTableDefinition("ordered_items",
-            [new ExpectedColumnDefinition("Id", typeof(int), false, "int")], schema: "new_application"),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "ordered_items",
+                [new ExpectedColumnDefinition("Id", typeof(int), false, "int")],
+                schema: "new_application"),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("ordered-schema-create"), cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("ordered-schema-create"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(expectedReady ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+        Assert.Equal(
+            expectedReady
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
             report.Status);
-        Assert.Equal(expectedReady ? SafeMigrationAction.Apply : SafeMigrationAction.RejectPrerequisiteMissing,
+
+        Assert.Equal(
+            expectedReady
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectPrerequisiteMissing,
             report.Assessments[^1].Action);
     }
 
@@ -48,18 +64,30 @@ public sealed class SqlServerSafeMigrationOrderedSchemasIntegrationTests : SqlSe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA removed_application;",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE SCHEMA removed_application;",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropSchemaIfExists("removed_application");
-        builder.EnsureTable(new ExpectedTableDefinition("ordered_items",
-            [new ExpectedColumnDefinition("Id", typeof(int), false, "int")], schema: "removed_application"),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "ordered_items",
+                [new ExpectedColumnDefinition("Id", typeof(int), false, "int")],
+                schema: "removed_application"),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("ordered-schema-drop"), cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("ordered-schema-drop"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -73,19 +101,28 @@ public sealed class SqlServerSafeMigrationOrderedSchemasIntegrationTests : SqlSe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.transfer_items (Id int NOT NULL);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE dbo.transfer_items (Id int NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureSchemaExists("transfer_application");
         builder.RenameTableIfExists("transfer_items", schema: "dbo", newSchema: "transfer_application");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("ordered-schema-transfer"), cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("ordered-schema-transfer"),
+                cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
-        var tableCount = await ScalarIntAsync(connectionString,
+        var tableCount = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'transfer_application.transfer_items');",
             cancellationToken: CancellationToken.None);
 
@@ -101,22 +138,35 @@ public sealed class SqlServerSafeMigrationOrderedSchemasIntegrationTests : SqlSe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA restored_application;",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE SCHEMA restored_application;",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropSchemaIfExists("restored_application");
         builder.EnsureSchemaExists("restored_application");
-        builder.EnsureTable(new ExpectedTableDefinition("restored_items",
-            [new ExpectedColumnDefinition("Id", typeof(int), false, "int")], schema: "restored_application"),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "restored_items",
+                [new ExpectedColumnDefinition("Id", typeof(int), false, "int")],
+                schema: "restored_application"),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("schema-drop-then-ensure"), cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("schema-drop-then-ensure"),
+                cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
-        var tableCount = await ScalarIntAsync(connectionString,
+        var tableCount = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'restored_application.restored_items');",
             cancellationToken: CancellationToken.None);
 
@@ -135,14 +185,24 @@ public sealed class SqlServerSafeMigrationOrderedSchemasIntegrationTests : SqlSe
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureSchemaExists("populated_application");
-        builder.EnsureTable(new ExpectedTableDefinition("items",
-            [new ExpectedColumnDefinition("Id", typeof(int), false, "int")], schema: "populated_application"),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "items",
+                [new ExpectedColumnDefinition("Id", typeof(int), false, "int")],
+                schema: "populated_application"),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.DropSchemaIfExists("populated_application");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("ensured-schema-is-not-empty"), cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("ensured-schema-is-not-empty"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -158,22 +218,33 @@ public sealed class SqlServerSafeMigrationOrderedSchemasIntegrationTests : SqlSe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA emptied_application;",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE SCHEMA emptied_application;",
             cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE emptied_application.items (Id int NOT NULL CONSTRAINT PK_emptied_items PRIMARY KEY);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropTableIfExists("items", "emptied_application");
         builder.DropSchemaIfExists("emptied_application");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("table-drop-then-empty-schema"), cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("table-drop-then-empty-schema"),
+                cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
-        var schemaCount = await ScalarIntAsync(connectionString,
+        var schemaCount = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.schemas WHERE name = N'emptied_application';",
             cancellationToken: CancellationToken.None);
 
@@ -194,26 +265,50 @@ public sealed class SqlServerSafeMigrationOrderedSchemasIntegrationTests : SqlSe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA source_application;",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE SCHEMA source_application;",
             cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA target_application;",
+
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE SCHEMA target_application;",
             cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE source_application.items (Id int NOT NULL);",
+
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE source_application.items (Id int NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("items", schema: "source_application", newSchema: "target_application");
-        builder.DropSchemaIfExists(dropSource ? "source_application" : "target_application");
+        builder.DropSchemaIfExists(
+            dropSource
+                ? "source_application"
+                : "target_application");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("transferred-schema-occupancy"), cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("transferred-schema-occupancy"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(expectedReady ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked,
+        Assert.Equal(
+            expectedReady
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
             report.Status);
+
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
-        Assert.Equal(expectedReady ? SafeMigrationAction.Apply : SafeMigrationAction.RejectDifferent,
+        Assert.Equal(
+            expectedReady
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectDifferent,
             report.Assessments[1].Action);
     }
 
@@ -221,30 +316,46 @@ public sealed class SqlServerSafeMigrationOrderedSchemasIntegrationTests : SqlSe
     [SqlServerLiveTheory]
     [InlineData("source_application")]
     [InlineData("target_application")]
-    public async Task RejectedSchemaTransferRetainsBothLiveSchemaOccupants(string schemaToDrop)
+    public async Task RejectedSchemaTransferRetainsBothLiveSchemaOccupants(
+        string schemaToDrop
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA source_application;",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE SCHEMA source_application;",
             cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA target_application;",
+
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE SCHEMA target_application;",
             cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE source_application.items (Id int NOT NULL); "
-            + "CREATE TABLE target_application.items (Id int NOT NULL);", cancellationToken: CancellationToken.None);
+            + "CREATE TABLE target_application.items (Id int NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.RenameTableIfExists("items", schema: "source_application", newSchema: "target_application");
         builder.DropSchemaIfExists(schemaToDrop);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("rejected-transfer-preserves-schema-occupancy"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("rejected-transfer-preserves-schema-occupancy"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.All(report.Assessments,
+        Assert.All(
+            report.Assessments,
             assessment => Assert.Equal(SafeMigrationAction.RejectDifferent, assessment.Action));
     }
 
@@ -253,14 +364,22 @@ public sealed class SqlServerSafeMigrationOrderedSchemasIntegrationTests : SqlSe
     [InlineData("CREATE VIEW guarded_application.remaining AS SELECT 1 AS Id;")]
     [InlineData("CREATE TYPE guarded_application.RemainingId FROM int;")]
     [InlineData("CREATE SEQUENCE guarded_application.remaining AS int;")]
-    public async Task LastTableDropCannotRemoveOtherSchemaObjects(string createOtherObject)
+    public async Task LastTableDropCannotRemoveOtherSchemaObjects(
+        string createOtherObject
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE SCHEMA guarded_application;",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE SCHEMA guarded_application;",
             cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE guarded_application.items (Id int NOT NULL);",
+
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE guarded_application.items (Id int NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await ExecuteSqlAsync(connectionString, createOtherObject, cancellationToken: CancellationToken.None);
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -268,8 +387,13 @@ public sealed class SqlServerSafeMigrationOrderedSchemasIntegrationTests : SqlSe
         builder.DropSchemaIfExists("guarded_application");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("schema-non-table-object-guard"), cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("schema-non-table-object-guard"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);

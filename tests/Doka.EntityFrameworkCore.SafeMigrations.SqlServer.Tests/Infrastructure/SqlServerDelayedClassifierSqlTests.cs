@@ -19,7 +19,9 @@ public sealed class SqlServerDelayedClassifierSqlTests
         // Arrange
         var plan = new SqlServerSafeMigrationRuntimePlan(
             "CASE WHEN EXISTS (SELECT 1 FROM dbo.missing_items) THEN N'matching' ELSE N'missing' END",
-            "0", SafeMigrationRepairCapability.None, "0")
+            "0",
+            SafeMigrationRepairCapability.None,
+            "0")
         {
             PrerequisiteExpression = "0",
             RequiresDelayedBinding = true,
@@ -30,12 +32,21 @@ public sealed class SqlServerDelayedClassifierSqlTests
 
         // Assert
         Assert.StartsWith("EXEC sys.sp_executesql N'", sql, StringComparison.Ordinal);
-        Assert.Contains("EXEC sys.sp_executesql N''SELECT @doka_ordinal,",
-            sql, StringComparison.Ordinal);
-        Assert.Contains("N'@doka_ordinal int', @doka_ordinal = " + ordinal.ToString(CultureInfo.InvariantCulture),
-            sql, StringComparison.Ordinal);
-        Assert.Contains("ELSE EXEC sys.sp_executesql N''SELECT @doka_ordinal, N''''prerequisite_missing''''",
-            sql, StringComparison.Ordinal);
+        Assert.Contains(
+            "EXEC sys.sp_executesql N''SELECT @doka_ordinal,",
+            sql,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "N'@doka_ordinal int', @doka_ordinal = " + ordinal.ToString(CultureInfo.InvariantCulture),
+            sql,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "ELSE EXEC sys.sp_executesql N''SELECT @doka_ordinal, N''''prerequisite_missing''''",
+            sql,
+            StringComparison.Ordinal);
+
         Assert.Contains("N''''matching''''", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("INSERT INTO", sql, StringComparison.Ordinal);
         Assert.InRange(Encoding.UTF8.GetByteCount(sql), 1, SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes);
@@ -50,7 +61,10 @@ public sealed class SqlServerDelayedClassifierSqlTests
         // Arrange
         var expression = "N'" + new string('\'', SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes / 2) + "'";
         var plan = new SqlServerSafeMigrationRuntimePlan(
-            expression, "0", SafeMigrationRepairCapability.None, "0")
+            expression,
+            "0",
+            SafeMigrationRepairCapability.None,
+            "0")
         {
             RequiresDelayedBinding = true,
         };

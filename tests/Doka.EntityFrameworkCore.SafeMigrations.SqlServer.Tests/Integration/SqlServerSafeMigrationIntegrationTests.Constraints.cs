@@ -22,6 +22,7 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
             "CREATE TABLE dbo.parents (Id int NOT NULL CONSTRAINT PK_parents PRIMARY KEY); "
             + "CREATE TABLE dbo.children (Id int NOT NULL, ParentId int NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddForeignKeyIfNotExists(
@@ -30,13 +31,17 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
             ["ParentId"],
             "parents",
             ["Id"]);
+
         builder.DropTableIfExists("parents");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-projected-fk"), cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-projected-fk"),
+                cancellationToken: CancellationToken.None);
 
         var parentCount = await ScalarIntAsync(
             connectionString,
@@ -61,23 +66,28 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
             "CREATE TABLE dbo.index_orders (Id int NOT NULL, Caption nvarchar(80) NULL); "
             + "CREATE INDEX IX_index_orders_Caption ON dbo.index_orders (Caption);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropIndexIfExists("IX_index_orders_Caption", "index_orders");
         builder.CreateIndexIfNotExists("IX_index_orders_Caption", "index_orders", ["Caption"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-drop-ensure-index"), cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-drop-ensure-index"),
+                cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
         var indexCount = await ScalarIntAsync(
             connectionString,
             "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.index_orders', N'U') "
-            + "AND name = N'IX_index_orders_Caption';", cancellationToken: CancellationToken.None);
+            + "AND name = N'IX_index_orders_Caption';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
@@ -101,6 +111,7 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
             + "FOREIGN KEY (ParentId) REFERENCES dbo.fk_parents (Id); "
             + "ALTER TABLE dbo.fk_children NOCHECK CONSTRAINT FK_fk_children_parents;",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddForeignKeyIfNotExists(
@@ -111,14 +122,19 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
             ["Id"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-disabled-fk"), cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-disabled-fk"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.NotEqual(SafeMigrationObservedState.Matching, Assert.Single(report.Assessments).ObservedState);
+        Assert.NotEqual(SafeMigrationObservedState.Matching,
+            Assert.Single(report.Assessments)
+                .ObservedState);
     }
 
     /// <summary>
@@ -133,20 +149,27 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
             connectionString,
             "CREATE TABLE dbo.filtered_orders (Id int NOT NULL, Caption nvarchar(80) NULL); "
             + "CREATE INDEX IX_filtered_orders_Caption ON dbo.filtered_orders (Caption) "
-            + "WHERE Caption IS NOT NULL;", cancellationToken: CancellationToken.None);
+            + "WHERE Caption IS NOT NULL;",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateIndexIfNotExists("IX_filtered_orders_Caption", "filtered_orders", ["Caption"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-filtered-index"), cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-filtered-index"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(report.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationObservedState.Different,
+            Assert.Single(report.Assessments)
+                .ObservedState);
     }
 
     /// <summary>
@@ -162,6 +185,7 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
             "CREATE TABLE dbo.add_parents (Id int NOT NULL); "
             + "CREATE TABLE dbo.add_children (Id int NOT NULL, ParentId int NOT NULL, Amount int NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddPrimaryKeyIfNotExists("PK_add_parents", "add_parents", ["Id"]);
@@ -185,7 +209,8 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
             + "+ (SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_add_children_Amount' "
             + "AND is_disabled = 0 AND is_not_trusted = 0) "
             + "+ (SELECT COUNT(*) FROM sys.foreign_keys WHERE name = N'FK_add_children_parents' "
-            + "AND is_disabled = 0 AND is_not_trusted = 0);", cancellationToken: CancellationToken.None);
+            + "AND is_disabled = 0 AND is_not_trusted = 0);",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(4, constraintCount);
@@ -207,7 +232,9 @@ public sealed class SqlServerSafeMigrationConstraintsIntegrationTests : SqlServe
             + "CREATE TABLE dbo.drop_fk_parent (Id int NOT NULL CONSTRAINT PK_drop_fk_parent PRIMARY KEY); "
             + "CREATE TABLE dbo.drop_fk_child (ParentId int NOT NULL); "
             + "ALTER TABLE dbo.drop_fk_child ADD CONSTRAINT FK_drop_fk_child_parent "
-            + "FOREIGN KEY (ParentId) REFERENCES dbo.drop_fk_parent (Id);", cancellationToken: CancellationToken.None);
+            + "FOREIGN KEY (ParentId) REFERENCES dbo.drop_fk_parent (Id);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropPrimaryKeyIfExists("PK_drop_pk", "drop_pk");

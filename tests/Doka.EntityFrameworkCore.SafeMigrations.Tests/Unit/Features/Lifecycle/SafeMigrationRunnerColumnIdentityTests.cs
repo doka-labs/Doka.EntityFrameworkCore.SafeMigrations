@@ -10,7 +10,9 @@ public sealed class SafeMigrationRunnerColumnIdentityTests
     [InlineData(SafeMigrationOperationKind.AlterColumn)]
     [InlineData(SafeMigrationOperationKind.DropColumn)]
     [InlineData(SafeMigrationOperationKind.RenameColumn)]
-    public void OrdinaryColumnCaptureSnapshotsImmutableIdentifiers(SafeMigrationOperationKind kind)
+    public void OrdinaryColumnCaptureSnapshotsImmutableIdentifiers(
+        SafeMigrationOperationKind kind
+    )
     {
         // Arrange
         var operation = CreateOperation(kind);
@@ -28,7 +30,11 @@ public sealed class SafeMigrationRunnerColumnIdentityTests
         Assert.Equal("Value", Assert.Single(identity.Columns));
         Assert.False(identity.Columns is IList<string>);
         Assert.False(identity.Columns is string[]);
-        Assert.Equal(kind == SafeMigrationOperationKind.RenameColumn ? "NewValue" : null, identity.NewObjectName);
+        Assert.Equal(
+            kind == SafeMigrationOperationKind.RenameColumn
+                ? "NewValue"
+                : null,
+            identity.NewObjectName);
     }
 
     /// <summary>Malformed required column names and owners remain unknown rather than becoming placeholders.</summary>
@@ -38,7 +44,9 @@ public sealed class SafeMigrationRunnerColumnIdentityTests
     [InlineData(SafeMigrationOperationKind.AlterColumn)]
     [InlineData(SafeMigrationOperationKind.DropColumn)]
     [InlineData(SafeMigrationOperationKind.RenameColumn)]
-    public void OrdinaryColumnCaptureRejectsMissingName(SafeMigrationOperationKind kind)
+    public void OrdinaryColumnCaptureRejectsMissingName(
+        SafeMigrationOperationKind kind
+    )
     {
         // Arrange
         var operation = CreateOperation(kind);
@@ -58,7 +66,9 @@ public sealed class SafeMigrationRunnerColumnIdentityTests
     [InlineData(SafeMigrationOperationKind.AlterColumn)]
     [InlineData(SafeMigrationOperationKind.DropColumn)]
     [InlineData(SafeMigrationOperationKind.RenameColumn)]
-    public void OrdinaryColumnCaptureRejectsMissingTable(SafeMigrationOperationKind kind)
+    public void OrdinaryColumnCaptureRejectsMissingTable(
+        SafeMigrationOperationKind kind
+    )
     {
         // Arrange
         var operation = CreateOperation(kind);
@@ -83,11 +93,22 @@ public sealed class SafeMigrationRunnerColumnIdentityTests
     [InlineData(SafeMigrationOperationKind.AlterColumn, false)]
     [InlineData(SafeMigrationOperationKind.DropColumn, false)]
     [InlineData(SafeMigrationOperationKind.RenameColumn, false)]
-    public void OrdinaryColumnCaptureRejectsWhitespaceIdentifiers(SafeMigrationOperationKind kind, bool malformedName)
+    public void OrdinaryColumnCaptureRejectsWhitespaceIdentifiers(
+        SafeMigrationOperationKind kind,
+        bool malformedName
+    )
     {
         // Arrange
         var operation = CreateOperation(kind);
-        ChangeIdentifiers(operation, malformedName ? " " : "Value", malformedName ? "Items" : " ", "authored");
+        ChangeIdentifiers(
+            operation,
+            malformedName
+                ? " "
+                : "Value",
+            malformedName
+                ? "Items"
+                : " ",
+            "authored");
 
         // Act
         var identity = SafeMigrationRunner.CaptureProviderIdentity(operation);
@@ -110,7 +131,9 @@ public sealed class SafeMigrationRunnerColumnIdentityTests
     [InlineData(SafeMigrationOperationKind.DropColumn, " ", false)]
     [InlineData(SafeMigrationOperationKind.RenameColumn, " ", false)]
     public void OrdinaryColumnCapturePreservesQualifierMeaning(
-        SafeMigrationOperationKind kind, string? schema, bool isKnown
+        SafeMigrationOperationKind kind,
+        string? schema,
+        bool isKnown
     )
     {
         // Arrange
@@ -126,26 +149,51 @@ public sealed class SafeMigrationRunnerColumnIdentityTests
         {
             Assert.Null(identity!.Schema);
         }
-
     }
 
     /// <summary>Provides synthetic ordinary EF operations without rows, expressions or provider annotations.</summary>
     /// <param name="kind">The requested ordinary column family.</param>
     /// <returns>A mutable EF operation for the isolated capture tests.</returns>
-    internal static MigrationOperation CreateOperation(SafeMigrationOperationKind kind) => kind switch
+    internal static MigrationOperation CreateOperation(
+        SafeMigrationOperationKind kind
+    ) => kind switch
     {
         SafeMigrationOperationKind.EnsureColumn => new AddColumnOperation
-            { Name = "Value", Table = "Items", Schema = "authored", ClrType = typeof(int) },
+        {
+            Name = "Value",
+            Table = "Items",
+            Schema = "authored",
+            ClrType = typeof(int),
+        },
         SafeMigrationOperationKind.AlterColumn => new AlterColumnOperation
-            { Name = "Value", Table = "Items", Schema = "authored", ClrType = typeof(int) },
+        {
+            Name = "Value",
+            Table = "Items",
+            Schema = "authored",
+            ClrType = typeof(int),
+        },
         SafeMigrationOperationKind.DropColumn => new DropColumnOperation
-            { Name = "Value", Table = "Items", Schema = "authored" },
+        {
+            Name = "Value",
+            Table = "Items",
+            Schema = "authored",
+        },
         SafeMigrationOperationKind.RenameColumn => new RenameColumnOperation
-            { Name = "Value", Table = "Items", Schema = "authored", NewName = "NewValue" },
+        {
+            Name = "Value",
+            Table = "Items",
+            Schema = "authored",
+            NewName = "NewValue",
+        },
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 
-    private static void ChangeIdentifiers(MigrationOperation operation, string? name, string? table, string? schema)
+    private static void ChangeIdentifiers(
+        MigrationOperation operation,
+        string? name,
+        string? table,
+        string? schema
+    )
     {
         switch (operation)
         {
@@ -173,6 +221,5 @@ public sealed class SafeMigrationRunnerColumnIdentityTests
             default:
                 throw new ArgumentException("A column operation is required.", nameof(operation));
         }
-
     }
 }

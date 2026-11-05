@@ -12,7 +12,9 @@ public sealed class MySqlRequiredColumnAddStagingContractTests
     [InlineData("opaque")]
     [InlineData("structured")]
     [InlineData("captured")]
-    public void NullableStagingCopiesEveryDefinitionFacet(string expressionKind)
+    public void NullableStagingCopiesEveryDefinitionFacet(
+        string expressionKind
+    )
     {
         // Arrange
         var annotated = new AddColumnOperation();
@@ -31,15 +33,23 @@ public sealed class MySqlRequiredColumnAddStagingContractTests
             scale: 2,
             collation: new SafeMigrationCollationIdentifier("utf8mb4_unicode_ci"),
             comment: "preserved staging comment",
-            defaultValue: expressionKind == "default" ? SafeMigrationDefaultValue.Literal("kept") : null,
-            computedColumnSql: expressionKind == "opaque" ? "`source_value`" : null,
-            isStored: expressionKind == "default" ? null : true,
+            defaultValue: expressionKind == "default"
+                ? SafeMigrationDefaultValue.Literal("kept")
+                : null,
+            computedColumnSql: expressionKind == "opaque"
+                ? "`source_value`"
+                : null,
+            isStored: expressionKind == "default"
+                ? null
+                : true,
             computedExpression: expressionKind is "structured" or "captured"
                 ? new SafeMigrationSqlIdentifierExpression(["source_value"])
                 : null)
         {
             ProviderAnnotations = SafeMigrationProviderAnnotation.Capture(annotated),
-            CapturedComputedSql = expressionKind == "captured" ? "`source_value`" : null,
+            CapturedComputedSql = expressionKind == "captured"
+                ? "`source_value`"
+                : null,
         };
 
         string[] expectedProperties =
@@ -60,8 +70,12 @@ public sealed class MySqlRequiredColumnAddStagingContractTests
         // WHY: Equality alone could miss a new optional property whose fixture
         // and forgotten copy both default to null. The property inventory makes
         // every future facet an explicit copy-and-fixture maintenance decision.
-        Assert.Equal(expectedProperties, properties.Select(static property => property.Name)
-            .Order(StringComparer.Ordinal));
+        Assert.Equal(
+            expectedProperties,
+            properties
+                .Select(static property => property.Name)
+                .Order(StringComparer.Ordinal));
+
         Assert.NotSame(definition, staging);
         Assert.False(definition.IsNullable);
         Assert.True(staging.IsNullable);
@@ -69,7 +83,8 @@ public sealed class MySqlRequiredColumnAddStagingContractTests
         Assert.Same(definition.DefaultValue, staging.DefaultValue);
         Assert.Same(definition.ComputedExpression, staging.ComputedExpression);
         Assert.Same(definition.CapturedComputedSql, staging.CapturedComputedSql);
-        Assert.All(properties.Where(static property => property.Name != nameof(ExpectedColumnDefinition.IsNullable)),
+        Assert.All(
+            properties.Where(static property => property.Name != nameof(ExpectedColumnDefinition.IsNullable)),
             property => Assert.Equal(property.GetValue(definition), property.GetValue(staging)));
     }
 
@@ -85,6 +100,8 @@ public sealed class MySqlRequiredColumnAddStagingContractTests
             MySqlSafeMigrationCatalogSqlBuilder.CreateRequiredColumnAddNullableTarget(definition!));
 
         // Assert
-        Assert.Equal("definition", Assert.IsType<ArgumentNullException>(exception).ParamName);
+        Assert.Equal("definition",
+            Assert.IsType<ArgumentNullException>(exception)
+                .ParamName);
     }
 }

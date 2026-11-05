@@ -10,9 +10,11 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE generated_drop(source integer, unrelated integer); "
-            + "INSERT INTO generated_drop VALUES(2,9);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO generated_drop VALUES(2,9);",
+            cancellationToken: CancellationToken.None);
 
         await using var writer = new NpgsqlConnection(connectionString);
         await writer.OpenAsync();
@@ -24,7 +26,9 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
         await add.ExecuteNonQueryAsync();
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync();
-        var dropPid = Assert.IsType<NpgsqlConnection>(context.Database.GetDbConnection()).ProcessID;
+        var dropPid = Assert.IsType<NpgsqlConnection>(context.Database.GetDbConnection())
+            .ProcessID;
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("source", "generated_drop");
         using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(2));
@@ -49,15 +53,25 @@ public sealed partial class PostgreSqlGeneratedDropIntegrationTests
         }
 
         // Assert
-        Assert.Equal("P1001", Assert.IsType<PostgresException>(failure).SqlState);
-        Assert.Equal("2:9:3", await ScalarStringAsync(connectionString,
-            "SELECT source::text || ':' || unrelated::text || ':' || derived::text FROM generated_drop;",
-            cancellationToken: deadline.Token));
+        Assert.Equal("P1001",
+            Assert.IsType<PostgresException>(failure)
+                .SqlState);
+
+        Assert.Equal(
+            "2:9:3",
+            await ScalarStringAsync(
+                connectionString,
+                "SELECT source::text || ':' || unrelated::text || ':' || derived::text FROM generated_drop;",
+                cancellationToken: deadline.Token));
     }
 
     /// <summary>Coordinates on native lock state instead of a CPU-dependent delay or runtime threshold.</summary>
     private static async Task WaitForDropOwnerLockAsync(
-        string connectionString, int processId, Task pending, CancellationToken cancellationToken)
+        string connectionString,
+        int processId,
+        Task pending,
+        CancellationToken cancellationToken
+    )
     {
         await using var observer = new NpgsqlConnection(connectionString);
         await observer.OpenAsync(cancellationToken);

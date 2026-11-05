@@ -1,3 +1,7 @@
+using System.Data;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 /// <summary>
@@ -6,10 +10,10 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSafeMigrationGuardedCommand
 {
     internal const string RecoveryFailureDataKey = "Doka:SqlServerIdentityInsertRecovery";
+    private readonly string? _acquisitionUnprovenMessage;
 
     private readonly string _cleanupSql;
     private readonly string? _scopeInUseMessage;
-    private readonly string? _acquisitionUnprovenMessage;
 
     /// <summary>Creates a seed-command recovery boundary using the existing scoped quarantine.</summary>
     /// <param name="command">The original provider command to delegate unchanged.</param>
@@ -36,12 +40,16 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
         {
             // WHY: A command can be retried. Capture bounded identifier-only
             // messages once, without changing its native cleanup or delegate.
-            _scopeInUseMessage = SafeMigrationDiagnosticMessages.FormatRuntime(operation,
-                "doka_sm_identity_scope_in_use", operationOrdinal);
-            _acquisitionUnprovenMessage = SafeMigrationDiagnosticMessages.FormatRuntime(operation,
-                "doka_sm_identity_acquisition_unproven", operationOrdinal);
-        }
+            _scopeInUseMessage = SafeMigrationDiagnosticMessages.FormatRuntime(
+                operation,
+                "doka_sm_identity_scope_in_use",
+                operationOrdinal);
 
+            _acquisitionUnprovenMessage = SafeMigrationDiagnosticMessages.FormatRuntime(
+                operation,
+                "doka_sm_identity_acquisition_unproven",
+                operationOrdinal);
+        }
     }
 
     /// <inheritdoc />
@@ -53,7 +61,10 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
         // WHY: A rejected retry did not execute SQL and must not attempt
         // recovery against the already-quarantined session.
         ThrowIfConnectionQuarantined();
-        var token = Guid.NewGuid().ToString("N");
+        var token = Guid
+            .NewGuid()
+            .ToString("N");
+
         var scopeOpened = false;
         var scopeIssued = false;
         var providerDispatched = false;
@@ -66,8 +77,11 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
 
             using (var command = connection.DbConnection.CreateCommand())
             {
-                ConfigureScopeCommand(connection, command,
+                ConfigureScopeCommand(
+                    connection,
+                    command,
                     SqlServerSafeMigrationIdentityInsertScope.BuildBootstrapSql(token, _scopeInUseMessage));
+
                 scopeIssued = true;
                 command.ExecuteNonQuery();
             }
@@ -111,7 +125,10 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
     {
         ThrowIfConnectionQuarantined();
         cancellationToken.ThrowIfCancellationRequested();
-        var token = Guid.NewGuid().ToString("N");
+        var token = Guid
+            .NewGuid()
+            .ToString("N");
+
         var scopeOpened = false;
         var scopeIssued = false;
         var providerDispatched = false;
@@ -129,8 +146,11 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
             // no owned marker or ON exists and recovery must not touch callers.
             await using (var command = connection.DbConnection.CreateCommand())
             {
-                ConfigureScopeCommand(connection, command,
+                ConfigureScopeCommand(
+                    connection,
+                    command,
                     SqlServerSafeMigrationIdentityInsertScope.BuildBootstrapSql(token, _scopeInUseMessage));
+
                 scopeIssued = true;
 
                 await command.ExecuteNonQueryAsync(cancellationToken);
@@ -179,7 +199,7 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
 
         try
         {
-            if (connection.DbConnection.State != System.Data.ConnectionState.Open)
+            if (connection.DbConnection.State != ConnectionState.Open)
             {
                 return;
             }
@@ -249,7 +269,7 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
 
         try
         {
-            if (connection.DbConnection.State != System.Data.ConnectionState.Open)
+            if (connection.DbConnection.State != ConnectionState.Open)
             {
                 return;
             }
@@ -260,7 +280,9 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
             // WHY: SQL Server TRY/CATCH does not catch client attentions.
             // Recovery must outlive the canceled operation's token, but it
             // remains bounded independently of the caller's canceled token.
-            await command.ExecuteNonQueryAsync(cleanupTimeout.Token).WaitAsync(cleanupTimeout.Token);
+            await command
+                .ExecuteNonQueryAsync(cleanupTimeout.Token)
+                .WaitAsync(cleanupTimeout.Token);
         }
         catch
         {
@@ -273,7 +295,10 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
             {
                 try
                 {
-                    await command.DisposeAsync().AsTask().WaitAsync(cleanupTimeout.Token);
+                    await command
+                        .DisposeAsync()
+                        .AsTask()
+                        .WaitAsync(cleanupTimeout.Token);
                 }
                 catch
                 {
@@ -292,7 +317,11 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
         {
             DiscardPooledSession(connection.DbConnection);
             using var closeTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-            await connection.DbConnection.CloseAsync().WaitAsync(closeTimeout.Token);
+            await connection
+                .DbConnection
+                .CloseAsync()
+                .WaitAsync(closeTimeout.Token);
+
             originalException.Data[RecoveryFailureDataKey] = "session_closed";
         }
         catch
@@ -300,7 +329,12 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
             try
             {
                 using var disposeTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-                await connection.DbConnection.DisposeAsync().AsTask().WaitAsync(disposeTimeout.Token);
+                await connection
+                    .DbConnection
+                    .DisposeAsync()
+                    .AsTask()
+                    .WaitAsync(disposeTimeout.Token);
+
                 originalException.Data[RecoveryFailureDataKey] = "session_disposed";
             }
             catch
@@ -321,18 +355,23 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
     }
 
     /// <summary>Recognizes the bootstrap's exact existing-key rejection before any owned marker is written.</summary>
-    private static bool IsRejectedBootstrap(Exception failure, bool providerDispatched)
-        => !providerDispatched && failure is Microsoft.Data.SqlClient.SqlException { Number: 51007 };
+    private static bool IsRejectedBootstrap(
+        Exception failure,
+        bool providerDispatched
+    )
+        => !providerDispatched && failure is SqlException { Number: 51007 };
 
     /// <summary>Prevents an uncertain active SqlClient lease from returning to its reusable connection pool.</summary>
-    private static void DiscardPooledSession(DbConnection connection)
+    private static void DiscardPooledSession(
+        DbConnection connection
+    )
     {
-        if (connection is Microsoft.Data.SqlClient.SqlConnection sqlConnection)
+        if (connection is SqlConnection sqlConnection)
         {
             // WHY: Close on a pooled SqlConnection does not physically dispose
             // the session. ClearPool marks this active lease for discard when
             // it closes; an uncertain acquired marker cannot await pool reset.
-            Microsoft.Data.SqlClient.SqlConnection.ClearPool(sqlConnection);
+            SqlConnection.ClearPool(sqlConnection);
         }
     }
 
@@ -346,8 +385,13 @@ internal sealed class SqlServerSafeMigrationIdentityInsertCommand : SqlServerSaf
         // WHY: A failed bootstrap cannot have executed its own ON. Its recovery
         // may remove only an exact ready marker; even observation failure must
         // quarantine supported reuse without physically closing caller state.
-        ConfigureScopeCommand(connection, command,
-            SqlServerSafeMigrationIdentityInsertScope.BuildRecoverySql(token, _cleanupSql, providerDispatched,
+        ConfigureScopeCommand(
+            connection,
+            command,
+            SqlServerSafeMigrationIdentityInsertScope.BuildRecoverySql(
+                token,
+                _cleanupSql,
+                providerDispatched,
                 _acquisitionUnprovenMessage));
     }
 
@@ -408,7 +452,7 @@ internal class SqlServerSafeMigrationGuardedCommand : MigrationCommand
     public override bool TransactionSuppressed => OriginalCommand.TransactionSuppressed;
 
     /// <inheritdoc />
-    public override Microsoft.EntityFrameworkCore.Diagnostics.IRelationalCommandDiagnosticsLogger CommandLogger
+    public override IRelationalCommandDiagnosticsLogger CommandLogger
         => OriginalCommand.CommandLogger;
 
     /// <inheritdoc />
@@ -448,6 +492,9 @@ internal class SqlServerSafeMigrationGuardedCommand : MigrationCommand
         // WHY: Only the delegated command owns SQL. The empty base command
         // avoids copying a potentially large payload merely to expose metadata.
 
-        return dependencies.CommandBuilderFactory.Create().Build();
+        return dependencies
+            .CommandBuilderFactory
+            .Create()
+            .Build();
     }
 }

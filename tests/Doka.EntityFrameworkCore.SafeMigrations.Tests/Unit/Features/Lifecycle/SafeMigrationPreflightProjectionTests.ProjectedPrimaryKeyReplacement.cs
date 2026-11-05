@@ -48,10 +48,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.Equal(SafeMigrationRepairCapability.None, projected.RepairCapability);
         Assert.False(projected.PostconditionSatisfied);
         Assert.False(projected.IsOpaqueProjectionUnknown);
-        Assert.True(((ISafeMigrationProjectedTableSource)projection).TryGetProjectedTableState(
-            "items",
-            schema: null,
-            out var table));
+        Assert.True(
+            ((ISafeMigrationProjectedTableSource)projection).TryGetProjectedTableState(
+                "items",
+                schema: null,
+                out var table));
 
         Assert.True(table.PrimaryKeyWasDropped);
         Assert.False(table.IsNewlyCreated);
@@ -113,15 +114,18 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void OpaqueOperationAfterPrimaryKeyDropCannotConsultReplacementProof(bool rawSql)
+    public void OpaqueOperationAfterPrimaryKeyDropCannotConsultReplacementProof(
+        bool rawSql
+    )
     {
         // Arrange
         var validator = new PrimaryKeyReplacementProbe(Live(SafeMigrationObservedState.Missing));
         var projection = ProjectionAfterStandalonePrimaryKeyDrop(validator);
 
-        projection.ObserveProviderPostcondition(rawSql
-            ? new SqlOperation { Sql = "SELECT 1;", }
-            : new UnknownPrimaryKeyReplacementOperation());
+        projection.ObserveProviderPostcondition(
+            rawSql
+                ? new SqlOperation { Sql = "SELECT 1;" }
+                : new UnknownPrimaryKeyReplacementOperation());
 
         // Act
         var analysis = projection.Project(
@@ -138,7 +142,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void InvariantPrimaryKeyRejectionPrecedesReplacementProof(bool opaqueSql)
+    public void InvariantPrimaryKeyRejectionPrecedesReplacementProof(
+        bool opaqueSql
+    )
     {
         // Arrange
         var validator = new PrimaryKeyReplacementProbe(Live(SafeMigrationObservedState.Missing));
@@ -154,7 +160,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         if (opaqueSql)
         {
-            projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1;", });
+            projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1;" });
         }
 
         // Act
@@ -174,12 +180,13 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var projection = ProjectionAfterStandalonePrimaryKeyDrop(validator);
         var operation = PrimaryKeyReplacementOperation();
 
-        projection.ObserveProviderPostcondition(new InsertDataOperation
-        {
-            Table = "items",
-            Columns = ["id", "external_id"],
-            Values = new object[,] { { 1, 2 } },
-        });
+        projection.ObserveProviderPostcondition(
+            new InsertDataOperation
+            {
+                Table = "items",
+                Columns = ["id", "external_id"],
+                Values = new object[,] { { 1, 2 } },
+            });
 
         // Act
         var analysis = projection.Project(operation, Live(SafeMigrationObservedState.Different));
@@ -195,10 +202,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
         Assert.Equal("projected_data_state_unknown", analysis.Code);
         Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, decision.Action);
-        Assert.True(((ISafeMigrationProjectedTableSource)projection).TryGetProjectedTableState(
-            "items",
-            schema: null,
-            out var table));
+        Assert.True(
+            ((ISafeMigrationProjectedTableSource)projection).TryGetProjectedTableState(
+                "items",
+                schema: null,
+                out var table));
 
         Assert.True(table.PrimaryKeyWasDropped);
         Assert.True(table.HasDataMutation);
@@ -224,16 +232,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             new ExpectedPrimaryKeyDefinition("pk_items_replacement", "items", ["external_id"])),
         SafeMigrationPolicy.ThrowIfDifferent);
 
-    private sealed class UnknownPrimaryKeyReplacementOperation : MigrationOperation
-    {
-    }
+    private sealed class UnknownPrimaryKeyReplacementOperation : MigrationOperation { }
 
     private sealed class PrimaryKeyReplacementProbe(
         SafeMigrationProviderAnalysis replacement
     ) : ISafeMigrationProjectedKeyAnalyzer
     {
-        public bool SharesUniqueConstraintAndIndexIdentity => false;
-
         public int ValidationCount { get; private set; }
 
         public EnsurePrimaryKeyIntent? LastIntent { get; private set; }
@@ -243,6 +247,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         public SafeMigrationProviderAnalysis? LastLiveAnalysis { get; private set; }
 
         public SafeMigrationProviderAnalysis? LastProjectedAnalysis { get; private set; }
+        public bool SharesUniqueConstraintAndIndexIdentity => false;
 
         public SafeMigrationProviderAnalysis ValidateProjectedPrimaryKey(
             EnsurePrimaryKeyIntent intent,

@@ -20,30 +20,43 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData("layout", true)]
     [InlineData("recreated", false)]
     [InlineData("recreated", true)]
-    public void FirstColumnRepairCannotReviveInvalidatedIntrinsicSources(string boundary, bool ensure)
+    public void FirstColumnRepairCannotReviveInvalidatedIntrinsicSources(
+        string boundary,
+        bool ensure
+    )
     {
         // Arrange
         var provider = new KeyColumnSourceProbe();
         var projection = new SafeMigrationPreflightProjection(
-            projectedColumnAnalyzer: boundary == "opt-out" ? null : provider);
+            projectedColumnAnalyzer: boundary == "opt-out"
+                ? null
+                : provider);
 
         var source = KeyColumnSource("reference");
         KeyColumnObserveSources(projection, source, KeyColumnSource("question"));
         var operation = KeyColumnOperation(source, KeyColumnSource("reference", nullable: true), ensure);
         var captured = provider.Capture(operation.Intent, source);
-        var live = boundary == "unbound-proof" ? KeyColumnLiveProof() : captured;
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, live.ObservedState,
-            operation.Policy, live.RepairCapability);
+        var live = boundary == "unbound-proof"
+            ? KeyColumnLiveProof()
+            : captured;
+
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            live.ObservedState,
+            operation.Policy,
+            live.RepairCapability);
 
         switch (boundary)
         {
             case "data":
-                projection.ObserveProviderPostcondition(new InsertDataOperation
-                {
-                    Table = "other",
-                    Columns = ["value"],
-                    Values = new object?[,] { { 1 } },
-                });
+                projection.ObserveProviderPostcondition(
+                    new InsertDataOperation
+                    {
+                        Table = "other",
+                        Columns = ["value"],
+                        Values = new object?[,] { { 1 } },
+                    });
+
                 break;
             case "opaque":
                 projection.ObserveProviderPostcondition(new SqlOperation { Sql = "SELECT 1" });
@@ -53,8 +66,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 break;
             case "recreated":
                 ObserveAccepted(projection, new DropTableIntent("items"), SafeMigrationObservedState.Matching);
-                Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("items", [source]),
-                    SafeMigrationTableMode.StrictDefinition));
+                Apply(
+                    projection,
+                    new EnsureTableIntent(
+                        new ExpectedTableDefinition("items", [source]),
+                        SafeMigrationTableMode.StrictDefinition));
+
                 break;
         }
 

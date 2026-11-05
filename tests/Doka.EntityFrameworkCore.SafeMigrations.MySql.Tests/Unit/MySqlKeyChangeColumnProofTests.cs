@@ -30,7 +30,10 @@ public sealed class MySqlKeyChangeColumnProofTests
     [InlineData("foreign-create", false)]
     [InlineData("index-drop", false)]
     [InlineData("column-drop", true)]
-    public void IntrinsicColumnSourceCertificateAcceptsOnlyQualifiedKeyChanges(string change, bool expected)
+    public void IntrinsicColumnSourceCertificateAcceptsOnlyQualifiedKeyChanges(
+        string change,
+        bool expected
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -70,13 +73,23 @@ public sealed class MySqlKeyChangeColumnProofTests
     [InlineData("missing", false)]
     [InlineData("unknown", false)]
     [InlineData("unsupported-target", false)]
-    public void EnsureKeyChangeCertificateRequiresCompleteNativeNullabilityEvidence(string evidence, bool expected)
+    public void EnsureKeyChangeCertificateRequiresCompleteNativeNullabilityEvidence(
+        string evidence,
+        bool expected
+    )
     {
         // Arrange
         using var context = CreateContext();
         var provider = GetColumnAnalyzer(context);
-        var intent = new EnsureColumnIntent("items", Column("reference_id", nullable: true,
-            drift: evidence.Contains("unsupported-target", StringComparison.Ordinal) ? "annotation" : "none"));
+        var intent = new EnsureColumnIntent(
+            "items",
+            Column(
+                "reference_id",
+                nullable: true,
+                drift: evidence.Contains("unsupported-target", StringComparison.Ordinal)
+                    ? "annotation"
+                    : "none"));
+
         var state = evidence switch
         {
             "matching" or "matching-unsatisfied" or "matching-unsupported-target"
@@ -93,17 +106,26 @@ public sealed class MySqlKeyChangeColumnProofTests
             "empty" => Array.Empty<SafeMigrationFacetDifference>(),
             "multiple-nullability" => [Difference("column_nullability"), Difference("column_nullability")],
             "mixed-type" => [Difference("column_nullability"), Difference("column_type")],
-            "column_type" or "column_default" or "column_collation" or "column_comment" or "column_annotation"
-                or "column_nullabilty" or "column_nullability_other"
+            "column_type"
+                or "column_default"
+                or "column_collation"
+                or "column_comment"
+                or "column_annotation"
+                or "column_nullabilty"
+                or "column_nullability_other"
                 => [Difference(evidence)],
-            _ => new[] { Difference("column_nullability"), },
+            _ => new[] { Difference("column_nullability") },
         };
 
-        var live = new SafeMigrationProviderAnalysis(state,
+        var live = new SafeMigrationProviderAnalysis(
+            state,
             state == SafeMigrationObservedState.Different && evidence != "unsafe"
-                ? SafeMigrationRepairCapability.Safe : SafeMigrationRepairCapability.None,
-            evidence is "matching" or "matching-unsupported-target", "captured_ensure_certificate",
-            SafeMigrationOperationalImpact.TableRewritePossible, differences)
+                ? SafeMigrationRepairCapability.Safe
+                : SafeMigrationRepairCapability.None,
+            evidence is "matching" or "matching-unsupported-target",
+            "captured_ensure_certificate",
+            SafeMigrationOperationalImpact.TableRewritePossible,
+            differences)
         {
             RepairMutatesData = evidence == "mutates-data",
             RequiresLiveDataProof = evidence == "nullability-row-proof",
@@ -136,26 +158,46 @@ public sealed class MySqlKeyChangeColumnProofTests
     [InlineData("mutates-data", false)]
     [InlineData("unsafe", false)]
     [InlineData("blocked", false)]
-    public void ImplicitNullDefaultCertificateRequiresExactNativePair(string boundary, bool expected)
+    public void ImplicitNullDefaultCertificateRequiresExactNativePair(
+        string boundary,
+        bool expected
+    )
     {
         // Arrange
         using var context = CreateContext();
         var provider = GetColumnAnalyzer(context);
-        var intent = new EnsureColumnIntent("items", Column("reference_id", boundary == "nullable-target",
-            boundary == "explicit-default" ? "default" : "none"));
+        var intent = new EnsureColumnIntent(
+            "items",
+            Column(
+                "reference_id",
+                boundary == "nullable-target",
+                boundary == "explicit-default"
+                    ? "default"
+                    : "none"));
 
         var differences = new List<SafeMigrationFacetDifference>();
         if (boundary != "missing-nullability")
         {
-            differences.Add(new SafeMigrationFacetDifference("column_nullability", "not_nullable",
-                boundary == "wrong-nullability" ? "not_nullable" : "nullable"));
+            differences.Add(
+                new SafeMigrationFacetDifference(
+                    "column_nullability",
+                    "not_nullable",
+                    boundary == "wrong-nullability"
+                        ? "not_nullable"
+                        : "nullable"));
         }
 
         if (boundary != "missing-kind")
         {
-            differences.Add(new SafeMigrationFacetDifference("column_default_kind",
-                boundary == "wrong-expected-kind" ? "present" : "none",
-                boundary == "other-default" ? "present" : "null"));
+            differences.Add(
+                new SafeMigrationFacetDifference(
+                    "column_default_kind",
+                    boundary == "wrong-expected-kind"
+                        ? "present"
+                        : "none",
+                    boundary == "other-default"
+                        ? "present"
+                        : "null"));
         }
 
         if (boundary != "without-digest")
@@ -180,9 +222,15 @@ public sealed class MySqlKeyChangeColumnProofTests
         }
 
         var live = new SafeMigrationProviderAnalysis(
-            boundary == "blocked" ? SafeMigrationObservedState.DataBlocked : SafeMigrationObservedState.Different,
-            boundary == "unsafe" ? SafeMigrationRepairCapability.None : SafeMigrationRepairCapability.Safe,
-            false, "captured_implicit_null_default", SafeMigrationOperationalImpact.TableRewritePossible,
+            boundary == "blocked"
+                ? SafeMigrationObservedState.DataBlocked
+                : SafeMigrationObservedState.Different,
+            boundary == "unsafe"
+                ? SafeMigrationRepairCapability.None
+                : SafeMigrationRepairCapability.Safe,
+            false,
+            "captured_implicit_null_default",
+            SafeMigrationOperationalImpact.TableRewritePossible,
             differences)
         {
             RepairMutatesData = boundary == "mutates-data",
@@ -217,7 +265,10 @@ public sealed class MySqlKeyChangeColumnProofTests
     [InlineData("unsupported", false)]
     [InlineData("data-blocked", false)]
     [InlineData("unsafe", false)]
-    public void AlterKeyChangeCertificateRetainsExactNullabilityAndDataBoundaries(string transition, bool expected)
+    public void AlterKeyChangeCertificateRetainsExactNullabilityAndDataBoundaries(
+        string transition,
+        bool expected
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -226,11 +277,25 @@ public sealed class MySqlKeyChangeColumnProofTests
         var source = transition == "widening"
             ? new ExpectedColumnDefinition("reference_id", typeof(string), false, "varchar(36)", maxLength: 36)
             : Column("reference_id", nullableSource);
+
         var target = transition == "widening"
             ? new ExpectedColumnDefinition("reference_id", typeof(string), true, "varchar(72)", maxLength: 72)
-            : Column("reference_id", transition == "same-nullability" ? nullableSource : !nullableSource,
-                drift: transition == "guid-backfill" ? "default" : transition);
-        var intent = new AlterColumnIntent("items", target, transition == "source-missing" ? null : source);
+            : Column(
+                "reference_id",
+                transition == "same-nullability"
+                    ? nullableSource
+                    : !nullableSource,
+                drift: transition == "guid-backfill"
+                    ? "default"
+                    : transition);
+
+        var intent = new AlterColumnIntent(
+            "items",
+            target,
+            transition == "source-missing"
+                ? null
+                : source);
+
         var state = transition switch
         {
             "matching" or "matching-unsatisfied" => SafeMigrationObservedState.Matching,
@@ -239,10 +304,13 @@ public sealed class MySqlKeyChangeColumnProofTests
             _ => SafeMigrationObservedState.Different,
         };
 
-        var live = new SafeMigrationProviderAnalysis(state,
+        var live = new SafeMigrationProviderAnalysis(
+            state,
             state == SafeMigrationObservedState.Different && transition != "unsafe"
-                ? SafeMigrationRepairCapability.Safe : SafeMigrationRepairCapability.None,
-            transition == "matching", "captured_alter_certificate")
+                ? SafeMigrationRepairCapability.Safe
+                : SafeMigrationRepairCapability.None,
+            transition == "matching",
+            "captured_alter_certificate")
         {
             RepairMutatesData = transition is "mutates-data" or "guid-backfill",
             RequiresLiveDataProof = nullableSource,
@@ -263,23 +331,36 @@ public sealed class MySqlKeyChangeColumnProofTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void QualifiedKeyHistoryPreservesMatchingAndRepairSiblingCertificates(bool ensure, bool matchingSibling)
+    public void QualifiedKeyHistoryPreservesMatchingAndRepairSiblingCertificates(
+        bool ensure,
+        bool matchingSibling
+    )
     {
         // Arrange
         using var context = CreateContext();
         var projection = CreateProjection(context);
-        Accept(projection, new EnsureColumnIntent("items", Column("left_id", nullable: false)),
+        Accept(
+            projection,
+            new EnsureColumnIntent("items", Column("left_id", nullable: false)),
             ColumnProof(matching: true));
-        Accept(projection, new EnsureColumnIntent("items", Column("right_id", nullable: matchingSibling)),
+
+        Accept(
+            projection,
+            new EnsureColumnIntent("items", Column("right_id", nullable: matchingSibling)),
             ColumnProof(matching: true));
+
         AcceptKeyChange(projection, "implicit-index");
         AcceptKeyChange(projection, "primary-drop");
         AcceptKeyChange(projection, "foreign-drop");
         var first = NullabilityOperation("left_id", ensure);
         var firstLive = ColumnProof();
         var firstResult = projection.Project(first, firstLive);
-        var firstDecision = SafeMigrationDecisionPlanner.Plan(first.Intent.Kind, firstResult.ObservedState,
-            first.Policy, firstResult.RepairCapability);
+        var firstDecision = SafeMigrationDecisionPlanner.Plan(
+            first.Intent.Kind,
+            firstResult.ObservedState,
+            first.Policy,
+            firstResult.RepairCapability);
+
         var sibling = NullabilityOperation("right_id", ensure);
         var siblingLive = ColumnProof(matchingSibling);
 
@@ -289,10 +370,18 @@ public sealed class MySqlKeyChangeColumnProofTests
 
         // Assert
         Assert.Equal(SafeMigrationAction.Repair, firstDecision.Action);
-        Assert.Equal(matchingSibling ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
+        Assert.Equal(
+            matchingSibling
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Different,
             result.ObservedState);
-        Assert.Equal(matchingSibling ? SafeMigrationRepairCapability.None : SafeMigrationRepairCapability.Safe,
+
+        Assert.Equal(
+            matchingSibling
+                ? SafeMigrationRepairCapability.None
+                : SafeMigrationRepairCapability.Safe,
             result.RepairCapability);
+
         Assert.Equal(matchingSibling, result.PostconditionSatisfied);
         Assert.Equal(0L, projection.DataMutationVersion);
         Assert.Equal(ensure && !matchingSibling, result.RepairPreservesIntrinsicColumnLayout);
@@ -308,13 +397,18 @@ public sealed class MySqlKeyChangeColumnProofTests
     [InlineData("collation")]
     [InlineData("comment")]
     [InlineData("annotation")]
-    public void KeyHistoryDoesNotReplaceAcceptedSourceFacetsWithAuthoredOldMetadata(string drift)
+    public void KeyHistoryDoesNotReplaceAcceptedSourceFacetsWithAuthoredOldMetadata(
+        string drift
+    )
     {
         // Arrange
         using var context = CreateContext();
         var projection = CreateProjection(context);
-        Accept(projection, new EnsureColumnIntent("items", Column("reference_id", nullable: false, drift: drift)),
+        Accept(
+            projection,
+            new EnsureColumnIntent("items", Column("reference_id", nullable: false, drift: drift)),
             ColumnProof(matching: true));
+
         AcceptKeyChange(projection, "implicit-index");
         AcceptKeyChange(projection, "primary-drop");
         var operation = NullabilityOperation("reference_id", ensure: false);
@@ -347,7 +441,10 @@ public sealed class MySqlKeyChangeColumnProofTests
     [InlineData("index-drop", "primary-drop")]
     [InlineData("widening", "foreign-drop")]
     [InlineData("widening", "primary-drop")]
-    public void LaterKeyRemovalCannotReviveInvalidatedColumnSources(string mutation, string removal)
+    public void LaterKeyRemovalCannotReviveInvalidatedColumnSources(
+        string mutation,
+        string removal
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -370,13 +467,17 @@ public sealed class MySqlKeyChangeColumnProofTests
     /// <summary>Reads the real registered provider callback without opening a database connection.</summary>
     /// <param name="context">The offline provider service scope.</param>
     /// <returns>The native projected-column analyzer.</returns>
-    private static ISafeMigrationProjectedColumnAnalyzer GetColumnAnalyzer(DbContext context)
+    private static ISafeMigrationProjectedColumnAnalyzer GetColumnAnalyzer(
+        DbContext context
+    )
         => (ISafeMigrationProjectedColumnAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
 
     /// <summary>Builds Core projection with the real provider's physical identity and column callbacks.</summary>
     /// <param name="context">The offline provider service scope.</param>
     /// <returns>The invocation-local ordered projection.</returns>
-    private static SafeMigrationPreflightProjection CreateProjection(DbContext context)
+    private static SafeMigrationPreflightProjection CreateProjection(
+        DbContext context
+    )
     {
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
 
@@ -389,15 +490,22 @@ public sealed class MySqlKeyChangeColumnProofTests
     /// <summary>Creates the independently classified removal, index or dependency contract.</summary>
     /// <param name="change">The exact contract variant exercised by the certificate boundary.</param>
     /// <returns>The immutable operation intent, with no fabricated table convergence.</returns>
-    private static SafeMigrationIntent KeyChange(string change)
+    private static SafeMigrationIntent KeyChange(
+        string change
+    )
         => change switch
         {
             "primary-drop" => new DropPrimaryKeyIntent("pk_items", "items"),
             "foreign-drop" => new DropForeignKeyIntent("fk_items_parent", "items"),
             "primary-create" => new EnsurePrimaryKeyIntent(
                 new ExpectedPrimaryKeyDefinition("pk_items", "items", ["reference_id"])),
-            "foreign-create" => new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition(
-                "fk_items_parent", "items", ["reference_id"], "parents", ["id"])),
+            "foreign-create" => new EnsureForeignKeyIntent(
+                new ExpectedForeignKeyDefinition(
+                    "fk_items_parent",
+                    "items",
+                    ["reference_id"],
+                    "parents",
+                    ["id"])),
             "index-drop" => new DropIndexIntent("ix_reference", "items"),
             "column-drop" => new DropColumnIntent("other_id", "items"),
             _ => new EnsureIndexIntent(Index(change)),
@@ -406,20 +514,25 @@ public sealed class MySqlKeyChangeColumnProofTests
     /// <summary>Builds index contracts whose independently controlled facets narrow provider certification.</summary>
     /// <param name="shape">The ordinary or disallowed native index shape.</param>
     /// <returns>The immutable index definition.</returns>
-    private static ExpectedIndexDefinition Index(string shape)
+    private static ExpectedIndexDefinition Index(
+        string shape
+    )
     {
         var key = shape switch
         {
             "functional-index" => new ExpectedIndexKeyDefinition(expression: "LOWER(`reference_id`)"),
             "structured-functional-index" => new ExpectedIndexKeyDefinition(
                 structuredExpression: SafeMigrationSql.Function("LOWER", SafeMigrationSql.Identifier("reference_id"))),
-            "descending-index" => new ExpectedIndexKeyDefinition("reference_id",
+            "descending-index" => new ExpectedIndexKeyDefinition(
+                "reference_id",
                 sortOrder: SafeMigrationIndexSortOrder.Descending),
-            "collated-index" => new ExpectedIndexKeyDefinition("reference_id",
+            "collated-index" => new ExpectedIndexKeyDefinition(
+                "reference_id",
                 collation: new SafeMigrationCollationIdentifier("ascii_bin")),
             "operator-index" => new ExpectedIndexKeyDefinition("reference_id", operatorClass: "text_ops"),
             "prefix-index" => new ExpectedIndexKeyDefinition("reference_id", prefixLength: 12),
-            "null-order-index" => new ExpectedIndexKeyDefinition("reference_id",
+            "null-order-index" => new ExpectedIndexKeyDefinition(
+                "reference_id",
                 nullOrder: SafeMigrationIndexNullOrder.First),
             _ => new ExpectedIndexKeyDefinition("reference_id"),
         };
@@ -434,10 +547,21 @@ public sealed class MySqlKeyChangeColumnProofTests
             _ => null,
         };
 
-        return new ExpectedIndexDefinition("ix_reference", "items", [key], unique: shape == "unique-index",
-            filter: shape == "filtered-index" ? "`reference_id` IS NOT NULL" : null,
-            includedColumns: shape == "included-index" ? ["other_id"] : null, method: method,
-            structuredFilter: shape == "structured-filter-index" ? SafeMigrationSql.Literal(true) : null);
+        return new ExpectedIndexDefinition(
+            "ix_reference",
+            "items",
+            [key],
+            unique: shape == "unique-index",
+            filter: shape == "filtered-index"
+                ? "`reference_id` IS NOT NULL"
+                : null,
+            includedColumns: shape == "included-index"
+                ? ["other_id"]
+                : null,
+            method: method,
+            structuredFilter: shape == "structured-filter-index"
+                ? SafeMigrationSql.Literal(true)
+                : null);
     }
 
     /// <summary>Records an accepted immutable provider observation through the production decision planner.</summary>
@@ -451,8 +575,11 @@ public sealed class MySqlKeyChangeColumnProofTests
     )
     {
         var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.RepairIfSafe);
-        var decision = SafeMigrationDecisionPlanner.Plan(intent.Kind, live.ObservedState,
-            operation.Policy, live.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            intent.Kind,
+            live.ObservedState,
+            operation.Policy,
+            live.RepairCapability);
 
         projection.Observe(operation, live, live, decision);
     }
@@ -460,13 +587,19 @@ public sealed class MySqlKeyChangeColumnProofTests
     /// <summary>Accepts a real key change while binding removals to their observed physical object names.</summary>
     /// <param name="projection">The ordered projection receiving the key change.</param>
     /// <param name="change">The exact removal or creation contract.</param>
-    private static void AcceptKeyChange(SafeMigrationPreflightProjection projection, string change)
+    private static void AcceptKeyChange(
+        SafeMigrationPreflightProjection projection,
+        string change
+    )
     {
         var intent = KeyChange(change);
         var live = new SafeMigrationProviderAnalysis(
             intent is DropPrimaryKeyIntent or DropForeignKeyIntent or DropIndexIntent
-                ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Missing,
-            SafeMigrationRepairCapability.None, false, "accepted_key_change")
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Missing,
+            SafeMigrationRepairCapability.None,
+            false,
+            "accepted_key_change")
         {
             MatchedObjectName = intent.ObjectName,
         };
@@ -477,17 +610,21 @@ public sealed class MySqlKeyChangeColumnProofTests
     /// <summary>Introduces an uncertified source or row effect before a later bounded key removal.</summary>
     /// <param name="projection">The ordered projection whose evidence lifetime is invalidated.</param>
     /// <param name="mutation">The exact invalidating effect.</param>
-    private static void Invalidate(SafeMigrationPreflightProjection projection, string mutation)
+    private static void Invalidate(
+        SafeMigrationPreflightProjection projection,
+        string mutation
+    )
     {
         switch (mutation)
         {
             case "data":
-                projection.ObserveProviderPostcondition(new InsertDataOperation
-                {
-                    Table = "other_items",
-                    Columns = ["id"],
-                    Values = new object?[,] { { 1 } },
-                });
+                projection.ObserveProviderPostcondition(
+                    new InsertDataOperation
+                    {
+                        Table = "other_items",
+                        Columns = ["id"],
+                        Values = new object?[,] { { 1 } },
+                    });
 
                 break;
             case "raw":
@@ -497,14 +634,15 @@ public sealed class MySqlKeyChangeColumnProofTests
                 projection.ObserveProviderPostcondition(new AlterTableOperation { Name = "items" });
                 break;
             case "column":
-                projection.ObserveProviderPostcondition(new AlterColumnOperation
-                {
-                    Table = "items",
-                    Name = "other_id",
-                    ClrType = typeof(int),
-                    ColumnType = "int",
-                    IsNullable = true,
-                });
+                projection.ObserveProviderPostcondition(
+                    new AlterColumnOperation
+                    {
+                        Table = "items",
+                        Name = "other_id",
+                        ClrType = typeof(int),
+                        ColumnType = "int",
+                        IsNullable = true,
+                    });
 
                 break;
             case "unique-index":
@@ -512,10 +650,14 @@ public sealed class MySqlKeyChangeColumnProofTests
                 AcceptKeyChange(projection, mutation);
                 break;
             case "widening":
-                Accept(projection, new AlterColumnIntent("items",
-                    new ExpectedColumnDefinition("other_id", typeof(string), false, "varchar(72)", maxLength: 72),
-                    new ExpectedColumnDefinition("other_id", typeof(string), false, "varchar(36)", maxLength: 36)),
+                Accept(
+                    projection,
+                    new AlterColumnIntent(
+                        "items",
+                        new ExpectedColumnDefinition("other_id", typeof(string), false, "varchar(72)", maxLength: 72),
+                        new ExpectedColumnDefinition("other_id", typeof(string), false, "varchar(36)", maxLength: 36)),
                     ColumnProof());
+
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(mutation), mutation, "Unknown source invalidation.");
@@ -526,8 +668,13 @@ public sealed class MySqlKeyChangeColumnProofTests
     /// <param name="name">The column whose own source lifetime is tested.</param>
     /// <param name="ensure">Whether to use Ensure without an authored old definition.</param>
     /// <returns>The immutable repair operation.</returns>
-    private static SafeMigrationOperation NullabilityOperation(string name, bool ensure)
-        => new(ensure ? new EnsureColumnIntent("items", Column(name, nullable: true))
+    private static SafeMigrationOperation NullabilityOperation(
+        string name,
+        bool ensure
+    )
+        => new(
+            ensure
+                ? new EnsureColumnIntent("items", Column(name, nullable: true))
                 : new AlterColumnIntent("items", Column(name, nullable: true), Column(name, nullable: false)),
             SafeMigrationPolicy.RepairIfSafe);
 
@@ -536,13 +683,31 @@ public sealed class MySqlKeyChangeColumnProofTests
     /// <param name="nullable">The exact reviewed nullability.</param>
     /// <param name="drift">The optional independently changed physical or annotation facet.</param>
     /// <returns>The immutable provider-neutral column definition.</returns>
-    private static ExpectedColumnDefinition Column(string name, bool nullable, string drift = "none")
-        => new(name, typeof(Guid), nullable, drift == "store-type" ? "binary(16)" : "char(36)",
-            collation: drift == "collation" ? new SafeMigrationCollationIdentifier("utf8mb4_bin") : null,
-            comment: drift == "comment" ? "changed" : null,
-            defaultValue: drift == "default" ? SafeMigrationDefaultValue.Literal(Guid.Empty) : null)
+    private static ExpectedColumnDefinition Column(
+        string name,
+        bool nullable,
+        string drift = "none"
+    )
+        => new(
+            name,
+            typeof(Guid),
+            nullable,
+            drift == "store-type"
+                ? "binary(16)"
+                : "char(36)",
+            collation: drift == "collation"
+                ? new SafeMigrationCollationIdentifier("utf8mb4_bin")
+                : null,
+            comment: drift == "comment"
+                ? "changed"
+                : null,
+            defaultValue: drift == "default"
+                ? SafeMigrationDefaultValue.Literal(Guid.Empty)
+                : null)
         {
-            ProviderAnnotations = drift == "annotation" ? UnsupportedAnnotations() : [],
+            ProviderAnnotations = drift == "annotation"
+                ? UnsupportedAnnotations()
+                : [],
         };
 
     /// <summary>Captures unsupported metadata through the real provider-annotation immutability boundary.</summary>
@@ -558,23 +723,37 @@ public sealed class MySqlKeyChangeColumnProofTests
     /// <summary>Creates one bounded facet diagnostic with metadata-only expected and actual values.</summary>
     /// <param name="facet">The exact diagnostic facet under examination.</param>
     /// <returns>The immutable native facet difference.</returns>
-    private static SafeMigrationFacetDifference Difference(string facet) => new(facet, "expected", "actual");
+    private static SafeMigrationFacetDifference Difference(
+        string facet
+    ) => new(facet, "expected", "actual");
 
     /// <summary>Represents independently captured matching or safe non-data nullability evidence.</summary>
     /// <param name="matching">Whether the exact target already matches the immutable live catalog.</param>
     /// <returns>The provider certificate, not an authored source declaration.</returns>
-    private static SafeMigrationProviderAnalysis ColumnProof(bool matching = false)
-        => new(matching ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
-            matching ? SafeMigrationRepairCapability.None : SafeMigrationRepairCapability.Safe,
-            matching, "captured_column_certificate", SafeMigrationOperationalImpact.TableRewritePossible,
-            matching ? [] : [Difference("column_nullability")]);
+    private static SafeMigrationProviderAnalysis ColumnProof(
+        bool matching = false
+    )
+        => new(
+            matching
+                ? SafeMigrationObservedState.Matching
+                : SafeMigrationObservedState.Different,
+            matching
+                ? SafeMigrationRepairCapability.None
+                : SafeMigrationRepairCapability.Safe,
+            matching,
+            "captured_column_certificate",
+            SafeMigrationOperationalImpact.TableRewritePossible,
+            matching
+                ? []
+                : [Difference("column_nullability")]);
 
     /// <summary>Creates the standard offline provider service scope without a live server or container.</summary>
     /// <returns>The disposable context carrying production provider services.</returns>
     private static DbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<DbContext>()
-            .UseMySql("Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
+            .UseMySql(
+                "Server=127.0.0.1;Port=1;User ID=test;Password=test;Database=test;Allow User Variables=true",
                 MySqlServerVersion.MySql(new Version(8, 4, 11)))
             .UseMySqlSafeMigrations()
             .Options;

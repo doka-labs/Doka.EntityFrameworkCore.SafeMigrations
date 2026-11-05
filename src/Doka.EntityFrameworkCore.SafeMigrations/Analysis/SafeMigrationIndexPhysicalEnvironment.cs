@@ -44,4 +44,5 @@ internal readonly record struct SafeMigrationIndexColumnPhysicalShape(
     long? MaximumPrefixUnits,
     long BytesPerPrefixUnit,
     long? FullWidthBytes,
-    bool SupportsPrefix);
+    bool SupportsPrefix
+);

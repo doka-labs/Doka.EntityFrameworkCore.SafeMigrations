@@ -105,8 +105,10 @@ internal struct MySqlExpressionChildCursor
             SafeMigrationSqlBetweenExpression => 3,
             SafeMigrationSqlInExpression value => checked(1 + value.Values.Count),
             SafeMigrationSqlFunctionExpression value => value.Arguments.Count,
-            SafeMigrationSqlCaseExpression value => checked((2 * value.WhenClauses.Count)
-                + (value.ElseResult is null ? 0 : 1)),
+            SafeMigrationSqlCaseExpression value => checked(2 * value.WhenClauses.Count
+                + (value.ElseResult is null
+                    ? 0
+                    : 1)),
             _ => 0,
         };
     }
@@ -138,13 +140,17 @@ internal struct MySqlExpressionChildCursor
         expression = Expression switch
         {
             SafeMigrationSqlUnaryExpression value => value.Operand,
-            SafeMigrationSqlBinaryExpression value => index == 0 ? value.Left : value.Right,
+            SafeMigrationSqlBinaryExpression value => index == 0
+                ? value.Left
+                : value.Right,
             SafeMigrationSqlNullTestExpression value => value.Operand,
             SafeMigrationSqlBetweenExpression value => index switch
             {
                 0 => value.Operand, 1 => value.Lower, _ => value.Upper,
             },
-            SafeMigrationSqlInExpression value => index == 0 ? value.Operand : value.Values[index - 1],
+            SafeMigrationSqlInExpression value => index == 0
+                ? value.Operand
+                : value.Values[index - 1],
             SafeMigrationSqlFunctionExpression value => value.Arguments[index],
             SafeMigrationSqlCastExpression value => value.Operand,
             SafeMigrationSqlCollateExpression value => value.Operand,
@@ -177,6 +183,8 @@ internal struct MySqlExpressionChildCursor
 
         var clause = expression.WhenClauses[index / 2];
 
-        return index % 2 == 0 ? clause.Condition : clause.Result;
+        return index % 2 == 0
+            ? clause.Condition
+            : clause.Result;
     }
 }

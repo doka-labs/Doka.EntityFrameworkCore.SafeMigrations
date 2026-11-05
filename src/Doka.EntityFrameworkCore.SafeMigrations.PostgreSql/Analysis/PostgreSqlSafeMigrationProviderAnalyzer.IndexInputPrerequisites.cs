@@ -3,9 +3,14 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 {
     /// <summary>Qualifies only independently eligible Missing-name candidates before binding any data SQL.</summary>
-    private async Task FindIndexInputStatesAsync(DbConnection connection,
-        IReadOnlyList<SafeMigrationOperation> operations, SafeMigrationObservedState?[] states,
-        List<int> ordinals, int? commandTimeout, CancellationToken cancellationToken)
+    private async Task FindIndexInputStatesAsync(
+        DbConnection connection,
+        IReadOnlyList<SafeMigrationOperation> operations,
+        SafeMigrationObservedState?[] states,
+        List<int> ordinals,
+        int? commandTimeout,
+        CancellationToken cancellationToken
+    )
     {
         // WHY: Embedding every semantic-alias/type plan into a clean Matching
         // prerequisite packet makes PostgreSQL compile thousands of unconsumed
@@ -13,8 +18,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         // a CREATE capability proof. Only the first stage's proven owner/member
         // candidates reach this bounded metadata fence before any data probe.
         var names = PostgreSqlIndexPrerequisiteCertificates.ReserveNames(operations);
-        await SafeMigrationCatalogProbeBatch.ReadAsync(connection, ordinals.Count,
-            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes, commandTimeout,
+        await SafeMigrationCatalogProbeBatch.ReadAsync(
+            connection,
+            ordinals.Count,
+            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes,
+            commandTimeout,
             (command, offset) => BuildIndexInputPrerequisiteStatement(command, operations, ordinals, names, offset),
             async (reader, offset, count, token) =>
             {
@@ -26,13 +34,17 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 var next = offset;
                 while (await reader.ReadAsync(token))
                 {
-                    if (next >= offset + count || reader.GetValue(0) is not int ordinal
+                    if (next >= offset + count
+                        || reader.GetValue(0) is not int ordinal
                         || ordinal != ordinals[next])
                     {
                         throw InvalidLivePrerequisiteEvidence();
                     }
 
-                    var state = reader.IsDBNull(1) ? null : reader.GetString(1);
+                    var state = reader.IsDBNull(1)
+                        ? null
+                        : reader.GetString(1);
+
                     if (state is not (null or "index_input_operator_class" or "index_input_binding_unproven"))
                     {
                         throw InvalidLivePrerequisiteEvidence();
@@ -42,7 +54,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                     {
                         (_indexInputShortCircuitCodes ??= []).Add(ordinal, state);
                         states[ordinal] = state == "index_input_operator_class"
-                            ? SafeMigrationObservedState.Unsupported : SafeMigrationObservedState.PrerequisiteMissing;
+                            ? SafeMigrationObservedState.Unsupported
+                            : SafeMigrationObservedState.PrerequisiteMissing;
                     }
 
                     next++;
@@ -52,19 +65,27 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 {
                     throw InvalidLivePrerequisiteEvidence();
                 }
-            }, cancellationToken);
+            },
+            cancellationToken);
     }
 
     /// <summary>
     /// Accounts for the full lazy WITH prefix under existing parameter, payload and statement bounds.
     /// </summary>
-    private SafeMigrationCatalogProbeStatement BuildIndexInputPrerequisiteStatement(SafeMigrationCatalogCommand command,
-        IReadOnlyList<SafeMigrationOperation> operations, List<int> ordinals, IReadOnlyList<string> names,
-        int offset)
+    private SafeMigrationCatalogProbeStatement BuildIndexInputPrerequisiteStatement(
+        SafeMigrationCatalogCommand command,
+        IReadOnlyList<SafeMigrationOperation> operations,
+        List<int> ordinals,
+        IReadOnlyList<string> names,
+        int offset
+    )
     {
         var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
-        var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(_typeMappingSource, _sqlGenerationHelper,
-            parameters.AddString, parameters.Add);
+        var builder = new PostgreSqlSafeMigrationCatalogSqlBuilder(
+            _typeMappingSource,
+            _sqlGenerationHelper,
+            parameters.AddString,
+            parameters.Add);
 
         var certificates = new PostgreSqlIndexPrerequisiteCertificates(names);
         var selections = new List<string>();
@@ -78,11 +99,16 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             var intent = (EnsureIndexIntent)operations[ordinal].Intent;
             var state = builder.BuildIndexInputPrerequisiteState(intent, certificates);
             var selection = "SELECT " + ordinal.ToString(CultureInfo.InvariantCulture) + ", (" + state + ")";
-            var nextBytes = sqlBytes + Encoding.UTF8.GetByteCount(selection)
-                + (selections.Count == 0 ? 0 : Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator));
+            var nextBytes = sqlBytes
+                + Encoding.UTF8.GetByteCount(selection)
+                + (selections.Count == 0
+                    ? 0
+                    : Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator));
 
             var payload = nextBytes + parameters.Utf8PayloadBytes + certificates.Utf8PrefixBytes;
-            if (SafeMigrationCatalogQueryLimits.Exceeded(parameters.Count, payload,
+            if (SafeMigrationCatalogQueryLimits.Exceeded(
+                parameters.Count,
+                payload,
                 SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes))
             {
                 var rejectedParameters = parameters.Count;

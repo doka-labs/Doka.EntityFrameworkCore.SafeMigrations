@@ -98,12 +98,18 @@ public sealed class SafeMigrationDecisionPlannerActionTests
         // Act
         var publicException = Record.Exception(() =>
             SafeMigrationDecisionPlanner.Plan(operationKind, observedState, conflictPolicy, repairCapability));
+
         var actionException = Record.Exception(() =>
             SafeMigrationDecisionPlanner.PlanAction(operationKind, observedState, conflictPolicy, repairCapability));
 
         // Assert
-        Assert.Equal(parameter, Assert.IsType<ArgumentOutOfRangeException>(publicException).ParamName);
-        Assert.Equal(parameter, Assert.IsType<ArgumentOutOfRangeException>(actionException).ParamName);
+        Assert.Equal(parameter,
+            Assert.IsType<ArgumentOutOfRangeException>(publicException)
+                .ParamName);
+
+        Assert.Equal(parameter,
+            Assert.IsType<ArgumentOutOfRangeException>(actionException)
+                .ParamName);
     }
 
     /// <summary>Does not allocate a public decision when generation consumes only the canonical action.</summary>
@@ -113,12 +119,17 @@ public sealed class SafeMigrationDecisionPlannerActionTests
         // Arrange
         const int count = 1000;
         var publicPlan = static () => SafeMigrationDecisionPlanner.Plan(
-            SafeMigrationOperationKind.EnsureColumn, SafeMigrationObservedState.Different,
-            SafeMigrationPolicy.RepairIfSafe, SafeMigrationRepairCapability.Safe).Action;
+                SafeMigrationOperationKind.EnsureColumn,
+                SafeMigrationObservedState.Different,
+                SafeMigrationPolicy.RepairIfSafe,
+                SafeMigrationRepairCapability.Safe)
+            .Action;
 
         var actionPlan = static () => SafeMigrationDecisionPlanner.PlanAction(
-            SafeMigrationOperationKind.EnsureColumn, SafeMigrationObservedState.Different,
-            SafeMigrationPolicy.RepairIfSafe, SafeMigrationRepairCapability.Safe);
+            SafeMigrationOperationKind.EnsureColumn,
+            SafeMigrationObservedState.Different,
+            SafeMigrationPolicy.RepairIfSafe,
+            SafeMigrationRepairCapability.Safe);
 
         // WHY: Warm the same validated table and prepare delegates before the
         // measurement. Only discarded public results differ; no timing is asserted.

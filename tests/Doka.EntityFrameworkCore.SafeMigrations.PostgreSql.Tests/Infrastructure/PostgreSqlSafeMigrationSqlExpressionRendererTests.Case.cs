@@ -14,11 +14,17 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
     [InlineData("-9223372036854775808", "20")]
     [InlineData("-(-9223372036854775808)", "1700")]
     [InlineData("LOWER(value)", null)]
-    public void NativeResultTypeRetainsSourceNumericDomains(string sql, string? expectedOid)
+    public void NativeResultTypeRetainsSourceNumericDomains(
+        string sql,
+        string? expectedOid
+    )
     {
         // Arrange
-        Assert.True(SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var expression,
-            foldUnquotedIdentifiers: true));
+        Assert.True(
+            SafeMigrationSqlExpressionParser.TryParseCapturedSource(
+                sql,
+                out var expression,
+                foldUnquotedIdentifiers: true));
 
         // Act
         var type = PostgreSqlSafeMigrationSqlExpressionRenderer.RenderNativeResultTypeSql(expression, Literal);
@@ -49,7 +55,9 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
     [InlineData("2147483648")]
     [InlineData("1.234567890123456789e30")]
     [InlineData("0.000e0")]
-    public void CapturedNumericRenderingPreservesNativeLexeme(string sql)
+    public void CapturedNumericRenderingPreservesNativeLexeme(
+        string sql
+    )
     {
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
@@ -71,7 +79,9 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
     [InlineData(2)]
     [InlineData(3)]
     [InlineData(4)]
-    public void ParsedConvertIsRejectedAcrossPostgreSqlRenderModes(int mode)
+    public void ParsedConvertIsRejectedAcrossPostgreSqlRenderModes(
+        int mode
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -102,7 +112,11 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
         var expression = SafeMigrationSql.Case(
-            [new(SafeMigrationSql.Literal(true), SafeMigrationSql.Cast(SafeMigrationSql.Literal(1), "bigint"))],
+            [
+                new SafeMigrationSqlCaseWhenClause(
+                    SafeMigrationSql.Literal(true),
+                    SafeMigrationSql.Cast(SafeMigrationSql.Literal(1), "bigint")),
+            ],
             SafeMigrationSql.Cast(SafeMigrationSql.Literal(2), "bigint"));
 
         var candidate = renderer.RenderCatalogNativeDeparsedCandidateSql(expression, Literal);
@@ -120,24 +134,37 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
         var flat = SafeMigrationSql.Case(
-            [new(SafeMigrationSql.Literal(true), SafeMigrationSql.Literal(1))], SafeMigrationSql.Literal(0));
+            [new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.Literal(true), SafeMigrationSql.Literal(1))],
+            SafeMigrationSql.Literal(0));
 
         var nested = SafeMigrationSql.Case(
-            [new(SafeMigrationSql.Literal(false), flat)], SafeMigrationSql.Literal(2));
+            [new SafeMigrationSqlCaseWhenClause(SafeMigrationSql.Literal(false), flat)],
+            SafeMigrationSql.Literal(2));
 
         var expectedFlat = renderer.RenderCatalogNativeDeparsedCandidateSql(flat, Literal);
         var expectedNested = renderer.RenderCatalogNativeDeparsedCandidateSql(nested, Literal);
         var results = new string?[64];
 
-        Parallel.For(0, results.Length, index => results[index] =
-            renderer.RenderCatalogNativeDeparsedCandidateSql(index % 2 == 0 ? flat : nested, Literal));
+        Parallel.For(
+            0,
+            results.Length,
+            index => results[index] =
+                renderer.RenderCatalogNativeDeparsedCandidateSql(
+                    index % 2 == 0
+                        ? flat
+                        : nested,
+                    Literal));
 
         Assert.NotNull(expectedFlat);
         Assert.NotNull(expectedNested);
         Assert.NotEqual(expectedFlat, expectedNested);
         for (var index = 0; index < results.Length; index++)
         {
-            Assert.Equal(index % 2 == 0 ? expectedFlat : expectedNested, results[index]);
+            Assert.Equal(
+                index % 2 == 0
+                    ? expectedFlat
+                    : expectedNested,
+                results[index]);
         }
     }
 
@@ -148,7 +175,11 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
         var expression = SafeMigrationSql.Case(
-            [new(SafeMigrationSql.IsNull(SafeMigrationSql.Identifier("value")), SafeMigrationSql.Literal("empty"))],
+            [
+                new SafeMigrationSqlCaseWhenClause(
+                    SafeMigrationSql.IsNull(SafeMigrationSql.Identifier("value")),
+                    SafeMigrationSql.Literal("empty")),
+            ],
             SafeMigrationSql.Function("COALESCE", SafeMigrationSql.Identifier("value"), SafeMigrationSql.Literal("x")));
 
         var sql = renderer.Render(expression);
@@ -179,9 +210,18 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
         var renderer = CreateRenderer(context);
         var unsupported = SafeMigrationSql.ProviderFragment("foreign", "x");
         var expression = SafeMigrationSql.Case(
-            [new(role == 0 ? unsupported : SafeMigrationSql.Literal(true),
-                role == 1 ? unsupported : SafeMigrationSql.Literal(1))],
-            role == 2 ? unsupported : SafeMigrationSql.Literal(0));
+            [
+                new SafeMigrationSqlCaseWhenClause(
+                    role == 0
+                        ? unsupported
+                        : SafeMigrationSql.Literal(true),
+                    role == 1
+                        ? unsupported
+                        : SafeMigrationSql.Literal(1)),
+            ],
+            role == 2
+                ? unsupported
+                : SafeMigrationSql.Literal(0));
 
         var feature = renderer.GetUnsupportedFeature(expression);
 

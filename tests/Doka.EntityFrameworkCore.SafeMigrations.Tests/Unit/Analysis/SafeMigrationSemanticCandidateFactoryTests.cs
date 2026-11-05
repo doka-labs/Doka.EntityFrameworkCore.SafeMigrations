@@ -78,12 +78,16 @@ public sealed class SafeMigrationSemanticCandidateFactoryTests
             ["pk_legacy", "uq_legacy", "uq_legacy", "ck_legacy", "fk_legacy", "ix_legacy"],
             candidates.Select(static value => value.Operation.Intent.ObjectName));
 
-        var foreignKey = Assert.IsType<EnsureForeignKeyIntent>(candidates[4].Operation.Intent).Definition;
+        var foreignKey = Assert.IsType<EnsureForeignKeyIntent>(candidates[4].Operation.Intent)
+            .Definition;
+
         Assert.Equal(["parent_id", "tenant_id"], foreignKey.Columns);
         Assert.Equal(["id", "tenant_id"], foreignKey.PrincipalColumns);
         Assert.Equal(ReferentialAction.Cascade, foreignKey.OnDelete);
 
-        var index = Assert.IsType<EnsureIndexIntent>(candidates[5].Operation.Intent).Definition;
+        var index = Assert.IsType<EnsureIndexIntent>(candidates[5].Operation.Intent)
+            .Definition;
+
         Assert.True(index.Unique);
         Assert.Equal(SafeMigrationIndexSortOrder.Descending, index.Keys[0].SortOrder);
 

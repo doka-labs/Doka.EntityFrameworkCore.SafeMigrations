@@ -12,7 +12,10 @@ public sealed class SqlServerCheckRenameRoleTests
     [InlineData("[Payload]>ABS(0)", "Payload")]
     [InlineData("CAST([Payload] AS int)>0", "Payload")]
     [InlineData("1=1", null)]
-    public void CapturedCheckCollectsOnlyColumnRoles(string sql, string? expected)
+    public void CapturedCheckCollectsOnlyColumnRoles(
+        string sql,
+        string? expected
+    )
     {
         // Arrange
         var definition = Captured(sql);
@@ -22,7 +25,11 @@ public sealed class SqlServerCheckRenameRoleTests
 
         // Assert
         Assert.NotNull(names);
-        Assert.Equal(expected is null ? [] : [expected], names);
+        Assert.Equal(
+            expected is null
+                ? []
+                : [expected],
+            names);
     }
 
     /// <summary>Unknown native type/function roles stay unproven instead of inventing column dependencies.</summary>
@@ -31,7 +38,9 @@ public sealed class SqlServerCheckRenameRoleTests
     [InlineData("TRY_CONVERT(int,[Payload])>0")]
     [InlineData("GETDATE()>[Payload]")]
     [InlineData("[Payload]")]
-    public void UnprovenNativeRolesNeverBecomeColumnComparisons(string sql)
+    public void UnprovenNativeRolesNeverBecomeColumnComparisons(
+        string sql
+    )
     {
         // Arrange
         var definition = Captured(sql);
@@ -43,10 +52,13 @@ public sealed class SqlServerCheckRenameRoleTests
         Assert.Null(names);
     }
 
-    private static ExpectedCheckConstraintDefinition Captured(string sql)
+    private static ExpectedCheckConstraintDefinition Captured(
+        string sql
+    )
     {
         var expression = SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var parsed)
-            ? parsed : throw new InvalidOperationException("The role fixture must parse.");
+            ? parsed
+            : throw new InvalidOperationException("The role fixture must parse.");
 
         return ExpectedCheckConstraintDefinition.FromCapturedExpression("CK_roles", "nodes", expression, sql, null);
     }

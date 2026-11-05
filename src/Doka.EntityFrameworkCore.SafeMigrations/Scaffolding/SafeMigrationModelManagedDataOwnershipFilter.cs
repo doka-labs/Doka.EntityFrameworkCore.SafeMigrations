@@ -176,6 +176,6 @@ internal static class SafeMigrationModelManagedDataOwnershipFilter
         public string DisplayName => Schema is null
             ? $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(Table)}'"
             : $"'{SafeMigrationDiagnosticMessages.BoundForDisplay(Schema)}."
-                + $"{SafeMigrationDiagnosticMessages.BoundForDisplay(Table)}'";
+            + $"{SafeMigrationDiagnosticMessages.BoundForDisplay(Table)}'";
     }
 }

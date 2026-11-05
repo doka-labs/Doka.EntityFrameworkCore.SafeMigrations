@@ -5,7 +5,9 @@ public sealed class MySqlSharedEngineIsolationTests : MySqlIntegrationTestBase
 {
     /// <summary>Uses the assembly-owned native fixture for the isolation counterprobe.</summary>
     /// <param name="fixture">The initialized shared engine.</param>
-    public MySqlSharedEngineIsolationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlSharedEngineIsolationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>Two distinct class owners must see their own identical table names and retain independent cleanup.</summary>
     [Fact]
@@ -23,43 +25,60 @@ public sealed class MySqlSharedEngineIsolationTests : MySqlIntegrationTestBase
                 first.SeedAndObserveAsync(11, rendezvous, cancellationToken: CancellationToken.None),
                 second.SeedAndObserveAsync(22, rendezvous, cancellationToken: CancellationToken.None));
 
-            var firstLogin = await Fixture.CreateLeastPrivilegeConnectionStringAsync(results[0].ConnectionString,
+            var firstLogin = await Fixture.CreateLeastPrivilegeConnectionStringAsync(
+                results[0].ConnectionString,
                 CancellationToken.None);
 
-            var secondLogin = await Fixture.CreateLeastPrivilegeConnectionStringAsync(results[1].ConnectionString,
+            var secondLogin = await Fixture.CreateLeastPrivilegeConnectionStringAsync(
+                results[1].ConnectionString,
                 CancellationToken.None);
 
             var foreignLogin = new MySqlConnectionStringBuilder(firstLogin)
             {
                 Database = new MySqlConnectionStringBuilder(secondLogin).Database,
             }.ConnectionString;
-            var denied = await Record.ExceptionAsync(() => ScalarIntAsync(foreignLogin,
-                "SELECT `value` FROM `parallel_owner_probe`;", cancellationToken: CancellationToken.None));
+
+            var denied = await Record.ExceptionAsync(() => ScalarIntAsync(
+                foreignLogin,
+                "SELECT `value` FROM `parallel_owner_probe`;",
+                cancellationToken: CancellationToken.None));
 
             var foreignLease = new MySqlConnectionStringBuilder(results[0].ConnectionString)
             {
                 Database = "bootstrap",
             }.ConnectionString;
-            var rejectedLease = await Record.ExceptionAsync(() => Fixture.ReleaseDatabaseAsync(foreignLease,
+
+            var rejectedLease = await Record.ExceptionAsync(() => Fixture.ReleaseDatabaseAsync(
+                foreignLease,
                 CancellationToken.None));
 
             using var cancelledCleanup = new CancellationTokenSource();
             cancelledCleanup.Cancel();
             var cancelledRelease = await Record.ExceptionAsync(() => Fixture.ReleaseDatabaseAsync(
-                results[0].ConnectionString, cancelledCleanup.Token));
-            var retainedValue = await ScalarIntAsync(firstLogin, "SELECT `value` FROM `parallel_owner_probe`;",
+                results[0].ConnectionString,
+                cancelledCleanup.Token));
+
+            var retainedValue = await ScalarIntAsync(
+                firstLogin,
+                "SELECT `value` FROM `parallel_owner_probe`;",
                 cancellationToken: CancellationToken.None);
 
             await first.DisposeAsync();
-            var survivingValue = await ScalarIntAsync(secondLogin, "SELECT `value` FROM `parallel_owner_probe`;",
+            var survivingValue = await ScalarIntAsync(
+                secondLogin,
+                "SELECT `value` FROM `parallel_owner_probe`;",
                 cancellationToken: CancellationToken.None);
 
-            var released = await ScalarIntAsync(results[1].ConnectionString,
+            var released = await ScalarIntAsync(
+                results[1].ConnectionString,
                 "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '"
-                + new MySqlConnectionStringBuilder(results[0].ConnectionString).Database + "';",
+                + new MySqlConnectionStringBuilder(results[0].ConnectionString).Database
+                + "';",
                 cancellationToken: CancellationToken.None);
 
-            var releasedLogin = await Record.ExceptionAsync(() => ScalarIntAsync(firstLogin, "SELECT 1;",
+            var releasedLogin = await Record.ExceptionAsync(() => ScalarIntAsync(
+                firstLogin,
+                "SELECT 1;",
                 cancellationToken: CancellationToken.None));
 
             // Assert
@@ -68,9 +87,14 @@ public sealed class MySqlSharedEngineIsolationTests : MySqlIntegrationTestBase
             Assert.NotEqual(results[0].Database, results[1].Database);
             Assert.Equal(11, results[0].Value);
             Assert.Equal(22, results[1].Value);
-            Assert.NotEqual(new MySqlConnectionStringBuilder(firstLogin).UserID,
+            Assert.NotEqual(
+                new MySqlConnectionStringBuilder(firstLogin).UserID,
                 new MySqlConnectionStringBuilder(secondLogin).UserID);
-            Assert.Equal(1044, Assert.IsType<MySqlException>(denied).Number);
+
+            Assert.Equal(1044,
+                Assert.IsType<MySqlException>(denied)
+                    .Number);
+
             Assert.IsType<ArgumentException>(rejectedLease);
             Assert.IsAssignableFrom<OperationCanceledException>(cancelledRelease);
             Assert.Equal(11, retainedValue);
@@ -139,9 +163,12 @@ public sealed class MySqlSharedEngineIsolationTests : MySqlIntegrationTestBase
                 cancellationToken.ThrowIfCancellationRequested();
 
                 connectionString = await CreateDatabaseAsync(cancellationToken);
-                await ExecuteSqlAsync(connectionString, "CREATE TABLE `parallel_owner_probe` (`value` int NOT NULL); "
+                await ExecuteSqlAsync(
+                    connectionString,
+                    "CREATE TABLE `parallel_owner_probe` (`value` int NOT NULL); "
                     + "INSERT INTO `parallel_owner_probe` VALUES ("
-                    + value.ToString(CultureInfo.InvariantCulture) + ");",
+                    + value.ToString(CultureInfo.InvariantCulture)
+                    + ");",
                     cancellationToken: cancellationToken);
             }
             finally
@@ -152,9 +179,12 @@ public sealed class MySqlSharedEngineIsolationTests : MySqlIntegrationTestBase
 
             await rendezvous.Ready.WaitAsync(cancellationToken);
 
-            return new DatabaseObservation(connectionString,
+            return new DatabaseObservation(
+                connectionString,
                 await ScalarStringAsync(connectionString, "SELECT DATABASE();", cancellationToken: cancellationToken),
-                await ScalarIntAsync(connectionString, "SELECT `value` FROM `parallel_owner_probe`;",
+                await ScalarIntAsync(
+                    connectionString,
+                    "SELECT `value` FROM `parallel_owner_probe`;",
                     cancellationToken: cancellationToken));
         }
     }
@@ -163,7 +193,11 @@ public sealed class MySqlSharedEngineIsolationTests : MySqlIntegrationTestBase
 
     private sealed class SecondDatabaseOwner(MySqlEngineContainerFixture fixture) : DatabaseOwner(fixture);
 
-    private sealed record DatabaseObservation(string ConnectionString, string Database, int Value);
+    private sealed record DatabaseObservation(
+        string ConnectionString,
+        string Database,
+        int Value
+    );
 
     private sealed class DatabaseRendezvous
     {

@@ -2,14 +2,29 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 {
-    private readonly Dictionary<SafeMigrationOperation, IntegerWideningProof> _integerWideningProofs = [];
-    private readonly HashSet<TransitionDependency> _acceptedTransitionDrops = [];
-    private readonly Dictionary<TransitionDependency, TransitionDependency> _transitionDropIdentities = [];
     private readonly Dictionary<(string Schema, string Table), Dictionary<string, ExpectedColumnDefinition>>
         _acceptedTransitionColumns = [];
 
+    private readonly HashSet<TransitionDependency> _acceptedTransitionDrops = [];
+    private readonly Dictionary<SafeMigrationOperation, IntegerWideningProof> _integerWideningProofs = [];
+    private readonly Dictionary<TransitionDependency, TransitionDependency> _transitionDropIdentities = [];
+
     private readonly HashSet<(string Schema, string Table)> _transitionStructureChanged = [];
     private bool _transitionDataChangedGlobally;
+
+    /// <inheritdoc />
+    SafeMigrationProviderAnalysis ISafeMigrationProjectedColumnAnalyzer.ValidateProjectedAlterColumn(
+        AlterColumnIntent intent,
+        ExpectedColumnDefinition source,
+        SafeMigrationProjectedAlterColumnContext context,
+        SafeMigrationProviderAnalysis liveAnalysis,
+        SafeMigrationProviderAnalysis projectedAnalysis
+    )
+        => context.CanReuseLiveProof
+            && liveAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe
+            && _catalogSqlBuilder.IsSupportedIntegerWidening(source, intent.Definition)
+                ? liveAnalysis
+                : projectedAnalysis;
 
     private void ResetProjectedColumnTransitions(
         bool retainInvalidatedCheckPredicates = false
@@ -58,7 +73,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     {
         if (operations.Count != liveAnalyses.Count)
         {
-            throw new ArgumentException("Transition capture requires one live classification per operation.",
+            throw new ArgumentException(
+                "Transition capture requires one live classification per operation.",
                 nameof(liveAnalyses));
         }
 
@@ -66,28 +82,34 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         // source cannot satisfy the authored old integer contract. Such a
         // certificate is discarded by qualification anyway. Excluding it also
         // prevents unused replay growth from reserving another column's budget.
-        var candidates = operations.Where((operation, index) => canReadExpressionDependencies
-            && liveAnalyses[index].ObservedState != SafeMigrationObservedState.Matching
-            && !liveAnalyses[index].IsInvariantUnsupported
-            && operation.Intent is AlterColumnIntent
-            { OldDefinition: not null } column
-            && _catalogSqlBuilder.IsSupportedIntegerWidening(column.OldDefinition, column.Definition))
+        var candidates = operations
+            .Where((operation, index) => canReadExpressionDependencies
+                && liveAnalyses[index].ObservedState != SafeMigrationObservedState.Matching
+                && !liveAnalyses[index].IsInvariantUnsupported
+                && operation.Intent is AlterColumnIntent
+                {
+                    OldDefinition: not null,
+                } column
+                && _catalogSqlBuilder.IsSupportedIntegerWidening(column.OldDefinition, column.Definition))
             .Distinct()
             .ToArray();
 
-        if (candidates.Length == 0 && !operations.Any(static operation =>
+        if (candidates.Length == 0
+            && !operations.Any(static operation =>
                 operation.Intent is EnsureCheckConstraintIntent))
         {
             return;
         }
 
-        var growth = candidates.GroupBy(static operation =>
+        var growth = candidates
+            .GroupBy(static operation =>
             {
                 var column = (AlterColumnIntent)operation.Intent;
 
                 return (column.Schema ?? "dbo", column.Table);
             })
-            .ToDictionary(static group => group.Key,
+            .ToDictionary(
+                static group => group.Key,
                 group => group.Sum(operation =>
                     _catalogSqlBuilder.IntegerWideningGrowth((AlterColumnIntent)operation.Intent)));
 
@@ -96,22 +118,34 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         // WHY: Retain capture offsets while enforcing the bounded operation window.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
-        for (var offset = 0; offset < candidates.Length;
+        for (var offset = 0;
+            offset < candidates.Length;
             offset += SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture)
         {
-            var count = Math.Min(SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture,
+            var count = Math.Min(
+                SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture,
                 candidates.Length - offset);
 
-            var plans = candidates.Skip(offset).Take(count).Select(operation =>
-            {
-                var column = (AlterColumnIntent)operation.Intent;
-                var reserved = growth[(column.Schema ?? "dbo", column.Table)]
-                    - _catalogSqlBuilder.IntegerWideningGrowth(column);
+            var plans = candidates
+                .Skip(offset)
+                .Take(count)
+                .Select(operation =>
+                {
+                    var column = (AlterColumnIntent)operation.Intent;
+                    var reserved = growth[(column.Schema ?? "dbo", column.Table)]
+                        - _catalogSqlBuilder.IntegerWideningGrowth(column);
 
-                return _catalogSqlBuilder.BuildIntegerWideningCapturePlan(column, reserved);
-            }).ToArray();
+                    return _catalogSqlBuilder.BuildIntegerWideningCapturePlan(column, reserved);
+                })
+                .ToArray();
 
-            await ReadCatalogCaptureAsync(connection, transaction, commandTimeout, plans, offset, analyses,
+            await ReadCatalogCaptureAsync(
+                connection,
+                transaction,
+                commandTimeout,
+                plans,
+                offset,
+                analyses,
                 cancellationToken);
         }
 
@@ -119,48 +153,73 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         // only when a catalog row actually belongs to that candidate; immutable
         // empty arrays carry dependency-free proofs without one empty set each.
         var dependencies = new HashSet<TransitionDependency>?[candidates.Length];
-        var requestedDrops = operations.Select(static operation => TransitionDrop(operation.Intent))
+        var requestedDrops = operations
+            .Select(static operation => TransitionDrop(operation.Intent))
             .OfType<TransitionDependency>()
             .Distinct()
             .ToArray();
 
         var capturedDrops = new Dictionary<TransitionDependency, TransitionDependency>();
         var dependencyStatements = (candidates.Length
-                + SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement - 1)
+                + SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement
+                - 1)
             / SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement;
 
         var dropStatements = (requestedDrops.Length + SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement - 1)
             / SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement;
 
-        await SafeMigrationCatalogProbeBatch.ReadAsync(connection,
+        await SafeMigrationCatalogProbeBatch.ReadAsync(
+            connection,
             dependencyStatements + dropStatements,
-            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes, commandTimeout,
+            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes,
+            commandTimeout,
             (command, slot) =>
             {
                 var dropCapture = slot >= dependencyStatements;
-                var offset = (dropCapture ? slot - dependencyStatements : slot)
+                var offset = (dropCapture
+                        ? slot - dependencyStatements
+                        : slot)
                     * SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement;
 
-                var count = Math.Min(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
-                    (dropCapture ? requestedDrops.Length : candidates.Length) - offset);
+                var count = Math.Min(
+                    SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
+                    (dropCapture
+                        ? requestedDrops.Length
+                        : candidates.Length)
+                    - offset);
 
                 command.CommandText = dropCapture
-                    ? string.Join(" UNION ALL ", requestedDrops.Skip(offset).Take(count)
-                        .Select((drop, index) => BuildTransitionDropIdentitySql(offset + index, drop)))
-                    : string.Join(" UNION ALL ", candidates.Skip(offset).Take(count)
-                        .Select((operation, index) => BuildTransitionDependenciesSql(
-                            offset + index, (AlterColumnIntent)operation.Intent)));
+                    ? string.Join(
+                        " UNION ALL ",
+                        requestedDrops
+                            .Skip(offset)
+                            .Take(count)
+                            .Select((drop, index) => BuildTransitionDropIdentitySql(offset + index, drop)))
+                    : string.Join(
+                        " UNION ALL ",
+                        candidates
+                            .Skip(offset)
+                            .Take(count)
+                            .Select((operation, index) => BuildTransitionDependenciesSql(
+                                offset + index,
+                                (AlterColumnIntent)operation.Intent)));
 
                 return new SafeMigrationCatalogProbeStatement(1, 0, offset);
             },
             async (reader, slot, _, token) =>
             {
                 var dropCapture = slot >= dependencyStatements;
-                var offset = (dropCapture ? slot - dependencyStatements : slot)
+                var offset = (dropCapture
+                        ? slot - dependencyStatements
+                        : slot)
                     * SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement;
 
-                var count = Math.Min(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
-                    (dropCapture ? requestedDrops.Length : candidates.Length) - offset);
+                var count = Math.Min(
+                    SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
+                    (dropCapture
+                        ? requestedDrops.Length
+                        : candidates.Length)
+                    - offset);
 
                 while (await reader.ReadAsync(token))
                 {
@@ -172,8 +231,11 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                             "SQL Server returned an unowned integer transition dependency.");
                     }
 
-                    var identity = new TransitionDependency(reader.GetString(1), reader.GetString(2),
-                        reader.GetString(3), reader.GetString(4));
+                    var identity = new TransitionDependency(
+                        reader.GetString(1),
+                        reader.GetString(2),
+                        reader.GetString(3),
+                        reader.GetString(4));
 
                     if (dropCapture)
                     {
@@ -189,16 +251,21 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                         (dependencies[ordinal] ??= []).Add(identity);
                     }
                 }
-            }, cancellationToken, transaction, SqlServerCatalogParameterBindings.MaximumParameters);
+            },
+            cancellationToken,
+            transaction,
+            SqlServerCatalogParameterBindings.MaximumParameters);
 
         // WHY: Pair each transition candidate with its analysis and dependency snapshot.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < candidates.Length; index++)
         {
-            CaptureProjectedIntegerWidening(candidates[index], analyses[index],
+            CaptureProjectedIntegerWidening(
+                candidates[index],
+                analyses[index],
                 (IReadOnlyCollection<TransitionDependency>?)dependencies[index]
-                    ?? Array.Empty<TransitionDependency>());
+                ?? Array.Empty<TransitionDependency>());
         }
 
         foreach (var pair in capturedDrops)
@@ -294,7 +361,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         ISafeMigrationProjectedColumnSource columns
     )
     {
-        if (operation.Intent is not AlterColumnIntent column || analysis.IsInvariantUnsupported
+        if (operation.Intent is not AlterColumnIntent column
+            || analysis.IsInvariantUnsupported
             || !_integerWideningProofs.TryGetValue(operation, out var proof))
         {
             return analysis;
@@ -320,42 +388,39 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             return analysis;
         }
 
-        if (column.OldDefinition!.IsNullable && !column.Definition.IsNullable
+        if (column.OldDefinition!.IsNullable
+            && !column.Definition.IsNullable
             && _transitionDataChangedGlobally)
         {
-            return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
-                SafeMigrationRepairCapability.None, false, "projected_data_state_unknown");
+            return new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.PrerequisiteMissing,
+                SafeMigrationRepairCapability.None,
+                false,
+                "projected_data_state_unknown");
         }
 
-        return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.Safe, false, "column_integer_widening_safe",
-            SafeMigrationOperationalImpact.TableRewritePossible, [])
+        return new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.Safe,
+            false,
+            "column_integer_widening_safe",
+            SafeMigrationOperationalImpact.TableRewritePossible,
+            [])
         {
             RepairPreservesLiveValueDomain = true,
             RequiresLiveDataProof = column.OldDefinition.IsNullable && !column.Definition.IsNullable,
         };
     }
 
-    /// <inheritdoc />
-    SafeMigrationProviderAnalysis ISafeMigrationProjectedColumnAnalyzer.ValidateProjectedAlterColumn(
-        AlterColumnIntent intent,
-        ExpectedColumnDefinition source,
-        SafeMigrationProjectedAlterColumnContext context,
-        SafeMigrationProviderAnalysis liveAnalysis,
-        SafeMigrationProviderAnalysis projectedAnalysis
-    )
-        => context.CanReuseLiveProof && liveAnalysis.RepairCapability == SafeMigrationRepairCapability.Safe
-            && _catalogSqlBuilder.IsSupportedIntegerWidening(source, intent.Definition)
-            ? liveAnalysis : projectedAnalysis;
-
     private void ObserveProjectedColumnTransition(
         SafeMigrationOperation operation,
         SafeMigrationDecision decision
     )
     {
-        if (!decision.ShouldExecute || (operation.Intent is RenameTableIntent rename
-            && (rename.NewName ?? rename.Name) == rename.Name
-            && (rename.NewSchema ?? rename.Schema ?? "dbo") == (rename.Schema ?? "dbo")))
+        if (!decision.ShouldExecute
+            || (operation.Intent is RenameTableIntent rename
+                && (rename.NewName ?? rename.Name) == rename.Name
+                && (rename.NewSchema ?? rename.Schema ?? "dbo") == (rename.Schema ?? "dbo")))
         {
             return;
         }
@@ -427,8 +492,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 break;
             case EnsureForeignKeyIntent foreign:
                 _transitionStructureChanged.Add((foreign.Definition.Schema ?? "dbo", foreign.Definition.Table));
-                _transitionStructureChanged.Add((foreign.Definition.PrincipalSchema ?? "dbo",
-                    foreign.Definition.PrincipalTable));
+                _transitionStructureChanged.Add(
+                    (foreign.Definition.PrincipalSchema ?? "dbo",
+                        foreign.Definition.PrincipalTable));
+
                 break;
         }
     }

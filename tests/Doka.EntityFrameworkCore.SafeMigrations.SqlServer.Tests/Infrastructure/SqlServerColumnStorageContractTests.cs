@@ -12,11 +12,14 @@ public sealed class SqlServerColumnStorageContractTests
     [InlineData(SafeMigrationOperationKind.EnsureColumn)]
     [InlineData(SafeMigrationOperationKind.AlterColumn)]
     [InlineData(SafeMigrationOperationKind.EnsureTable)]
-    public void MatchingContract_RejectsBoundRuleAndEncryptedStorage(SafeMigrationOperationKind kind)
+    public void MatchingContract_RejectsBoundRuleAndEncryptedStorage(
+        SafeMigrationOperationKind kind
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(context.GetService<IRelationalTypeMappingSource>(),
+        var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
+            context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
         var column = new ExpectedColumnDefinition("Value", typeof(int), false, "int");
@@ -25,7 +28,8 @@ public sealed class SqlServerColumnStorageContractTests
             SafeMigrationOperationKind.EnsureColumn => new EnsureColumnIntent("items", column),
             SafeMigrationOperationKind.AlterColumn => new AlterColumnIntent("items", column, column),
             SafeMigrationOperationKind.EnsureTable => new EnsureTableIntent(
-                new ExpectedTableDefinition("items", [column]), SafeMigrationTableMode.StrictDefinition),
+                new ExpectedTableDefinition("items", [column]),
+                SafeMigrationTableMode.StrictDefinition),
             _ => throw new UnreachableException(),
         };
 

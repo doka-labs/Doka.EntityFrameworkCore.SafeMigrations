@@ -1,7 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
 /// <summary>Runs the ConstraintsProjectedUnknownLiterals PostgreSQL feature cases independently.</summary>
-public sealed class PostgreSqlConstraintsProjectedUnknownLiteralsIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
+public sealed class
+    PostgreSqlConstraintsProjectedUnknownLiteralsIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned container for this feature.</summary>
     /// <param name="fixture">The shared PostgreSQL container fixture.</param>
@@ -15,7 +16,8 @@ public sealed class PostgreSqlConstraintsProjectedUnknownLiteralsIntegrationTest
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE FUNCTION metadata_equal(smallint, text) RETURNS boolean LANGUAGE sql IMMUTABLE "
             + "AS 'SELECT TRUE'; CREATE OPERATOR public.= (LEFTARG = smallint, RIGHTARG = text, "
             + "FUNCTION = metadata_equal); CREATE TABLE mixed_columns (id smallint NOT NULL, "
@@ -24,14 +26,25 @@ public sealed class PostgreSqlConstraintsProjectedUnknownLiteralsIntegrationTest
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureCheckConstraint(ExpectedCheckConstraintDefinition.FromExpression("ck_integer_input",
-            "mixed_columns", SqlBinary(SafeMigrationSql.Identifier("id"), SafeMigrationSqlBinaryOperator.Equal,
-                SafeMigrationSql.Literal("40000"))), SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_integer_input",
+                "mixed_columns",
+                SqlBinary(
+                    SafeMigrationSql.Identifier("id"),
+                    SafeMigrationSqlBinaryOperator.Equal,
+                    SafeMigrationSql.Literal("40000"))),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var exception = await Assert.ThrowsAsync<PostgresException>(() =>
-            context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-                new SafeMigrationRunOptions("native-integer-range-boundary"), CancellationToken.None));
+            context
+                .GetService<ISafeMigrationRunner>()
+                .AnalyzeAsync(
+                    context,
+                    builder.Operations,
+                    new SafeMigrationRunOptions("native-integer-range-boundary"),
+                    CancellationToken.None));
 
         // Assert
         // WHY: PostgreSQL independently binds the existing validation probe;
@@ -64,11 +77,14 @@ public sealed class PostgreSqlConstraintsProjectedUnknownLiteralsIntegrationTest
         bool approved,
         bool useIn,
         bool typedCast = false,
-        bool typedLiteral = false)
+        bool typedLiteral = false
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE mixed_columns (old_int integer NOT NULL);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE mixed_columns (old_int integer NOT NULL);",
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -76,23 +92,37 @@ public sealed class PostgreSqlConstraintsProjectedUnknownLiteralsIntegrationTest
         builder.AddColumnIfNotExists<int>("new_int", "mixed_columns", type: "integer", nullable: false);
         var operand = typedCast
             ? SafeMigrationSql.Cast(SafeMigrationSql.Literal(literal, "text"), "integer")
-            : SafeMigrationSql.Literal(literal, typedLiteral ? "integer" : null);
+            : SafeMigrationSql.Literal(
+                literal,
+                typedLiteral
+                    ? "integer"
+                    : null);
 
         var comparison = useIn
             ? SafeMigrationSql.In(SafeMigrationSql.Identifier("new_int"), [SafeMigrationSql.Literal(literal)])
-            : SqlBinary(SafeMigrationSql.Identifier("new_int"), SafeMigrationSqlBinaryOperator.Equal,
+            : SqlBinary(
+                SafeMigrationSql.Identifier("new_int"),
+                SafeMigrationSqlBinaryOperator.Equal,
                 operand);
 
-        builder.EnsureCheckConstraint(ExpectedCheckConstraintDefinition.FromExpression("ck_integer_input",
-            "mixed_columns", SqlBinary(SqlColumnAndInt("old_int", SafeMigrationSqlBinaryOperator.GreaterThan, 0),
-                SafeMigrationSqlBinaryOperator.And, comparison)),
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_integer_input",
+                "mixed_columns",
+                SqlBinary(
+                    SqlColumnAndInt("old_int", SafeMigrationSqlBinaryOperator.GreaterThan, 0),
+                    SafeMigrationSqlBinaryOperator.And,
+                    comparison)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-check-unknown-integer-input"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sparse-check-unknown-integer-input"),
+            CancellationToken.None);
 
         SafeMigrationRunReport? postflight = null;
         SafeMigrationRunReport? replay = null;
@@ -101,16 +131,30 @@ public sealed class PostgreSqlConstraintsProjectedUnknownLiteralsIntegrationTest
         {
             report.ThrowIfBlocked();
             await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-            postflight = await runner.VerifyAsync(context, builder.Operations,
-                new SafeMigrationRunOptions("sparse-check-unknown-integer-final"), CancellationToken.None);
+            postflight = await runner.VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-check-unknown-integer-final"),
+                CancellationToken.None);
 
-            replay = await runner.AnalyzeAsync(context, builder.Operations,
-                new SafeMigrationRunOptions("sparse-check-unknown-integer-replay"), CancellationToken.None);
+            replay = await runner.AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-check-unknown-integer-replay"),
+                CancellationToken.None);
         }
 
         // Assert
-        Assert.Equal(approved ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(approved ? SafeMigrationAction.Apply : SafeMigrationAction.RejectPrerequisiteMissing,
+        Assert.Equal(
+            approved
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
+            report.Status);
+
+        Assert.Equal(
+            approved
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectPrerequisiteMissing,
             report.Assessments[1].Action);
 
         if (!approved)
@@ -125,5 +169,4 @@ public sealed class PostgreSqlConstraintsProjectedUnknownLiteralsIntegrationTest
             Assert.All(replay.Assessments, static item => Assert.Equal(SafeMigrationAction.NoOp, item.Action));
         }
     }
-
 }

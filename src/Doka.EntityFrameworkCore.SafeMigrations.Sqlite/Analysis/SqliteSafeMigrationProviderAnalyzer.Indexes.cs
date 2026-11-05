@@ -100,6 +100,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         return (source is null
                 ? Missing(postconditionSatisfied: true)
                 : Different("rename_target", "missing", "existing"))
+
             // WHY: A later accepted destination drop can remove a collision,
             // but cannot turn a constraint-backed source into a standalone index.
             .WithRenameSourceSupported(source?.Origin == "c")
@@ -166,7 +167,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             : _expressionRenderer.Render(expected.StructuredFilter);
 
         if (actual.Unique != expected.Unique
-            || actual.Partial != (expectedFilter is not null)
+            || actual.Partial != expectedFilter is not null
             || actualKeys.Length != expected.Keys.Count
             || !SqlEquivalent(actual.Filter, expectedFilter))
         {
@@ -217,7 +218,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             .ToArray();
 
         if (actual.Unique != expected.IsUnique
-            || actual.Partial != (expected.Filter is not null)
+            || actual.Partial != expected.Filter is not null
             || actualKeys.Length != expected.Columns.Count
             || !SqlEquivalent(actual.Filter, expected.Filter))
         {
@@ -225,6 +226,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         }
 
         var descending = expected.IsDescending;
+
         // WHY: Compare actual and expected key facets at the same ordered key position.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery

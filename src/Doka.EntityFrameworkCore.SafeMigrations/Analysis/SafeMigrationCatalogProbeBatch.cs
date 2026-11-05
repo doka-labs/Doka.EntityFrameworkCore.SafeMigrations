@@ -32,10 +32,13 @@ internal static class SafeMigrationCatalogProbeBatch
         ArgumentOutOfRangeException.ThrowIfNegative(operationCount);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumPayloadBytes);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            maximumPayloadBytes, SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes);
+            maximumPayloadBytes,
+            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes);
+
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumParameters);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            maximumParameters, SafeMigrationCatalogQueryLimits.MaximumParameters);
+            maximumParameters,
+            SafeMigrationCatalogQueryLimits.MaximumParameters);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -51,7 +54,7 @@ internal static class SafeMigrationCatalogProbeBatch
             var parameters = 0;
             var payloadBytes = 0;
             while (batch.Count < SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch
-                   && offset < operationCount)
+                && offset < operationCount)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -74,10 +77,14 @@ internal static class SafeMigrationCatalogProbeBatch
 
                 if (command.Parameters.Count > maximumParameters
                     || SafeMigrationCatalogQueryLimits.Exceeded(
-                        command.Parameters.Count, statementPayloadBytes, maximumPayloadBytes))
+                        command.Parameters.Count,
+                        statementPayloadBytes,
+                        maximumPayloadBytes))
                 {
                     throw SafeMigrationCatalogQueryLimits.OversizedOperation(
-                        statement.FirstOrdinal, command.Parameters.Count, statementPayloadBytes);
+                        statement.FirstOrdinal,
+                        command.Parameters.Count,
+                        statementPayloadBytes);
                 }
 
                 if (parameters + command.Parameters.Count > maximumParameters

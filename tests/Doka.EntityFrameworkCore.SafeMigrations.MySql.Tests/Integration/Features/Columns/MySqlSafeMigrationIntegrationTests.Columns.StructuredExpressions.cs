@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the ColumnsStructuredExpressions migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlColumnsStructuredExpressionsIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlColumnsStructuredExpressionsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlColumnsStructuredExpressionsIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlColumnsStructuredExpressionsIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     [Fact]
     public async Task StructuredIntegerCast_ConvergesRoundTripsAndDetectsSemanticDrift()
@@ -46,12 +48,14 @@ public sealed partial class MySqlColumnsStructuredExpressionsIntegrationTests : 
                 connectionString,
                 "SELECT `doubled_id` FROM `structured_expression_columns` WHERE `id` = 7;",
                 cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM `structured_expression_columns` "
-                + "WHERE `id` = 7 AND `created_at` IS NOT NULL;", cancellationToken: CancellationToken.None));
+                + "WHERE `id` = 7 AND `created_at` IS NOT NULL;",
+                cancellationToken: CancellationToken.None));
 
         var drift = new MigrationBuilder(context.Database.ProviderName!);
         drift.ConvergeTable(StructuredExpressionTable(multiplier: 3));
@@ -107,6 +111,7 @@ public sealed partial class MySqlColumnsStructuredExpressionsIntegrationTests : 
             report.Assessments,
             static assessment => assessment.ObservedState == SafeMigrationObservedState.Unsupported
                 && assessment.Code == "structured_cast_type");
+
         Assert.Equal(
             0,
             await ScalarIntAsync(
@@ -176,6 +181,7 @@ public sealed partial class MySqlColumnsStructuredExpressionsIntegrationTests : 
         var renderer = new MySqlSafeMigrationSqlExpressionRenderer(
             context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
+
         var storeTypes = new[]
         {
             "int",

@@ -17,25 +17,60 @@ public sealed class SqliteColumnRepairProofTests
     [InlineData("computed")]
     [InlineData("stored")]
     [InlineData("autoincrement")]
-    public void DomainChangesDoNotAuthorizeRepairs(string facet)
+    public void DomainChangesDoNotAuthorizeRepairs(
+        string facet
+    )
     {
         // Arrange
-        var source = new ExpectedColumnDefinition("value", typeof(long), true, storeType: "INTEGER",
-            computedColumnSql: facet == "stored" ? "1 + 1" : null,
-            isStored: facet == "stored" ? false : null);
+        var source = new ExpectedColumnDefinition(
+            "value",
+            typeof(long),
+            true,
+            storeType: "INTEGER",
+            computedColumnSql: facet == "stored"
+                ? "1 + 1"
+                : null,
+            isStored: facet == "stored"
+                ? false
+                : null);
 
-        var target = new ExpectedColumnDefinition("value", facet == "clr-type" ? typeof(int) : typeof(long), false,
-            storeType: facet == "store-type" ? "REAL" : "INTEGER",
-            isUnicode: facet == "unicode" ? true : null,
-            maxLength: facet == "length" ? 10 : null,
-            isFixedLength: facet == "fixed-length" ? true : null,
-            precision: facet == "precision" ? 10 : null,
-            scale: facet == "scale" ? 2 : null,
-            collation: facet == "collation" ? new SafeMigrationCollationIdentifier("NOCASE") : null,
-            computedColumnSql: facet is "computed" or "stored" ? "1 + 1" : null,
-            isStored: facet == "stored" ? true : null)
+        var target = new ExpectedColumnDefinition(
+            "value",
+            facet == "clr-type"
+                ? typeof(int)
+                : typeof(long),
+            false,
+            storeType: facet == "store-type"
+                ? "REAL"
+                : "INTEGER",
+            isUnicode: facet == "unicode"
+                ? true
+                : null,
+            maxLength: facet == "length"
+                ? 10
+                : null,
+            isFixedLength: facet == "fixed-length"
+                ? true
+                : null,
+            precision: facet == "precision"
+                ? 10
+                : null,
+            scale: facet == "scale"
+                ? 2
+                : null,
+            collation: facet == "collation"
+                ? new SafeMigrationCollationIdentifier("NOCASE")
+                : null,
+            computedColumnSql: facet is "computed" or "stored"
+                ? "1 + 1"
+                : null,
+            isStored: facet == "stored"
+                ? true
+                : null)
         {
-            ProviderAnnotations = facet == "autoincrement" ? AutoincrementAnnotations() : [],
+            ProviderAnnotations = facet == "autoincrement"
+                ? AutoincrementAnnotations()
+                : [],
         };
 
         // Act
@@ -50,14 +85,26 @@ public sealed class SqliteColumnRepairProofTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void GeneratedValueDomainChangesDoNotAuthorizeRepairs(bool removeExpression)
+    public void GeneratedValueDomainChangesDoNotAuthorizeRepairs(
+        bool removeExpression
+    )
     {
         // Arrange
-        var source = new ExpectedColumnDefinition("value", typeof(long), false, storeType: "INTEGER",
+        var source = new ExpectedColumnDefinition(
+            "value",
+            typeof(long),
+            false,
+            storeType: "INTEGER",
             computedColumnSql: "1 + 1");
 
-        var target = new ExpectedColumnDefinition("value", typeof(long), false, storeType: "INTEGER",
-            computedColumnSql: removeExpression ? null : "1 + 2");
+        var target = new ExpectedColumnDefinition(
+            "value",
+            typeof(long),
+            false,
+            storeType: "INTEGER",
+            computedColumnSql: removeExpression
+                ? null
+                : "1 + 2");
 
         // Act
         var repairIsLossless = SqliteColumnRepairProof.HasLosslessShape(source, target);
@@ -77,12 +124,19 @@ public sealed class SqliteColumnRepairProofTests
     public void SameShapeRetainsNullabilityAndDefaultRepairs(
         bool sourceNullable,
         bool targetNullable,
-        bool changeDefault)
+        bool changeDefault
+    )
     {
         // Arrange
         var source = new ExpectedColumnDefinition("value", typeof(long), sourceNullable, storeType: "INTEGER");
-        var target = new ExpectedColumnDefinition("value", typeof(long), targetNullable, storeType: "INTEGER",
-            defaultValue: changeDefault ? SafeMigrationDefaultValue.Literal(7L) : null);
+        var target = new ExpectedColumnDefinition(
+            "value",
+            typeof(long),
+            targetNullable,
+            storeType: "INTEGER",
+            defaultValue: changeDefault
+                ? SafeMigrationDefaultValue.Literal(7L)
+                : null);
 
         // Act
         var repairIsLossless = SqliteColumnRepairProof.HasLosslessShape(source, target);
@@ -99,17 +153,24 @@ public sealed class SqliteColumnRepairProofTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void AutoincrementIdentityIsPreserved(bool sourceAutoincrement, bool targetAutoincrement)
+    public void AutoincrementIdentityIsPreserved(
+        bool sourceAutoincrement,
+        bool targetAutoincrement
+    )
     {
         // Arrange
         var source = new ExpectedColumnDefinition("value", typeof(long), true, storeType: "INTEGER")
         {
-            ProviderAnnotations = sourceAutoincrement ? AutoincrementAnnotations() : [],
+            ProviderAnnotations = sourceAutoincrement
+                ? AutoincrementAnnotations()
+                : [],
         };
 
         var target = new ExpectedColumnDefinition("value", typeof(long), false, storeType: "INTEGER")
         {
-            ProviderAnnotations = targetAutoincrement ? AutoincrementAnnotations() : [],
+            ProviderAnnotations = targetAutoincrement
+                ? AutoincrementAnnotations()
+                : [],
         };
 
         // Act

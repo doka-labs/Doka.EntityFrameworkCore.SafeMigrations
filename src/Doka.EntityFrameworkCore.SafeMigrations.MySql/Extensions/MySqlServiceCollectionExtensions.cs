@@ -13,7 +13,7 @@ public static class MySqlServiceCollectionExtensions
     /// <returns>The same service collection so additional registrations can be chained.</returns>
     public static IServiceCollection AddEntityFrameworkDokaMySqlSafeMigrations(
         this IServiceCollection services
-    ) => AddEntityFrameworkDokaMySqlSafeMigrations(services, canonicalContextType: null);
+    ) => services.AddEntityFrameworkDokaMySqlSafeMigrations(canonicalContextType: null);
 
     /// <summary>
     /// Adds SafeMigrations and selects the context that owns migration discovery, history, and model validation.
@@ -41,6 +41,7 @@ public static class MySqlServiceCollectionExtensions
 
         services.TryAddEnumerable(
             ServiceDescriptor.Scoped<IMySqlMigrationOperationHandler, MySqlSafeMigrationOperationHandler>());
+
         services.TryAddEnumerable(
             ServiceDescriptor.Scoped<IMySqlMigrationOperationHandler,
                 MySqlSafeMigrationDesignTimeServicesGuardHandler>());

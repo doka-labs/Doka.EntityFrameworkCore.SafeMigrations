@@ -30,7 +30,10 @@ public sealed partial class MySqlProviderAnalysisCleanupTests
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropTableIfExists("items");
 
-        return builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+        return builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
     }
 
     /// <summary>
@@ -70,7 +73,7 @@ public sealed partial class MySqlProviderAnalysisCleanupTests
         public int ClassificationCount { get; private set; }
 
         /// <inheritdoc />
-        [System.Diagnostics.CodeAnalysis.AllowNull]
+        [AllowNull]
         public override string ConnectionString { get; set; } =
             "Server=localhost;Database=analysis_cleanup;AllowUserVariables=true;GuidFormat=Binary16";
 
@@ -174,8 +177,16 @@ public sealed partial class MySqlProviderAnalysisCleanupTests
             result.Columns.Add("dependency_counts", typeof(string));
             result.Columns.Add("diagnostics", typeof(string));
             result.Columns.Add("matched_name", typeof(string));
-            result.Rows.Add(0, "matching", false, false, DBNull.Value, DBNull.Value, DBNull.Value,
-                DBNull.Value, DBNull.Value);
+            result.Rows.Add(
+                0,
+                "matching",
+                false,
+                false,
+                DBNull.Value,
+                DBNull.Value,
+                DBNull.Value,
+                DBNull.Value,
+                DBNull.Value);
 
             return result;
         }

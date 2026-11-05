@@ -9,13 +9,16 @@ internal static class GeneratedExpressionConsumerContract
             SafeMigrationSql.Literal(0));
 
         var builder = new MigrationBuilder("PackageConsumer");
-        builder.AddColumnIfNotExistsFromModel(
-            static operations => operations.AddColumn<long>(
-                name: "computed_value", table: "expression_probe", nullable: true,
-                computedColumnSql: "CASE WHEN source_value = 0 THEN 1 ELSE 2 END"));
+        builder.AddColumnIfNotExistsFromModel(static operations => operations.AddColumn<long>(
+            name: "computed_value",
+            table: "expression_probe",
+            nullable: true,
+            computedColumnSql: "CASE WHEN source_value = 0 THEN 1 ELSE 2 END"));
 
         builder.AddCheckConstraintIfNotExists(
-            name: "ck_expression_probe", table: "expression_probe", sql: "source_value >= 0");
+            name: "ck_expression_probe",
+            table: "expression_probe",
+            sql: "source_value >= 0");
 
         // WHY: ProjectReference-only tests cannot detect missing public types,
         // metadata bridges or compile assets in an isolated NuGet consumer.
@@ -29,7 +32,7 @@ internal static class GeneratedExpressionConsumerContract
                 SafeMigrationOperation { Intent: EnsureCheckConstraintIntent { Definition.Expression: not null } },
             ])
         {
-            throw new System.InvalidOperationException("The packaged generated-expression contract is incomplete.");
+            throw new InvalidOperationException("The packaged generated-expression contract is incomplete.");
         }
     }
 }

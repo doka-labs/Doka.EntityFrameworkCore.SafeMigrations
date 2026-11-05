@@ -15,30 +15,43 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var projection = new SafeMigrationPreflightProjection();
 
         ObserveColumnsOnExistingTable(projection, "items", Column("id"));
-        ObserveAccepted(projection, new DropPrimaryKeyIntent("pk_items", "items"),
+        ObserveAccepted(
+            projection,
+            new DropPrimaryKeyIntent("pk_items", "items"),
             SafeMigrationObservedState.Matching);
 
         var addition = new SafeMigrationOperation(
-            new EnsureColumnIntent("items", Column("replacement_id")), SafeMigrationPolicy.ThrowIfDifferent);
+            new EnsureColumnIntent("items", Column("replacement_id")),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
-        var live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
-            SafeMigrationRepairCapability.None, postconditionSatisfied: false, "required-add")
+        var live = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Missing,
+            SafeMigrationRepairCapability.None,
+            postconditionSatisfied: false,
+            "required-add")
         {
             RequiredColumnAddResumesOwnedStaging = resumesStaging,
         };
 
-        var decision = SafeMigrationDecisionPlanner.Plan(addition.Intent.Kind, live.ObservedState,
-            addition.Policy, live.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            addition.Intent.Kind,
+            live.ObservedState,
+            addition.Policy,
+            live.RepairCapability);
 
         // Act
         projection.Observe(addition, live, live, decision);
-        var analysis = projection.Project(ConstraintReplacementPrimaryKeyOperation(),
+        var analysis = projection.Project(
+            ConstraintReplacementPrimaryKeyOperation(),
             Live(SafeMigrationObservedState.Different));
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, decision.Action);
-        Assert.Equal(resumesStaging ? SafeMigrationObservedState.PrerequisiteMissing
-            : SafeMigrationObservedState.Missing, analysis.ObservedState);
+        Assert.Equal(
+            resumesStaging
+                ? SafeMigrationObservedState.PrerequisiteMissing
+                : SafeMigrationObservedState.Missing,
+            analysis.ObservedState);
     }
 
     /// <summary>
@@ -48,8 +61,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     public void RequiredColumnRecoveryCertificateSurvivesDiagnosticEnrichment()
     {
         // Arrange
-        var source = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
-            SafeMigrationRepairCapability.None, postconditionSatisfied: false, "column_atomic_add_resume")
+        var source = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Missing,
+            SafeMigrationRepairCapability.None,
+            postconditionSatisfied: false,
+            "column_atomic_add_resume")
         {
             RequiredColumnAddResumesOwnedStaging = true,
         };

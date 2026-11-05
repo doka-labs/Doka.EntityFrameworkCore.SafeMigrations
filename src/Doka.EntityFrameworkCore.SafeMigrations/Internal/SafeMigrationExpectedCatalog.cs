@@ -254,10 +254,12 @@ internal static partial class SafeMigrationExpectedCatalog
                 table,
                 definition.UniqueConstraints.Select(static value => value.Name),
                 SafeMigrationDatabaseObjectKind.UniqueConstraint);
+
             AddConstraints(
                 table,
                 definition.CheckConstraints.Select(static value => value.Name),
                 SafeMigrationDatabaseObjectKind.CheckConstraint);
+
             AddConstraints(
                 table,
                 definition.ForeignKeys.Select(static value => value.Name),

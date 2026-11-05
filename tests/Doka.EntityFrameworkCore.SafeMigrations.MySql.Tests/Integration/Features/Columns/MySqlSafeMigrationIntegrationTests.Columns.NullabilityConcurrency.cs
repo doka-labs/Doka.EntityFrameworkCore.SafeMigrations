@@ -1,50 +1,66 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the ColumnsNullabilityConcurrency migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlColumnsNullabilityConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlColumnsNullabilityConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlColumnsNullabilityConcurrencyIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlColumnsNullabilityConcurrencyIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>A late committed NULL cannot be coerced after an earlier runtime NULL-free proof.</summary>
     /// <param name="ensure">Whether the target is EnsureColumn rather than an explicit AlterColumn.</param>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task NullabilityTighteningLateNullWriterFailsWithoutInventingValues(bool ensure)
+    public async Task NullabilityTighteningLateNullWriterFailsWithoutInventingValues(
+        bool ensure
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, NullabilityConcurrencyFixtureSql(),
+        await ExecuteSqlAsync(
+            connectionString,
+            NullabilityConcurrencyFixtureSql(),
             cancellationToken: CancellationToken.None);
+
         var observer = new NullabilityConcurrencyWriter(connectionString, insertNull: true);
         await using var context = CreateRuntimeContext(connectionString, observer);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
-        await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES';",
+        await AtomicRequiredAddSessionSqlAsync(
+            context,
+            "SET SESSION sql_mode = 'STRICT_ALL_TABLES';",
             cancellationToken: CancellationToken.None);
+
         var operation = NullabilityConcurrencyOperation(ensure);
 
         // Act
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var nullable = await ScalarIntAsync(connectionString,
+        var nullable = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'nullability_race_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'YES';",
             cancellationToken: CancellationToken.None);
 
-        var nullRows = await ScalarIntAsync(connectionString,
+        var nullRows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `nullability_race_items` WHERE `id` = 2 AND `value` IS NULL;",
             cancellationToken: CancellationToken.None);
 
-        var preserved = await ScalarIntAsync(connectionString,
+        var preserved = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `nullability_race_items` WHERE `id` = 1 "
-            + "AND `value` = '00000000-0000-0000-0000-000000000001';", cancellationToken: CancellationToken.None);
+            + "AND `value` = '00000000-0000-0000-0000-000000000001';",
+            cancellationToken: CancellationToken.None);
 
-        var invented = await ScalarIntAsync(connectionString,
+        var invented = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `nullability_race_items` WHERE `value` = '' "
-            + "OR `value` = '00000000-0000-0000-0000-000000000000';", cancellationToken: CancellationToken.None);
+            + "OR `value` = '00000000-0000-0000-0000-000000000000';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var providerException = Assert.IsType<MySqlException>(exception);
@@ -52,8 +68,12 @@ public sealed partial class MySqlColumnsNullabilityConcurrencyIntegrationTests :
         Assert.True(observer.ProvenRepairCheckpointObserved);
         Assert.True(observer.WasInjected);
         Assert.Equal(1, observer.CommittedRows);
-        Assert.True(Fixture.IsMariaDb ? providerException.Number == 1265 : providerException.Number == 1138,
+        Assert.True(
+            Fixture.IsMariaDb
+                ? providerException.Number == 1265
+                : providerException.Number == 1138,
             $"Unexpected native NULL failure {providerException.Number}: {providerException.Message}");
+
         Assert.DoesNotContain("doka_sm_", providerException.Message, StringComparison.Ordinal);
         Assert.Equal(1, nullable);
         Assert.Equal(1, nullRows);
@@ -68,27 +88,37 @@ public sealed partial class MySqlColumnsNullabilityConcurrencyIntegrationTests :
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task NullabilityTighteningLateExplicitWriterSurvivesRequiredRepair(bool ensure)
+    public async Task NullabilityTighteningLateExplicitWriterSurvivesRequiredRepair(
+        bool ensure
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, NullabilityConcurrencyFixtureSql(),
+        await ExecuteSqlAsync(
+            connectionString,
+            NullabilityConcurrencyFixtureSql(),
             cancellationToken: CancellationToken.None);
+
         var observer = new NullabilityConcurrencyWriter(connectionString, insertNull: false);
         await using var context = CreateRuntimeContext(connectionString, observer);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
-        await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES';",
+        await AtomicRequiredAddSessionSqlAsync(
+            context,
+            "SET SESSION sql_mode = 'STRICT_ALL_TABLES';",
             cancellationToken: CancellationToken.None);
+
         var operation = NullabilityConcurrencyOperation(ensure);
 
         // Act
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
-        var required = await ScalarIntAsync(connectionString,
+        var required = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'nullability_race_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';",
             cancellationToken: CancellationToken.None);
 
-        var preserved = await ScalarIntAsync(connectionString,
+        var preserved = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `nullability_race_items` WHERE "
             + "(`id` = 1 AND `value` = '00000000-0000-0000-0000-000000000001') "
             + "OR (`id` = 2 AND `value` = '00000000-0000-0000-0000-000000000002');",
@@ -115,15 +145,22 @@ public sealed partial class MySqlColumnsNullabilityConcurrencyIntegrationTests :
     /// </summary>
     /// <param name="ensure">Whether to capture an Ensure rather than an explicit Alter intent.</param>
     /// <returns>The immutable no-default required-column request.</returns>
-    private static SafeMigrationOperation NullabilityConcurrencyOperation(bool ensure)
+    private static SafeMigrationOperation NullabilityConcurrencyOperation(
+        bool ensure
+    )
     {
         var builder = new MigrationBuilder("Doka.EntityFrameworkCore.MySql");
         if (ensure)
         {
             builder.AddColumnIfNotExistsFromModel(
-                operationFactory: static operations => operations.AddColumn<Guid>(
-                        name: "value", table: "nullability_race_items", type: "char(36)",
-                        fixedLength: true, maxLength: 36, nullable: false)
+                operationFactory: static operations => operations
+                    .AddColumn<Guid>(
+                        name: "value",
+                        table: "nullability_race_items",
+                        type: "char(36)",
+                        fixedLength: true,
+                        maxLength: 36,
+                        nullable: false)
                     .Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Char36)
                     .Annotation("Doka:MySql:RequiresExplicitBackfill", true)
                     .Annotation("Doka:MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.None),
@@ -132,11 +169,19 @@ public sealed partial class MySqlColumnsNullabilityConcurrencyIntegrationTests :
         else
         {
             builder.AlterColumnIfDifferentFromModel(
-                operationFactory: static operations => operations.AlterColumn<Guid>(
-                        name: "value", table: "nullability_race_items", type: "char(36)",
-                        fixedLength: true, maxLength: 36, nullable: false,
-                        oldClrType: typeof(Guid), oldType: "char(36)", oldFixedLength: true,
-                        oldMaxLength: 36, oldNullable: true)
+                operationFactory: static operations => operations
+                    .AlterColumn<Guid>(
+                        name: "value",
+                        table: "nullability_race_items",
+                        type: "char(36)",
+                        fixedLength: true,
+                        maxLength: 36,
+                        nullable: false,
+                        oldClrType: typeof(Guid),
+                        oldType: "char(36)",
+                        oldFixedLength: true,
+                        oldMaxLength: 36,
+                        oldNullable: true)
                     .Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Char36)
                     .Annotation("Doka:MySql:RequiresExplicitBackfill", true)
                     .Annotation("Doka:MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.None)
@@ -151,7 +196,6 @@ public sealed partial class MySqlColumnsNullabilityConcurrencyIntegrationTests :
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-
     /// <summary>Commits an external row exactly after runtime proof setup and before the real guarded body.</summary>
     /// <remarks>
     /// WHY: A before-preflight or before-setup writer only tests ordinary data
@@ -166,7 +210,10 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         /// <summary>Initializes an independent writer with one caller-controlled late row.</summary>
         /// <param name="connectionString">The isolated fixture database connection.</param>
         /// <param name="insertNull">Whether the late value violates the requested NOT NULL contract.</param>
-        public NullabilityConcurrencyWriter(string connectionString, bool insertNull)
+        public NullabilityConcurrencyWriter(
+            string connectionString,
+            bool insertNull
+        )
         {
             _connectionString = connectionString;
             _insertNull = insertNull;
@@ -204,8 +251,11 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
                 + "AND COALESCE(@doka_sm_action = 'repair', FALSE) "
                 + "AND COALESCE(@doka_sm_repair_ok, FALSE) "
                 + "AND NOT COALESCE(@doka_sm_nullability_blocked, TRUE);";
+
             ProvenRepairCheckpointObserved = Convert.ToBoolean(
-                await checkpoint.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture);
+                await checkpoint.ExecuteScalarAsync(cancellationToken),
+                CultureInfo.InvariantCulture);
+
             if (!ProvenRepairCheckpointObserved)
             {
                 throw new InvalidOperationException("The writer did not reach a proven runtime NULL-free repair.");
@@ -215,7 +265,11 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             await writer.OpenAsync(cancellationToken);
             await using var insert = writer.CreateCommand();
             insert.CommandText = "INSERT INTO `nullability_race_items` (`id`, `value`) VALUES (2, "
-                + (_insertNull ? "NULL" : "'00000000-0000-0000-0000-000000000002'") + ");";
+                + (_insertNull
+                    ? "NULL"
+                    : "'00000000-0000-0000-0000-000000000002'")
+                + ");";
+
             CommittedRows = await insert.ExecuteNonQueryAsync(cancellationToken);
             WasInjected = true;
 

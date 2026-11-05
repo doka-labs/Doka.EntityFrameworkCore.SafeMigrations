@@ -26,9 +26,10 @@ internal static class MaintenanceAttribution
                 new
                 {
                     Runtime = Environment.Version.ToString(),
-                    Architecture = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString(),
+                    Architecture = RuntimeInformation.ProcessArchitecture.ToString(),
                     Provider = provider,
-                    Evidence = "Functional controls only; measurements are in native BenchmarkDotNet full JSON reports.",
+                    Evidence =
+                        "Functional controls only; measurements are in native BenchmarkDotNet full JSON reports.",
                     SourceLabel = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_ATTRIBUTION_SOURCE")
                         ?? "unlabelled",
                     Results = results,
@@ -45,7 +46,7 @@ internal static class MaintenanceAttribution
     /// <returns>The uppercase SHA-256 digest of its UTF-8 representation.</returns>
     internal static string Hash(
         string value
-    ) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value)));
+    ) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
     /// <summary>Rejects a failed functional invariant, independently of measured performance.</summary>
     /// <param name="condition">The exact functional invariant.</param>

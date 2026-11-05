@@ -23,6 +23,9 @@ internal static class SharedContainerFixtureSelection
         string? skipReason
     ) => string.IsNullOrEmpty(skipReason)
         && !testClass.IsAbstract
-        && testClass.GetConstructors().Any(constructor => constructor.GetParameters()
-            .Any(parameter => parameter.ParameterType == typeof(TFixture)));
+        && testClass
+            .GetConstructors()
+            .Any(constructor => constructor
+                .GetParameters()
+                .Any(parameter => parameter.ParameterType == typeof(TFixture)));
 }

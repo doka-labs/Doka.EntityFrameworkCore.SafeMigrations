@@ -1,10 +1,11 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
 /// <summary>Owns test-local databases and synchronization without owning the shared native container.</summary>
-public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlContainerFixture>, IAsyncLifetime, IDisposable
+public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlContainerFixture>, IAsyncLifetime,
+    IDisposable
 {
-    private readonly List<string> _ownedDatabases = [];
     private readonly SemaphoreSlim _ownedDatabaseLock = new(1, 1);
+    private readonly List<string> _ownedDatabases = [];
     private bool _cleanupStarted;
     private int _synchronizationDisposed;
 
@@ -12,7 +13,10 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
     /// <param name="fixture">The assembly-owned PostgreSQL container fixture.</param>
     protected PostgreSqlIntegrationTestBase(
         PostgreSqlContainerFixture fixture
-    ) => Fixture = fixture;
+    )
+    {
+        Fixture = fixture;
+    }
 
     /// <summary>Gets the shared fixture without transferring its startup or disposal ownership.</summary>
     protected PostgreSqlContainerFixture Fixture { get; }
@@ -20,26 +24,6 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
     /// <summary>Leaves container startup with the assembly runner.</summary>
     /// <returns>An already completed task.</returns>
     public Task InitializeAsync() => Task.CompletedTask;
-
-    /// <summary>Disposes only test-local synchronization after asynchronous database cleanup.</summary>
-    public void Dispose()
-    {
-        Dispose(disposing: true);
-        GC.SuppressFinalize(this);
-    }
-
-    /// <summary>Releases this test's managed synchronization resource without transferring fixture ownership.</summary>
-    /// <param name="disposing">Whether managed resources are being released.</param>
-    protected virtual void Dispose(
-        bool disposing
-    )
-    {
-        // WHY: xUnit runs asynchronous teardown first; the shared container is never this test's disposable resource.
-        if (disposing && Interlocked.Exchange(ref _synchronizationDisposed, 1) == 0)
-        {
-            _ownedDatabaseLock.Dispose();
-        }
-    }
 
     /// <summary>Releases this test's databases without disposing the shared container.</summary>
     /// <returns>A task completing when all of this test's database releases have been attempted.</returns>
@@ -74,6 +58,26 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
         if (failures.Count != 0)
         {
             throw new AggregateException("The test's PostgreSQL databases could not be released.", failures);
+        }
+    }
+
+    /// <summary>Disposes only test-local synchronization after asynchronous database cleanup.</summary>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Releases this test's managed synchronization resource without transferring fixture ownership.</summary>
+    /// <param name="disposing">Whether managed resources are being released.</param>
+    protected virtual void Dispose(
+        bool disposing
+    )
+    {
+        // WHY: xUnit runs asynchronous teardown first; the shared container is never this test's disposable resource.
+        if (disposing && Interlocked.Exchange(ref _synchronizationDisposed, 1) == 0)
+        {
+            _ownedDatabaseLock.Dispose();
         }
     }
 
@@ -123,7 +127,7 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
         var generator = context.GetService<IMigrationsSqlGenerator>();
         var commands = generator.Generate(operations, context.Model);
         var connection = context.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open)
+        if (connection.State != ConnectionState.Open)
         {
             await connection.OpenAsync(cancellationToken);
         }
@@ -224,6 +228,7 @@ public abstract class PostgreSqlIntegrationTestBase : IClassFixture<PostgreSqlCo
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT pg_catalog.pg_get_expr(co.conbin, co.conrelid) "
             + "FROM pg_catalog.pg_constraint co WHERE co.conname = @name;";
+
         command.Parameters.AddWithValue("name", constraintName);
 
         return Convert.ToString(

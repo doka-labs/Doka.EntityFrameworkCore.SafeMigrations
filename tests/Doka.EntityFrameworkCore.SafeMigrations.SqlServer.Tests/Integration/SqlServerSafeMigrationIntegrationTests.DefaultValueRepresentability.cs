@@ -23,18 +23,28 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.default_items (Id int NOT NULL); INSERT dbo.default_items VALUES (1); "
-            + "CREATE TABLE dbo.default_ddl_events (Id int NOT NULL);", cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+            + "CREATE TABLE dbo.default_ddl_events (Id int NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TRIGGER doka_default_ddl_audit ON DATABASE FOR DDL_TABLE_EVENTS "
-            + "AS INSERT dbo.default_ddl_events VALUES (1);", cancellationToken: CancellationToken.None);
+            + "AS INSERT dbo.default_ddl_events VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var defaultValue = structured
             ? SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(DateTime.MinValue, "datetime"))
             : SafeMigrationDefaultValue.Literal(DateTime.MinValue);
 
-        var definition = new ExpectedColumnDefinition("Created", typeof(DateTime), false, "datetime",
+        var definition = new ExpectedColumnDefinition(
+            "Created",
+            typeof(DateTime),
+            false,
+            "datetime",
             defaultValue: defaultValue);
 
         var operation = TemporalDefaultOperation(definition, inlineTable);
@@ -42,21 +52,29 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
 
         // Act
         var analyses = await analyzer.AnalyzeAsync(context, [operation], cancellationToken: CancellationToken.None);
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [operation],
             cancellationToken: CancellationToken.None));
 
-        var originalColumns = await ScalarIntAsync(connectionString,
+        var originalColumns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.default_items', N'U');",
             cancellationToken: CancellationToken.None);
 
-        var originalRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.default_items WHERE Id = 1;", cancellationToken: CancellationToken.None);
+        var originalRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.default_items WHERE Id = 1;",
+            cancellationToken: CancellationToken.None);
 
-        var newTables = await ScalarIntAsync(connectionString,
+        var newTables = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'dbo.new_default_items', N'U');",
             cancellationToken: CancellationToken.None);
 
-        var ddlEvents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.default_ddl_events;",
+        var ddlEvents = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.default_ddl_events;",
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -95,41 +113,61 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.default_items (Id int NOT NULL); INSERT dbo.default_items VALUES (1);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var value = new DateTime(year, 1, 1);
         var defaultValue = structured
             ? SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(value, storeType))
             : SafeMigrationDefaultValue.Literal(value);
 
-        var definition = new ExpectedColumnDefinition("Created", typeof(DateTime), false, storeType,
+        var definition = new ExpectedColumnDefinition(
+            "Created",
+            typeof(DateTime),
+            false,
+            storeType,
             defaultValue: defaultValue);
 
         var operation = TemporalDefaultOperation(definition, inlineTable);
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
-        var table = inlineTable ? "new_default_items" : "default_items";
+        var table = inlineTable
+            ? "new_default_items"
+            : "default_items";
+
         var expected = value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
         // Act
-        var beforeAnalyses = await analyzer.AnalyzeAsync(context, [operation],
+        var beforeAnalyses = await analyzer.AnalyzeAsync(
+            context,
+            [operation],
             cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [operation], cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "INSERT dbo." + table + " (Id) VALUES (2);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "INSERT dbo." + table + " (Id) VALUES (2);",
             cancellationToken: CancellationToken.None);
-        var afterAnalyses = await analyzer.AnalyzeAsync(context, [operation],
+
+        var afterAnalyses = await analyzer.AnalyzeAsync(
+            context,
+            [operation],
             cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [operation], cancellationToken: CancellationToken.None);
-        var matchingRows = await ScalarIntAsync(connectionString,
+        var matchingRows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM dbo." + table + " WHERE Created = CAST(N'" + expected + "' AS datetime2(7));",
             cancellationToken: CancellationToken.None);
 
-        var defaults = await ScalarIntAsync(connectionString,
+        var defaults = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.default_constraints WHERE parent_object_id = OBJECT_ID(N'dbo."
-            + table + "', N'U');", cancellationToken: CancellationToken.None);
+            + table
+            + "', N'U');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var before = Assert.Single(beforeAnalyses);
@@ -137,7 +175,12 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
         Assert.Equal(SafeMigrationObservedState.Missing, before.ObservedState);
         Assert.Equal(SafeMigrationObservedState.Matching, after.ObservedState);
         Assert.True(after.PostconditionSatisfied);
-        Assert.Equal(inlineTable ? 1 : 2, matchingRows);
+        Assert.Equal(
+            inlineTable
+                ? 1
+                : 2,
+            matchingRows);
+
         Assert.Equal(1, defaults);
     }
 
@@ -155,39 +198,57 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.default_items (Id int NOT NULL); INSERT dbo.default_items VALUES (1);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
-        var definition = new ExpectedColumnDefinition("Created", typeof(DateTime), false, storeType,
+        var definition = new ExpectedColumnDefinition(
+            "Created",
+            typeof(DateTime),
+            false,
+            storeType,
             defaultValue: SafeMigrationDefaultValue.Sql(sql));
 
         var operation = TemporalDefaultOperation(definition, inlineTable);
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
-        var table = inlineTable ? "new_default_items" : "default_items";
+        var table = inlineTable
+            ? "new_default_items"
+            : "default_items";
 
         // Act
-        var beforeAnalyses = await analyzer.AnalyzeAsync(context, [operation],
+        var beforeAnalyses = await analyzer.AnalyzeAsync(
+            context,
+            [operation],
             cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [operation], cancellationToken: CancellationToken.None);
         if (inlineTable)
         {
-            await ExecuteSqlAsync(connectionString, "INSERT dbo." + table + " (Id) VALUES (1);",
+            await ExecuteSqlAsync(
+                connectionString,
+                "INSERT dbo." + table + " (Id) VALUES (1);",
                 cancellationToken: CancellationToken.None);
         }
 
-        var afterAnalyses = await analyzer.AnalyzeAsync(context, [operation],
+        var afterAnalyses = await analyzer.AnalyzeAsync(
+            context,
+            [operation],
             cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [operation], cancellationToken: CancellationToken.None);
-        var matchingRows = await ScalarIntAsync(connectionString,
+        var matchingRows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM dbo." + table + " WHERE Id = 1 AND Created IS NOT NULL;",
             cancellationToken: CancellationToken.None);
 
-        var defaults = await ScalarIntAsync(connectionString,
+        var defaults = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.default_constraints WHERE parent_object_id = OBJECT_ID(N'dbo."
-            + table + "', N'U');", cancellationToken: CancellationToken.None);
+            + table
+            + "', N'U');",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         var before = Assert.Single(beforeAnalyses);
@@ -209,39 +270,64 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.default_items (Id int NOT NULL); INSERT dbo.default_items VALUES (1);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var definition = kind == "integer"
-            ? new ExpectedColumnDefinition("Created", typeof(int), false, "int",
+            ? new ExpectedColumnDefinition(
+                "Created",
+                typeof(int),
+                false,
+                "int",
                 defaultValue: SafeMigrationDefaultValue.Sql("SYSUTCDATETIME()"))
-            : new ExpectedColumnDefinition("Created", typeof(DateTime), false, "datetime",
-                defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Function("COALESCE",
-                    SafeMigrationSql.Current(SafeMigrationSqlCurrentValue.Timestamp),
-                    SafeMigrationSql.Literal(DateTime.MinValue))));
+            : new ExpectedColumnDefinition(
+                "Created",
+                typeof(DateTime),
+                false,
+                "datetime",
+                defaultValue: SafeMigrationDefaultValue.Sql(
+                    SafeMigrationSql.Function(
+                        "COALESCE",
+                        SafeMigrationSql.Current(SafeMigrationSqlCurrentValue.Timestamp),
+                        SafeMigrationSql.Literal(DateTime.MinValue))));
 
         var operation = TemporalDefaultOperation(definition, inlineTable: false);
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation],
-            cancellationToken: CancellationToken.None);
+        var analyses = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [operation],
             cancellationToken: CancellationToken.None));
 
-        var columns = await ScalarIntAsync(connectionString,
+        var columns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.default_items', N'U');",
             cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.default_items WHERE Id = 1;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.default_items WHERE Id = 1;",
             cancellationToken: CancellationToken.None);
 
         // Assert
         var analysis = Assert.Single(analyses);
         Assert.Equal(SafeMigrationObservedState.Unsupported, analysis.ObservedState);
-        Assert.Equal(kind == "integer" ? "default_expression_unproven" : "default_value_unrepresentable",
+        Assert.Equal(
+            kind == "integer"
+                ? "default_expression_unproven"
+                : "default_value_unrepresentable",
             analysis.Code);
+
         Assert.True(analysis.IsInvariantUnsupported);
         Assert.IsType<NotSupportedException>(failure);
         Assert.Equal(1, columns);
@@ -268,53 +354,84 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.default_items (Id int NOT NULL); INSERT dbo.default_items VALUES (1); "
-            + "CREATE TABLE dbo.default_ddl_events (Id int NOT NULL);", cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+            + "CREATE TABLE dbo.default_ddl_events (Id int NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TRIGGER doka_default_ddl_audit ON DATABASE FOR DDL_TABLE_EVENTS "
-            + "AS INSERT dbo.default_ddl_events VALUES (1);", cancellationToken: CancellationToken.None);
+            + "AS INSERT dbo.default_ddl_events VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
-        var definition = new ExpectedColumnDefinition("Caption", typeof(string), false,
+        var definition = new ExpectedColumnDefinition(
+            "Caption",
+            typeof(string),
+            false,
             "varchar(" + maximumBytes.ToString(CultureInfo.InvariantCulture) + ")",
             collation: new SafeMigrationCollationIdentifier(collation),
             defaultValue: SafeMigrationDefaultValue.Literal(value));
 
         var operation = TemporalDefaultOperation(definition, inlineTable);
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
-        var table = inlineTable ? "new_default_items" : "default_items";
+        var table = inlineTable
+            ? "new_default_items"
+            : "default_items";
 
         // Act
-        var beforeAnalyses = await analyzer.AnalyzeAsync(context, [operation],
+        var beforeAnalyses = await analyzer.AnalyzeAsync(
+            context,
+            [operation],
             cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [operation],
             cancellationToken: CancellationToken.None));
 
         if (supported && inlineTable)
         {
-            await ExecuteSqlAsync(connectionString, "INSERT dbo." + table + " (Id) VALUES (1);",
+            await ExecuteSqlAsync(
+                connectionString,
+                "INSERT dbo." + table + " (Id) VALUES (1);",
                 cancellationToken: CancellationToken.None);
         }
 
-        var afterAnalyses = await analyzer.AnalyzeAsync(context, [operation],
+        var afterAnalyses = await analyzer.AnalyzeAsync(
+            context,
+            [operation],
             cancellationToken: CancellationToken.None);
 
-        var columns = await ScalarIntAsync(connectionString,
+        var columns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo." + table + "', N'U');",
             cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.default_items WHERE Id = 1;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.default_items WHERE Id = 1;",
             cancellationToken: CancellationToken.None);
 
-        var ddlEvents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.default_ddl_events;",
+        var ddlEvents = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.default_ddl_events;",
             cancellationToken: CancellationToken.None);
 
         // Assert
         var before = Assert.Single(beforeAnalyses);
         var after = Assert.Single(afterAnalyses);
         Assert.Equal(1, rows);
-        Assert.Equal(supported ? 2 : inlineTable ? 0 : 1, columns);
+        Assert.Equal(
+            supported
+                ? 2
+                : inlineTable
+                    ? 0
+                    : 1,
+            columns);
+
         if (supported)
         {
             Assert.Equal(SafeMigrationObservedState.Missing, before.ObservedState);
@@ -327,7 +444,10 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
             Assert.Equal(SafeMigrationObservedState.Unsupported, before.ObservedState);
             Assert.Equal("default_value_unrepresentable", before.Code);
             Assert.True(before.IsInvariantUnsupported);
-            Assert.Equal(51002, Assert.IsType<SqlException>(failure).Number);
+            Assert.Equal(51002,
+                Assert.IsType<SqlException>(failure)
+                    .Number);
+
             Assert.Equal(SafeMigrationObservedState.Unsupported, after.ObservedState);
             Assert.Equal(0, ddlEvents);
         }
@@ -339,42 +459,68 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.default_items (Id int NOT NULL, "
             + "Caption varchar(1) COLLATE Latin1_General_100_CI_AS_SC_UTF8 "
             + "NOT NULL DEFAULT ('A')); INSERT dbo.default_items (Id) VALUES (1); "
-            + "CREATE TABLE dbo.default_ddl_events (Id int NOT NULL);", cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+            + "CREATE TABLE dbo.default_ddl_events (Id int NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TRIGGER doka_default_ddl_audit ON DATABASE FOR DDL_TABLE_EVENTS "
-            + "AS INSERT dbo.default_ddl_events VALUES (1);", cancellationToken: CancellationToken.None);
+            + "AS INSERT dbo.default_ddl_events VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
-        var oldDefinition = new ExpectedColumnDefinition("Caption", typeof(string), false, "varchar(1)",
+        var oldDefinition = new ExpectedColumnDefinition(
+            "Caption",
+            typeof(string),
+            false,
+            "varchar(1)",
             collation: new SafeMigrationCollationIdentifier("Latin1_General_100_CI_AS_SC_UTF8"),
             defaultValue: SafeMigrationDefaultValue.Literal("A"));
 
-        var definition = new ExpectedColumnDefinition("Caption", typeof(string), false, "varchar(1)",
-            collation: oldDefinition.Collation, defaultValue: SafeMigrationDefaultValue.Literal("\u00E9"));
+        var definition = new ExpectedColumnDefinition(
+            "Caption",
+            typeof(string),
+            false,
+            "varchar(1)",
+            collation: oldDefinition.Collation,
+            defaultValue: SafeMigrationDefaultValue.Literal("\u00E9"));
 
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("default_items", definition, oldDefinition),
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent("default_items", definition, oldDefinition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var analyses = await context.GetService<ISafeMigrationProviderAnalyzer>().AnalyzeAsync(context, [operation],
-            cancellationToken: CancellationToken.None);
+        var analyses = await context
+            .GetService<ISafeMigrationProviderAnalyzer>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                cancellationToken: CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [operation],
             cancellationToken: CancellationToken.None));
 
-        var rows = await ScalarIntAsync(connectionString,
+        var rows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM dbo.default_items WHERE Id = 1 AND Caption = 'A';",
             cancellationToken: CancellationToken.None);
 
-        var defaults = await ScalarIntAsync(connectionString,
+        var defaults = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.default_constraints "
             + "WHERE parent_object_id = OBJECT_ID(N'dbo.default_items', N'U');",
             cancellationToken: CancellationToken.None);
 
-        var ddlEvents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.default_ddl_events;",
+        var ddlEvents = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.default_ddl_events;",
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -382,7 +528,10 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
         Assert.Equal(SafeMigrationObservedState.Unsupported, analysis.ObservedState);
         Assert.Equal("default_value_unrepresentable", analysis.Code);
         Assert.True(analysis.IsInvariantUnsupported);
-        Assert.Equal(51002, Assert.IsType<SqlException>(failure).Number);
+        Assert.Equal(51002,
+            Assert.IsType<SqlException>(failure)
+                .Number);
+
         Assert.Equal(1, rows);
         Assert.Equal(1, defaults);
         Assert.Equal(0, ddlEvents);
@@ -398,18 +547,29 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.default_items (Id int NOT NULL PRIMARY KEY); INSERT dbo.default_items VALUES (1);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
-        var definition = new ExpectedColumnDefinition("Created", typeof(DateTime), false, "datetime2",
+        var definition = new ExpectedColumnDefinition(
+            "Created",
+            typeof(DateTime),
+            false,
+            "datetime2",
             defaultValue: SafeMigrationDefaultValue.Sql(sql));
 
         SafeMigrationOperation[] operations =
         [
             new(new EnsureColumnIntent("default_items", definition), SafeMigrationPolicy.ThrowIfDifferent),
-            new(new EnsureIndexIntent(new ExpectedIndexDefinition("IX_default_Created", "default_items",
-                [new ExpectedIndexKeyDefinition("Created")])), SafeMigrationPolicy.ThrowIfDifferent),
+            new(
+                new EnsureIndexIntent(
+                    new ExpectedIndexDefinition(
+                        "IX_default_Created",
+                        "default_items",
+                        [new ExpectedIndexKeyDefinition("Created")])),
+                SafeMigrationPolicy.ThrowIfDifferent),
         ];
 
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -420,7 +580,8 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
         await ExecuteOperationsAsync(context, operations, cancellationToken: CancellationToken.None);
         var after = await runner.VerifyAsync(context, operations, options, cancellationToken: CancellationToken.None);
         await ExecuteOperationsAsync(context, operations, cancellationToken: CancellationToken.None);
-        var rows = await ScalarIntAsync(connectionString,
+        var rows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM dbo.default_items WHERE Id = 1 AND Created IS NOT NULL;",
             cancellationToken: CancellationToken.None);
 
@@ -451,21 +612,34 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "ALTER DATABASE CURRENT COLLATE " + collation + ";",
+        await ExecuteSqlAsync(
+            connectionString,
+            "ALTER DATABASE CURRENT COLLATE " + collation + ";",
             cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.default_items (Id int NOT NULL); INSERT dbo.default_items VALUES (1); "
             + "CREATE TABLE dbo.default_intermediate_events (Id int NOT NULL);",
             cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TRIGGER doka_default_intermediate_audit ON DATABASE FOR DDL_TABLE_EVENTS "
-            + "AS INSERT dbo.default_intermediate_events VALUES (1);", cancellationToken: CancellationToken.None);
+            + "AS INSERT dbo.default_intermediate_events VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var intermediate = "varchar(" + maximum.ToString(CultureInfo.InvariantCulture) + ")";
-        var expression = explicitCast ? SafeMigrationSql.Cast(SafeMigrationSql.Literal(value), intermediate)
+        var expression = explicitCast
+            ? SafeMigrationSql.Cast(SafeMigrationSql.Literal(value), intermediate)
             : SafeMigrationSql.Literal(value, intermediate);
 
-        var definition = new ExpectedColumnDefinition("Caption", typeof(string), false, "nvarchar(10)",
+        var definition = new ExpectedColumnDefinition(
+            "Caption",
+            typeof(string),
+            false,
+            "nvarchar(10)",
             defaultValue: SafeMigrationDefaultValue.Sql(expression));
 
         var operation = TemporalDefaultOperation(definition, inlineTable: false);
@@ -473,7 +647,9 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
 
         // Act
         var analyses = await analyzer.AnalyzeAsync(context, [operation], cancellationToken: CancellationToken.None);
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [operation],
             cancellationToken: CancellationToken.None));
 
         if (supported)
@@ -481,22 +657,34 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
             await ExecuteOperationsAsync(context, [operation], cancellationToken: CancellationToken.None);
         }
 
-        var afterAnalyses = await analyzer.AnalyzeAsync(context, [operation],
+        var afterAnalyses = await analyzer.AnalyzeAsync(
+            context,
+            [operation],
             cancellationToken: CancellationToken.None);
 
-        var columns = await ScalarIntAsync(connectionString,
+        var columns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.default_items', N'U');",
             cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.default_items WHERE Id = 1;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.default_items WHERE Id = 1;",
             cancellationToken: CancellationToken.None);
 
-        var stored = supported ? await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM dbo.default_items WHERE CONVERT(varbinary(max), Caption) = "
-            + "CONVERT(varbinary(max), N'" + value.Replace("'", "''", StringComparison.Ordinal) + "');",
-            cancellationToken: CancellationToken.None) : 0;
+        var stored = supported
+            ? await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM dbo.default_items WHERE CONVERT(varbinary(max), Caption) = "
+                + "CONVERT(varbinary(max), N'"
+                + value.Replace("'", "''", StringComparison.Ordinal)
+                + "');",
+                cancellationToken: CancellationToken.None)
+            : 0;
 
-        var events = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.default_intermediate_events;",
+        var events = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.default_intermediate_events;",
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -518,7 +706,10 @@ public sealed class SqlServerSafeMigrationDefaultValueRepresentabilityIntegratio
             Assert.Equal(SafeMigrationObservedState.Unsupported, analysis.ObservedState);
             Assert.Equal("default_value_unrepresentable", analysis.Code);
             Assert.True(analysis.IsInvariantUnsupported);
-            Assert.Equal(51002, Assert.IsType<SqlException>(failure).Number);
+            Assert.Equal(51002,
+                Assert.IsType<SqlException>(failure)
+                    .Number);
+
             Assert.Equal(SafeMigrationObservedState.Unsupported, after.ObservedState);
             Assert.Equal(1, columns);
             Assert.Equal(0, events);

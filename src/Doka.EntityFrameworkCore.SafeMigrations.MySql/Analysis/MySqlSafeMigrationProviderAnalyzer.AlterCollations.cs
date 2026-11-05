@@ -17,7 +17,8 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         CancellationToken cancellationToken
     )
     {
-        var names = operations.Select(static operation => operation.Intent)
+        var names = operations
+            .Select(static operation => operation.Intent)
             .OfType<AlterColumnIntent>()
             .Where(static intent => intent.OldDefinition is { IsNullable: true, Collation.Schema: null }
                 && intent.OldDefinition.Collation is not null
@@ -44,7 +45,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
         await SafeMigrationCatalogProbeBatch.ReadAsync(
             connection,
             (names.Length + SafeMigrationCatalogQueryLimits.MaximumInventoryValues - 1)
-                / SafeMigrationCatalogQueryLimits.MaximumInventoryValues,
+            / SafeMigrationCatalogQueryLimits.MaximumInventoryValues,
             maximumPayloadBytes,
             commandTimeout,
             (command, slot) =>
@@ -53,6 +54,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 var count = Math.Min(SafeMigrationCatalogQueryLimits.MaximumInventoryValues, names.Length - offset);
                 var parameters = new string[count];
                 var valueBytes = 0;
+
                 // WHY: Keep bounded owner parameters aligned with their generated parameter-name slots.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery

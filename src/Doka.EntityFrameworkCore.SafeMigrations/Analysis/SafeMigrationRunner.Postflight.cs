@@ -78,6 +78,7 @@ public sealed partial class SafeMigrationRunner
         }
 
         var updated = analyses.ToArray();
+
         // WHY: Map each compact probe result back to its original safe-operation ordinal.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery

@@ -59,7 +59,9 @@ public sealed class SqlServerFilteredIndexPredicateTests
         // Act
         var plan = catalog.Build(operation);
         var failure = Record.Exception(() =>
-            context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([operation], context.Model));
 
         // Assert
         Assert.Equal(!supported, plan.IsStaticallyUnsupported);
@@ -112,9 +114,13 @@ public sealed class SqlServerFilteredIndexPredicateTests
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var plan = CreateFilterCatalog(context).Build(operation);
+        var plan = CreateFilterCatalog(context)
+            .Build(operation);
+
         var failure = Record.Exception(() =>
-            context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([operation], context.Model));
 
         // Assert
         Assert.Equal(!supported, plan.IsStaticallyUnsupported);
@@ -144,22 +150,33 @@ public sealed class SqlServerFilteredIndexPredicateTests
 
         return shape switch
         {
-            "and" => SafeMigrationSql.Binary(comparison, SafeMigrationSqlBinaryOperator.And,
+            "and" => SafeMigrationSql.Binary(
+                comparison,
+                SafeMigrationSqlBinaryOperator.And,
                 SafeMigrationSql.IsNotNull(SafeMigrationSql.Identifier("Code"))),
             "in" => SafeMigrationSql.In(flag, [one, SafeMigrationSql.Literal(2)]),
             "null" => SafeMigrationSql.IsNull(flag),
-            "or" => SafeMigrationSql.Binary(comparison, SafeMigrationSqlBinaryOperator.Or,
+            "or" => SafeMigrationSql.Binary(
+                comparison,
+                SafeMigrationSqlBinaryOperator.Or,
                 SafeMigrationSql.IsNotNull(SafeMigrationSql.Identifier("Code"))),
-            "column" => SafeMigrationSql.Binary(flag, SafeMigrationSqlBinaryOperator.Equal,
+            "column" => SafeMigrationSql.Binary(
+                flag,
+                SafeMigrationSqlBinaryOperator.Equal,
                 SafeMigrationSql.Identifier("Id")),
-            "null-comparison" => SafeMigrationSql.Binary(flag, SafeMigrationSqlBinaryOperator.Equal,
+            "null-comparison" => SafeMigrationSql.Binary(
+                flag,
+                SafeMigrationSqlBinaryOperator.Equal,
                 SafeMigrationSql.Literal(null)),
             "not-in" => SafeMigrationSql.In(flag, [one], negated: true),
-            "function" => SafeMigrationSql.Binary(SafeMigrationSql.Function("ABS", flag),
-                SafeMigrationSqlBinaryOperator.Equal, one),
+            "function" => SafeMigrationSql.Binary(
+                SafeMigrationSql.Function("ABS", flag),
+                SafeMigrationSqlBinaryOperator.Equal,
+                one),
             "arithmetic" => SafeMigrationSql.Binary(
                 SafeMigrationSql.Binary(flag, SafeMigrationSqlBinaryOperator.Add, one),
-                SafeMigrationSqlBinaryOperator.Equal, one),
+                SafeMigrationSqlBinaryOperator.Equal,
+                one),
             _ => throw new ArgumentOutOfRangeException(nameof(shape)),
         };
     }

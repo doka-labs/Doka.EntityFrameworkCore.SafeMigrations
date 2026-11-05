@@ -21,16 +21,25 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var definition = new ExpectedColumnDefinition("Created", typeof(DateTime), false, storeType,
+        var definition = new ExpectedColumnDefinition(
+            "Created",
+            typeof(DateTime),
+            false,
+            storeType,
             defaultValue: SafeMigrationDefaultValue.Literal(new DateTime(year, 1, 1)));
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("default_items", definition),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("default_items", definition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var plan = CreateCatalog(context).Build(operation);
+        var plan = CreateCatalog(context)
+            .Build(operation);
+
         var failure = Record.Exception(() =>
-            context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([operation], context.Model));
 
         // Assert
         Assert.Equal(unsupported, plan.IsStaticallyUnsupported);
@@ -64,17 +73,25 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
             ? SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(value, storeType))
             : SafeMigrationDefaultValue.Literal(value);
 
-        var definition = new ExpectedColumnDefinition("Created", typeof(DateTime), false, storeType,
+        var definition = new ExpectedColumnDefinition(
+            "Created",
+            typeof(DateTime),
+            false,
+            storeType,
             defaultValue: defaultValue);
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("default_items", definition),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("default_items", definition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var renderer = new SqlServerSafeMigrationSqlExpressionRenderer(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         // Act
-        var plan = CreateCatalog(context).Build(operation);
+        var plan = CreateCatalog(context)
+            .Build(operation);
+
         var rendered = renderer.Render(SafeMigrationSql.Literal(value, storeType));
 
         // Assert
@@ -97,13 +114,18 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var invalid = new ExpectedColumnDefinition("Created", typeof(DateTime), false, "datetime",
+        var invalid = new ExpectedColumnDefinition(
+            "Created",
+            typeof(DateTime),
+            false,
+            "datetime",
             defaultValue: SafeMigrationDefaultValue.Literal(DateTime.MinValue));
 
         var valid = new ExpectedColumnDefinition("Created", typeof(DateTime), false, "datetime2");
         SafeMigrationIntent intent = entryPoint switch
         {
-            "table" => new EnsureTableIntent(new ExpectedTableDefinition("default_items", [invalid]),
+            "table" => new EnsureTableIntent(
+                new ExpectedTableDefinition("default_items", [invalid]),
                 SafeMigrationTableMode.StrictDefinition),
             "alter_target" => new AlterColumnIntent("default_items", invalid, valid),
             "alter_old" => new AlterColumnIntent("default_items", valid, invalid),
@@ -113,9 +135,13 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
         var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var plan = CreateCatalog(context).Build(operation);
+        var plan = CreateCatalog(context)
+            .Build(operation);
+
         var failure = Record.Exception(() =>
-            context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([operation], context.Model));
 
         // Assert
         Assert.True(plan.IsStaticallyUnsupported);
@@ -134,16 +160,27 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var definition = family == "temporal"
-            ? new ExpectedColumnDefinition("Value", typeof(DateTime), false, precision: 3,
+            ? new ExpectedColumnDefinition(
+                "Value",
+                typeof(DateTime),
+                false,
+                precision: 3,
                 defaultValue: SafeMigrationDefaultValue.Literal(DateTime.MaxValue))
-            : new ExpectedColumnDefinition("Value", typeof(decimal), false, precision: 2, scale: 1,
+            : new ExpectedColumnDefinition(
+                "Value",
+                typeof(decimal),
+                false,
+                precision: 2,
+                scale: 1,
                 defaultValue: SafeMigrationDefaultValue.Literal(9.95m));
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("default_items", definition),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("default_items", definition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var plan = CreateCatalog(context).Build(operation);
+        var plan = CreateCatalog(context)
+            .Build(operation);
 
         // Assert
         Assert.True(plan.IsStaticallyUnsupported);
@@ -161,14 +198,20 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var definition = new ExpectedColumnDefinition("Created", typeof(DateTime), false, storeType,
+        var definition = new ExpectedColumnDefinition(
+            "Created",
+            typeof(DateTime),
+            false,
+            storeType,
             defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(DateTime.MinValue, storeType)));
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("default_items", definition),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("default_items", definition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var plan = CreateCatalog(context).Build(operation);
+        var plan = CreateCatalog(context)
+            .Build(operation);
 
         // Assert
         Assert.Equal(unsupported, plan.IsStaticallyUnsupported);
@@ -193,16 +236,25 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
             ? SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal("not a date"))
             : SafeMigrationDefaultValue.Sql("CONVERT(datetime, N'0001-01-01')");
 
-        var definition = new ExpectedColumnDefinition("Created", typeof(DateTime), false, "datetime",
+        var definition = new ExpectedColumnDefinition(
+            "Created",
+            typeof(DateTime),
+            false,
+            "datetime",
             defaultValue: defaultValue);
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("default_items", definition),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("default_items", definition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var plan = CreateCatalog(context).Build(operation);
+        var plan = CreateCatalog(context)
+            .Build(operation);
+
         var failure = Record.Exception(() =>
-            context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model));
+            context
+                .GetService<IMigrationsSqlGenerator>()
+                .Generate([operation], context.Model));
 
         // Assert
         Assert.True(plan.IsStaticallyUnsupported);
@@ -223,14 +275,21 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var definition = new ExpectedColumnDefinition("Created", typeof(DateTime), false, storeType,
+        var definition = new ExpectedColumnDefinition(
+            "Created",
+            typeof(DateTime),
+            false,
+            storeType,
             defaultValue: SafeMigrationDefaultValue.Sql(sql));
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("default_items", definition),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("default_items", definition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var plan = CreateCatalog(context).Build(operation);
+        var plan = CreateCatalog(context)
+            .Build(operation);
+
         var selection = SqlServerSafeMigrationProviderAnalyzer.BuildCatalogSelection(257, plan);
         var runtime = SqlServerGuardedSqlTestContract.GenerateBody(context, operation);
 
@@ -257,22 +316,37 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var definition = kind == "integer"
-            ? new ExpectedColumnDefinition("Value", typeof(int), false, "int",
+            ? new ExpectedColumnDefinition(
+                "Value",
+                typeof(int),
+                false,
+                "int",
                 defaultValue: SafeMigrationDefaultValue.Sql("SYSUTCDATETIME()"))
-            : new ExpectedColumnDefinition("Value", typeof(DateTime), false, "datetime",
-                defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Function("COALESCE",
-                    SafeMigrationSql.Current(SafeMigrationSqlCurrentValue.Timestamp),
-                    SafeMigrationSql.Literal(DateTime.MinValue))));
+            : new ExpectedColumnDefinition(
+                "Value",
+                typeof(DateTime),
+                false,
+                "datetime",
+                defaultValue: SafeMigrationDefaultValue.Sql(
+                    SafeMigrationSql.Function(
+                        "COALESCE",
+                        SafeMigrationSql.Current(SafeMigrationSqlCurrentValue.Timestamp),
+                        SafeMigrationSql.Literal(DateTime.MinValue))));
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("default_items", definition),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("default_items", definition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var plan = CreateCatalog(context).Build(operation);
+        var plan = CreateCatalog(context)
+            .Build(operation);
 
         // Assert
         Assert.True(plan.IsStaticallyUnsupported);
-        Assert.Equal(kind == "integer" ? "default_expression_unproven" : "default_value_unrepresentable",
+        Assert.Equal(
+            kind == "integer"
+                ? "default_expression_unproven"
+                : "default_value_unrepresentable",
             plan.UnsupportedCode);
     }
 
@@ -320,19 +394,26 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         const string collation = "Latin1_General_100_CI_AS_SC_UTF8";
-        var definition = new ExpectedColumnDefinition("Caption", typeof(string), false, "varchar(1)",
+        var definition = new ExpectedColumnDefinition(
+            "Caption",
+            typeof(string),
+            false,
+            "varchar(1)",
             collation: new SafeMigrationCollationIdentifier(collation),
             defaultValue: SafeMigrationDefaultValue.Literal("\u00E9"));
 
         SafeMigrationIntent intent = inlineTable
-            ? new EnsureTableIntent(new ExpectedTableDefinition("default_items", [definition]),
+            ? new EnsureTableIntent(
+                new ExpectedTableDefinition("default_items", [definition]),
                 SafeMigrationTableMode.StrictDefinition)
             : new EnsureColumnIntent("default_items", definition);
 
         var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var plan = CreateCatalog(context).Build(operation);
+        var plan = CreateCatalog(context)
+            .Build(operation);
+
         var support = plan.DefaultValueSupportExpression;
         var selection = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate(plan);
 
@@ -360,11 +441,16 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var definition = new ExpectedColumnDefinition("Created", typeof(DateTime), false, "datetime2",
+        var definition = new ExpectedColumnDefinition(
+            "Created",
+            typeof(DateTime),
+            false,
+            "datetime2",
             defaultValue: SafeMigrationDefaultValue.Sql(sql));
 
         // Act
-        var proof = CreateCatalog(context).BuildNonNullDefaultSupportExpression(definition);
+        var proof = CreateCatalog(context)
+            .BuildNonNullDefaultSupportExpression(definition);
 
         // Assert
         Assert.NotNull(proof);
@@ -404,8 +490,12 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
             context.GetService<IRelationalTypeMappingSource>(),
             context.GetService<ISqlGenerationHelper>());
 
-        var expression = SafeMigrationSql.Function(function,
-            Enumerable.Range(0, count).Select(static value => SafeMigrationSql.Literal(value)).ToArray());
+        var expression = SafeMigrationSql.Function(
+            function,
+            Enumerable
+                .Range(0, count)
+                .Select(static value => SafeMigrationSql.Literal(value))
+                .ToArray());
 
         // Act
         var feature = renderer.GetUnsupportedFeature(expression);
@@ -430,15 +520,22 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var definition = new ExpectedColumnDefinition("Caption", typeof(string), false, "varchar(8)",
+        var definition = new ExpectedColumnDefinition(
+            "Caption",
+            typeof(string),
+            false,
+            "varchar(8)",
             collation: new SafeMigrationCollationIdentifier("Doka_missing_collation"),
             defaultValue: SafeMigrationDefaultValue.Literal("a"));
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("default_items", definition),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("default_items", definition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var plan = CreateCatalog(context).Build(operation);
+        var plan = CreateCatalog(context)
+            .Build(operation);
+
         var selection = SqlServerSafeMigrationProviderAnalyzer.BuildDelayedCatalogTemplate(plan);
         var runtime = SqlServerGuardedSqlTestContract.GenerateBody(context, operation);
 
@@ -447,7 +544,8 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
         Assert.True(plan.DefaultValueSupportRequiresDelayedBinding);
         Assert.Contains("sys.fn_helpcollations()", installed, StringComparison.Ordinal);
         Assert.Contains("column_collation_unproven", selection, StringComparison.Ordinal);
-        var selectionProof = selection.IndexOf(installed.Replace("'", "''", StringComparison.Ordinal),
+        var selectionProof = selection.IndexOf(
+            installed.Replace("'", "''", StringComparison.Ordinal),
             StringComparison.Ordinal);
 
         var selectionDefault = selection.IndexOf("DECLARE @doka_default", StringComparison.Ordinal);
@@ -463,14 +561,20 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var definition = new ExpectedColumnDefinition("Caption", typeof(string), false, "nvarchar(max)",
+        var definition = new ExpectedColumnDefinition(
+            "Caption",
+            typeof(string),
+            false,
+            "nvarchar(max)",
             defaultValue: SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal(new string('a', 4_001))));
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("default_items", definition),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("default_items", definition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var plan = CreateCatalog(context).Build(operation);
+        var plan = CreateCatalog(context)
+            .Build(operation);
 
         // Assert
         Assert.False(plan.IsStaticallyUnsupported);
@@ -493,7 +597,8 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var renderer = new SqlServerSafeMigrationSqlExpressionRenderer(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         var expression = SafeMigrationSql.Literal(value, storeType);
 
@@ -519,15 +624,21 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var definition = new ExpectedColumnDefinition("Caption", typeof(string), true, storeType);
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("default_items", definition),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("default_items", definition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var plan = CreateCatalog(context).Build(operation);
+        var plan = CreateCatalog(context)
+            .Build(operation);
 
         // Assert
         Assert.Equal(!supported, plan.IsStaticallyUnsupported);
-        Assert.Equal(supported ? null : "column_type_mapping", plan.UnsupportedCode);
+        Assert.Equal(
+            supported
+                ? null
+                : "column_type_mapping",
+            plan.UnsupportedCode);
     }
 
     /// <summary>Proves the encoded byte width of typed ANSI intermediate defaults before Unicode conversion.</summary>
@@ -540,17 +651,24 @@ public sealed class SqlServerDefaultValueRepresentabilityTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var expression = explicitCast ? SafeMigrationSql.Cast(SafeMigrationSql.Literal("\u00E9"), "varchar(1)")
+        var expression = explicitCast
+            ? SafeMigrationSql.Cast(SafeMigrationSql.Literal("\u00E9"), "varchar(1)")
             : SafeMigrationSql.Literal("\u00E9", "varchar(1)");
 
-        var definition = new ExpectedColumnDefinition("Caption", typeof(string), false, "nvarchar(10)",
+        var definition = new ExpectedColumnDefinition(
+            "Caption",
+            typeof(string),
+            false,
+            "nvarchar(10)",
             defaultValue: SafeMigrationDefaultValue.Sql(expression));
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("default_items", definition),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("default_items", definition),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var plan = CreateCatalog(context).Build(operation);
+        var plan = CreateCatalog(context)
+            .Build(operation);
 
         // Assert
         Assert.False(plan.IsStaticallyUnsupported);

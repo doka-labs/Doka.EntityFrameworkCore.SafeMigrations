@@ -7,7 +7,9 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
     [Theory]
     [InlineData("ensure")]
     [InlineData("update")]
-    public void ManagedValueRenameRetainsUniqueKeyAndImmutableMatrices(string kind)
+    public void ManagedValueRenameRetainsUniqueKeyAndImmutableMatrices(
+        string kind
+    )
     {
         // Arrange
         var source = ManagedRenameIntent(kind, "source");
@@ -21,7 +23,9 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         var probes = ManagedProbes(operations);
 
         // Assert
-        var rebound = Assert.IsAssignableFrom<ModelManagedDataIntent>(Assert.Single(probes!).Operation.Intent);
+        var rebound = Assert.IsAssignableFrom<ModelManagedDataIntent>(Assert.Single(probes!)
+            .Operation.Intent);
+
         Assert.Equal(["source"], rebound.KeyColumns);
         Assert.Contains("renamed_payload", rebound.Columns);
         Assert.Same(source.KeyValues, rebound.KeyValues);
@@ -29,7 +33,9 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         {
             var actual = Assert.IsType<EnsureModelManagedDataIntent>(rebound);
             Assert.Same(ensure.Values, actual.Values);
-            Assert.Equal(["renamed_payload"], Assert.Single(actual.UniqueKeys).Columns);
+            Assert.Equal(["renamed_payload"],
+                Assert.Single(actual.UniqueKeys)
+                    .Columns);
         }
         else
         {
@@ -37,7 +43,9 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
             var actual = Assert.IsType<UpdateModelManagedDataIntent>(rebound);
             Assert.Same(update.OldValues, actual.OldValues);
             Assert.Same(update.NewValues, actual.NewValues);
-            Assert.Equal(["renamed_payload"], Assert.Single(actual.UniqueKeys).Columns);
+            Assert.Equal(["renamed_payload"],
+                Assert.Single(actual.UniqueKeys)
+                    .Columns);
         }
     }
 
@@ -57,7 +65,9 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         var probes = ManagedProbes(operations);
 
         // Assert
-        var actual = Assert.IsType<DeleteModelManagedDataIntent>(Assert.Single(probes!).Operation.Intent);
+        var actual = Assert.IsType<DeleteModelManagedDataIntent>(Assert.Single(probes!)
+            .Operation.Intent);
+
         var foreignKey = Assert.Single(actual.ForeignKeys);
         Assert.Equal("dependents", foreignKey.Table);
         Assert.Null(foreignKey.Schema);
@@ -92,7 +102,10 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         Assert.Equal(["final"], actual.KeyColumns);
         Assert.Equal(["final", "payload"], actual.Columns);
         Assert.Same(source.KeyValues, actual.KeyValues);
-        Assert.Same(Assert.IsType<EnsureModelManagedDataIntent>(source).Values, actual.Values);
+        Assert.Same(Assert.IsType<EnsureModelManagedDataIntent>(source)
+                .Values,
+            actual.Values);
+
         Assert.Equal(operation.Policy, probe.Operation.Policy);
         Assert.Equal("retained", probe.Operation["Test:CapturedMetadata"]);
         Assert.Equal(0, probe.OperationOrdinal);
@@ -106,19 +119,28 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
     [InlineData("other_owner")]
     [InlineData("later_sql")]
     [InlineData("later_structure")]
-    public void UnprovenManagedRenameMetadataDoesNotProduceProbe(string boundary)
+    public void UnprovenManagedRenameMetadataDoesNotProduceProbe(
+        string boundary
+    )
     {
         // Arrange
         var operations = new List<MigrationOperation>
         {
             Safe(ManagedRenameIntent("ensure", "source")),
-            Safe(new RenameColumnIntent("source", boundary == "other_owner" ? "other_nodes" : "source_nodes",
-                boundary == "collision" ? "payload" : "renamed")),
+            Safe(
+                new RenameColumnIntent(
+                    "source",
+                    boundary == "other_owner"
+                        ? "other_nodes"
+                        : "source_nodes",
+                    boundary == "collision"
+                        ? "payload"
+                        : "renamed")),
         };
 
         if (boundary == "later_sql")
         {
-            operations.Add(new SqlOperation { Sql = "SELECT 1;", });
+            operations.Add(new SqlOperation { Sql = "SELECT 1;" });
         }
         else if (boundary == "later_structure")
         {
@@ -134,9 +156,16 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
 
     private static List<SafeMigrationPostflightRenameProbe>? ManagedProbes(
         IReadOnlyList<MigrationOperation> operations
-    ) => SafeMigrationPostflightProjection.CreateRenamedManagedDataProbes(operations,
-        operations.OfType<SafeMigrationOperation>().Select(static _ =>
-            new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Matching,
-                SafeMigrationRepairCapability.None, true, "classified_matching")).ToArray(),
+    ) => SafeMigrationPostflightProjection.CreateRenamedManagedDataProbes(
+        operations,
+        operations
+            .OfType<SafeMigrationOperation>()
+            .Select(static _ =>
+                new SafeMigrationProviderAnalysis(
+                    SafeMigrationObservedState.Matching,
+                    SafeMigrationRepairCapability.None,
+                    true,
+                    "classified_matching"))
+            .ToArray(),
         new FinalCatalogAnalyzer(Table("source")));
 }

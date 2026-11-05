@@ -25,7 +25,7 @@ public sealed class SafeMigrationOptionsBuilder
     /// <param name="mode">The scaffolding strategy.</param>
     /// <returns>The same builder so additional configuration can be chained.</returns>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="mode"/> is not a defined scaffolding mode.
+    /// <paramref name="mode" /> is not a defined scaffolding mode.
     /// </exception>
     public SafeMigrationOptionsBuilder UseScaffoldingMode(
         SafeMigrationScaffoldingMode mode
@@ -48,13 +48,13 @@ public sealed class SafeMigrationOptionsBuilder
     /// operations.
     /// </summary>
     /// <param name="policy">
-    /// <see cref="SafeMigrationPolicy.ThrowIfDifferent"/> to reject every existing
-    /// mismatch, or <see cref="SafeMigrationPolicy.RepairIfSafe"/> to repair only
+    /// <see cref="SafeMigrationPolicy.ThrowIfDifferent" /> to reject every existing
+    /// mismatch, or <see cref="SafeMigrationPolicy.RepairIfSafe" /> to repair only
     /// provider-verified safe drift.
     /// </param>
     /// <returns>The same builder so additional configuration can be chained.</returns>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="policy"/> is undefined or cannot preserve convergence
+    /// <paramref name="policy" /> is undefined or cannot preserve convergence
     /// safety.
     /// </exception>
     public SafeMigrationOptionsBuilder UseLegacyConvergencePolicy(

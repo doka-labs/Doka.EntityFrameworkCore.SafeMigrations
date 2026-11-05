@@ -8,17 +8,35 @@ public sealed class SqliteGeneratedColumnOwnershipTests
     public void UnrelatedNativeRebuildDoesNotInheritSafeOwnership()
     {
         // Arrange
-        var safeDrop = new DropColumnOperation { Name = "obsolete", Table = "safe_nodes" };
-        var ordinaryDrop = new DropColumnOperation { Name = "obsolete", Table = "ordinary_nodes" };
+        var safeDrop = new DropColumnOperation
+        {
+            Name = "obsolete",
+            Table = "safe_nodes",
+        };
+
+        var ordinaryDrop = new DropColumnOperation
+        {
+            Name = "obsolete",
+            Table = "ordinary_nodes",
+        };
+
         var safeCreator = new CreateTableOperation { Name = "native_safe" };
         var ordinaryCreator = new CreateTableOperation { Name = "native_ordinary" };
         var ownership = new SqliteGeneratedColumnOwnership([safeDrop, ordinaryDrop], [ordinaryDrop]);
         MigrationOperation[] rewritten =
         [
             safeCreator,
-            new RenameTableOperation { Name = safeCreator.Name, NewName = safeDrop.Table },
+            new RenameTableOperation
+            {
+                Name = safeCreator.Name,
+                NewName = safeDrop.Table,
+            },
             ordinaryCreator,
-            new RenameTableOperation { Name = ordinaryCreator.Name, NewName = ordinaryDrop.Table },
+            new RenameTableOperation
+            {
+                Name = ordinaryCreator.Name,
+                NewName = ordinaryDrop.Table,
+            },
         ];
 
         // Act
@@ -34,13 +52,23 @@ public sealed class SqliteGeneratedColumnOwnershipTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void RenamedSafeLifetimeDoesNotLeakThroughOrdinaryRecreation(bool recreate)
+    public void RenamedSafeLifetimeDoesNotLeakThroughOrdinaryRecreation(
+        bool recreate
+    )
     {
         // Arrange
         var operations = new List<MigrationOperation>
         {
-            new DropColumnOperation { Name = "obsolete", Table = "old_nodes" },
-            new RenameTableOperation { Name = "old_nodes", NewName = "new_nodes" },
+            new DropColumnOperation
+            {
+                Name = "obsolete",
+                Table = "old_nodes",
+            },
+            new RenameTableOperation
+            {
+                Name = "old_nodes",
+                NewName = "new_nodes",
+            },
         };
 
         var ordinary = new List<MigrationOperation>();
@@ -56,7 +84,11 @@ public sealed class SqliteGeneratedColumnOwnershipTests
         MigrationOperation[] rewritten =
         [
             creator,
-            new RenameTableOperation { Name = creator.Name, NewName = "new_nodes" },
+            new RenameTableOperation
+            {
+                Name = creator.Name,
+                NewName = "new_nodes",
+            },
         ];
 
         // Act
@@ -71,8 +103,18 @@ public sealed class SqliteGeneratedColumnOwnershipTests
     public void AuthoredRenameDoesNotCertifyUnrelatedCreator()
     {
         // Arrange
-        var drop = new DropColumnOperation { Name = "obsolete", Table = "authored_name" };
-        var rename = new RenameTableOperation { Name = "authored_name", NewName = "safe_nodes" };
+        var drop = new DropColumnOperation
+        {
+            Name = "obsolete",
+            Table = "authored_name",
+        };
+
+        var rename = new RenameTableOperation
+        {
+            Name = "authored_name",
+            NewName = "safe_nodes",
+        };
+
         var creator = new CreateTableOperation { Name = rename.Name };
         var ownership = new SqliteGeneratedColumnOwnership([drop, rename], [rename]);
 

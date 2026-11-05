@@ -33,12 +33,16 @@ var designTimeReferences = Assembly
     .ToArray();
 
 var hasExpectedDesignTimeReference = designTimeReferences is [{ ConstructorArguments.Count: 2 }]
-    && designTimeReferences[0].ConstructorArguments[0].Value is string typeName
-    && designTimeReferences[0].ConstructorArguments[1].Value is string referencedProvider
+    && designTimeReferences[0]
+        .ConstructorArguments[0].Value is string typeName
+    && designTimeReferences[0]
+        .ConstructorArguments[1].Value is string referencedProvider
     && typeName == designTimeServicesTypeName
     && referencedProvider == providerName;
 
-if (expectsDesignTimeReference ? !hasExpectedDesignTimeReference : designTimeReferences.Length != 0)
+if (expectsDesignTimeReference
+    ? !hasExpectedDesignTimeReference
+    : designTimeReferences.Length != 0)
 {
     Console.Error.WriteLine(
         expectsDesignTimeReference
@@ -69,6 +73,7 @@ internal sealed class PackageScaffoldingDbContext : DbContext
     {
         optionsBuilder.UseSqlServer(
             "Server=127.0.0.1,1;Database=package;User ID=sa;Password=PackageConsumer123!;TrustServerCertificate=True");
+
         optionsBuilder.UseSqlServerSafeMigrations();
     }
 
@@ -76,12 +81,14 @@ internal sealed class PackageScaffoldingDbContext : DbContext
         ModelBuilder modelBuilder
     )
     {
-        modelBuilder.Entity<PackageScaffoldingEntity>().HasData(
-            new PackageScaffoldingEntity
-            {
-                Id = 1,
-                Name = "package-consumer",
-            });
+        modelBuilder
+            .Entity<PackageScaffoldingEntity>()
+            .HasData(
+                new PackageScaffoldingEntity
+                {
+                    Id = 1,
+                    Name = "package-consumer",
+                });
     }
 }
 

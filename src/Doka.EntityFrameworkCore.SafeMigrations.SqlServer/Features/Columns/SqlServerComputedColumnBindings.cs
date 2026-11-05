@@ -34,16 +34,22 @@ internal static class SqlServerComputedColumnBindings
         {
             var ordinal = ReadNumber(ref remaining, allowNegative: true);
             var length = ReadNumber(ref remaining, allowNegative: false);
-            if (length is < 1 or > 128 || remaining.Length < length
-                || ordinal < -1 || ordinal >= (authored?.Columns.Count ?? 0))
+            if (length is < 1 or > 128
+                || remaining.Length < length
+                || ordinal < -1
+                || ordinal >= (authored?.Columns.Count ?? 0))
             {
                 throw InvalidBindings();
             }
 
             var nameSpan = remaining[..length];
             remaining = remaining[length..];
-            var definition = ordinal < 0 ? null : authored!.Columns[ordinal];
-            if (definition is not null && !nameSpan.SequenceEqual(definition.Name))
+            var definition = ordinal < 0
+                ? null
+                : authored!.Columns[ordinal];
+
+            if (definition is not null
+                && !nameSpan.SequenceEqual(definition.Name))
             {
                 throw InvalidBindings();
             }
@@ -69,12 +75,20 @@ internal static class SqlServerComputedColumnBindings
         return result;
     }
 
-    private static int ReadNumber(ref ReadOnlySpan<char> remaining, bool allowNegative)
+    private static int ReadNumber(
+        ref ReadOnlySpan<char> remaining,
+        bool allowNegative
+    )
     {
         var separator = remaining.IndexOf(':');
-        if (separator < 1 || !int.TryParse(remaining[..separator],
-            allowNegative ? NumberStyles.AllowLeadingSign : NumberStyles.None, CultureInfo.InvariantCulture,
-            out var value))
+        if (separator < 1
+            || !int.TryParse(
+                remaining[..separator],
+                allowNegative
+                    ? NumberStyles.AllowLeadingSign
+                    : NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var value))
         {
             throw InvalidBindings();
         }

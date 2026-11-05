@@ -15,6 +15,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             "doka_actual",
             "doka_expected",
             "t");
+
         var found = $"doka_actual.{Delimited(intent.KeyColumns[0])} IS NOT NULL";
         var uniqueCollision = UniqueCollision(intent, intent.UniqueKeys, relation, "t");
         var state = "(SELECT CASE "
@@ -58,12 +59,14 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             "doka_actual",
             "doka_expected",
             "o");
+
         var targetMatch = ColumnMatch(
             intent.Columns,
             intent.ColumnTypes,
             "doka_actual",
             "doka_expected",
             "n");
+
         var found = $"doka_actual.{Delimited(intent.KeyColumns[0])} IS NOT NULL";
         var uniqueCollision = UniqueCollision(intent, intent.UniqueKeys, relation, "n");
         var state = "(SELECT CASE "
@@ -104,6 +107,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             "doka_actual",
             "doka_expected",
             "o");
+
         var found = $"doka_actual.{Delimited(intent.KeyColumns[0])} IS NOT NULL";
         var dependencyExists = DependencyExists(intent, relation);
         var unmodeledDependency = UnmodeledIncomingForeignKey(intent);
@@ -182,14 +186,18 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             "doka_actual",
             "doka_expected",
             "o");
+
         var targetMatch = ColumnMatch(
             intent.Columns,
             intent.ColumnTypes,
             "doka_actual",
             "doka_expected",
             "n");
-        var assignments = string.Join(", ", intent.Columns.Select((column, ordinal) =>
-            $"{Delimited(column)} = doka_expected.{Delimited($"n{ordinal}")}"));
+
+        var assignments = string.Join(
+            ", ",
+            intent.Columns.Select((column, ordinal) =>
+                $"{Delimited(column)} = doka_expected.{Delimited($"n{ordinal}")}"));
 
         return $"UPDATE {table} AS doka_actual SET {assignments} FROM {relation} "
             + $"WHERE {keyMatch} AND ({sourceMatch}) AND NOT ({targetMatch})";
@@ -208,6 +216,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             "doka_actual",
             "doka_expected",
             "o");
+
         var dependencyExists = DependencyExists(intent, relation);
 
         return $"DELETE FROM {table} AS doka_actual USING {relation} "
@@ -218,7 +227,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         ModelManagedDataIntent intent
     )
     {
-        var columns = intent.KeyColumns
+        var columns = intent
+            .KeyColumns
             .Concat(intent.Columns)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
@@ -250,13 +260,19 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             "r",
         };
 
-        aliases.AddRange(Enumerable.Range(0, intent.KeyColumns.Count).Select(static ordinal => $"k{ordinal}"));
+        aliases.AddRange(Enumerable
+            .Range(0, intent.KeyColumns.Count)
+            .Select(static ordinal => $"k{ordinal}"));
+
         foreach (var matrix in matrices)
         {
-            aliases.AddRange(Enumerable.Range(0, matrix.Columns.Count).Select(ordinal => $"{matrix.Prefix}{ordinal}"));
+            aliases.AddRange(Enumerable
+                .Range(0, matrix.Columns.Count)
+                .Select(ordinal => $"{matrix.Prefix}{ordinal}"));
         }
 
         var rows = new string[intent.RowCount];
+
         // WHY: Keep each authored row's protocol ordinal and output position aligned.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -356,7 +372,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         int count,
         string alias,
         string prefix
-    ) => Enumerable.Range(0, count).Select(ordinal => $"{alias}.{Delimited($"{prefix}{ordinal}")}");
+    ) => Enumerable
+        .Range(0, count)
+        .Select(ordinal => $"{alias}.{Delimited($"{prefix}{ordinal}")}");
 
     private string UniqueCollision(
         ModelManagedDataIntent intent,
@@ -488,16 +506,19 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         DeleteModelManagedDataIntent intent
     )
     {
-        var missingModeled = intent.ForeignKeys.Count == 0 ? "FALSE" : string.Join(" OR ",
-            intent.ForeignKeys.Select(foreignKey =>
-                "NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint constraint_row "
-                + "JOIN pg_catalog.pg_class dependent_table ON dependent_table.oid = constraint_row.conrelid "
-                + "JOIN pg_catalog.pg_namespace dependent_namespace "
-                + "ON dependent_namespace.oid = dependent_table.relnamespace "
-                + "WHERE constraint_row.contype = 'f'::\"char\" "
-                + $"AND constraint_row.confrelid = {QualifiedRegclass(intent.Table, intent.Schema)} "
-                + $"AND ({ModelManagedForeignKeyShape(foreignKey)}) "
-                + $"AND ({ModelManagedForeignKeyEnforcementContract()}))"));
+        var missingModeled = intent.ForeignKeys.Count == 0
+            ? "FALSE"
+            : string.Join(
+                " OR ",
+                intent.ForeignKeys.Select(foreignKey =>
+                    "NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint constraint_row "
+                    + "JOIN pg_catalog.pg_class dependent_table ON dependent_table.oid = constraint_row.conrelid "
+                    + "JOIN pg_catalog.pg_namespace dependent_namespace "
+                    + "ON dependent_namespace.oid = dependent_table.relnamespace "
+                    + "WHERE constraint_row.contype = 'f'::\"char\" "
+                    + $"AND constraint_row.confrelid = {QualifiedRegclass(intent.Table, intent.Schema)} "
+                    + $"AND ({ModelManagedForeignKeyShape(foreignKey)}) "
+                    + $"AND ({ModelManagedForeignKeyEnforcementContract()}))"));
 
         // WHY: Native FK checks supply the parent-lock fence. A missing,
         // disabled, or NOT ENFORCED counterpart cannot certify an empty child.

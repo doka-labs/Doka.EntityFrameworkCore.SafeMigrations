@@ -2,25 +2,17 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
 internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 {
-    private PostgreSqlTriggerRisk _eventTriggerRisk;
     private PostgreSqlTriggerRisk _dmlTriggerRisk;
-    private int? _triggerOriginOrdinal;
+    private PostgreSqlTriggerRisk _eventTriggerRisk;
+    private int? _projectedOperationOrdinal;
     private string? _triggerOriginCode;
     private bool _triggerOriginIsDml;
-    private int? _projectedOperationOrdinal;
+    private int? _triggerOriginOrdinal;
 
     /// <inheritdoc />
-    public void SetCurrentOperationOrdinal(int operationOrdinal) => _projectedOperationOrdinal = operationOrdinal;
-
-    /// <inheritdoc />
-    public bool PreservesUnrelatedColumnAbsence(RenameColumnIntent operation)
-        => _eventTriggerRisk == PostgreSqlTriggerRisk.None
-            && !_generatedIndexHasOpaqueBoundary
-            && _triggerOriginOrdinal is null && _schemaIdentityOriginOrdinal is null;
-
-    /// <inheritdoc />
-    public bool PreservesExistingTableState(MigrationOperation operation)
-        => ProviderOperationPreservesTableState(operation);
+    public void SetCurrentOperationOrdinal(
+        int operationOrdinal
+    ) => _projectedOperationOrdinal = operationOrdinal;
 
     /// <inheritdoc />
     public SafeMigrationProviderAnalysis? ValidateCapturedProjection(
@@ -97,7 +89,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     }
 
     /// <inheritdoc />
-    public void ObserveProviderOperation(MigrationOperation operation)
+    public void ObserveProviderOperation(
+        MigrationOperation operation
+    )
     {
         if (ProviderOperationPreservesTableState(operation))
         {
@@ -124,37 +118,74 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             return;
         }
 
-        if (operation is AlterColumnOperation alter && ColumnAlterMayEmitDml(alter))
+        if (operation is AlterColumnOperation alter
+            && ColumnAlterMayEmitDml(alter))
         {
             InvalidateProjectedDmlTriggerEffects();
         }
 
-        if (operation is CreateTableOperation or AlterTableOperation or DropTableOperation
-            or RenameTableOperation or AddColumnOperation or AlterColumnOperation or DropColumnOperation
-            or RenameColumnOperation or CreateIndexOperation or DropIndexOperation or RenameIndexOperation
-            or AddPrimaryKeyOperation or DropPrimaryKeyOperation or AddUniqueConstraintOperation
-            or DropUniqueConstraintOperation or AddCheckConstraintOperation or DropCheckConstraintOperation
-            or AddForeignKeyOperation or DropForeignKeyOperation or EnsureSchemaOperation or DropSchemaOperation
-            or AlterDatabaseOperation or CreateSequenceOperation or AlterSequenceOperation or RestartSequenceOperation
-            or RenameSequenceOperation or DropSequenceOperation)
+        if (operation is CreateTableOperation
+            or AlterTableOperation
+            or DropTableOperation
+            or RenameTableOperation
+            or AddColumnOperation
+            or AlterColumnOperation
+            or DropColumnOperation
+            or RenameColumnOperation
+            or CreateIndexOperation
+            or DropIndexOperation
+            or RenameIndexOperation
+            or AddPrimaryKeyOperation
+            or DropPrimaryKeyOperation
+            or AddUniqueConstraintOperation
+            or DropUniqueConstraintOperation
+            or AddCheckConstraintOperation
+            or DropCheckConstraintOperation
+            or AddForeignKeyOperation
+            or DropForeignKeyOperation
+            or EnsureSchemaOperation
+            or DropSchemaOperation
+            or AlterDatabaseOperation
+            or CreateSequenceOperation
+            or AlterSequenceOperation
+            or RestartSequenceOperation
+            or RenameSequenceOperation
+            or DropSequenceOperation)
         {
             InvalidateProjectedEventTriggerEffects();
         }
     }
 
+    /// <inheritdoc />
+    public bool PreservesUnrelatedColumnAbsence(
+        RenameColumnIntent operation
+    )
+        => _eventTriggerRisk == PostgreSqlTriggerRisk.None
+            && !_generatedIndexHasOpaqueBoundary
+            && _triggerOriginOrdinal is null
+            && _schemaIdentityOriginOrdinal is null;
+
+    /// <inheritdoc />
+    public bool PreservesExistingTableState(
+        MigrationOperation operation
+    )
+        => ProviderOperationPreservesTableState(operation);
+
     /// <summary>Recognizes only Npgsql baselines which preserve every captured table-scoped fact.</summary>
     /// <param name="operation">The ordinary provider operation in the ordered stream.</param>
     /// <returns>Whether the complete operation emits no table DDL or row write.</returns>
-    internal static bool ProviderOperationPreservesTableState(MigrationOperation operation)
+    internal static bool ProviderOperationPreservesTableState(
+        MigrationOperation operation
+    )
     {
         // WHY: Npgsql 10 omits these zero-row table writes, unchanged renames and public-schema ensure.
         // Empty INSERT may still bump an identity sequence; sequence counters are not
         // table, column, constraint, index or row facts and cannot invoke DML/event triggers.
         // An unchanged column rename is not included: its baseline still emits ALTER TABLE.
         return operation is InsertDataOperation { Values.Length: 0 }
-            or UpdateDataOperation { KeyValues.Length: 0 }
-            or DeleteDataOperation { KeyValues.Length: 0 }
-            or EnsureSchemaOperation { Name: "public" }
+                or UpdateDataOperation { KeyValues.Length: 0 }
+                or DeleteDataOperation { KeyValues.Length: 0 }
+                or EnsureSchemaOperation { Name: "public" }
             || (operation is RenameTableOperation table
                 && (table.NewName is null || table.Name == table.NewName)
                 && (table.NewSchema is null || table.Schema == table.NewSchema))
@@ -189,10 +220,14 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     /// <summary>Recognizes the ordinary Npgsql nullable-to-required backfill branch before its DDL.</summary>
     /// <param name="operation">The original provider column alteration.</param>
     /// <returns>Whether the baseline can execute a table UPDATE.</returns>
-    private static bool ColumnAlterMayEmitDml(AlterColumnOperation operation)
+    private static bool ColumnAlterMayEmitDml(
+            AlterColumnOperation operation
+        )
+
         // WHY: Npgsql handles computed-column replacement before its backfill branch
         // and ignores system-column operations altogether. Neither emits a table UPDATE.
-        => operation.OldColumn.IsNullable && !operation.IsNullable
+        => operation.OldColumn.IsNullable
+            && !operation.IsNullable
             && (operation.DefaultValue is not null || operation.DefaultValueSql is not null)
             && operation.ComputedColumnSql == operation.OldColumn.ComputedColumnSql
             && operation.IsStored == operation.OldColumn.IsStored
@@ -242,7 +277,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         // required-column equality admission in 0x40.
         // Unreadable optional role catalogs must not bind into DROP SQL.
         if (await visibility.ExecuteScalarAsync(cancellationToken) is not int access
-            || access < 0 || access > 127 || (access & 15) is not (4 or 5 or 6 or 8 or 9 or 10))
+            || access < 0
+            || access > 127
+            || (access & 15) is not (4 or 5 or 6 or 8 or 9 or 10))
         {
             throw new InvalidOperationException(
                 "The PostgreSQL trigger visibility query returned invalid evidence.");
@@ -263,7 +300,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             _dmlTriggerRisk = PostgreSqlTriggerRisk.VisibilityUnproven;
         }
 
-        if (eventAccess != 1 && !canReadDmlTriggers)
+        if (eventAccess != 1
+            && !canReadDmlTriggers)
         {
             // WHY: Revoked catalog privilege never proves that triggers are absent.
             // Check privilege separately: PostgreSQL checks SELECT permissions before CASE branches.
@@ -272,38 +310,44 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
         await using var active = connection.CreateCommand();
         ApplyCommandTimeout(active, commandTimeout);
+
         // WHY: Construct only catalogs the caller can bind. Native operators
         // are pinned too: an application overload on the active search path
         // must not execute while establishing the absence of callback risk.
         var activeEventTrigger = eventAccess == 1
             ? "EXISTS (SELECT 1 FROM pg_catalog.pg_event_trigger e "
-                + "WHERE (e.evtevent OPERATOR(pg_catalog.=) 'ddl_command_start' "
-                + "OR e.evtevent OPERATOR(pg_catalog.=) 'ddl_command_end' "
-                + "OR e.evtevent OPERATOR(pg_catalog.=) 'sql_drop' "
-                + "OR e.evtevent OPERATOR(pg_catalog.=) 'table_rewrite') "
-                + "AND (e.evtenabled OPERATOR(pg_catalog.=) 'A' OR e.evtenabled OPERATOR(pg_catalog.=) 'R' "
-                + "AND pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'replica' "
-                + "OR e.evtenabled OPERATOR(pg_catalog.=) 'O' "
-                + "AND (pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'origin' "
-                + "OR pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'local')))"
+            + "WHERE (e.evtevent OPERATOR(pg_catalog.=) 'ddl_command_start' "
+            + "OR e.evtevent OPERATOR(pg_catalog.=) 'ddl_command_end' "
+            + "OR e.evtevent OPERATOR(pg_catalog.=) 'sql_drop' "
+            + "OR e.evtevent OPERATOR(pg_catalog.=) 'table_rewrite') "
+            + "AND (e.evtenabled OPERATOR(pg_catalog.=) 'A' OR e.evtenabled OPERATOR(pg_catalog.=) 'R' "
+            + "AND pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'replica' "
+            + "OR e.evtenabled OPERATOR(pg_catalog.=) 'O' "
+            + "AND (pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'origin' "
+            + "OR pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'local')))"
             : "FALSE";
 
         var activeDmlTrigger = canReadDmlTriggers
             ? "EXISTS (SELECT 1 FROM pg_catalog.pg_trigger t WHERE NOT t.tgisinternal "
-                + "AND (t.tgenabled OPERATOR(pg_catalog.=) 'A' OR t.tgenabled OPERATOR(pg_catalog.=) 'R' "
-                + "AND pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'replica' "
-                + "OR t.tgenabled OPERATOR(pg_catalog.=) 'O' "
-                + "AND (pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'origin' "
-                + "OR pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'local')))"
+            + "AND (t.tgenabled OPERATOR(pg_catalog.=) 'A' OR t.tgenabled OPERATOR(pg_catalog.=) 'R' "
+            + "AND pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'replica' "
+            + "OR t.tgenabled OPERATOR(pg_catalog.=) 'O' "
+            + "AND (pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'origin' "
+            + "OR pg_catalog.current_setting('session_replication_role') OPERATOR(pg_catalog.=) 'local')))"
             : "FALSE";
 
         // WHY: Qualified OPERATOR syntax has generic precedence, not the
         // builtin symbol's arithmetic precedence. Keep the independent DML
         // bit grouped so its absence cannot erase an active event-trigger bit.
-        active.CommandText = "SELECT (" + activeEventTrigger + ")::integer OPERATOR(pg_catalog.+) "
-            + "(2 OPERATOR(pg_catalog.*) (" + activeDmlTrigger + ")::integer);";
+        active.CommandText = "SELECT ("
+            + activeEventTrigger
+            + ")::integer OPERATOR(pg_catalog.+) "
+            + "(2 OPERATOR(pg_catalog.*) ("
+            + activeDmlTrigger
+            + ")::integer);";
 
-        if (await active.ExecuteScalarAsync(cancellationToken) is not int activation || activation is < 0 or > 3)
+        if (await active.ExecuteScalarAsync(cancellationToken) is not int activation
+            || activation is < 0 or > 3)
         {
             throw new InvalidOperationException(
                 "The PostgreSQL trigger activation query returned invalid evidence.");
@@ -331,7 +375,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             _triggerOriginOrdinal = _projectedOperationOrdinal;
             _triggerOriginIsDml = false;
             _triggerOriginCode = _eventTriggerRisk == PostgreSqlTriggerRisk.EnabledTrigger
-                ? "projected_event_trigger_state_unknown" : "projected_event_trigger_visibility_unknown";
+                ? "projected_event_trigger_state_unknown"
+                : "projected_event_trigger_visibility_unknown";
         }
     }
 
@@ -347,7 +392,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             _triggerOriginOrdinal = _projectedOperationOrdinal;
             _triggerOriginIsDml = true;
             _triggerOriginCode = _dmlTriggerRisk == PostgreSqlTriggerRisk.EnabledTrigger
-                ? "projected_dml_trigger_structure_unknown" : "projected_dml_trigger_visibility_unknown";
+                ? "projected_dml_trigger_structure_unknown"
+                : "projected_dml_trigger_visibility_unknown";
         }
     }
 
@@ -365,16 +411,20 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             return null;
         }
 
-        if (analysis.IsInvariantUnsupported || analysis.ObservedState == SafeMigrationObservedState.Unsupported)
+        if (analysis.IsInvariantUnsupported
+            || analysis.ObservedState == SafeMigrationObservedState.Unsupported)
         {
             // WHY: Unknown trigger effects cannot authorize unsupported contracts or metadata grants.
             return analysis;
         }
 
-        return new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
-            SafeMigrationRepairCapability.None, false,
+        return new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.PrerequisiteMissing,
+            SafeMigrationRepairCapability.None,
+            false,
             _triggerOriginIsDml && operation.Intent is ModelManagedDataIntent
-                ? "projected_model_managed_data_state_unknown" : _triggerOriginCode!)
+                ? "projected_model_managed_data_state_unknown"
+                : _triggerOriginCode!)
         {
             ProviderDeferredOriginOrdinal = ordinal,
         };
@@ -386,8 +436,10 @@ internal enum PostgreSqlTriggerRisk
 {
     /// <summary>No trigger in this family fires in the current session.</summary>
     None,
+
     /// <summary>An enabled user trigger can change captured rows or structure.</summary>
     EnabledTrigger,
+
     /// <summary>The caller cannot inspect the trigger catalog to prove absence.</summary>
     VisibilityUnproven,
 }

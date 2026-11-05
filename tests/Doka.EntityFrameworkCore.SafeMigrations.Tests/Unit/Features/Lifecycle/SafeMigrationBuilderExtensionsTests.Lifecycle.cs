@@ -46,6 +46,7 @@ public sealed partial class SafeMigrationBuilderExtensionsTests
             ["id"],
             ["int"],
             new object?[,] { { 1 } });
+
         builder.UpdateModelManagedDataFromModel(
             "items",
             ["id"],
@@ -55,6 +56,7 @@ public sealed partial class SafeMigrationBuilderExtensionsTests
             ["varchar(32)"],
             new object?[,] { { "old" } },
             new object?[,] { { "new" } });
+
         builder.DeleteModelManagedDataFromModel(
             "items",
             ["id"],
@@ -73,6 +75,7 @@ public sealed partial class SafeMigrationBuilderExtensionsTests
             Enum.GetValues<SafeMigrationOperationKind>()
                 .Length,
             operations.Length);
+
         Assert.Equal(
             Enum
                 .GetValues<SafeMigrationOperationKind>()
@@ -80,6 +83,7 @@ public sealed partial class SafeMigrationBuilderExtensionsTests
             operations
                 .Select(static operation => operation.Intent.Kind)
                 .Order());
+
         Assert.All(operations, static operation => Assert.Empty(operation.GetAnnotations()));
     }
 }

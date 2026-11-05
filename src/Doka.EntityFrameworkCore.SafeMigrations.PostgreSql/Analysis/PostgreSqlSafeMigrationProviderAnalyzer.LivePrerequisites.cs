@@ -2,21 +2,27 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
 internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 {
+    private Dictionary<LiveForeignKeyNameIdentity, string>? _liveConstraintCollisionKinds;
+    private Dictionary<ExpectedForeignKeyDefinition, LiveForeignKeyPrerequisites>? _liveForeignKeyPrerequisites;
     private Dictionary<LiveColumnIdentity, LiveColumnStorage>? _livePrerequisiteColumns;
     private Dictionary<LiveColumnTypeIdentity, LiveColumnStorage>? _livePrerequisiteTypes;
-    private Dictionary<ExpectedForeignKeyDefinition, LiveForeignKeyPrerequisites>? _liveForeignKeyPrerequisites;
-    private HashSet<LiveForeignKeyNameIdentity>? _requestedLiveConstraintNames;
-    private Dictionary<LiveForeignKeyNameIdentity, string>? _liveConstraintCollisionKinds;
-    private HashSet<LiveForeignKeyNameIdentity>? _removedLiveConstraintNames;
     private Dictionary<LiveForeignKeyNameIdentity, string>? _occupiedProjectedConstraintNames;
+    private HashSet<LiveForeignKeyNameIdentity>? _removedLiveConstraintNames;
+    private HashSet<LiveForeignKeyNameIdentity>? _requestedLiveConstraintNames;
 
     /// <inheritdoc />
-    public bool HasLiveColumn(string table, string? schema, string column)
+    public bool HasLiveColumn(
+        string table,
+        string? schema,
+        string column
+    )
         => HasCurrentGeneratedLiveBinding(table, schema, column)
             && _livePrerequisiteColumns?.ContainsKey(LiveColumnKey(table, schema, column)) == true;
 
     /// <inheritdoc />
-    public bool RequiresLiveForeignKeyQualification(EnsureForeignKeyIntent intent)
+    public bool RequiresLiveForeignKeyQualification(
+        EnsureForeignKeyIntent intent
+    )
         => _liveForeignKeyPrerequisites?.TryGetValue(intent.Definition, out var captured) == true
             && captured.BothOwnersExist;
 
@@ -29,27 +35,44 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         if (_liveForeignKeyPrerequisites is null
             || !_liveForeignKeyPrerequisites.TryGetValue(intent.Definition, out var captured)
             || !captured.OwnersCompatible
-            || _occupiedProjectedConstraintNames?.ContainsKey(LiveForeignKeyName(
-                intent.Definition.Table, intent.Definition.Schema, intent.Definition.Name)) == true
-            || !captured.DependentExists && !IsAcceptedNewForeignKeyOwner(intent.Definition, columns)
-            || captured.CollisionKind is not null && !IsAcceptedNewForeignKeyOwner(intent.Definition, columns)
+            || _occupiedProjectedConstraintNames?.ContainsKey(
+                LiveForeignKeyName(
+                    intent.Definition.Table,
+                    intent.Definition.Schema,
+                    intent.Definition.Name))
+            == true
+            || (!captured.DependentExists && !IsAcceptedNewForeignKeyOwner(intent.Definition, columns))
+            || (captured.CollisionKind is not null
+                && !IsAcceptedNewForeignKeyOwner(intent.Definition, columns)
                 && _removedLiveConstraintNames?.Contains(
-                    LiveForeignKeyName(intent.Definition.Table, intent.Definition.Schema,
-                        intent.Definition.Name)) != true)
+                    LiveForeignKeyName(
+                        intent.Definition.Table,
+                        intent.Definition.Schema,
+                        intent.Definition.Name))
+                != true))
         {
             return null;
         }
 
         var definition = intent.Definition;
+
         // WHY: Compare dependent and principal FK storage at the same key position.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = 0; ordinal < definition.Columns.Count; ordinal++)
         {
-            if (!TryGetCurrentForeignKeyStorage(definition.Table, definition.Schema,
-                    definition.Columns[ordinal], columns, out var dependent)
-                || !TryGetCurrentForeignKeyStorage(definition.PrincipalTable, definition.PrincipalSchema,
-                    definition.PrincipalColumns[ordinal], columns, out var principal)
+            if (!TryGetCurrentForeignKeyStorage(
+                    definition.Table,
+                    definition.Schema,
+                    definition.Columns[ordinal],
+                    columns,
+                    out var dependent)
+                || !TryGetCurrentForeignKeyStorage(
+                    definition.PrincipalTable,
+                    definition.PrincipalSchema,
+                    definition.PrincipalColumns[ordinal],
+                    columns,
+                    out var principal)
                 || !ForeignKeyStorageCompatible(dependent, principal))
             {
                 // WHY: A newly NULL-filled endpoint proves row compatibility,
@@ -89,9 +112,13 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     }
 
     /// <summary>Tracks only requested native constraint symbols through accepted executable family changes.</summary>
-    private void ObserveAcceptedLiveConstraintName(SafeMigrationOperation operation, SafeMigrationDecision decision)
+    private void ObserveAcceptedLiveConstraintName(
+        SafeMigrationOperation operation,
+        SafeMigrationDecision decision
+    )
     {
-        if (_requestedLiveConstraintNames is null || decision.Action != SafeMigrationAction.Apply)
+        if (_requestedLiveConstraintNames is null
+            || decision.Action != SafeMigrationAction.Apply)
         {
             return;
         }
@@ -99,21 +126,30 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         var identity = operation.Intent switch
         {
             DropForeignKeyIntent value => LiveForeignKeyName(value.Table, value.Schema, value.Name),
-            EnsureForeignKeyIntent value => LiveForeignKeyName(value.Definition.Table,
-                value.Definition.Schema, value.Definition.Name),
+            EnsureForeignKeyIntent value => LiveForeignKeyName(
+                value.Definition.Table,
+                value.Definition.Schema,
+                value.Definition.Name),
             DropPrimaryKeyIntent value => LiveForeignKeyName(value.Table, value.Schema, value.Name),
             DropUniqueConstraintIntent value => LiveForeignKeyName(value.Table, value.Schema, value.Name),
             DropCheckConstraintIntent value => LiveForeignKeyName(value.Table, value.Schema, value.Name),
-            EnsurePrimaryKeyIntent value => LiveForeignKeyName(value.Definition.Table,
-                value.Definition.Schema, value.Definition.Name),
-            EnsureUniqueConstraintIntent value => LiveForeignKeyName(value.Definition.Table,
-                value.Definition.Schema, value.Definition.Name),
-            EnsureCheckConstraintIntent value => LiveForeignKeyName(value.Definition.Table,
-                value.Definition.Schema, value.Definition.Name),
+            EnsurePrimaryKeyIntent value => LiveForeignKeyName(
+                value.Definition.Table,
+                value.Definition.Schema,
+                value.Definition.Name),
+            EnsureUniqueConstraintIntent value => LiveForeignKeyName(
+                value.Definition.Table,
+                value.Definition.Schema,
+                value.Definition.Name),
+            EnsureCheckConstraintIntent value => LiveForeignKeyName(
+                value.Definition.Table,
+                value.Definition.Schema,
+                value.Definition.Name),
             _ => (LiveForeignKeyNameIdentity?)null,
         };
 
-        if (identity is { } name && _requestedLiveConstraintNames.Contains(name))
+        if (identity is { } name
+            && _requestedLiveConstraintNames.Contains(name))
         {
             var kind = operation.Intent switch
             {
@@ -124,10 +160,13 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 _ => throw new UnreachableException(),
             };
 
-            if (operation.Intent is DropForeignKeyIntent or DropPrimaryKeyIntent
-                or DropUniqueConstraintIntent or DropCheckConstraintIntent)
+            if (operation.Intent is DropForeignKeyIntent
+                or DropPrimaryKeyIntent
+                or DropUniqueConstraintIntent
+                or DropCheckConstraintIntent)
             {
-                if (_liveConstraintCollisionKinds?.TryGetValue(name, out var actualKind) == true && actualKind == kind)
+                if (_liveConstraintCollisionKinds?.TryGetValue(name, out var actualKind) == true
+                    && actualKind == kind)
                 {
                     // WHY: Only a correctly typed executable drop of the
                     // independently observed owned symbol frees its name.
@@ -166,7 +205,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 Occupy(check.Name, "c");
             }
 
-            void Occupy(string name, string kind)
+            void Occupy(
+                string name,
+                string kind
+            )
             {
                 var occupied = LiveForeignKeyName(table.Definition.Table, table.Definition.Schema, name);
                 if (_requestedLiveConstraintNames.Contains(occupied))
@@ -183,27 +225,35 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         ISafeMigrationProjectedColumnSource columns
     ) => columns is ISafeMigrationProjectedTableSource tables
         && tables.TryGetProjectedTableState(definition.Table, definition.Schema, out var state)
-        && state.IsNewlyCreated && !state.HasUnknownStructure;
+        && state.IsNewlyCreated
+        && !state.HasUnknownStructure;
 
     /// <summary>Resolves an owned FK symbol through the same proven schema normalization as its catalog row.</summary>
-    private LiveForeignKeyNameIdentity LiveForeignKeyName(string table, string? schema, string name)
+    private LiveForeignKeyNameIdentity LiveForeignKeyName(
+        string table,
+        string? schema,
+        string name
+    )
         => new(table, PostgreSqlSafeMigrationSchemaIdentity.Normalize(schema, _currentSchema), name);
 
     /// <summary>Qualifies native builtin equality families and PostgreSQL's deterministic-collation rule.</summary>
-    private static bool ForeignKeyStorageCompatible(LiveColumnStorage dependent, LiveColumnStorage principal)
+    private static bool ForeignKeyStorageCompatible(
+        LiveColumnStorage dependent,
+        LiveColumnStorage principal
+    )
     {
         // WHY: PostgreSQL's default btree integer family provides cross-width
         // equality; text/varchar share text_ops. No arbitrary cast or nondefault
         // opclass is inferred. The engine permits different deterministic
         // collations but requires equal identities when either is nondeterministic.
         var typesCompatible = dependent.TypeOid == principal.TypeOid
-            || dependent.TypeOid is 20 or 21 or 23 && principal.TypeOid is 20 or 21 or 23
-            || dependent.TypeOid is 25 or 1043 && principal.TypeOid is 25 or 1043;
+            || (dependent.TypeOid is 20 or 21 or 23 && principal.TypeOid is 20 or 21 or 23)
+            || (dependent.TypeOid is 25 or 1043 && principal.TypeOid is 25 or 1043);
 
         return typesCompatible
-            && (dependent.CollationOid == 0) == (principal.CollationOid == 0)
+            && dependent.CollationOid == 0 == (principal.CollationOid == 0)
             && (dependent.CollationOid == principal.CollationOid
-                || dependent.CollationDeterministic && principal.CollationDeterministic);
+                || (dependent.CollationDeterministic && principal.CollationDeterministic));
     }
 
     /// <summary>Reads only accepted current definitions or independently captured unchanged live endpoints.</summary>
@@ -247,10 +297,18 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         var nativeDrop = CaptureNativeGeneratedDropEvidence(operations, results);
 
         var requests = CollectLivePrerequisiteRequests(operations, results, cancellationToken);
-        if (requests is null || requests.Count == 0)
+        if (requests is null
+            || requests.Count == 0)
         {
-            _indexInputProofs = await CaptureIndexInputProofsAsync(connection, operations, results,
-                null, null, commandTimeout, cancellationToken);
+            _indexInputProofs = await CaptureIndexInputProofsAsync(
+                connection,
+                operations,
+                results,
+                null,
+                null,
+                commandTimeout,
+                cancellationToken);
+
             _nativeGeneratedDropDependencies = nativeDrop.Dependencies;
             _nativeGeneratedDropCapabilityRefusals = nativeDrop.CapabilityRefusals;
 
@@ -287,8 +345,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 while (await reader.ReadAsync(token))
                 {
                     var ordinal = reader.GetInt32(0);
-                    if (ordinal < offset || ordinal >= offset + count
-                        || ordinal != currentOrdinal && ordinal != nextOrdinal
+                    if (ordinal < offset
+                        || ordinal >= offset + count
+                        || (ordinal != currentOrdinal && ordinal != nextOrdinal)
                         || reader.GetValue(1) is not bool valid)
                     {
                         throw InvalidLivePrerequisiteEvidence();
@@ -301,30 +360,42 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                         currentOrdinal = ordinal;
                         nextOrdinal = ordinal + 1;
                         compatible = valid;
-                        candidates = request is LiveForeignKeyRequest ? [] : null;
-                        candidateIdentities = request is LiveForeignKeyRequest ? [] : null;
+                        candidates = request is LiveForeignKeyRequest
+                            ? []
+                            : null;
+
+                        candidateIdentities = request is LiveForeignKeyRequest
+                            ? []
+                            : null;
+
                         absentCandidate = false;
                         bothOwnersExist = false;
                         dependentExists = false;
                         collisionKind = null;
                     }
-                    else if (request is not LiveForeignKeyRequest || compatible != valid || absentCandidate)
+                    else if (request is not LiveForeignKeyRequest
+                        || compatible != valid
+                        || absentCandidate)
                     {
                         throw InvalidLivePrerequisiteEvidence();
                     }
 
                     if (request is LiveForeignKeyRequest)
                     {
-                        if (!reader.IsDBNull(2) && (reader.GetValue(2) is not long dependentOid || dependentOid <= 0)
-                            || !reader.IsDBNull(3) && (reader.GetValue(3) is not long principalOid || principalOid <= 0)
+                        if ((!reader.IsDBNull(2) && (reader.GetValue(2) is not long dependentOid || dependentOid <= 0))
+                            || (!reader.IsDBNull(3)
+                                && (reader.GetValue(3) is not long principalOid || principalOid <= 0))
                             || !reader.IsDBNull(8))
                         {
                             throw InvalidLivePrerequisiteEvidence();
                         }
 
                         var ownersExist = !reader.IsDBNull(2) && !reader.IsDBNull(3);
-                        var collision = reader.IsDBNull(7) ? null : reader.GetString(7);
-                        if (candidates!.Count > 0 && (bothOwnersExist != ownersExist || collisionKind != collision)
+                        var collision = reader.IsDBNull(7)
+                            ? null
+                            : reader.GetString(7);
+
+                        if ((candidates!.Count > 0 && (bothOwnersExist != ownersExist || collisionKind != collision))
                             || collision is { Length: not 1 })
                         {
                             throw InvalidLivePrerequisiteEvidence();
@@ -336,7 +407,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
                         if (reader.IsDBNull(4))
                         {
-                            if (!reader.IsDBNull(5) || !reader.IsDBNull(6) || candidates!.Count != 0)
+                            if (!reader.IsDBNull(5)
+                                || !reader.IsDBNull(6)
+                                || candidates!.Count != 0)
                             {
                                 throw InvalidLivePrerequisiteEvidence();
                             }
@@ -355,10 +428,13 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                         };
 
                         var name = reader.GetString(5);
-                        var backingIndex = reader.IsDBNull(6) ? null : reader.GetString(6);
+                        var backingIndex = reader.IsDBNull(6)
+                            ? null
+                            : reader.GetString(6);
+
                         if (name.Length == 0
-                            || kind == SafeMigrationDatabaseObjectKind.Index && backingIndex is not null
-                            || kind != SafeMigrationDatabaseObjectKind.Index && string.IsNullOrEmpty(backingIndex))
+                            || (kind == SafeMigrationDatabaseObjectKind.Index && backingIndex is not null)
+                            || (kind != SafeMigrationDatabaseObjectKind.Index && string.IsNullOrEmpty(backingIndex)))
                         {
                             throw InvalidLivePrerequisiteEvidence();
                         }
@@ -374,7 +450,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                         continue;
                     }
 
-                    if (!reader.IsDBNull(4) || !reader.IsDBNull(5) || !reader.IsDBNull(6) || !reader.IsDBNull(7))
+                    if (!reader.IsDBNull(4)
+                        || !reader.IsDBNull(5)
+                        || !reader.IsDBNull(6)
+                        || !reader.IsDBNull(7))
                     {
                         throw InvalidLivePrerequisiteEvidence();
                     }
@@ -384,8 +463,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                         continue;
                     }
 
-                    if (reader.GetValue(2) is not long typeOid || typeOid <= 0
-                        || reader.GetValue(3) is not long collationOid || collationOid < 0
+                    if (reader.GetValue(2) is not long typeOid
+                        || typeOid <= 0
+                        || reader.GetValue(3) is not long collationOid
+                        || collationOid < 0
                         || reader.GetValue(8) is not bool deterministic)
                     {
                         throw InvalidLivePrerequisiteEvidence();
@@ -413,23 +494,41 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
                 void PublishForeignKey()
                 {
-                    if (currentOrdinal >= offset && requests[currentOrdinal] is LiveForeignKeyRequest foreignKey)
+                    if (currentOrdinal >= offset
+                        && requests[currentOrdinal] is LiveForeignKeyRequest foreignKey)
                     {
-                        foreignKeys.Add(foreignKey.Definition,
-                            new LiveForeignKeyPrerequisites(compatible!.Value, bothOwnersExist, dependentExists,
-                                collisionKind, candidates!.AsReadOnly()));
+                        foreignKeys.Add(
+                            foreignKey.Definition,
+                            new LiveForeignKeyPrerequisites(
+                                compatible!.Value,
+                                bothOwnersExist,
+                                dependentExists,
+                                collisionKind,
+                                candidates!.AsReadOnly()));
                     }
                 }
             },
             cancellationToken);
 
-        var indexFacts = await CaptureIndexInputProofsAsync(connection, operations, results,
-            liveColumns, liveTypes, commandTimeout, cancellationToken);
+        var indexFacts = await CaptureIndexInputProofsAsync(
+            connection,
+            operations,
+            results,
+            liveColumns,
+            liveTypes,
+            commandTimeout,
+            cancellationToken);
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var checkFacts = await CaptureSparseCheckTypeFactsAsync(connection, operations, results,
-            requests, liveTypes, commandTimeout, cancellationToken);
+        var checkFacts = await CaptureSparseCheckTypeFactsAsync(
+            connection,
+            operations,
+            results,
+            requests,
+            liveTypes,
+            commandTimeout,
+            cancellationToken);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -441,7 +540,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             {
                 var name = LiveForeignKeyName(definition.Table, definition.Schema, definition.Name);
                 collisionKinds ??= [];
-                if (collisionKinds.TryGetValue(name, out var previous) && previous != kind)
+                if (collisionKinds.TryGetValue(name, out var previous)
+                    && previous != kind)
                 {
                     throw InvalidLivePrerequisiteEvidence();
                 }
@@ -450,11 +550,15 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             }
         }
 
-        var requestedNames = foreignKeys.Count == 0 ? null : foreignKeys.Keys
-            .Select(definition => LiveForeignKeyName(definition.Table, definition.Schema, definition.Name))
-            .ToHashSet();
+        var requestedNames = foreignKeys.Count == 0
+            ? null
+            : foreignKeys
+                .Keys
+                .Select(definition => LiveForeignKeyName(definition.Table, definition.Schema, definition.Name))
+                .ToHashSet();
 
         HashSet<int>? caseCandidates = null;
+
         // WHY: Capture missing-member evidence for the matching operation and result.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -482,8 +586,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
                 // An occupied native name emits Different instead. Retain its
                 // exact symbol so accepted prefix creations expire that proof.
                 (caseCandidates ??= []).Add(ordinal);
-                (requestedNames ??= []).Add(LiveForeignKeyName(check.Definition.Table,
-                    check.Definition.Schema, check.Definition.Name));
+                (requestedNames ??= []).Add(
+                    LiveForeignKeyName(
+                        check.Definition.Table,
+                        check.Definition.Schema,
+                        check.Definition.Name));
             }
         }
 
@@ -522,6 +629,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     )
     {
         var hasMissingPrerequisite = false;
+
         // WHY: Check prerequisite observations against their corresponding operations.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -529,8 +637,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (results[ordinal].ObservedState == SafeMigrationObservedState.PrerequisiteMissing
-                || operations[ordinal].Intent is EnsureIndexIntent
-                    && NeedsIndexInputCapture(results[ordinal], ordinal)
+                || (operations[ordinal].Intent is EnsureIndexIntent
+                    && NeedsIndexInputCapture(results[ordinal], ordinal))
                 || NeedsGeneratedCaseInputCapture(operations[ordinal].Intent, results[ordinal]))
             {
                 hasMissingPrerequisite = true;
@@ -547,6 +655,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         }
 
         var relevantColumns = new HashSet<LiveColumnIdentity>();
+
         // WHY: Collect each operation's requests using its own prerequisite verdict.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -555,18 +664,22 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             cancellationToken.ThrowIfCancellationRequested();
             var intent = operations[ordinal].Intent;
             if (!(results[ordinal].ObservedState == SafeMigrationObservedState.PrerequisiteMissing
-                    || intent is EnsureIndexIntent && NeedsIndexInputCapture(results[ordinal], ordinal)
+                    || (intent is EnsureIndexIntent && NeedsIndexInputCapture(results[ordinal], ordinal))
                     || NeedsGeneratedCaseInputCapture(intent, results[ordinal]))
-                || intent is not (EnsureForeignKeyIntent or EnsureIndexIntent or EnsurePrimaryKeyIntent
-                    or EnsureUniqueConstraintIntent or EnsureCheckConstraintIntent)
-                    && !PostgreSqlSafeMigrationCatalogSqlBuilder.RequiresGeneratedCaseInputCapture(intent))
+                || (intent is not (EnsureForeignKeyIntent
+                        or EnsureIndexIntent
+                        or EnsurePrimaryKeyIntent
+                        or EnsureUniqueConstraintIntent
+                        or EnsureCheckConstraintIntent)
+                    && !PostgreSqlSafeMigrationCatalogSqlBuilder.RequiresGeneratedCaseInputCapture(intent)))
             {
                 continue;
             }
 
             var owner = PostgreSqlSafeMigrationSchemaIdentity.GetOwner(intent);
             var local = intent is EnsureIndexIntent index
-                ? GetIndexPrerequisiteColumns(index) : NativePrerequisiteColumns(intent);
+                ? GetIndexPrerequisiteColumns(index)
+                : NativePrerequisiteColumns(intent);
 
             foreach (var column in local)
             {
@@ -577,8 +690,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             {
                 foreach (var column in foreign.Definition.PrincipalColumns)
                 {
-                    relevantColumns.Add(LiveColumnKey(foreign.Definition.PrincipalTable,
-                        foreign.Definition.PrincipalSchema, column));
+                    relevantColumns.Add(
+                        LiveColumnKey(
+                            foreign.Definition.PrincipalTable,
+                            foreign.Definition.PrincipalSchema,
+                            column));
                 }
             }
         }
@@ -595,8 +711,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var ordinal = operations.Count - 1; ordinal >= 0; ordinal--)
         {
-            if (operations[ordinal].Intent is RenameColumnIntent rename && relevantColumns.Contains(
-                LiveColumnKey(rename.Table, rename.Schema, rename.NewName)))
+            if (operations[ordinal].Intent is RenameColumnIntent rename
+                && relevantColumns.Contains(
+                    LiveColumnKey(rename.Table, rename.Schema, rename.NewName)))
             {
                 // WHY: Keep only the requested member's prefix aliases. This
                 // captures type identities, not permission to accept the rename
@@ -624,7 +741,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             {
                 foreach (var proposal in proposals)
                 {
-                    RecordColumn(LiveColumnKey(proposal.Table, proposal.Schema, proposal.Definition.Name),
+                    RecordColumn(
+                        LiveColumnKey(proposal.Table, proposal.Schema, proposal.Definition.Name),
                         proposal.Definition);
                 }
             }
@@ -692,10 +810,13 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             }
 
             if (!(results[ordinal].ObservedState == SafeMigrationObservedState.PrerequisiteMissing
-                    || intent is EnsureIndexIntent && NeedsIndexInputCapture(results[ordinal], ordinal)
+                    || (intent is EnsureIndexIntent && NeedsIndexInputCapture(results[ordinal], ordinal))
                     || NeedsGeneratedCaseInputCapture(intent, results[ordinal]))
-                || intent is not (EnsureForeignKeyIntent or EnsureIndexIntent or EnsurePrimaryKeyIntent
-                    or EnsureUniqueConstraintIntent or EnsureCheckConstraintIntent))
+                || intent is not (EnsureForeignKeyIntent
+                    or EnsureIndexIntent
+                    or EnsurePrimaryKeyIntent
+                    or EnsureUniqueConstraintIntent
+                    or EnsureCheckConstraintIntent))
             {
                 continue;
             }
@@ -711,18 +832,22 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             if (intent is EnsureForeignKeyIntent foreignKey)
             {
                 hasPriorColumn |= foreignKey.Definition.PrincipalColumns.Any(column => priorColumns.ContainsKey(
-                    LiveColumnKey(foreignKey.Definition.PrincipalTable,
-                        foreignKey.Definition.PrincipalSchema, column)));
+                    LiveColumnKey(
+                        foreignKey.Definition.PrincipalTable,
+                        foreignKey.Definition.PrincipalSchema,
+                        column)));
             }
 
-            if (!hasPriorColumn && intent is not EnsureIndexIntent
+            if (!hasPriorColumn
+                && intent is not EnsureIndexIntent
                 && !NeedsGeneratedCaseInputCapture(intent, results[ordinal]))
             {
                 continue;
             }
 
             AddColumns(owner.Table!, owner.Schema, local);
-            if (intent is EnsureCheckConstraintIntent check && check.Definition.Expression is { } expression)
+            if (intent is EnsureCheckConstraintIntent check
+                && check.Definition.Expression is { } expression)
             {
                 foreach (var type in CheckExpressionTypeIdentities(expression))
                 {
@@ -735,7 +860,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
             if (intent is EnsureForeignKeyIntent foreign)
             {
-                AddColumns(foreign.Definition.PrincipalTable, foreign.Definition.PrincipalSchema,
+                AddColumns(
+                    foreign.Definition.PrincipalTable,
+                    foreign.Definition.PrincipalSchema,
                     foreign.Definition.PrincipalColumns);
 
                 if (requestedForeignKeys.Add(foreign.Definition))
@@ -747,7 +874,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
         return requests;
 
-        void AddColumns(string table, string? schema, IReadOnlyList<string> columns)
+        void AddColumns(
+            string table,
+            string? schema,
+            IReadOnlyList<string> columns
+        )
         {
             foreach (var column in columns)
             {
@@ -770,7 +901,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             }
         }
 
-        void RecordColumn(LiveColumnIdentity key, ExpectedColumnDefinition definition)
+        void RecordColumn(
+            LiveColumnIdentity key,
+            ExpectedColumnDefinition definition
+        )
         {
             if (!relevantColumns.Contains(key))
             {
@@ -800,20 +934,34 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     }
 
     /// <summary>Shares the normalizer's proven schema alias without folding exact quoted identifiers.</summary>
-    private LiveColumnIdentity LiveColumnKey(string table, string? schema, string column)
+    private LiveColumnIdentity LiveColumnKey(
+        string table,
+        string? schema,
+        string column
+    )
         => new(table, PostgreSqlSafeMigrationSchemaIdentity.Normalize(schema, _currentSchema), column);
 
     /// <summary>Maps projected definitions to native OIDs rather than comparing CLR or alias spellings.</summary>
-    private LiveColumnTypeIdentity? ProjectedColumnTypeIdentity(ExpectedColumnDefinition definition)
+    private LiveColumnTypeIdentity? ProjectedColumnTypeIdentity(
+        ExpectedColumnDefinition definition
+    )
     {
-        var mapping = _typeMappingSource.FindMapping(definition.ClrType, definition.StoreType,
-            keyOrIndex: false, unicode: definition.IsUnicode, size: definition.MaxLength,
-            rowVersion: definition.IsRowVersion, fixedLength: definition.IsFixedLength,
-            precision: definition.Precision, scale: definition.Scale);
+        var mapping = _typeMappingSource.FindMapping(
+            definition.ClrType,
+            definition.StoreType,
+            keyOrIndex: false,
+            unicode: definition.IsUnicode,
+            size: definition.MaxLength,
+            rowVersion: definition.IsRowVersion,
+            fixedLength: definition.IsFixedLength,
+            precision: definition.Precision,
+            scale: definition.Scale);
 
         return mapping is null
             ? null
-            : new LiveColumnTypeIdentity(mapping.StoreTypeNameBase, definition.Collation?.Name,
+            : new LiveColumnTypeIdentity(
+                mapping.StoreTypeNameBase,
+                definition.Collation?.Name,
                 definition.Collation?.Schema);
     }
 
@@ -841,10 +989,14 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             };
 
             var selectionBytes = Encoding.UTF8.GetByteCount(selection)
-                + (selections.Count == 0 ? 0 : Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator));
+                + (selections.Count == 0
+                    ? 0
+                    : Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Separator));
 
             var payload = checked(sqlBytes + selectionBytes + parameters.Utf8PayloadBytes);
-            if (SafeMigrationCatalogQueryLimits.Exceeded(parameters.Count, payload,
+            if (SafeMigrationCatalogQueryLimits.Exceeded(
+                parameters.Count,
+                payload,
                 SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes))
             {
                 var count = parameters.Count;
@@ -895,11 +1047,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         var collation = identity.Collation is null
             ? "t.typcollation"
             : "(SELECT coll.oid FROM pg_catalog.pg_collation coll "
-                + "JOIN pg_catalog.pg_namespace cn ON cn.oid = coll.collnamespace "
-                + $"WHERE coll.collname = {parameters.AddString(identity.Collation)} "
-                + (identity.CollationSchema is null
-                    ? "AND pg_catalog.pg_collation_is_visible(coll.oid))"
-                    : $"AND cn.nspname = {parameters.AddString(identity.CollationSchema)})");
+            + "JOIN pg_catalog.pg_namespace cn ON cn.oid = coll.collnamespace "
+            + $"WHERE coll.collname = {parameters.AddString(identity.Collation)} "
+            + (identity.CollationSchema is null
+                ? "AND pg_catalog.pg_collation_is_visible(coll.oid))"
+                : $"AND cn.nspname = {parameters.AddString(identity.CollationSchema)})");
 
         return $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, "
             + "t.oid IS NOT NULL AND expected.collation IS NOT NULL, t.oid::bigint, expected.collation::bigint, "
@@ -919,7 +1071,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     )
     {
         var principalColumns = "ARRAY["
-            + string.Join(", ", definition.PrincipalColumns.Select(parameters.AddString)) + "]::name[]";
+            + string.Join(", ", definition.PrincipalColumns.Select(parameters.AddString))
+            + "]::name[]";
 
         // WHY: Metadata alone cannot prove an arbitrary opclass, partial or
         // expression index is a native reference key. Native owner/type/collation
@@ -930,7 +1083,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             + "NULL::boolean";
 
         return $"SELECT {ordinal.ToString(CultureInfo.InvariantCulture)}, COALESCE(({owners}), FALSE), "
-            + "d.oid::bigint, p.oid::bigint, keys.kind, keys.name, keys.backing, " + collision + " "
+            + "d.oid::bigint, p.oid::bigint, keys.kind, keys.name, keys.backing, "
+            + collision
+            + " "
             + "FROM (SELECT 1) seed LEFT JOIN pg_catalog.pg_namespace dn "
             + $"ON dn.nspname = {LiveSchemaExpression(definition.Schema, parameters)} "
             + "LEFT JOIN pg_catalog.pg_class d ON d.relnamespace = dn.oid "
@@ -956,7 +1111,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             + "AND ARRAY(SELECT a.attname FROM unnest(i.indkey) WITH ORDINALITY key(attnum, ord) "
             + "JOIN pg_catalog.pg_attribute a ON a.attrelid = p.oid AND a.attnum = key.attnum "
             + "WHERE key.ord <= i.indnkeyatts AND NOT a.attisdropped ORDER BY key.ord) = "
-            + principalColumns + " AND NOT EXISTS (SELECT 1 FROM unnest(i.indkey) WITH ORDINALITY key(attnum, ord) "
+            + principalColumns
+            + " AND NOT EXISTS (SELECT 1 FROM unnest(i.indkey) WITH ORDINALITY key(attnum, ord) "
             + "JOIN pg_catalog.pg_attribute a ON a.attrelid = p.oid AND a.attnum = key.attnum "
             + "JOIN pg_catalog.pg_opclass opc ON opc.oid = i.indclass[key.ord::integer - 1] "
             + "WHERE key.ord <= i.indnkeyatts AND ((i.indcollation[key.ord::integer - 1] <> a.attcollation "
@@ -968,11 +1124,18 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     }
 
     /// <summary>Resolves only the active creation schema, never another visible search-path owner.</summary>
-    private static string LiveSchemaExpression(string? schema, PostgreSqlCatalogQueryParameters parameters)
-        => schema is null ? "current_schema()" : parameters.AddString(schema);
+    private static string LiveSchemaExpression(
+        string? schema,
+        PostgreSqlCatalogQueryParameters parameters
+    )
+        => schema is null
+            ? "current_schema()"
+            : parameters.AddString(schema);
 
     /// <summary>Excludes views, partitions and inheritance which need a separate native ownership contract.</summary>
-    private static string LiveOrdinaryOwner(string alias)
+    private static string LiveOrdinaryOwner(
+        string alias
+    )
         => $"{alias}.relkind = 'r' AND NOT {alias}.relispartition AND NOT EXISTS "
             + $"(SELECT 1 FROM pg_catalog.pg_inherits inheritance WHERE inheritance.inhrelid = {alias}.oid "
             + $"OR inheritance.inhparent = {alias}.oid)";
@@ -982,13 +1145,25 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         => new("The PostgreSQL live prerequisite query returned malformed or incomplete evidence.");
 
     /// <summary>An exact provider-normalized requested physical member, not a model declaration.</summary>
-    private readonly record struct LiveColumnIdentity(string Table, string? Schema, string Column);
+    private readonly record struct LiveColumnIdentity(
+        string Table,
+        string? Schema,
+        string Column
+    );
 
     /// <summary>The independently resolved PostgreSQL type and effective comparison collation.</summary>
-    private readonly record struct LiveColumnStorage(long TypeOid, long CollationOid, bool CollationDeterministic);
+    private readonly record struct LiveColumnStorage(
+        long TypeOid,
+        long CollationOid,
+        bool CollationDeterministic
+    );
 
     /// <summary>The provider-mapped type spelling and requested collation used for native OID resolution.</summary>
-    private readonly record struct LiveColumnTypeIdentity(string StoreType, string? Collation, string? CollationSchema);
+    private readonly record struct LiveColumnTypeIdentity(
+        string StoreType,
+        string? Collation,
+        string? CollationSchema
+    );
 
     /// <summary>Immutable independent owner/name qualification and actual surviving-candidate identities.</summary>
     private sealed record LiveForeignKeyPrerequisites(
@@ -996,40 +1171,61 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         bool BothOwnersExist,
         bool DependentExists,
         string? CollisionKind,
-        IReadOnlyList<SafeMigrationLiveCandidateKey> CandidateKeys);
+        IReadOnlyList<SafeMigrationLiveCandidateKey> CandidateKeys
+    );
 
     /// <summary>The exact owned foreign-key name discharged by an accepted native drop.</summary>
-    private readonly record struct LiveForeignKeyNameIdentity(string Table, string? Schema, string Name);
+    private readonly record struct LiveForeignKeyNameIdentity(
+        string Table,
+        string? Schema,
+        string Name
+    );
 
     /// <summary>A deduplicated metadata request carrying no application row values.</summary>
     private abstract record LivePrerequisiteRequest;
+
     private sealed record LiveColumnRequest(LiveColumnIdentity Identity) : LivePrerequisiteRequest;
+
     private sealed record LiveColumnTypeRequest(LiveColumnTypeIdentity Identity) : LivePrerequisiteRequest;
+
     private sealed record LiveForeignKeyRequest(ExpectedForeignKeyDefinition Definition) : LivePrerequisiteRequest;
 
     /// <summary>Deduplicates exact ordered FK metadata bindings without delimiter-sensitive string encodings.</summary>
     private sealed class LiveForeignKeyComparer(string? currentSchema) : IEqualityComparer<ExpectedForeignKeyDefinition>
     {
-        public bool Equals(ExpectedForeignKeyDefinition? left, ExpectedForeignKeyDefinition? right)
-            => ReferenceEquals(left, right) || left is not null && right is not null
-                && left.Name == right.Name && left.Table == right.Table && left.PrincipalTable == right.PrincipalTable
-                && PostgreSqlSafeMigrationSchemaIdentity.Normalize(left.Schema, currentSchema)
+        public bool Equals(
+            ExpectedForeignKeyDefinition? left,
+            ExpectedForeignKeyDefinition? right
+        )
+            => ReferenceEquals(left, right)
+                || (left is not null
+                    && right is not null
+                    && left.Name == right.Name
+                    && left.Table == right.Table
+                    && left.PrincipalTable == right.PrincipalTable
+                    && PostgreSqlSafeMigrationSchemaIdentity.Normalize(left.Schema, currentSchema)
                     == PostgreSqlSafeMigrationSchemaIdentity.Normalize(right.Schema, currentSchema)
-                && PostgreSqlSafeMigrationSchemaIdentity.Normalize(left.PrincipalSchema, currentSchema)
+                    && PostgreSqlSafeMigrationSchemaIdentity.Normalize(left.PrincipalSchema, currentSchema)
                     == PostgreSqlSafeMigrationSchemaIdentity.Normalize(right.PrincipalSchema, currentSchema)
-                && left.Columns.SequenceEqual(right.Columns, StringComparer.Ordinal)
-                && left.PrincipalColumns.SequenceEqual(right.PrincipalColumns, StringComparer.Ordinal);
+                    && left.Columns.SequenceEqual(right.Columns, StringComparer.Ordinal)
+                    && left.PrincipalColumns.SequenceEqual(right.PrincipalColumns, StringComparer.Ordinal));
 
-        public int GetHashCode(ExpectedForeignKeyDefinition definition)
+        public int GetHashCode(
+            ExpectedForeignKeyDefinition definition
+        )
         {
             var hash = new HashCode();
             hash.Add(definition.Name, StringComparer.Ordinal);
             hash.Add(definition.Table, StringComparer.Ordinal);
-            hash.Add(PostgreSqlSafeMigrationSchemaIdentity.Normalize(definition.Schema, currentSchema),
+            hash.Add(
+                PostgreSqlSafeMigrationSchemaIdentity.Normalize(definition.Schema, currentSchema),
                 StringComparer.Ordinal);
+
             hash.Add(definition.PrincipalTable, StringComparer.Ordinal);
-            hash.Add(PostgreSqlSafeMigrationSchemaIdentity.Normalize(definition.PrincipalSchema, currentSchema),
+            hash.Add(
+                PostgreSqlSafeMigrationSchemaIdentity.Normalize(definition.PrincipalSchema, currentSchema),
                 StringComparer.Ordinal);
+
             hash.Add(definition.Columns.Count);
             foreach (var column in definition.Columns)
             {

@@ -56,10 +56,14 @@ internal static partial class SafeMigrationSqlExpressionInspector
         {
             var clause = expression.WhenClauses[(int)clauseIndex];
 
-            return ordinal % 2 == 0 ? clause.Condition : clause.Result;
+            return ordinal % 2 == 0
+                ? clause.Condition
+                : clause.Result;
         }
 
-        return !elseFirst && ordinal == 2L * expression.WhenClauses.Count ? expression.ElseResult : null;
+        return !elseFirst && ordinal == 2L * expression.WhenClauses.Count
+            ? expression.ElseResult
+            : null;
     }
 
     /// <summary>Resumes one sibling at a time, so wide lists do not consume a work frame per element.</summary>

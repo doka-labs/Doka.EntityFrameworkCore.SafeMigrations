@@ -20,22 +20,37 @@ public sealed class PostgreSqlIndexesSimpleFilterDataSafetyIntegrationTests : Po
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var rows = negated ? "(1, NULL), (1, NULL), (2, 1)" : "(1, 1), (1, 2), (2, NULL)";
+        var rows = negated
+            ? "(1, NULL), (1, NULL), (2, 1)"
+            : "(1, 1), (1, 2), (2, NULL)";
+
         await ExecuteSqlAsync(
             connectionString,
             "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters "
             + "(id integer NOT NULL, parent integer NULL);"
-            + $"INSERT INTO hierarchy.simple_filters VALUES {rows};", cancellationToken: CancellationToken.None);
+            + $"INSERT INTO hierarchy.simple_filters VALUES {rows};",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
-        var builder = SimpleFilterBuilder(context, negated ? "parent IS NOT NULL" : "parent IS NULL", unique: true);
+        var builder = SimpleFilterBuilder(
+            context,
+            negated
+                ? "parent IS NOT NULL"
+                : "parent IS NULL",
+            unique: true);
 
         // Act
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Assert
         Assert.Equal(1, await SimpleFilterIndexCountAsync(connectionString, cancellationToken: CancellationToken.None));
-        Assert.Equal(3, await ScalarIntAsync(connectionString, "SELECT count(*) FROM hierarchy.simple_filters;",
-            cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            3,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT count(*) FROM hierarchy.simple_filters;",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -56,20 +71,33 @@ public sealed class PostgreSqlIndexesSimpleFilterDataSafetyIntegrationTests : Po
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var rows = negated ? "(1, 1), (1, 2), (2, NULL)" : "(1, NULL), (1, NULL), (2, 1)";
+        var rows = negated
+            ? "(1, 1), (1, 2), (2, NULL)"
+            : "(1, NULL), (1, NULL), (2, 1)";
+
         await ExecuteSqlAsync(
             connectionString,
             "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters "
             + "(id integer NOT NULL, parent integer NULL);"
-            + $"INSERT INTO hierarchy.simple_filters VALUES {rows};", cancellationToken: CancellationToken.None);
+            + $"INSERT INTO hierarchy.simple_filters VALUES {rows};",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
-        var builder = SimpleFilterBuilder(context, negated ? "parent IS NOT NULL" : "parent IS NULL", unique: true);
+        var builder = SimpleFilterBuilder(
+            context,
+            negated
+                ? "parent IS NOT NULL"
+                : "parent IS NULL",
+            unique: true);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("simple-filter-unique-duplicates"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("simple-filter-unique-duplicates"),
+                CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
@@ -90,17 +118,29 @@ public sealed class PostgreSqlIndexesSimpleFilterDataSafetyIntegrationTests : Po
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var rows = negated ? "(1, 1), (1, 2), (2, NULL)" : "(1, NULL), (1, NULL), (2, 1)";
+        var rows = negated
+            ? "(1, 1), (1, 2), (2, NULL)"
+            : "(1, NULL), (1, NULL), (2, 1)";
+
         await ExecuteSqlAsync(
             connectionString,
             "CREATE SCHEMA hierarchy; CREATE TABLE hierarchy.simple_filters "
             + "(id integer NOT NULL, parent integer NULL);"
-            + $"INSERT INTO hierarchy.simple_filters VALUES {rows};", cancellationToken: CancellationToken.None);
+            + $"INSERT INTO hierarchy.simple_filters VALUES {rows};",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
-        var builder = SimpleFilterBuilder(context, negated ? "parent IS NOT NULL" : "parent IS NULL", unique: true);
+        var builder = SimpleFilterBuilder(
+            context,
+            negated
+                ? "parent IS NOT NULL"
+                : "parent IS NULL",
+            unique: true);
 
         // Act
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
         // Assert
@@ -108,8 +148,12 @@ public sealed class PostgreSqlIndexesSimpleFilterDataSafetyIntegrationTests : Po
         Assert.Equal("P1003", postgres.SqlState);
         Assert.StartsWith("doka_sm_data_blocked:", postgres.MessageText, StringComparison.Ordinal);
         Assert.Equal(0, await SimpleFilterIndexCountAsync(connectionString, cancellationToken: CancellationToken.None));
-        Assert.Equal(3, await ScalarIntAsync(connectionString, "SELECT count(*) FROM hierarchy.simple_filters;",
-            cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            3,
+            await ScalarIntAsync(
+                connectionString,
+                "SELECT count(*) FROM hierarchy.simple_filters;",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>A same-shape canonical filter alias binds to the existing independently owned index.</summary>
@@ -130,10 +174,13 @@ public sealed class PostgreSqlIndexesSimpleFilterDataSafetyIntegrationTests : Po
         var expected = SimpleFilterBuilder(context, filter);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            expected.Operations,
-            new SafeMigrationRunOptions("simple-filter-semantic-alias"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                expected.Operations,
+                new SafeMigrationRunOptions("simple-filter-semantic-alias"),
+                CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
@@ -182,10 +229,13 @@ public sealed class PostgreSqlIndexesSimpleFilterDataSafetyIntegrationTests : Po
         var expected = SimpleFilterBuilder(context, "parent IS NOT NULL");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            expected.Operations,
-            new SafeMigrationRunOptions("simple-filter-nonidentity"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                expected.Operations,
+                new SafeMigrationRunOptions("simple-filter-nonidentity"),
+                CancellationToken.None);
 
         // Assert
         var assessment = Assert.Single(report.Assessments);
@@ -193,5 +243,4 @@ public sealed class PostgreSqlIndexesSimpleFilterDataSafetyIntegrationTests : Po
         Assert.Equal(SafeMigrationObservedState.Missing, assessment.ObservedState);
         Assert.Equal(SafeMigrationAction.Apply, assessment.Action);
     }
-
 }

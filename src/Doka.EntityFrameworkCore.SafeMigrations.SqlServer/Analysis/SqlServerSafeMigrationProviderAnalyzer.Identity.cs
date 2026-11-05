@@ -2,10 +2,11 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
 {
+    private readonly HashSet<(string Schema, string Table)> _liveIdentitySlotConflicts = [];
+
     // WHY: Column shape alone cannot prove SQL Server's single table-wide
     // identity slot. Null records mean a removal or opaque effect lacks proof.
     private readonly Dictionary<(string Schema, string Table), string?> _projectedIdentitySlots = [];
-    private readonly HashSet<(string Schema, string Table)> _liveIdentitySlotConflicts = [];
     private bool _identityProjectionOpaque;
 
     private void ResetProjectedIdentityProofs()
@@ -42,11 +43,16 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         SafeMigrationProviderAnalysis analysis
     )
     {
-        if (analysis.IsInvariantUnsupported || analysis.IsOpaqueProjectionUnknown
+        if (analysis.IsInvariantUnsupported
+            || analysis.IsOpaqueProjectionUnknown
             || analysis.ObservedState != SafeMigrationObservedState.Missing
             || operation.Intent is not EnsureColumnIntent column
             || !SqlServerSafeMigrationCatalogSqlBuilder.TryGetIdentity(
-                column.Definition, out var identity, out _, out _) || !identity)
+                column.Definition,
+                out var identity,
+                out _,
+                out _)
+            || !identity)
         {
             return analysis;
         }
@@ -59,11 +65,15 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 return analysis;
             }
 
-            return IdentitySlotFailure(slot is null ? "projected_identity_slot_unproven" : "identity_slot_occupied");
+            return IdentitySlotFailure(
+                slot is null
+                    ? "projected_identity_slot_unproven"
+                    : "identity_slot_occupied");
         }
 
         return _identityProjectionOpaque || _liveIdentitySlotConflicts.Contains(key)
-            ? IdentitySlotFailure("projected_identity_slot_unproven") : analysis;
+            ? IdentitySlotFailure("projected_identity_slot_unproven")
+            : analysis;
     }
 
     private void ObserveProjectedIdentityOperation(
@@ -72,7 +82,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         SafeMigrationDecision decision
     )
     {
-        if (decision.Action is not (SafeMigrationAction.Apply or SafeMigrationAction.Repair
+        if (decision.Action is not (SafeMigrationAction.Apply
+            or SafeMigrationAction.Repair
             or SafeMigrationAction.NoOp))
         {
             return;
@@ -85,19 +96,25 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     && analysis.ObservedState == SafeMigrationObservedState.Matching):
                 var identityColumn = table.Definition.Columns.FirstOrDefault(static column =>
                     SqlServerSafeMigrationCatalogSqlBuilder.TryGetIdentity(column, out var identity, out _, out _)
-                        && identity);
+                    && identity);
 
                 _projectedIdentitySlots[(table.Definition.Schema ?? "dbo", table.Definition.Table)]
                     = identityColumn?.Name ?? string.Empty;
+
                 break;
             case EnsureColumnIntent column when SqlServerSafeMigrationCatalogSqlBuilder.TryGetIdentity(
-                column.Definition, out var identity, out _, out _) && identity
+                    column.Definition,
+                    out var identity,
+                    out _,
+                    out _)
+                && identity
                 && (decision.ShouldExecute || analysis.ObservedState == SafeMigrationObservedState.Matching):
                 _projectedIdentitySlots[(column.Schema ?? "dbo", column.Table)] = column.Definition.Name;
                 break;
             case DropColumnIntent column when decision.ShouldExecute:
                 var key = (column.Schema ?? "dbo", column.Table);
-                if (!_projectedIdentitySlots.TryGetValue(key, out var slot) || slot == column.Name)
+                if (!_projectedIdentitySlots.TryGetValue(key, out var slot)
+                    || slot == column.Name)
                 {
                     _projectedIdentitySlots[key] = null;
                 }
@@ -115,7 +132,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                 break;
             case RenameColumnIntent column when decision.ShouldExecute:
                 var columnKey = (column.Schema ?? "dbo", column.Table);
-                if (_projectedIdentitySlots.TryGetValue(columnKey, out var oldIdentity) && oldIdentity == column.Name)
+                if (_projectedIdentitySlots.TryGetValue(columnKey, out var oldIdentity)
+                    && oldIdentity == column.Name)
                 {
                     _projectedIdentitySlots[columnKey] = column.NewName;
                 }

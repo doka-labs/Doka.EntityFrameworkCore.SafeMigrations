@@ -21,7 +21,9 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
     [InlineData("INSERT")]
     [InlineData("UPDATE")]
     [InlineData("DELETE")]
-    public async Task SideEffects_ExplicitSqlTriggerInvalidatesLiveMatchingRow(string writeKind)
+    public async Task SideEffects_ExplicitSqlTriggerInvalidatesLiveMatchingRow(
+        string writeKind
+    )
     {
         // Arrange
         var connectionString = await CreateSideEffectTriggerFixtureAsync(
@@ -59,8 +61,10 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
             new SafeMigrationRunOptions("sqlserver-sql-trigger-actual-" + writeKind),
             cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(
-            () => ExecuteOperationsAsync(context, [builder.Operations[1]], cancellationToken: CancellationToken.None));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [builder.Operations[1]],
+            cancellationToken: CancellationToken.None));
 
         var changedRows = await ScalarIntAsync(
             connectionString,
@@ -70,8 +74,14 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
         var origin = preflight.Assessments[1].DeferredOrigin;
 
         // Assert
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(baseline.Assessments).ObservedState);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(baseline.Assessments).Action);
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(baseline.Assessments)
+                .ObservedState);
+
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(baseline.Assessments)
+                .Action);
+
         Assert.False(preflight.Assessments[0].IsSafeOperation);
         Assert.Null(preflight.Assessments[0].Action);
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, preflight.Status);
@@ -83,8 +93,14 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
         Assert.NotNull(origin);
         Assert.Equal(0, origin.OperationOrdinal);
         Assert.Equal(typeof(SqlOperation).FullName, origin.OperationType);
-        Assert.Equal(SafeMigrationObservedState.Different, Assert.Single(actual.Assessments).ObservedState);
-        Assert.Equal(51001, Assert.IsType<SqlException>(exception).Number);
+        Assert.Equal(SafeMigrationObservedState.Different,
+            Assert.Single(actual.Assessments)
+                .ObservedState);
+
+        Assert.Equal(51001,
+            Assert.IsType<SqlException>(exception)
+                .Number);
+
         Assert.Equal(1, changedRows);
     }
 
@@ -94,7 +110,9 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
     [InlineData("INSERT")]
     [InlineData("UPDATE")]
     [InlineData("DELETE")]
-    public async Task SideEffects_ManagedWriteWithTriggerRemainsUnsupported(string writeKind)
+    public async Task SideEffects_ManagedWriteWithTriggerRemainsUnsupported(
+        string writeKind
+    )
     {
         // Arrange
         var connectionString = await CreateSideEffectTriggerFixtureAsync(
@@ -107,13 +125,17 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
         AppendSideEffectWrite(builder, writeKind);
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-managed-trigger-rejected-" + writeKind),
+                cancellationToken: CancellationToken.None);
+
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-managed-trigger-rejected-" + writeKind),
-            cancellationToken: CancellationToken.None);
-
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var unchangedRows = await ScalarIntAsync(
@@ -128,11 +150,24 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, preflight.Status);
-        Assert.Equal(SafeMigrationObservedState.Unsupported, Assert.Single(preflight.Assessments).ObservedState);
-        Assert.Equal(SafeMigrationAction.RejectUnsupported, Assert.Single(preflight.Assessments).Action);
-        Assert.Equal(51002, Assert.IsType<SqlException>(exception).Number);
+        Assert.Equal(SafeMigrationObservedState.Unsupported,
+            Assert.Single(preflight.Assessments)
+                .ObservedState);
+
+        Assert.Equal(SafeMigrationAction.RejectUnsupported,
+            Assert.Single(preflight.Assessments)
+                .Action);
+
+        Assert.Equal(51002,
+            Assert.IsType<SqlException>(exception)
+                .Number);
+
         Assert.Equal(1, unchangedRows);
-        Assert.Equal(writeKind == "INSERT" ? 0 : 1, sourceRows);
+        Assert.Equal(
+            writeKind == "INSERT"
+                ? 0
+                : 1,
+            sourceRows);
     }
 
     /// <summary>
@@ -147,7 +182,8 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE dbo.side_effect_rows (id int NOT NULL PRIMARY KEY, "
-            + "managed_value nvarchar(64) NOT NULL);", cancellationToken: CancellationToken.None);
+            + "managed_value nvarchar(64) NOT NULL);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
 
@@ -156,19 +192,23 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
         AppendSideEffectEnsure(builder, "side_effect_rows");
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-managed-immediate-postcondition"),
-            cancellationToken: CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-managed-immediate-postcondition"),
+                cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
-        var replay = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-managed-executed-replay"),
-            cancellationToken: CancellationToken.None);
+        var replay = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-managed-executed-replay"),
+                cancellationToken: CancellationToken.None);
 
         var rowCount = await ScalarIntAsync(
             connectionString,
@@ -179,8 +219,14 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[0].Action);
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(replay.Assessments).ObservedState);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(replay.Assessments)
+                .Action);
+
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(replay.Assessments)
+                .ObservedState);
+
         Assert.Equal(1, rowCount);
     }
 
@@ -209,10 +255,13 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
         AppendSideEffectEnsure(builder, "side_effect_rows");
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-managed-fresh-table"), cancellationToken: CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-managed-fresh-table"),
+                cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
@@ -257,18 +306,24 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
         AppendSideEffectParentDelete(builder);
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context,
-            builder.Operations,
-            new SafeMigrationRunOptions("sqlserver-managed-two-child-deletes"),
-            cancellationToken: CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-managed-two-child-deletes"),
+                cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
 
-        var parents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.side_effect_parents;",
+        var parents = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.side_effect_parents;",
             cancellationToken: CancellationToken.None);
 
-        var children = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.side_effect_children;",
+        var children = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.side_effect_children;",
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -310,7 +365,8 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
 
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER dbo.side_effect_trigger ON dbo.side_effect_writes AFTER " + writeKind
+            "CREATE TRIGGER dbo.side_effect_trigger ON dbo.side_effect_writes AFTER "
+            + writeKind
             + " AS BEGIN SET NOCOUNT ON; INSERT INTO dbo.side_effect_children (id, parent_id) VALUES (99, 1); END;",
             cancellationToken: CancellationToken.None);
 
@@ -334,7 +390,9 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
             new SafeMigrationRunOptions("sqlserver-managed-recreated-child"),
             cancellationToken: CancellationToken.None);
 
-        await ExecuteOperationsAsync(context, [builder.Operations[0], builder.Operations[1]],
+        await ExecuteOperationsAsync(
+            context,
+            [builder.Operations[0], builder.Operations[1]],
             cancellationToken: CancellationToken.None);
 
         var actual = await runner.AnalyzeAsync(
@@ -343,10 +401,14 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
             new SafeMigrationRunOptions("sqlserver-managed-recreated-child-actual"),
             cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(
-            () => ExecuteOperationsAsync(context, [builder.Operations[2]], cancellationToken: CancellationToken.None));
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [builder.Operations[2]],
+            cancellationToken: CancellationToken.None));
 
-        var parents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.side_effect_parents;",
+        var parents = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.side_effect_parents;",
             cancellationToken: CancellationToken.None);
 
         var recreatedChildren = await ScalarIntAsync(
@@ -366,8 +428,14 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
         Assert.NotNull(origin);
         Assert.Equal(1, origin.OperationOrdinal);
         Assert.Equal(typeof(SqlOperation).FullName, origin.OperationType);
-        Assert.Equal(SafeMigrationObservedState.DataBlocked, Assert.Single(actual.Assessments).ObservedState);
-        Assert.Equal(51003, Assert.IsType<SqlException>(exception).Number);
+        Assert.Equal(SafeMigrationObservedState.DataBlocked,
+            Assert.Single(actual.Assessments)
+                .ObservedState);
+
+        Assert.Equal(51003,
+            Assert.IsType<SqlException>(exception)
+                .Number);
+
         Assert.Equal(1, parents);
         Assert.Equal(1, recreatedChildren);
     }
@@ -378,7 +446,8 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
     /// <returns>The isolated fixture's connection string.</returns>
     private async Task<string> CreateSideEffectTriggerFixtureAsync(
         string writeKind,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -399,7 +468,8 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
         // WHY: SQL Server requires CREATE TRIGGER to start its own batch.
         await ExecuteSqlAsync(
             connectionString,
-            "CREATE TRIGGER dbo.side_effect_trigger ON dbo.side_effect_writes AFTER " + writeKind
+            "CREATE TRIGGER dbo.side_effect_trigger ON dbo.side_effect_writes AFTER "
+            + writeKind
             + " AS BEGIN SET NOCOUNT ON; "
             + "UPDATE dbo.side_effect_rows SET managed_value = 'trigger-change' WHERE id = 1; END;",
             cancellationToken: cancellationToken);
@@ -410,7 +480,9 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
     /// <summary>Invokes the fixture's DML trigger explicitly, outside the managed-write contract.</summary>
     /// <param name="writeKind">The event emitted by the isolated trigger fixture.</param>
     /// <returns>The exact write that changes or removes the deterministic fixture row.</returns>
-    private static string SideEffectWriteSql(string writeKind) => writeKind switch
+    private static string SideEffectWriteSql(
+        string writeKind
+    ) => writeKind switch
     {
         "INSERT" => "INSERT INTO dbo.side_effect_writes (id, managed_value) VALUES (1, 'target');",
         "UPDATE" => "UPDATE dbo.side_effect_writes SET managed_value = 'target' WHERE id = 1;",
@@ -418,7 +490,10 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
         _ => throw new ArgumentOutOfRangeException(nameof(writeKind)),
     };
 
-    private static void AppendSideEffectEnsure(MigrationBuilder builder, string table)
+    private static void AppendSideEffectEnsure(
+        MigrationBuilder builder,
+        string table
+    )
         => builder.EnsureModelManagedDataFromModel(
             table,
             ["id"],
@@ -427,7 +502,10 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
             ["int", "nvarchar(64)"],
             new object?[,] { { 1, "expected" } });
 
-    private static void AppendSideEffectWrite(MigrationBuilder builder, string writeKind)
+    private static void AppendSideEffectWrite(
+        MigrationBuilder builder,
+        string writeKind
+    )
     {
         switch (writeKind)
         {
@@ -469,7 +547,10 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
         }
     }
 
-    private static void AppendSideEffectChildDelete(MigrationBuilder builder, int id)
+    private static void AppendSideEffectChildDelete(
+        MigrationBuilder builder,
+        int id
+    )
         => builder.DeleteModelManagedDataFromModel(
             "side_effect_children",
             ["id"],
@@ -479,7 +560,9 @@ public sealed class SqlServerSafeMigrationModelManagedDataSideEffectsIntegration
             ["int", "int"],
             new object?[,] { { id, 1 } });
 
-    private static void AppendSideEffectParentDelete(MigrationBuilder builder)
+    private static void AppendSideEffectParentDelete(
+        MigrationBuilder builder
+    )
         => builder.DeleteModelManagedDataFromModel(
             "side_effect_parents",
             ["id"],

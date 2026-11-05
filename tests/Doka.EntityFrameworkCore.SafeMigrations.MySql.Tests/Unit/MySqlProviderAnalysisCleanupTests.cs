@@ -29,7 +29,9 @@ public sealed partial class MySqlProviderAnalysisCleanupTests
         var operations = CreateOperations(context);
 
         // Act
-        var actual = await Assert.ThrowsAnyAsync<Exception>(() => analyzer.AnalyzeAsync(context, operations,
+        var actual = await Assert.ThrowsAnyAsync<Exception>(() => analyzer.AnalyzeAsync(
+            context,
+            operations,
             CancellationToken.None));
 
         // Assert
@@ -127,9 +129,22 @@ public sealed partial class MySqlProviderAnalysisCleanupTests
         var result = await analyzer.AnalyzeAsync(context, operations, CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(result).ObservedState);
-        Assert.Equal(initiallyOpen ? 0 : 1, connection.CloseAttempts);
-        Assert.Equal(initiallyOpen ? ConnectionState.Open : ConnectionState.Closed, connection.State);
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(result)
+                .ObservedState);
+
+        Assert.Equal(
+            initiallyOpen
+                ? 0
+                : 1,
+            connection.CloseAttempts);
+
+        Assert.Equal(
+            initiallyOpen
+                ? ConnectionState.Open
+                : ConnectionState.Closed,
+            connection.State);
+
         Assert.Equal(1, connection.ClassificationCount);
     }
 }

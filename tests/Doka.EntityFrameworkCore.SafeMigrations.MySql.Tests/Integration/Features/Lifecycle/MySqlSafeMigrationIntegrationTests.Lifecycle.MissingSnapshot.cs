@@ -1,15 +1,17 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the LifecycleMissingSnapshot migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlLifecycleMissingSnapshotIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlLifecycleMissingSnapshotIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
-    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
-    /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlLifecycleMissingSnapshotIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
-
     private const string SnapshotFreeCatalogCountSql =
         "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() "
         + "AND TABLE_NAME IN ('snapshotless_items', '__EFMigrationsHistory');";
+
+    /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
+    /// <param name="fixture">The initialized shared native engine.</param>
+    public MySqlLifecycleMissingSnapshotIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     [Theory]
     [InlineData(false)]
@@ -23,15 +25,19 @@ public sealed partial class MySqlLifecycleMissingSnapshotIntegrationTests : MySq
         var assembly = context.GetService<IMigrationsAssembly>();
         var model = context.GetService<IDesignTimeModel>()
             .Model;
+
         var fingerprint = SafeMigrationModelFingerprint.Create(model, context.Database.ProviderName!);
         var options = new SafeMigrationRunOptions(
             "snapshot-free-instance",
-            expectedModelFingerprint: requireExpectedFingerprint ? fingerprint : null);
+            expectedModelFingerprint: requireExpectedFingerprint
+                ? fingerprint
+                : null);
 
         Assert.Equal(
             "Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationMigrationsAssembly",
             assembly.GetType()
                 .FullName);
+
         Assert.Null(assembly.ModelSnapshot);
         Assert.Null(assembly.ModelSnapshot);
         Assert.Empty(assembly.Migrations);
@@ -49,11 +55,16 @@ public sealed partial class MySqlLifecycleMissingSnapshotIntegrationTests : MySq
         Assert.Equal(SafeMigrationAction.Apply, preflightAssessment.Action);
         Assert.False(preflightAssessment.PostconditionSatisfied);
         Assert.Equal(
-            System.Data.ConnectionState.Closed,
+            ConnectionState.Closed,
             context.Database.GetDbConnection()
                 .State);
-        Assert.Equal(0, await ScalarIntAsync(connectionString, SnapshotFreeCatalogCountSql,
-            cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                SnapshotFreeCatalogCountSql,
+                cancellationToken: CancellationToken.None));
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         var postflight = await runner.VerifyAsync(context, builder.Operations, options, CancellationToken.None);
@@ -67,11 +78,16 @@ public sealed partial class MySqlLifecycleMissingSnapshotIntegrationTests : MySq
         Assert.True(postflightAssessment.PostconditionSatisfied);
         Assert.Null(assembly.ModelSnapshot);
         Assert.Equal(
-            System.Data.ConnectionState.Closed,
+            ConnectionState.Closed,
             context.Database.GetDbConnection()
                 .State);
-        Assert.Equal(1, await ScalarIntAsync(connectionString, SnapshotFreeCatalogCountSql,
-            cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                SnapshotFreeCatalogCountSql,
+                cancellationToken: CancellationToken.None));
     }
 
     [Theory]
@@ -88,10 +104,12 @@ public sealed partial class MySqlLifecycleMissingSnapshotIntegrationTests : MySq
             differentModelContext.GetService<IDesignTimeModel>()
                 .Model,
             differentModelContext.Database.ProviderName!);
+
         var actual = SafeMigrationModelFingerprint.Create(
             context.GetService<IDesignTimeModel>()
                 .Model,
             context.Database.ProviderName!);
+
         var options = new SafeMigrationRunOptions("snapshot-free-instance", expectedModelFingerprint: expected);
         var builder = CreateSnapshotFreeOperations(context);
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -99,16 +117,15 @@ public sealed partial class MySqlLifecycleMissingSnapshotIntegrationTests : MySq
         var connectionTransitions = 0;
 
         // The final closed state alone would miss an unintended open-and-close cycle.
-        connection.StateChange += (
-            _,
-            _
-        ) => connectionTransitions++;
+        connection.StateChange += (_,
+            _) => connectionTransitions++;
 
         Assert.Null(
             context.GetService<IMigrationsAssembly>()
                 .ModelSnapshot);
+
         Assert.NotEqual(expected, actual);
-        Assert.Equal(System.Data.ConnectionState.Closed, connection.State);
+        Assert.Equal(ConnectionState.Closed, connection.State);
 
         var exception = await Assert.ThrowsAsync<SafeMigrationModelMismatchException>(() =>
             mode == SafeMigrationReportMode.Preflight
@@ -118,9 +135,13 @@ public sealed partial class MySqlLifecycleMissingSnapshotIntegrationTests : MySq
         Assert.Equal(expected, exception.ExpectedFingerprint);
         Assert.Equal(actual, exception.ActualFingerprint);
         Assert.Equal(0, connectionTransitions);
-        Assert.Equal(System.Data.ConnectionState.Closed, connection.State);
-        Assert.Equal(0, await ScalarIntAsync(connectionString, SnapshotFreeCatalogCountSql,
-            cancellationToken: CancellationToken.None));
+        Assert.Equal(ConnectionState.Closed, connection.State);
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                SnapshotFreeCatalogCountSql,
+                cancellationToken: CancellationToken.None));
     }
 
     private SnapshotFreeContext CreateSnapshotFreeContext(
@@ -151,7 +172,6 @@ public sealed partial class MySqlLifecycleMissingSnapshotIntegrationTests : MySq
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-
     protected sealed class SnapshotFreeContext : DbContext
     {
         public SnapshotFreeContext(

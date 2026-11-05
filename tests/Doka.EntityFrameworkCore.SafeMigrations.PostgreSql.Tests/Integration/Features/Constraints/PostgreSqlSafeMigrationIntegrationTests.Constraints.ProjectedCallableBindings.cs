@@ -1,7 +1,8 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 
 /// <summary>Runs the ConstraintsProjectedCallableBindings PostgreSQL feature cases independently.</summary>
-public sealed class PostgreSqlConstraintsProjectedCallableBindingsIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
+public sealed class
+    PostgreSqlConstraintsProjectedCallableBindingsIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned container for this feature.</summary>
     /// <param name="fixture">The shared PostgreSQL container fixture.</param>
@@ -14,29 +15,49 @@ public sealed class PostgreSqlConstraintsProjectedCallableBindingsIntegrationTes
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task MatchingCheckDoesNotBorrowBuiltinLowerCastAcrossCustomOverload(bool defaultSuffix)
+    public async Task MatchingCheckDoesNotBorrowBuiltinLowerCastAcrossCustomOverload(
+        bool defaultSuffix
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var signature = defaultSuffix ? "varchar, boolean DEFAULT false" : "varchar";
-        await ExecuteSqlAsync(connectionString,
+        var signature = defaultSuffix
+            ? "varchar, boolean DEFAULT false"
+            : "varchar";
+
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE mixed_columns (id varchar(32) NOT NULL, added integer NOT NULL, "
             + "CONSTRAINT ck_lower_binding CHECK (LOWER(id) >= '' AND added >= 0)); "
             + $"CREATE FUNCTION public.lower({signature}) RETURNS text LANGUAGE sql IMMUTABLE "
-            + "AS 'SELECT upper($1::text)';", cancellationToken: CancellationToken.None);
+            + "AS 'SELECT upper($1::text)';",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureCheckConstraint(ExpectedCheckConstraintDefinition.FromExpression("ck_lower_binding",
-            "mixed_columns", SqlBinary(SqlBinary(SafeMigrationSql.Function("LOWER",
-                    SafeMigrationSql.Identifier("id")), SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
-                SafeMigrationSql.Literal(string.Empty)), SafeMigrationSqlBinaryOperator.And,
-                SqlColumnAndInt("added", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0))),
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_lower_binding",
+                "mixed_columns",
+                SqlBinary(
+                    SqlBinary(
+                        SafeMigrationSql.Function(
+                            "LOWER",
+                            SafeMigrationSql.Identifier("id")),
+                        SafeMigrationSqlBinaryOperator.GreaterThanOrEqual,
+                        SafeMigrationSql.Literal(string.Empty)),
+                    SafeMigrationSqlBinaryOperator.And,
+                    SqlColumnAndInt("added", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-lower-overload-boundary"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("native-lower-overload-boundary"),
+                CancellationToken.None);
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
@@ -61,15 +82,27 @@ public sealed class PostgreSqlConstraintsProjectedCallableBindingsIntegrationTes
     public async Task EmptyMixedCheckRequiresUnambiguousCallableArgumentBinding(
         bool exact,
         bool defaultPrefix,
-        bool variadicCompetitor = false)
+        bool variadicCompetitor = false
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var type = exact || defaultPrefix ? "integer" : "smallint";
-        var firstSignature = defaultPrefix ? "integer, boolean DEFAULT false" : "integer";
-        var secondSignature = defaultPrefix ? "integer, text DEFAULT ''"
-            : variadicCompetitor ? "VARIADIC integer[]" : "bigint";
-        await ExecuteSqlAsync(connectionString,
+        var type = exact || defaultPrefix
+            ? "integer"
+            : "smallint";
+
+        var firstSignature = defaultPrefix
+            ? "integer, boolean DEFAULT false"
+            : "integer";
+
+        var secondSignature = defaultPrefix
+            ? "integer, text DEFAULT ''"
+            : variadicCompetitor
+                ? "VARIADIC integer[]"
+                : "bigint";
+
+        await ExecuteSqlAsync(
+            connectionString,
             $"CREATE TABLE mixed_columns (id {type} NOT NULL); CREATE TABLE callback_audit (id integer); "
             + $"CREATE FUNCTION metadata_ambiguous({firstSignature}) RETURNS boolean LANGUAGE plpgsql AS "
             + "'BEGIN INSERT INTO callback_audit VALUES (1); RETURN TRUE; END'; "
@@ -80,17 +113,26 @@ public sealed class PostgreSqlConstraintsProjectedCallableBindingsIntegrationTes
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("added", "mixed_columns", type: "integer", nullable: false);
-        builder.EnsureCheckConstraint(ExpectedCheckConstraintDefinition.FromExpression("ck_callable_binding",
-            "mixed_columns", SqlBinary(SafeMigrationSql.Function("metadata_ambiguous",
-                    SafeMigrationSql.Identifier("id")), SafeMigrationSqlBinaryOperator.And,
-                SqlColumnAndInt("added", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0))),
+        builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_callable_binding",
+                "mixed_columns",
+                SqlBinary(
+                    SafeMigrationSql.Function(
+                        "metadata_ambiguous",
+                        SafeMigrationSql.Identifier("id")),
+                    SafeMigrationSqlBinaryOperator.And,
+                    SqlColumnAndInt("added", SafeMigrationSqlBinaryOperator.GreaterThanOrEqual, 0))),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var report = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("sparse-check-callable-arguments"), CancellationToken.None);
+        var report = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sparse-check-callable-arguments"),
+            CancellationToken.None);
 
         SafeMigrationRunReport? postflight = null;
         SafeMigrationRunReport? replay = null;
@@ -99,25 +141,39 @@ public sealed class PostgreSqlConstraintsProjectedCallableBindingsIntegrationTes
         {
             report.ThrowIfBlocked();
             await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-            postflight = await runner.VerifyAsync(context, builder.Operations,
-                new SafeMigrationRunOptions("sparse-check-callable-final"), CancellationToken.None);
+            postflight = await runner.VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-check-callable-final"),
+                CancellationToken.None);
 
-            replay = await runner.AnalyzeAsync(context, builder.Operations,
-                new SafeMigrationRunOptions("sparse-check-callable-replay"), CancellationToken.None);
+            replay = await runner.AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sparse-check-callable-replay"),
+                CancellationToken.None);
         }
         else
         {
-            nativeError = await Assert.ThrowsAsync<PostgresException>(() => ExecuteSqlAsync(connectionString,
+            nativeError = await Assert.ThrowsAsync<PostgresException>(() => ExecuteSqlAsync(
+                connectionString,
                 "ALTER TABLE mixed_columns ADD CONSTRAINT native_probe CHECK (metadata_ambiguous(id));",
                 cancellationToken: CancellationToken.None));
         }
 
-        var callbacks = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM callback_audit;",
+        var callbacks = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM callback_audit;",
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(0, callbacks);
-        Assert.Equal(exact ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(
+            exact
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
+            report.Status);
+
         if (exact)
         {
             Assert.Equal(SafeMigrationReportStatus.Ready, postflight!.Status);
@@ -132,5 +188,4 @@ public sealed class PostgreSqlConstraintsProjectedCallableBindingsIntegrationTes
             Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, report.Assessments[1].Action);
         }
     }
-
 }

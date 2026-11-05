@@ -3,13 +3,18 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 /// <summary>Shares exact native index-input expressions only within one catalog-only prerequisite statement.</summary>
 internal sealed class PostgreSqlIndexPrerequisiteCertificates
 {
-    private readonly Dictionary<ExpectedIndexDefinition, string> _references = new(InputContractComparer.Instance);
     private readonly List<(ExpectedIndexDefinition Input, string Definition, int Bytes)> _definitions = [];
     private readonly IReadOnlyList<string>? _names;
+    private readonly Dictionary<ExpectedIndexDefinition, string> _references = new(InputContractComparer.Instance);
 
     /// <summary>Uses the invocation's collision-free names without retaining its owner-name inventory.</summary>
     /// <param name="names">The bounded immutable alias palette, or null for isolated catalog-only use.</param>
-    internal PostgreSqlIndexPrerequisiteCertificates(IReadOnlyList<string>? names = null) => _names = names;
+    internal PostgreSqlIndexPrerequisiteCertificates(
+        IReadOnlyList<string>? names = null
+    )
+    {
+        _names = names;
+    }
 
     /// <summary>Gets the number of independently retained native input contracts.</summary>
     internal int Count => _definitions.Count;
@@ -21,7 +26,10 @@ internal sealed class PostgreSqlIndexPrerequisiteCertificates
     /// <param name="input">The immutable physical/native input contract, without operation-specific name state.</param>
     /// <param name="builder">The current statement's parameter-bound catalog renderer.</param>
     /// <returns>The scalar subquery consumed only by its operation's existing Missing branch.</returns>
-    internal string Intern(ExpectedIndexDefinition input, PostgreSqlSafeMigrationCatalogSqlBuilder builder)
+    internal string Intern(
+        ExpectedIndexDefinition input,
+        PostgreSqlSafeMigrationCatalogSqlBuilder builder
+    )
     {
         if (_references.TryGetValue(input, out var existing))
         {
@@ -29,11 +37,16 @@ internal sealed class PostgreSqlIndexPrerequisiteCertificates
         }
 
         var expression = builder.IndexInputEligibility(input);
-        var name = _names is null ? "\"_doka_sm_index_input_" + Count.ToString(CultureInfo.InvariantCulture) + "\""
+        var name = _names is null
+            ? "\"_doka_sm_index_input_" + Count.ToString(CultureInfo.InvariantCulture) + "\""
             : _names[Count];
+
         var definition = name + " AS MATERIALIZED (SELECT (" + expression + ") AS eligible)";
         var reference = "(SELECT eligible FROM " + name + ")";
-        var bytes = Encoding.UTF8.GetByteCount(definition) + (Count == 0 ? 6 : 2);
+        var bytes = Encoding.UTF8.GetByteCount(definition)
+            + (Count == 0
+                ? 6
+                : 2);
 
         // WHY: PostgreSQL initializes planned expression copies before CASE
         // chooses a branch; repeated unconsumed catalog SQL can trigger costly
@@ -48,7 +61,9 @@ internal sealed class PostgreSqlIndexPrerequisiteCertificates
 
     /// <summary>Restores the exact certificate prefix alongside its provider-parameter checkpoint.</summary>
     /// <param name="count">The certificate count before the candidate operation was constructed.</param>
-    internal void Rollback(int count)
+    internal void Rollback(
+        int count
+    )
     {
         ArgumentOutOfRangeException.ThrowIfGreaterThan((uint)count, (uint)Count);
         while (_definitions.Count > count)
@@ -62,13 +77,18 @@ internal sealed class PostgreSqlIndexPrerequisiteCertificates
 
     /// <summary>Emits only retained catalog certificates; a rolled-back empty prefix emits no WITH.</summary>
     internal string RenderPrefix()
-        => Count == 0 ? string.Empty : "WITH "
-            + string.Join(", ", _definitions.Select(static value => value.Definition)) + "\n";
+        => Count == 0
+            ? string.Empty
+            : "WITH "
+            + string.Join(", ", _definitions.Select(static value => value.Definition))
+            + "\n";
 
     /// <summary>Reserves exact unqualified zero-row owners once, then retains only one statement's aliases.</summary>
     /// <param name="operations">The actual authored stream; reservation is never a structural certificate.</param>
     /// <returns>A collision-free palette under the existing per-statement operation bound.</returns>
-    internal static string[] ReserveNames(IReadOnlyList<SafeMigrationOperation> operations)
+    internal static string[] ReserveNames(
+        IReadOnlyList<SafeMigrationOperation> operations
+    )
     {
         var owners = new HashSet<string>(StringComparer.Ordinal);
         foreach (var operation in operations)
@@ -86,6 +106,7 @@ internal sealed class PostgreSqlIndexPrerequisiteCertificates
         // repeated full-stream scan per statement; only 32 aliases survive.
         var names = new string[SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement];
         var candidate = 0;
+
         // WHY: Assign each reserved identifier to its stable output slot.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -96,8 +117,7 @@ internal sealed class PostgreSqlIndexPrerequisiteCertificates
             {
                 name = "_doka_sm_index_input_" + candidate.ToString(CultureInfo.InvariantCulture);
                 candidate++;
-            }
-            while (owners.Contains(name));
+            } while (owners.Contains(name));
 
             names[ordinal] = "\"" + name + "\"";
         }
@@ -111,19 +131,23 @@ internal sealed class PostgreSqlIndexPrerequisiteCertificates
         internal static readonly InputContractComparer Instance = new();
 
         /// <inheritdoc />
-        public bool Equals(ExpectedIndexDefinition? first, ExpectedIndexDefinition? second)
+        public bool Equals(
+            ExpectedIndexDefinition? first,
+            ExpectedIndexDefinition? second
+        )
         {
             if (ReferenceEquals(first, second))
             {
                 return true;
             }
 
-            if (first is null || second is null
+            if (first is null
+                || second is null
                 || !StringComparer.Ordinal.Equals(first.Table, second.Table)
                 || !StringComparer.Ordinal.Equals(first.Schema, second.Schema)
                 || !StringComparer.Ordinal.Equals(first.Method ?? "btree", second.Method ?? "btree")
                 || PostgreSqlSafeMigrationCatalogSqlBuilder.IndexRequiredFlags(first)
-                    != PostgreSqlSafeMigrationCatalogSqlBuilder.IndexRequiredFlags(second))
+                != PostgreSqlSafeMigrationCatalogSqlBuilder.IndexRequiredFlags(second))
             {
                 return false;
             }
@@ -134,13 +158,15 @@ internal sealed class PostgreSqlIndexPrerequisiteCertificates
             {
                 var firstMember = Next(first, ref firstOrdinal);
                 var secondMember = Next(second, ref secondOrdinal);
-                if (firstMember is null || secondMember is null)
+                if (firstMember is null
+                    || secondMember is null)
                 {
                     return firstMember is null && secondMember is null;
                 }
 
                 if (firstMember != secondMember
-                    || !StringComparer.Ordinal.Equals(first.Keys[firstOrdinal - 1].OperatorClass,
+                    || !StringComparer.Ordinal.Equals(
+                        first.Keys[firstOrdinal - 1].OperatorClass,
                         second.Keys[secondOrdinal - 1].OperatorClass))
                 {
                     return false;
@@ -149,13 +175,16 @@ internal sealed class PostgreSqlIndexPrerequisiteCertificates
         }
 
         /// <inheritdoc />
-        public int GetHashCode(ExpectedIndexDefinition input)
+        public int GetHashCode(
+            ExpectedIndexDefinition input
+        )
         {
             var hash = new HashCode();
             hash.Add(input.Table, StringComparer.Ordinal);
             hash.Add(input.Schema, StringComparer.Ordinal);
             hash.Add(input.Method ?? "btree", StringComparer.Ordinal);
             hash.Add(PostgreSqlSafeMigrationCatalogSqlBuilder.IndexRequiredFlags(input));
+
             // WHY: Hash immutable key snapshots without an interface enumerator.
             // ReSharper disable once ForCanBeConvertedToForeach
             // ReSharper disable once LoopCanBeConvertedToQuery
@@ -174,7 +203,10 @@ internal sealed class PostgreSqlIndexPrerequisiteCertificates
             return hash.ToHashCode();
         }
 
-        private static PostgreSqlIndexPhysicalMember? Next(ExpectedIndexDefinition input, ref int ordinal)
+        private static PostgreSqlIndexPhysicalMember? Next(
+            ExpectedIndexDefinition input,
+            ref int ordinal
+        )
         {
             while (ordinal < input.Keys.Count)
             {

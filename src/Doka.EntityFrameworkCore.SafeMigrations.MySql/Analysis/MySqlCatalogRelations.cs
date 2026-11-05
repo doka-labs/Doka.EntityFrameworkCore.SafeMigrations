@@ -6,7 +6,6 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 /// and cannot keep one holding TEXT in its HEAP engine, so each lands on disk. Batched
 /// classification can read a copy of those views instead, which needs the relation a predicate
 /// names to be decided when the template is rendered rather than when it is built.
-///
 /// Templates keep naming the live views, and redirection happens only when a caller supplies a
 /// binding. Without one no scan runs at all, so the runtime generation path pays nothing. Only
 /// unquoted table sources in template text are scanned, never a rendered parameter value. Quoted
@@ -71,7 +70,7 @@ internal static class MySqlCatalogRelations
             if (after <= end
                 && string.CompareOrdinal(text, start, view, 0, view.Length) == 0
                 && (after == text.Length
-                    || !IsIdentifierCharacter(text[after]) && text[after] is not ('.' or '\u001e')))
+                    || (!IsIdentifierCharacter(text[after]) && text[after] is not ('.' or '\u001e'))))
             {
                 return view;
             }
@@ -128,7 +127,10 @@ internal static class MySqlCatalogRelations
             while (position < end)
             {
                 var character = text[position];
-                var next = position + 1 < end ? text[position + 1] : '\0';
+                var next = position + 1 < end
+                    ? text[position + 1]
+                    : '\0';
+
                 if (_lineComment)
                 {
                     _lineComment = character is not ('\r' or '\n');
@@ -139,7 +141,8 @@ internal static class MySqlCatalogRelations
 
                 if (_blockComment)
                 {
-                    if (character == '/' && next == '*')
+                    if (character == '/'
+                        && next == '*')
                     {
                         // WHY: Nested block comments have engine-dependent acceptance. Keep
                         // their remainder verbatim instead of treating an inner close as SQL.
@@ -148,7 +151,8 @@ internal static class MySqlCatalogRelations
                         break;
                     }
 
-                    if (character == '*' && next == '/')
+                    if (character == '*'
+                        && next == '/')
                     {
                         _blockComment = false;
                         position += 2;
@@ -163,7 +167,8 @@ internal static class MySqlCatalogRelations
 
                 if (_quote != '\0')
                 {
-                    if (character == '\\' && _quote != '`')
+                    if (character == '\\'
+                        && _quote != '`')
                     {
                         // WHY: Whether a backslash escapes the following quote depends on
                         // NO_BACKSLASH_ESCAPES. Without that session contract, keeping the rest
@@ -200,8 +205,10 @@ internal static class MySqlCatalogRelations
                 }
 
                 if (character == '#'
-                    || character == '-' && next == '-'
-                    && position + 2 < end && text[position + 2] <= ' ')
+                    || (character == '-'
+                        && next == '-'
+                        && position + 2 < end
+                        && text[position + 2] <= ' '))
                 {
                     _lineComment = true;
                     position++;
@@ -209,7 +216,8 @@ internal static class MySqlCatalogRelations
                     continue;
                 }
 
-                if (character == '/' && next == '*')
+                if (character == '/'
+                    && next == '*')
                 {
                     if (IsExecutableComment(text, position, end))
                     {
@@ -241,7 +249,10 @@ internal static class MySqlCatalogRelations
                         var view = MatchAt(text, position, end);
                         if (view is not null)
                         {
-                            builder.Append(text, copyStart, position - copyStart).Append(resolve(view));
+                            builder
+                                .Append(text, copyStart, position - copyStart)
+                                .Append(resolve(view));
+
                             position += view.Length;
                             copyStart = position;
                             _expectRelation = false;
@@ -251,7 +262,8 @@ internal static class MySqlCatalogRelations
                     }
 
                     var wordStart = position++;
-                    while (position < end && (IsIdentifierCharacter(text[position]) || text[position] == '.'))
+                    while (position < end
+                        && (IsIdentifierCharacter(text[position]) || text[position] == '.'))
                     {
                         position++;
                     }
@@ -283,7 +295,8 @@ internal static class MySqlCatalogRelations
                         break;
                     }
                 }
-                else if (character == ')' && _depth > 0)
+                else if (character == ')'
+                    && _depth > 0)
                 {
                     _queryScopes &= ~(1UL << _depth);
                     _depth--;
@@ -312,7 +325,7 @@ internal static class MySqlCatalogRelations
             string text,
             int start,
             int end
-        ) => start + 2 < end && text[start + 2] == '!'
-            || start + 3 < end && text[start + 2] == 'M' && text[start + 3] == '!';
+        ) => (start + 2 < end && text[start + 2] == '!')
+            || (start + 3 < end && text[start + 2] == 'M' && text[start + 3] == '!');
     }
 }

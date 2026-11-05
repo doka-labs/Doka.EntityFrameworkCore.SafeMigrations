@@ -25,19 +25,29 @@ public sealed class SqlServerSafeMigrationProjectedKeysIntegrationTests : SqlSer
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        var inserts = rowCount == 0 ? string.Empty
+        var inserts = rowCount == 0
+            ? string.Empty
             : "INSERT dbo.projected_null_keys (Id) VALUES "
-                + string.Join(", ", Enumerable.Range(1, rowCount).Select(static id => $"({id})")) + ";";
+            + string.Join(", ",
+                Enumerable
+                    .Range(1, rowCount)
+                    .Select(static id => $"({id})"))
+            + ";";
 
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.projected_null_keys (Id int NOT NULL); " + inserts,
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("Code", "projected_null_keys", type: "int", nullable: true);
         if (index)
         {
-            builder.CreateIndexIfNotExists("IX_projected_null_keys_Code", "projected_null_keys", ["Code"],
+            builder.CreateIndexIfNotExists(
+                "IX_projected_null_keys_Code",
+                "projected_null_keys",
+                ["Code"],
                 unique: true);
         }
         else
@@ -46,18 +56,28 @@ public sealed class SqlServerSafeMigrationProjectedKeysIntegrationTests : SqlSer
         }
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-projected-null-key"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-projected-null-key"),
+                cancellationToken: CancellationToken.None);
 
-        var remainingColumns = await ScalarIntAsync(connectionString,
+        var remainingColumns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.projected_null_keys') "
-            + "AND name = N'Code';", cancellationToken: CancellationToken.None);
+            + "AND name = N'Code';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(expected, report.Status);
-        Assert.Equal(rowCount <= 1 ? SafeMigrationAction.Apply : SafeMigrationAction.RejectDataBlocked,
+        Assert.Equal(
+            rowCount <= 1
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectDataBlocked,
             report.Assessments[1].Action);
+
         Assert.Equal(0, remainingColumns);
     }
 
@@ -72,26 +92,42 @@ public sealed class SqlServerSafeMigrationProjectedKeysIntegrationTests : SqlSer
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.projected_width (Code nvarchar(10) NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AlterColumnIfDifferentFromModel(
-            operation => operation.AlterColumn<string>("Code", "projected_width",
-                type: $"nvarchar({length})", maxLength: length, nullable: false,
-                oldClrType: typeof(string), oldType: "nvarchar(10)", oldMaxLength: 10),
+            operation => operation.AlterColumn<string>(
+                "Code",
+                "projected_width",
+                type: $"nvarchar({length})",
+                maxLength: length,
+                nullable: false,
+                oldClrType: typeof(string),
+                oldType: "nvarchar(10)",
+                oldMaxLength: 10),
             SafeMigrationPolicy.RepairIfSafe);
+
         builder.CreateIndexIfNotExists("IX_projected_width_Code", "projected_width", ["Code"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-projected-width"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-projected-width"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(expected, report.Status);
-        Assert.Equal(length <= 850 ? SafeMigrationAction.Apply : SafeMigrationAction.RejectUnsupported,
+        Assert.Equal(
+            length <= 850
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectUnsupported,
             report.Assessments[1].Action);
     }
 
@@ -101,17 +137,24 @@ public sealed class SqlServerSafeMigrationProjectedKeysIntegrationTests : SqlSer
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.projected_pk (Id int NOT NULL);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE dbo.projected_pk (Id int NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("Code", "projected_pk", type: "int", nullable: true);
         builder.AddPrimaryKeyIfNotExists("PK_projected_pk", "projected_pk", ["Code"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-projected-nullable-pk"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-projected-nullable-pk"),
+                cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -143,10 +186,17 @@ public sealed class SqlServerSafeMigrationProjectedKeysIntegrationTests : SqlSer
             _ => throw new UnreachableException(),
         };
 
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.projected_replace (Id int NOT NULL, Code int NOT NULL); "
             + "INSERT dbo.projected_replace (Id, Code) VALUES (1, 10), (2, "
-            + (duplicates ? "10" : "20") + "); " + original, cancellationToken: CancellationToken.None);
+            + (duplicates
+                ? "10"
+                : "20")
+            + "); "
+            + original,
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         switch (family)
@@ -166,21 +216,31 @@ public sealed class SqlServerSafeMigrationProjectedKeysIntegrationTests : SqlSer
         }
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlserver-projected-replacement"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlserver-projected-replacement"),
+                cancellationToken: CancellationToken.None);
 
-        var preservedOldKey = await ScalarIntAsync(connectionString,
+        var preservedOldKey = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.indexes i JOIN sys.index_columns ic "
             + "ON ic.object_id = i.object_id AND ic.index_id = i.index_id "
             + "JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
             + "WHERE i.object_id = OBJECT_ID(N'dbo.projected_replace') AND i.name = N'K_projected_replace' "
-            + "AND ic.key_ordinal = 1 AND c.name = N'Id';", cancellationToken: CancellationToken.None);
+            + "AND ic.key_ordinal = 1 AND c.name = N'Id';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(expected, report.Status);
-        Assert.Equal(duplicates ? SafeMigrationAction.RejectDataBlocked : SafeMigrationAction.Apply,
+        Assert.Equal(
+            duplicates
+                ? SafeMigrationAction.RejectDataBlocked
+                : SafeMigrationAction.Apply,
             report.Assessments[1].Action);
+
         Assert.Equal(1, preservedOldKey);
     }
 
@@ -190,7 +250,8 @@ public sealed class SqlServerSafeMigrationProjectedKeysIntegrationTests : SqlSer
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.metadata_only_index (Code int NOT NULL); "
             + "CREATE USER metadata_index_user WITHOUT LOGIN; "
             + "GRANT CONNECT TO metadata_index_user; "
@@ -198,6 +259,7 @@ public sealed class SqlServerSafeMigrationProjectedKeysIntegrationTests : SqlSer
             + "GRANT ALTER ON OBJECT::dbo.metadata_only_index TO metadata_index_user; "
             + "DENY SELECT ON OBJECT::dbo.metadata_only_index TO metadata_index_user;",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await context.Database.ExecuteSqlRawAsync("EXECUTE AS USER = N'metadata_index_user';");
@@ -208,9 +270,13 @@ public sealed class SqlServerSafeMigrationProjectedKeysIntegrationTests : SqlSer
         SafeMigrationRunReport report;
         try
         {
-            report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-                context, builder.Operations, new SafeMigrationRunOptions("sqlserver-metadata-only-key"),
-                cancellationToken: CancellationToken.None);
+            report = await context
+                .GetService<ISafeMigrationRunner>()
+                .AnalyzeAsync(
+                    context,
+                    builder.Operations,
+                    new SafeMigrationRunOptions("sqlserver-metadata-only-key"),
+                    cancellationToken: CancellationToken.None);
         }
         finally
         {
@@ -219,6 +285,8 @@ public sealed class SqlServerSafeMigrationProjectedKeysIntegrationTests : SqlSer
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Equal(SafeMigrationAction.Apply, Assert.Single(report.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.Apply,
+            Assert.Single(report.Assessments)
+                .Action);
     }
 }

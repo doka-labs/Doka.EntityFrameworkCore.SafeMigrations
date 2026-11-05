@@ -5,7 +5,9 @@ internal sealed partial class SafeMigrationPreflightProjection
     /// <summary>Reads current relation-name occupancy when the index namespace spans owner tables.</summary>
     /// <param name="intent">The index rename's verified owner schema and destination name.</param>
     /// <returns>Current presence/removal, or null when immutable destination evidence remains authoritative.</returns>
-    private bool? ProjectSchemaScopedIndexDestination(RenameIndexIntent intent)
+    private bool? ProjectSchemaScopedIndexDestination(
+        RenameIndexIntent intent
+    )
     {
         if (_objectIdentityNormalizer?.IndexUsesSchemaScopedIdentity != true)
         {
@@ -23,7 +25,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         // Current presence always wins over an older removal tombstone.
         foreach (var pair in _tables)
         {
-            if (!SameIndexSchema(pair.Key, targetSchema) || _projectedMissingTables.Contains(pair.Key))
+            if (!SameIndexSchema(pair.Key, targetSchema)
+                || _projectedMissingTables.Contains(pair.Key))
             {
                 continue;
             }
@@ -42,7 +45,8 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         foreach (var pair in _prerequisites)
         {
-            if (!SameIndexSchema(pair.Key, targetSchema) || _projectedMissingTables.Contains(pair.Key))
+            if (!SameIndexSchema(pair.Key, targetSchema)
+                || _projectedMissingTables.Contains(pair.Key))
             {
                 continue;
             }
@@ -71,7 +75,8 @@ internal sealed partial class SafeMigrationPreflightProjection
 
         foreach (var missing in _projectedMissingTables)
         {
-            if (SameIndexSchema(missing, targetSchema) && comparer.Equals(missing.Table, intent.NewName))
+            if (SameIndexSchema(missing, targetSchema)
+                && comparer.Equals(missing.Table, intent.NewName))
             {
                 return false;
             }
@@ -81,13 +86,20 @@ internal sealed partial class SafeMigrationPreflightProjection
     }
 
     /// <summary>Compares verified effective schemas without broadening object or member identity.</summary>
-    private bool SameIndexSchema(TableKey owner, string? schema) => StringComparer.Ordinal.Equals(
-        _objectIdentityNormalizer is null ? owner.Schema : _objectIdentityNormalizer.NormalizeSchema(owner.Schema),
+    private bool SameIndexSchema(
+        TableKey owner,
+        string? schema
+    ) => StringComparer.Ordinal.Equals(
+        _objectIdentityNormalizer is null
+            ? owner.Schema
+            : _objectIdentityNormalizer.NormalizeSchema(owner.Schema),
         schema);
 
     /// <summary>Retains known owned index removals before a physical table lifetime is discarded.</summary>
     /// <param name="owner">The actual table removed by an accepted drop.</param>
-    private void CaptureDroppedTableIndexNames(TableKey owner)
+    private void CaptureDroppedTableIndexNames(
+        TableKey owner
+    )
     {
         if (_objectIdentityNormalizer?.IndexUsesSchemaScopedIdentity != true)
         {

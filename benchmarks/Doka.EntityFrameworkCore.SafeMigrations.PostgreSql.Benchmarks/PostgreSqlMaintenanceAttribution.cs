@@ -3,14 +3,15 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 /// <summary>Attributes real bounded narrowing discovery and transport phases with deterministic ADO results.</summary>
 public class PostgreSqlMaintenanceAttribution : IDisposable
 {
-    private PostgreSqlGenerationContext _context = null!;
     private CatalogStatementTestConnection _connection = null!;
-    private SafeMigrationOperation[] _operations = null!;
-    private SafeMigrationObservedState?[] _states = null!;
+    private PostgreSqlGenerationContext _context = null!;
     private bool _disposed;
+    private SafeMigrationOperation[] _operations = null!;
 
     private Func<DbConnection, IReadOnlyList<SafeMigrationOperation>, SafeMigrationObservedState?[], CancellationToken,
         Task> _resolve = null!;
+
+    private SafeMigrationObservedState?[] _states = null!;
 
     /// <summary>Gets or sets the operation count surrounding statement and transport batch boundaries.</summary>
     [Params(
@@ -26,6 +27,13 @@ public class PostgreSqlMaintenanceAttribution : IDisposable
     /// <summary>Gets or sets whether deterministic ADO supports native batching or command fallback.</summary>
     [Params(false, true)]
     public bool NativeBatch { get; set; }
+
+    /// <summary>Releases the deterministic transport and provider service context.</summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
 
     /// <summary>Runs exact native-batch and fallback windows without claiming native database timings.</summary>
     /// <param name="args">The BenchmarkDotNet command-line arguments.</param>
@@ -60,35 +68,32 @@ public class PostgreSqlMaintenanceAttribution : IDisposable
         var observed = ReadResult(resolved);
         var expected = _operations
             .Chunk(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
-            .Select((
-                    chunk,
-                    window
-                ) => string.Join(
+            .Select((chunk,
+                    window) => string.Join(
                     SafeMigrationCatalogQueryLimits.Separator,
-                    chunk.Select((
-                        operation,
-                        ordinal
-                    ) => EligibilitySql(
+                    chunk.Select((operation,
+                        ordinal) => EligibilitySql(
                         catalog,
                         operation,
-                        (window * SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement) + ordinal)))
+                        window * SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement + ordinal)))
                 + SafeMigrationCatalogQueryLimits.Trailer)
             .ToArray();
 
         MaintenanceAttribution.Require(
             expected.SequenceEqual(_connection.Submissions.Select(static submission => submission.Sql)),
             "The measured PostgreSQL window lost exact SQL or ordinal ownership.");
+
         MaintenanceAttribution.Require(
             observed.Length == OperationCount
             && _connection.Submissions.All(static submission => submission is { Timeout: 71, Parameters.Count: 0 }
-                && System.Text.Encoding.UTF8.GetByteCount(submission.Sql)
+                && Encoding.UTF8.GetByteCount(submission.Sql)
                 <= SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes),
             "The PostgreSQL attribution transport or result shape is invalid.");
 
         VerifyFacts(observed);
         var batches = _connection.BatchCounts.ToArray();
         var sqlBytes = _connection.Submissions.Sum(static submission =>
-            System.Text.Encoding.UTF8.GetByteCount(submission.Sql));
+            Encoding.UTF8.GetByteCount(submission.Sql));
 
         var hash = MaintenanceAttribution.Hash(string.Join("\n", expected));
         _connection.ResetCaptures();
@@ -145,13 +150,6 @@ public class PostgreSqlMaintenanceAttribution : IDisposable
     /// <summary>Disposes the deterministic transport and provider service context.</summary>
     [GlobalCleanup]
     public void Cleanup() => Dispose();
-
-    /// <summary>Releases the deterministic transport and provider service context.</summary>
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
 
     /// <summary>Releases owned managed resources once while supporting generated benchmark subclasses.</summary>
     /// <param name="disposing">Whether managed resources should be released.</param>

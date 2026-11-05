@@ -26,9 +26,16 @@ public sealed class SqlServerDatabaseCleanupTests
         }
 
         // Act
-        await SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(databases, "sm_owned", DropAsync,
+        await SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(
+            databases,
+            "sm_owned",
+            DropAsync,
             CancellationToken.None);
-        await SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(databases, "sm_owned", DropAsync,
+
+        await SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(
+            databases,
+            "sm_owned",
+            DropAsync,
             CancellationToken.None);
 
         // Assert
@@ -57,7 +64,10 @@ public sealed class SqlServerDatabaseCleanupTests
         }
 
         // Act
-        await SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(databases, "sm_unknown", DropAsync,
+        await SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(
+            databases,
+            "sm_unknown",
+            DropAsync,
             CancellationToken.None);
 
         // Assert
@@ -76,8 +86,11 @@ public sealed class SqlServerDatabaseCleanupTests
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         // Act
-        var release = SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(databases, "sm_owned",
-            (_, _) => completion.Task, CancellationToken.None);
+        var release = SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(
+            databases,
+            "sm_owned",
+            (_, _) => completion.Task,
+            CancellationToken.None);
 
         var ownershipWhilePending = databases.ToArray();
         var releaseWasPending = !release.IsCompleted;
@@ -116,7 +129,8 @@ public sealed class SqlServerDatabaseCleanupTests
         {
             openAttempts++;
 
-            if (openAttempts == 1 && !failDuringDrop)
+            if (openAttempts == 1
+                && !failDuringDrop)
             {
                 return Task.FromException(expected);
             }
@@ -133,7 +147,10 @@ public sealed class SqlServerDatabaseCleanupTests
 
         // Act
         var observed = await Record.ExceptionAsync(() => SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(
-            databases, "sm_owned", DropAsync, CancellationToken.None));
+            databases,
+            "sm_owned",
+            DropAsync,
+            CancellationToken.None));
 
         var ownershipAfterFailure = databases.ToArray();
 
@@ -143,7 +160,10 @@ public sealed class SqlServerDatabaseCleanupTests
         }
         else
         {
-            await SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(databases, "sm_owned", DropAsync,
+            await SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(
+                databases,
+                "sm_owned",
+                DropAsync,
                 CancellationToken.None);
         }
 
@@ -151,7 +171,12 @@ public sealed class SqlServerDatabaseCleanupTests
         Assert.Same(expected, observed);
         Assert.Equal(["sm_owned"], ownershipAfterFailure);
         Assert.Equal(2, openAttempts);
-        Assert.Equal(failDuringDrop ? 2 : 1, dropAttempts);
+        Assert.Equal(
+            failDuringDrop
+                ? 2
+                : 1,
+            dropAttempts);
+
         Assert.Empty(databases);
     }
 
@@ -183,7 +208,8 @@ public sealed class SqlServerDatabaseCleanupTests
             tokens.Add(cancellationToken);
             openAttempts++;
 
-            if (openAttempts == 1 && !cancelDuringDrop)
+            if (openAttempts == 1
+                && !cancelDuringDrop)
             {
                 cancellation.Cancel();
 
@@ -204,7 +230,10 @@ public sealed class SqlServerDatabaseCleanupTests
 
         // Act
         var observed = await Record.ExceptionAsync(() => SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(
-            databases, "sm_owned", DropAsync, cancellation.Token));
+            databases,
+            "sm_owned",
+            DropAsync,
+            cancellation.Token));
 
         var ownershipAfterCancellation = databases.ToArray();
 
@@ -214,17 +243,28 @@ public sealed class SqlServerDatabaseCleanupTests
         }
         else
         {
-            await SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(databases, "sm_owned", DropAsync,
+            await SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(
+                databases,
+                "sm_owned",
+                DropAsync,
                 CancellationToken.None);
         }
 
         // Assert
-        Assert.Equal(cancellation.Token,
-            Assert.IsAssignableFrom<OperationCanceledException>(observed).CancellationToken);
+        Assert.Equal(
+            cancellation.Token,
+            Assert.IsAssignableFrom<OperationCanceledException>(observed)
+                .CancellationToken);
+
         Assert.Equal(["sm_owned"], ownershipAfterCancellation);
         Assert.Equal([cancellation.Token, CancellationToken.None], tokens);
         Assert.Equal(2, openAttempts);
-        Assert.Equal(cancelDuringDrop ? 2 : 1, dropAttempts);
+        Assert.Equal(
+            cancelDuringDrop
+                ? 2
+                : 1,
+            dropAttempts);
+
         Assert.Empty(databases);
     }
 
@@ -252,10 +292,16 @@ public sealed class SqlServerDatabaseCleanupTests
 
         // Act
         var observed = await Record.ExceptionAsync(() => SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(
-            databases, "sm_owned", DropAsync, cancellation.Token));
+            databases,
+            "sm_owned",
+            DropAsync,
+            cancellation.Token));
 
         // Assert
-        Assert.Equal(cancellation.Token, Assert.IsType<OperationCanceledException>(observed).CancellationToken);
+        Assert.Equal(cancellation.Token,
+            Assert.IsType<OperationCanceledException>(observed)
+                .CancellationToken);
+
         Assert.Equal(0, attempts);
         Assert.Equal(["sm_owned"], databases);
     }
@@ -293,10 +339,16 @@ public sealed class SqlServerDatabaseCleanupTests
 
         // Act
         var observed = await Record.ExceptionAsync(() => SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(
-            databases, "sm_owned", DropAsync, CancellationToken.None));
+            databases,
+            "sm_owned",
+            DropAsync,
+            CancellationToken.None));
 
         var ownershipAfterUncertainCompletion = databases.ToArray();
-        await SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(databases, "sm_owned", DropAsync,
+        await SqlServerContainerFixture.ReleaseOwnedDatabaseAsync(
+            databases,
+            "sm_owned",
+            DropAsync,
             CancellationToken.None);
 
         // Assert
@@ -315,7 +367,13 @@ public sealed class SqlServerDatabaseCleanupTests
     public async Task Cleanup_PartialFailureRetainsOnlyUnfinishedDatabasesForRetry()
     {
         // Arrange
-        var databases = new List<string> { "sm_first", "sm_second", "sm_third" };
+        var databases = new List<string>
+        {
+            "sm_first",
+            "sm_second",
+            "sm_third",
+        };
+
         var expected = new InvalidOperationException("Injected second database drop failure.");
         var attempts = new List<string>();
 
@@ -326,7 +384,9 @@ public sealed class SqlServerDatabaseCleanupTests
         {
             attempts.Add(database);
 
-            return attempts.Count == 2 ? Task.FromException(expected) : Task.CompletedTask;
+            return attempts.Count == 2
+                ? Task.FromException(expected)
+                : Task.CompletedTask;
         }
 
         // Act
@@ -350,7 +410,13 @@ public sealed class SqlServerDatabaseCleanupTests
     public async Task Cleanup_PartialCancellationRetainsOnlyUnfinishedDatabasesForRetry()
     {
         // Arrange
-        var databases = new List<string> { "sm_first", "sm_second", "sm_third" };
+        var databases = new List<string>
+        {
+            "sm_first",
+            "sm_second",
+            "sm_third",
+        };
+
         using var cancellation = new CancellationTokenSource();
         var attempts = new List<string>();
 
@@ -379,8 +445,11 @@ public sealed class SqlServerDatabaseCleanupTests
         await SqlServerContainerFixture.DropOwnedDatabasesAsync(databases, DropAsync, CancellationToken.None);
 
         // Assert
-        Assert.Equal(cancellation.Token,
-            Assert.IsAssignableFrom<OperationCanceledException>(observed).CancellationToken);
+        Assert.Equal(
+            cancellation.Token,
+            Assert.IsAssignableFrom<OperationCanceledException>(observed)
+                .CancellationToken);
+
         Assert.Equal(["sm_second", "sm_third"], ownershipAfterCancellation);
         Assert.Equal(["sm_first", "sm_second", "sm_second", "sm_third"], attempts);
         Assert.Empty(databases);
@@ -427,8 +496,10 @@ public sealed class SqlServerDatabaseCleanupTests
         var commandText = SqlServerContainerFixture.DropDatabaseCommandText(database);
 
         // Assert
-        Assert.Equal("IF DB_ID(N'sm_owned') IS NOT NULL BEGIN "
+        Assert.Equal(
+            "IF DB_ID(N'sm_owned') IS NOT NULL BEGIN "
             + "ALTER DATABASE [sm_owned] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; "
-            + "DROP DATABASE [sm_owned]; END;", commandText);
+            + "DROP DATABASE [sm_owned]; END;",
+            commandText);
     }
 }

@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 /// <summary>Verifies live-parent prerequisites for new children and new operands on existing children.</summary>
@@ -8,7 +10,9 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
     [Theory]
     [InlineData(SafeMigrationObservedState.Missing)]
     [InlineData(SafeMigrationObservedState.PrerequisiteMissing)]
-    public async Task StandaloneForeignKey_OccupiedNameRejectsBothMissingStates(SafeMigrationObservedState state)
+    public async Task StandaloneForeignKey_OccupiedNameRejectsBothMissingStates(
+        SafeMigrationObservedState state
+    )
     {
         // Arrange
         await using var connection = new GraphConnection(true, "C");
@@ -17,9 +21,13 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         var graph = await ReadGraph(connection, [create, ensure], cancellationToken: CancellationToken.None);
         var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: graph);
         Accept(projection, create, Missing());
-        var projected = new SafeMigrationProviderAnalysis(state, SafeMigrationRepairCapability.None, false,
+        var projected = new SafeMigrationProviderAnalysis(
+            state,
+            SafeMigrationRepairCapability.None,
+            false,
             state == SafeMigrationObservedState.PrerequisiteMissing
-                ? "projected_structure_state_unknown" : "classified_missing");
+                ? "projected_structure_state_unknown"
+                : "classified_missing");
 
         // Act
         var result = graph.ValidateProjectedOperation(ensure, projected, projection);
@@ -27,7 +35,10 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         // Assert
         Assert.Equal(SafeMigrationObservedState.Different, result.ObservedState);
         Assert.Equal("projected_constraint_name_occupied", result.Code);
-        Assert.Equal(SafeMigrationAction.RejectDifferent, Decision(ensure, result).Action);
+        Assert.Equal(SafeMigrationAction.RejectDifferent,
+            Decision(ensure, result)
+                .Action);
+
         Assert.False(result.RequiresLiveDataProof);
     }
 
@@ -53,9 +64,13 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         var graph = await ReadGraph(connection, [create, ensure], cancellationToken: CancellationToken.None);
         var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: graph);
         Accept(projection, create, Missing());
-        var projected = new SafeMigrationProviderAnalysis(state, SafeMigrationRepairCapability.None, false,
+        var projected = new SafeMigrationProviderAnalysis(
+            state,
+            SafeMigrationRepairCapability.None,
+            false,
             state == SafeMigrationObservedState.PrerequisiteMissing
-                ? "projected_structure_state_unknown" : "classified_missing");
+                ? "projected_structure_state_unknown"
+                : "classified_missing");
 
         // Act
         var result = graph.ValidateProjectedOperation(ensure, projected, projection);
@@ -63,7 +78,10 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, result.ObservedState);
         Assert.Equal(code, result.Code);
-        Assert.Equal(SafeMigrationAction.Apply, Decision(ensure, result).Action);
+        Assert.Equal(SafeMigrationAction.Apply,
+            Decision(ensure, result)
+                .Action);
+
         Assert.Equal(requiresLiveDataProof, result.RequiresLiveDataProof);
     }
 
@@ -77,27 +95,56 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
     )
     {
         // Arrange
-        string[] principal = composite ? ["TenantId", "Id"] : ["Id"];
+        string[] principal = composite
+            ? ["TenantId", "Id"]
+            : ["Id"];
 
         await using var connection = new GraphConnection(true, principalColumns: principal);
-        var create = Operation(new EnsureTableIntent(new ExpectedTableDefinition("child",
-            [new ExpectedColumnDefinition(composite ? "TenantId" : "Id", typeof(int), false, "int")]),
-            SafeMigrationTableMode.StrictDefinition));
+        var create = Operation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "child",
+                    [
+                        new ExpectedColumnDefinition(
+                            composite
+                                ? "TenantId"
+                                : "Id",
+                            typeof(int),
+                            false,
+                            "int"),
+                    ]),
+                SafeMigrationTableMode.StrictDefinition));
 
-        var add = Operation(new EnsureColumnIntent("child",
-            new ExpectedColumnDefinition("ParentId", typeof(int), true, "int")));
+        var add = Operation(
+            new EnsureColumnIntent(
+                "child",
+                new ExpectedColumnDefinition("ParentId", typeof(int), true, "int")));
 
-        var index = Operation(new EnsureIndexIntent(new ExpectedIndexDefinition("IX_child", "child",
-            [new ExpectedIndexKeyDefinition("ParentId")])));
+        var index = Operation(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "IX_child",
+                    "child",
+                    [new ExpectedIndexKeyDefinition("ParentId")])));
 
-        var ensure = Operation(new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition("FK_child", "child",
-            composite ? ["TenantId", "ParentId"] : ["ParentId"], "parent", principal)));
+        var ensure = Operation(
+            new EnsureForeignKeyIntent(
+                new ExpectedForeignKeyDefinition(
+                    "FK_child",
+                    "child",
+                    composite
+                        ? ["TenantId", "ParentId"]
+                        : ["ParentId"],
+                    "parent",
+                    principal)));
+
         var graph = await ReadGraph(
             connection,
             [create, add, index, ensure],
             cancellationToken: CancellationToken.None);
 
-        var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: graph,
+        var projection = new SafeMigrationPreflightProjection(
+            projectedDependencyAnalyzer: graph,
             livePrerequisiteSource: graph);
 
         Accept(projection, create, Missing());
@@ -109,7 +156,9 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
-        Assert.Equal(SafeMigrationAction.Apply, Decision(ensure, analysis).Action);
+        Assert.Equal(SafeMigrationAction.Apply,
+            Decision(ensure, analysis)
+                .Action);
     }
 
     /// <summary>Future, rejected, removed, or opaque owners cannot activate a missing-owner hypothesis.</summary>
@@ -125,15 +174,22 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
     {
         // Arrange
         await using var connection = new GraphConnection(true);
-        var create = Operation(new EnsureTableIntent(new ExpectedTableDefinition("child",
-            [new ExpectedColumnDefinition("Id", typeof(int), false, "int")]), SafeMigrationTableMode.StrictDefinition));
+        var create = Operation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "child",
+                    [new ExpectedColumnDefinition("Id", typeof(int), false, "int")]),
+                SafeMigrationTableMode.StrictDefinition));
 
-        var add = Operation(new EnsureColumnIntent("child",
-            new ExpectedColumnDefinition("ParentId", typeof(int), true, "int")));
+        var add = Operation(
+            new EnsureColumnIntent(
+                "child",
+                new ExpectedColumnDefinition("ParentId", typeof(int), true, "int")));
 
         var ensure = Operation(new EnsureForeignKeyIntent(ForeignKey()));
         var graph = await ReadGraph(connection, [create, add, ensure], cancellationToken: CancellationToken.None);
-        var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: graph,
+        var projection = new SafeMigrationPreflightProjection(
+            projectedDependencyAnalyzer: graph,
             livePrerequisiteSource: graph);
 
         if (mutation == "rejected")
@@ -152,7 +208,7 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         }
         else if (mutation == "opaque")
         {
-            graph.ObserveProviderOperation(new SqlOperation { Sql = "UPDATE dbo.child SET Id = Id;", });
+            graph.ObserveProviderOperation(new SqlOperation { Sql = "UPDATE dbo.child SET Id = Id;" });
         }
 
         // Act
@@ -162,9 +218,10 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         // Assert
         Assert.Null(candidates);
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
-        Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, Decision(ensure, analysis).Action);
+        Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing,
+            Decision(ensure, analysis)
+                .Action);
     }
-
 
     /// <summary>A rejected or existence-only proposal cannot replace an accepted operand's physical proof.</summary>
     /// <param name="existenceOnly">Whether the later different proposal is an accepted existence-only no-op.</param>
@@ -177,16 +234,23 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
     {
         // Arrange
         await using var connection = new GraphConnection(true, existingChild: true);
-        var add = Operation(new EnsureColumnIntent("child",
-            new ExpectedColumnDefinition("ParentId", typeof(int), true, "int")));
+        var add = Operation(
+            new EnsureColumnIntent(
+                "child",
+                new ExpectedColumnDefinition("ParentId", typeof(int), true, "int")));
 
-        var proposal = new SafeMigrationOperation(new EnsureColumnIntent("child",
-            new ExpectedColumnDefinition("ParentId", typeof(string), true, "nvarchar(20)")),
-            existenceOnly ? SafeMigrationPolicy.ExistenceOnly : SafeMigrationPolicy.ThrowIfDifferent);
+        var proposal = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "child",
+                new ExpectedColumnDefinition("ParentId", typeof(string), true, "nvarchar(20)")),
+            existenceOnly
+                ? SafeMigrationPolicy.ExistenceOnly
+                : SafeMigrationPolicy.ThrowIfDifferent);
 
         var ensure = Operation(new EnsureForeignKeyIntent(ForeignKey()));
         var graph = await ReadGraph(connection, [add, proposal, ensure], cancellationToken: CancellationToken.None);
-        var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: graph,
+        var projection = new SafeMigrationPreflightProjection(
+            projectedDependencyAnalyzer: graph,
             livePrerequisiteSource: graph);
 
         Accept(projection, add, Missing());
@@ -199,9 +263,16 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Different, proposed.ObservedState);
-        Assert.Equal(existenceOnly ? SafeMigrationAction.NoOp : SafeMigrationAction.RejectDifferent, decision.Action);
+        Assert.Equal(
+            existenceOnly
+                ? SafeMigrationAction.NoOp
+                : SafeMigrationAction.RejectDifferent,
+            decision.Action);
+
         Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
-        Assert.Equal(SafeMigrationAction.Apply, Decision(ensure, analysis).Action);
+        Assert.Equal(SafeMigrationAction.Apply,
+            Decision(ensure, analysis)
+                .Action);
     }
 
     /// <summary>Independent composite alternatives cannot certify an unaccepted valid proposal.</summary>
@@ -215,26 +286,59 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
     {
         // Arrange
         const int count = 16;
-        var names = Enumerable.Range(0, count).Select(static ordinal => "Id" + ordinal).ToArray();
+        var names = Enumerable
+            .Range(0, count)
+            .Select(static ordinal => "Id" + ordinal)
+            .ToArray();
+
         await using var connection = new GraphConnection(true, existingChild: true, principalColumns: names);
         var operations = new List<SafeMigrationOperation>();
         for (var ordinal = 0; ordinal < count; ordinal++)
         {
             var compatible = acceptedCompatible || ordinal != 0;
-            operations.Add(Operation(new EnsureColumnIntent("child",
-                new ExpectedColumnDefinition(names[ordinal], compatible ? typeof(int) : typeof(string), true,
-                    compatible ? "int" : "nvarchar(20)"))));
-            operations.Add(new SafeMigrationOperation(new EnsureColumnIntent("child",
-                new ExpectedColumnDefinition(names[ordinal], compatible ? typeof(string) : typeof(int), true,
-                    compatible ? "nvarchar(20)" : "int")), SafeMigrationPolicy.ExistenceOnly));
+            operations.Add(
+                Operation(
+                    new EnsureColumnIntent(
+                        "child",
+                        new ExpectedColumnDefinition(
+                            names[ordinal],
+                            compatible
+                                ? typeof(int)
+                                : typeof(string),
+                            true,
+                            compatible
+                                ? "int"
+                                : "nvarchar(20)"))));
+
+            operations.Add(
+                new SafeMigrationOperation(
+                    new EnsureColumnIntent(
+                        "child",
+                        new ExpectedColumnDefinition(
+                            names[ordinal],
+                            compatible
+                                ? typeof(string)
+                                : typeof(int),
+                            true,
+                            compatible
+                                ? "nvarchar(20)"
+                                : "int")),
+                    SafeMigrationPolicy.ExistenceOnly));
         }
 
-        var ensure = Operation(new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition("FK_child", "child",
-            names, "parent", names)));
+        var ensure = Operation(
+            new EnsureForeignKeyIntent(
+                new ExpectedForeignKeyDefinition(
+                    "FK_child",
+                    "child",
+                    names,
+                    "parent",
+                    names)));
 
         operations.Add(ensure);
         var graph = await ReadGraph(connection, operations, cancellationToken: CancellationToken.None);
-        var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: graph,
+        var projection = new SafeMigrationPreflightProjection(
+            projectedDependencyAnalyzer: graph,
             livePrerequisiteSource: graph);
 
         foreach (var operation in operations.Take(count * 2))
@@ -246,13 +350,18 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         // Act
         var candidates = graph.GetLiveForeignKeyCandidateKeys((EnsureForeignKeyIntent)ensure.Intent, projection);
         var analysis = projection.Project(ensure, UnknownLivePrerequisite());
-        var captures = connection.Statements.Sum(static sql => System.Text.RegularExpressions.Regex.Count(sql,
+        var captures = connection.Statements.Sum(static sql => Regex.Count(
+            sql,
             @"CONVERT\(bit, CASE WHEN [01] = 1"));
 
         // Assert
         Assert.Equal(count * 2, captures);
-        Assert.Equal(acceptedCompatible ? SafeMigrationObservedState.Missing
-            : SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
+        Assert.Equal(
+            acceptedCompatible
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.PrerequisiteMissing,
+            analysis.ObservedState);
+
         if (acceptedCompatible)
         {
             Assert.NotNull(candidates);
@@ -263,8 +372,12 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
             Assert.Null(candidates);
         }
 
-        Assert.All(connection.Statements, static sql => Assert.InRange(Encoding.UTF8.GetByteCount(sql), 1,
-            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes));
+        Assert.All(
+            connection.Statements,
+            static sql => Assert.InRange(
+                Encoding.UTF8.GetByteCount(sql),
+                1,
+                SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes));
     }
 
     /// <summary>The isolated three-operation stream fails without the live bridge and succeeds only with it.</summary>
@@ -278,16 +391,25 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
     {
         // Arrange
         await using var connection = new GraphConnection(true, existingChild: true);
-        var add = Operation(new EnsureColumnIntent("child",
-            new ExpectedColumnDefinition("ParentId", typeof(int), true, "int")));
+        var add = Operation(
+            new EnsureColumnIntent(
+                "child",
+                new ExpectedColumnDefinition("ParentId", typeof(int), true, "int")));
 
-        var index = Operation(new EnsureIndexIntent(new ExpectedIndexDefinition("IX_child", "child",
-            [new ExpectedIndexKeyDefinition("ParentId")])));
+        var index = Operation(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "IX_child",
+                    "child",
+                    [new ExpectedIndexKeyDefinition("ParentId")])));
 
         var ensure = Operation(new EnsureForeignKeyIntent(ForeignKey()));
         var graph = await ReadGraph(connection, [add, index, ensure], cancellationToken: CancellationToken.None);
-        var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: graph,
-            livePrerequisiteSource: liveBridge ? graph : null);
+        var projection = new SafeMigrationPreflightProjection(
+            projectedDependencyAnalyzer: graph,
+            livePrerequisiteSource: liveBridge
+                ? graph
+                : null);
 
         Accept(projection, add, Missing());
         Accept(projection, index, Missing());
@@ -296,10 +418,18 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         var analysis = projection.Project(ensure, UnknownLivePrerequisite());
 
         // Assert
-        Assert.Equal(liveBridge ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.PrerequisiteMissing,
+        Assert.Equal(
+            liveBridge
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.PrerequisiteMissing,
             analysis.ObservedState);
-        Assert.Equal(liveBridge ? SafeMigrationAction.Apply : SafeMigrationAction.RejectPrerequisiteMissing,
-            Decision(ensure, analysis).Action);
+
+        Assert.Equal(
+            liveBridge
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectPrerequisiteMissing,
+            Decision(ensure, analysis)
+                .Action);
     }
 
     /// <summary>Equal authored CLR/null-collation facets cannot override failed native qualification.</summary>
@@ -308,14 +438,22 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
     {
         // Arrange
         await using var connection = new GraphConnection(true, existingChild: true, captureReadyOverride: false);
-        var principal = Operation(new EnsureColumnIntent("parent",
-            new ExpectedColumnDefinition("Id", typeof(int), false, "int")));
+        var principal = Operation(
+            new EnsureColumnIntent(
+                "parent",
+                new ExpectedColumnDefinition("Id", typeof(int), false, "int")));
 
-        var key = Operation(new EnsurePrimaryKeyIntent(new ExpectedPrimaryKeyDefinition("PK_parent", "parent",
-            ["Id"])));
+        var key = Operation(
+            new EnsurePrimaryKeyIntent(
+                new ExpectedPrimaryKeyDefinition(
+                    "PK_parent",
+                    "parent",
+                    ["Id"])));
 
-        var add = Operation(new EnsureColumnIntent("child",
-            new ExpectedColumnDefinition("ParentId", typeof(int), true, "int")));
+        var add = Operation(
+            new EnsureColumnIntent(
+                "child",
+                new ExpectedColumnDefinition("ParentId", typeof(int), true, "int")));
 
         var ensure = Operation(new EnsureForeignKeyIntent(ForeignKey()));
         var graph = await ReadGraph(
@@ -323,7 +461,8 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
             [principal, key, add, ensure],
             cancellationToken: CancellationToken.None);
 
-        var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: graph,
+        var projection = new SafeMigrationPreflightProjection(
+            projectedDependencyAnalyzer: graph,
             livePrerequisiteSource: graph);
 
         var columnSource = (ISafeMigrationProjectedColumnSource)projection;
@@ -341,7 +480,9 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         Assert.True(columnSource.TryGetProjectedColumn("parent", null, "Id", out _));
         Assert.True(columnSource.TryGetProjectedColumn("child", null, "ParentId", out _));
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
-        Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, Decision(ensure, analysis).Action);
+        Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing,
+            Decision(ensure, analysis)
+                .Action);
     }
 
     /// <summary>Proves captured sparse endpoints independently of a synthetic parent convergence operation.</summary>
@@ -358,13 +499,21 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
     {
         // Arrange
         await using var connection = new GraphConnection(hasKey, existingChild: true);
-        var definition = new ExpectedColumnDefinition("ParentId", compatible ? typeof(int) : typeof(long),
-            true, compatible ? "int" : "bigint");
+        var definition = new ExpectedColumnDefinition(
+            "ParentId",
+            compatible
+                ? typeof(int)
+                : typeof(long),
+            true,
+            compatible
+                ? "int"
+                : "bigint");
 
         var add = Operation(new EnsureColumnIntent("child", definition));
         var ensure = Operation(new EnsureForeignKeyIntent(ForeignKey()));
         var graph = await ReadGraph(connection, [add, ensure], cancellationToken: CancellationToken.None);
-        var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: graph,
+        var projection = new SafeMigrationPreflightProjection(
+            projectedDependencyAnalyzer: graph,
             livePrerequisiteSource: graph);
 
         Accept(projection, add, Missing());
@@ -376,12 +525,21 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
 
         // Assert
         Assert.True(principalPresent);
-        Assert.Equal(hasKey && compatible ? SafeMigrationObservedState.Missing
-            : SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
+        Assert.Equal(
+            hasKey && compatible
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.PrerequisiteMissing,
+            analysis.ObservedState);
+
         if (compatible)
         {
             Assert.NotNull(candidates);
-            Assert.Equal(hasKey ? 1 : 0, candidates.Count);
+            Assert.Equal(
+                hasKey
+                    ? 1
+                    : 0,
+                candidates.Count);
+
             if (hasKey)
             {
                 var candidate = Assert.Single(candidates);
@@ -412,24 +570,35 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
     {
         // Arrange
         await using var connection = new GraphConnection(true, existingChild: true);
-        var add = Operation(new EnsureColumnIntent("child",
-            new ExpectedColumnDefinition("ParentId", typeof(int), true, "int")));
+        var add = Operation(
+            new EnsureColumnIntent(
+                "child",
+                new ExpectedColumnDefinition("ParentId", typeof(int), true, "int")));
 
         var ensure = Operation(new EnsureForeignKeyIntent(ForeignKey()));
         var changes = Mutations(mutation);
         var graph = await ReadGraph(
             connection,
-            new[] { add }.Concat(changes).Append(ensure).ToArray(),
+            new[] { add }
+                .Concat(changes)
+                .Append(ensure)
+                .ToArray(),
             cancellationToken: CancellationToken.None);
 
         var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: graph);
         Accept(projection, add, Missing());
         foreach (var change in changes)
         {
-            Accept(projection, change, change.Intent is AlterColumnIntent
-                ? new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-                    SafeMigrationRepairCapability.Safe, false, "classified_different")
-                : Live(SafeMigrationObservedState.Matching));
+            Accept(
+                projection,
+                change,
+                change.Intent is AlterColumnIntent
+                    ? new SafeMigrationProviderAnalysis(
+                        SafeMigrationObservedState.Different,
+                        SafeMigrationRepairCapability.Safe,
+                        false,
+                        "classified_different")
+                    : Live(SafeMigrationObservedState.Matching));
         }
 
         if (mutation == "raw-sql")
@@ -457,16 +626,22 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
     {
         // Arrange
         await using var connection = new GraphConnection(true, existingChild: true);
-        var add = Operation(new EnsureColumnIntent("child",
-            new ExpectedColumnDefinition("ParentId", typeof(int), true, "int")));
+        var add = Operation(
+            new EnsureColumnIntent(
+                "child",
+                new ExpectedColumnDefinition("ParentId", typeof(int), true, "int")));
 
         var ensure = Operation(new EnsureForeignKeyIntent(ForeignKey()));
         var graph = await ReadGraph(connection, [add, ensure], cancellationToken: CancellationToken.None);
         var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: graph);
         if (accepted)
         {
-            var replacement = sameDefinition ? add : Operation(new EnsureColumnIntent("child",
-                new ExpectedColumnDefinition("ParentId", typeof(long), true, "bigint")));
+            var replacement = sameDefinition
+                ? add
+                : Operation(
+                    new EnsureColumnIntent(
+                        "child",
+                        new ExpectedColumnDefinition("ParentId", typeof(long), true, "bigint")));
 
             Accept(projection, replacement, Missing());
         }
@@ -492,12 +667,15 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
     {
         // Arrange
         await using var connection = new GraphConnection(true, kind, existingChild: true);
-        var add = Operation(new EnsureColumnIntent("child",
-            new ExpectedColumnDefinition("ParentId", typeof(int), true, "int")));
+        var add = Operation(
+            new EnsureColumnIntent(
+                "child",
+                new ExpectedColumnDefinition("ParentId", typeof(int), true, "int")));
 
         var ensure = Operation(new EnsureForeignKeyIntent(ForeignKey()));
         var graph = await ReadGraph(connection, [add, ensure], cancellationToken: CancellationToken.None);
-        var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: graph,
+        var projection = new SafeMigrationPreflightProjection(
+            projectedDependencyAnalyzer: graph,
             livePrerequisiteSource: graph);
 
         Accept(projection, add, Missing());
@@ -508,7 +686,9 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         // Assert
         Assert.Equal(SafeMigrationObservedState.Different, analysis.ObservedState);
         Assert.Equal("projected_constraint_name_occupied", analysis.Code);
-        Assert.Equal(SafeMigrationAction.RejectDifferent, Decision(ensure, analysis).Action);
+        Assert.Equal(SafeMigrationAction.RejectDifferent,
+            Decision(ensure, analysis)
+                .Action);
     }
 
     /// <summary>Sparse FKs reuse bounded capture without retaining unrelated authored columns.</summary>
@@ -522,10 +702,18 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         for (var ordinal = 0; ordinal < count; ordinal++)
         {
             var table = "child_" + ordinal;
-            operations.Add(Operation(new EnsureColumnIntent(table,
-                new ExpectedColumnDefinition("Unrelated", typeof(string), true, "nvarchar(max)"))));
-            operations.Add(Operation(new EnsureColumnIntent(table,
-                new ExpectedColumnDefinition("ParentId", typeof(int), true, "int"))));
+            operations.Add(
+                Operation(
+                    new EnsureColumnIntent(
+                        table,
+                        new ExpectedColumnDefinition("Unrelated", typeof(string), true, "nvarchar(max)"))));
+
+            operations.Add(
+                Operation(
+                    new EnsureColumnIntent(
+                        table,
+                        new ExpectedColumnDefinition("ParentId", typeof(int), true, "int"))));
+
             operations.Add(Operation(new EnsureForeignKeyIntent(ForeignKey(table))));
         }
 
@@ -533,13 +721,25 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         await ReadGraph(connection, operations, cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(1, connection.Statements.Count(static sql => sql.StartsWith("SELECT i.object_id",
-            StringComparison.Ordinal)));
-        Assert.Equal(3, connection.Statements.Count(static sql => sql.Contains("CONVERT(bit, CASE WHEN 1 = 1",
-            StringComparison.Ordinal)));
+        Assert.Equal(
+            1,
+            connection.Statements.Count(static sql => sql.StartsWith(
+                "SELECT i.object_id",
+                StringComparison.Ordinal)));
+
+        Assert.Equal(
+            3,
+            connection.Statements.Count(static sql => sql.Contains(
+                "CONVERT(bit, CASE WHEN 1 = 1",
+                StringComparison.Ordinal)));
+
         Assert.DoesNotContain(connection.Statements, static sql => sql.Contains("Unrelated", StringComparison.Ordinal));
-        Assert.All(connection.Statements, static sql => Assert.InRange(Encoding.UTF8.GetByteCount(sql), 1,
-            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes));
+        Assert.All(
+            connection.Statements,
+            static sql => Assert.InRange(
+                Encoding.UTF8.GetByteCount(sql),
+                1,
+                SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes));
     }
 
     /// <summary>Native constraint and index aliases disappear together with either accepted drop.</summary>
@@ -558,16 +758,22 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
     {
         // Arrange
         await using var connection = new GraphConnection(true, existingChild: true, keyKind: keyKind);
-        var add = Operation(new EnsureColumnIntent("child",
-            new ExpectedColumnDefinition("ParentId", typeof(int), true, "int")));
+        var add = Operation(
+            new EnsureColumnIntent(
+                "child",
+                new ExpectedColumnDefinition("ParentId", typeof(int), true, "int")));
 
         var ensure = Operation(new EnsureForeignKeyIntent(ForeignKey()));
-        var drop = Operation(dropBacking ? new DropIndexIntent("IX_parent", "parent")
-            : keyKind == "PK" ? new DropPrimaryKeyIntent("PK_parent", "parent")
-            : new DropUniqueConstraintIntent("UQ_parent", "parent"));
+        var drop = Operation(
+            dropBacking
+                ? new DropIndexIntent("IX_parent", "parent")
+                : keyKind == "PK"
+                    ? new DropPrimaryKeyIntent("PK_parent", "parent")
+                    : new DropUniqueConstraintIntent("UQ_parent", "parent"));
 
         var graph = await ReadGraph(connection, [add, drop, ensure], cancellationToken: CancellationToken.None);
-        var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: graph,
+        var projection = new SafeMigrationPreflightProjection(
+            projectedDependencyAnalyzer: graph,
             livePrerequisiteSource: graph);
 
         Accept(projection, add, Missing());
@@ -580,12 +786,26 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
 
         // Assert
         var candidate = Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<SafeMigrationLiveCandidateKey>>(original));
-        Assert.Equal(keyKind == "PK" ? SafeMigrationDatabaseObjectKind.PrimaryKey
-            : keyKind == "UQ" ? SafeMigrationDatabaseObjectKind.UniqueConstraint
-            : SafeMigrationDatabaseObjectKind.Index,
+        Assert.Equal(
+            keyKind == "PK"
+                ? SafeMigrationDatabaseObjectKind.PrimaryKey
+                : keyKind == "UQ"
+                    ? SafeMigrationDatabaseObjectKind.UniqueConstraint
+                    : SafeMigrationDatabaseObjectKind.Index,
             candidate.Kind);
-        Assert.Equal(keyKind == "IX" ? "IX_parent" : keyKind + "_parent", candidate.PhysicalName);
-        Assert.Equal(keyKind == "IX" ? null : "IX_parent", candidate.BackingIndexName);
+
+        Assert.Equal(
+            keyKind == "IX"
+                ? "IX_parent"
+                : keyKind + "_parent",
+            candidate.PhysicalName);
+
+        Assert.Equal(
+            keyKind == "IX"
+                ? null
+                : "IX_parent",
+            candidate.BackingIndexName);
+
         Assert.Empty(Assert.IsAssignableFrom<IReadOnlyList<SafeMigrationLiveCandidateKey>>(afterDrop));
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, analysis.ObservedState);
     }
@@ -608,7 +828,11 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
     {
         // Arrange
         await using var connection = new GraphConnection(hasKey);
-        var child = Child(compatible ? "int" : "bigint");
+        var child = Child(
+            compatible
+                ? "int"
+                : "bigint");
+
         var create = Operation(new EnsureTableIntent(child, SafeMigrationTableMode.StrictDefinition));
         var foreign = ForeignKey();
         var ensure = Operation(new EnsureForeignKeyIntent(foreign));
@@ -620,14 +844,31 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         var result = projection.Project(ensure, UnknownLivePrerequisite());
 
         // Assert
-        Assert.Equal(ready ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.PrerequisiteMissing,
+        Assert.Equal(
+            ready
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.PrerequisiteMissing,
             result.ObservedState);
-        Assert.Equal(ready ? SafeMigrationAction.Apply : SafeMigrationAction.RejectPrerequisiteMissing,
-            Decision(ensure, result).Action);
-        Assert.Equal(1, connection.Statements.Count(static sql => sql.StartsWith("SELECT i.object_id",
-            StringComparison.Ordinal)));
-        Assert.Equal(1, connection.Statements.Count(static sql => sql.StartsWith("SELECT 0, CONVERT(bit",
-            StringComparison.Ordinal)));
+
+        Assert.Equal(
+            ready
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectPrerequisiteMissing,
+            Decision(ensure, result)
+                .Action);
+
+        Assert.Equal(
+            1,
+            connection.Statements.Count(static sql => sql.StartsWith(
+                "SELECT i.object_id",
+                StringComparison.Ordinal)));
+
+        Assert.Equal(
+            1,
+            connection.Statements.Count(static sql => sql.StartsWith(
+                "SELECT 0, CONVERT(bit",
+                StringComparison.Ordinal)));
+
         if (ready)
         {
             Assert.Equal("projected_foreign_key_prerequisites_ready", result.Code);
@@ -690,18 +931,26 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         var changes = Mutations(mutation);
         var graph = await ReadGraph(
             connection,
-            new[] { create }.Concat(changes).Append(ensure).ToArray(),
+            new[] { create }
+                .Concat(changes)
+                .Append(ensure)
+                .ToArray(),
             cancellationToken: CancellationToken.None);
 
         var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: graph);
         Accept(projection, create, Missing());
         foreach (var change in changes)
         {
-            var state = change.Intent is EnsureColumnIntent or EnsurePrimaryKeyIntent
-                or EnsureModelManagedDataIntent ? Missing()
+            var state = change.Intent is EnsureColumnIntent
+                or EnsurePrimaryKeyIntent
+                or EnsureModelManagedDataIntent
+                ? Missing()
                 : change.Intent is AlterColumnIntent
-                    ? new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-                        SafeMigrationRepairCapability.Safe, false, "classified_different")
+                    ? new SafeMigrationProviderAnalysis(
+                        SafeMigrationObservedState.Different,
+                        SafeMigrationRepairCapability.Safe,
+                        false,
+                        "classified_different")
                     : Live(SafeMigrationObservedState.Matching);
 
             Accept(projection, change, state);
@@ -718,7 +967,9 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
 
         // Assert
         Assert.NotEqual(SafeMigrationObservedState.Missing, result.ObservedState);
-        Assert.NotEqual(SafeMigrationAction.Apply, Decision(ensure, result).Action);
+        Assert.NotEqual(SafeMigrationAction.Apply,
+            Decision(ensure, result)
+                .Action);
     }
 
     /// <summary>An accepted equivalent key replacement remains valid on unchanged captured principal columns.</summary>
@@ -729,8 +980,9 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         await using var connection = new GraphConnection(true);
         var create = Operation(new EnsureTableIntent(Child(), SafeMigrationTableMode.StrictDefinition));
         var drop = Operation(new DropPrimaryKeyIntent("PK_parent", "parent"));
-        var replacement = Operation(new EnsurePrimaryKeyIntent(
-            new ExpectedPrimaryKeyDefinition("PK_replacement", "parent", ["Id"])));
+        var replacement = Operation(
+            new EnsurePrimaryKeyIntent(
+                new ExpectedPrimaryKeyDefinition("PK_replacement", "parent", ["Id"])));
 
         var ensure = Operation(new EnsureForeignKeyIntent(ForeignKey()));
         var graph = await ReadGraph(
@@ -748,7 +1000,9 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Missing, result.ObservedState);
-        Assert.Equal(SafeMigrationAction.Apply, Decision(ensure, result).Action);
+        Assert.Equal(SafeMigrationAction.Apply,
+            Decision(ensure, result)
+                .Action);
     }
 
     /// <summary>Any existing schema object retains the runtime's schema-global name precedence.</summary>
@@ -779,7 +1033,9 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         // Assert
         Assert.Equal(SafeMigrationObservedState.Different, result.ObservedState);
         Assert.Equal("projected_constraint_name_occupied", result.Code);
-        Assert.Equal(SafeMigrationAction.RejectDifferent, Decision(ensure, result).Action);
+        Assert.Equal(SafeMigrationAction.RejectDifferent,
+            Decision(ensure, result)
+                .Action);
     }
 
     /// <summary>Only a matching accepted drop of the exact captured owner and object kind frees the name.</summary>
@@ -803,8 +1059,10 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         // Arrange
         await using var connection = new GraphConnection(true, occupiedKind);
         var create = Operation(new EnsureTableIntent(Child(), SafeMigrationTableMode.StrictDefinition));
-        var drop = Operation(kind == "F" ? new DropForeignKeyIntent("FK_child", owner)
-            : new DropCheckConstraintIntent("FK_child", owner));
+        var drop = Operation(
+            kind == "F"
+                ? new DropForeignKeyIntent("FK_child", owner)
+                : new DropCheckConstraintIntent("FK_child", owner));
 
         var ensure = Operation(new EnsureForeignKeyIntent(ForeignKey()));
         var graph = await ReadGraph(connection, [create, drop, ensure], cancellationToken: CancellationToken.None);
@@ -816,7 +1074,10 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         var result = projection.Project(ensure, UnknownLivePrerequisite());
 
         // Assert
-        Assert.Equal(ready ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.Different,
+        Assert.Equal(
+            ready
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.Different,
             result.ObservedState);
     }
 
@@ -838,15 +1099,26 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
     {
         // Arrange
         await using var connection = new GraphConnection(true);
-        var table = kind == "U" ? "FK_child" : sameChild ? "child" : "other_new";
-        var occupied = Operation(new EnsureTableIntent(OccupiedTable(table, kind),
-            SafeMigrationTableMode.StrictDefinition));
+        var table = kind == "U"
+            ? "FK_child"
+            : sameChild
+                ? "child"
+                : "other_new";
 
-        var create = sameChild ? occupied
+        var occupied = Operation(
+            new EnsureTableIntent(
+                OccupiedTable(table, kind),
+                SafeMigrationTableMode.StrictDefinition));
+
+        var create = sameChild
+            ? occupied
             : Operation(new EnsureTableIntent(Child(), SafeMigrationTableMode.StrictDefinition));
 
         var ensure = Operation(new EnsureForeignKeyIntent(ForeignKey()));
-        SafeMigrationOperation[] operations = sameChild ? [create, ensure] : [occupied, create, ensure];
+        SafeMigrationOperation[] operations = sameChild
+            ? [create, ensure]
+            : [occupied, create, ensure];
+
         var graph = await ReadGraph(connection, operations, cancellationToken: CancellationToken.None);
         var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: graph);
         if (!sameChild)
@@ -874,8 +1146,10 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
     {
         // Arrange
         await using var connection = new GraphConnection(true);
-        var owner = Operation(new EnsureTableIntent(OccupiedTable("other_new", "PK"),
-            SafeMigrationTableMode.StrictDefinition));
+        var owner = Operation(
+            new EnsureTableIntent(
+                OccupiedTable("other_new", "PK"),
+                SafeMigrationTableMode.StrictDefinition));
 
         var drop = Operation(new DropPrimaryKeyIntent("FK_child", "other_new"));
         var rename = Operation(new RenameTableIntent("other_new", "other_new", newSchema: "target"));
@@ -900,7 +1174,10 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         var result = projection.Project(ensure, UnknownLivePrerequisite());
 
         // Assert
-        Assert.Equal(dropBeforeTransfer ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.Different,
+        Assert.Equal(
+            dropBeforeTransfer
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.Different,
             result.ObservedState);
     }
 
@@ -929,7 +1206,9 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.PrerequisiteMissing, result.ObservedState);
-        Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, Decision(ensure, result).Action);
+        Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing,
+            Decision(ensure, result)
+                .Action);
     }
 
     /// <summary>A later successful standalone capture cannot certify an incompatible earlier inline operand.</summary>
@@ -944,9 +1223,17 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         // Arrange
         await using var connection = new GraphConnection(true);
         var foreign = ForeignKey();
-        var first = Operation(new EnsureTableIntent(new ExpectedTableDefinition("child",
-            Child(compatibleFirst ? "int" : "bigint").Columns, foreignKeys: [foreign]),
-            SafeMigrationTableMode.StrictDefinition));
+        var first = Operation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "child",
+                    Child(
+                            compatibleFirst
+                                ? "int"
+                                : "bigint")
+                        .Columns,
+                    foreignKeys: [foreign]),
+                SafeMigrationTableMode.StrictDefinition));
 
         var drop = Operation(new DropTableIntent("child"));
         var second = Operation(new EnsureTableIntent(Child(), SafeMigrationTableMode.StrictDefinition));
@@ -962,8 +1249,11 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         var result = projection.Project(first, UnknownLivePrerequisite());
 
         // Assert
-        Assert.Equal(compatibleFirst ? SafeMigrationObservedState.Missing
-            : SafeMigrationObservedState.PrerequisiteMissing, result.ObservedState);
+        Assert.Equal(
+            compatibleFirst
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.PrerequisiteMissing,
+            result.ObservedState);
     }
 
     /// <summary>Inline FK storage evidence does not treat a later comment change as physical incompatibility.</summary>
@@ -973,13 +1263,22 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         // Arrange
         await using var connection = new GraphConnection(true);
         var foreign = ForeignKey();
-        var first = Operation(new EnsureTableIntent(new ExpectedTableDefinition("child", Child().Columns,
-            foreignKeys: [foreign]), SafeMigrationTableMode.StrictDefinition));
+        var first = Operation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "child",
+                    Child()
+                        .Columns,
+                    foreignKeys: [foreign]),
+                SafeMigrationTableMode.StrictDefinition));
 
         var drop = Operation(new DropTableIntent("child"));
-        var second = Operation(new EnsureTableIntent(new ExpectedTableDefinition("child",
-            [new ExpectedColumnDefinition("ParentId", typeof(int), false, "int", comment: "later")]),
-            SafeMigrationTableMode.StrictDefinition));
+        var second = Operation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "child",
+                    [new ExpectedColumnDefinition("ParentId", typeof(int), false, "int", comment: "later")]),
+                SafeMigrationTableMode.StrictDefinition));
 
         var ensure = Operation(new EnsureForeignKeyIntent(foreign));
         var graph = await ReadGraph(
@@ -1010,9 +1309,12 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         var first = Operation(new EnsureTableIntent(Child(), SafeMigrationTableMode.StrictDefinition));
         var ensure = Operation(new EnsureForeignKeyIntent(ForeignKey()));
         var drop = Operation(new DropTableIntent("child"));
-        var second = Operation(new EnsureTableIntent(new ExpectedTableDefinition("child",
-            [new ExpectedColumnDefinition("ParentId", typeof(int), false, "int", comment: "later")]),
-            SafeMigrationTableMode.StrictDefinition));
+        var second = Operation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "child",
+                    [new ExpectedColumnDefinition("ParentId", typeof(int), false, "int", comment: "later")]),
+                SafeMigrationTableMode.StrictDefinition));
 
         var graph = await ReadGraph(
             connection,
@@ -1046,11 +1348,19 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
     {
         // Arrange
         await using var connection = new GraphConnection(true);
-        var owner = Operation(new EnsureTableIntent(Child(table: "other_new"),
-            SafeMigrationTableMode.StrictDefinition));
+        var owner = Operation(
+            new EnsureTableIntent(
+                Child(table: "other_new"),
+                SafeMigrationTableMode.StrictDefinition));
 
-        var first = Operation(new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition("FK_child", "other_new",
-            ["ParentId"], "parent", ["Id"])));
+        var first = Operation(
+            new EnsureForeignKeyIntent(
+                new ExpectedForeignKeyDefinition(
+                    "FK_child",
+                    "other_new",
+                    ["ParentId"],
+                    "parent",
+                    ["Id"])));
 
         var drop = Operation(new DropForeignKeyIntent("FK_child", "other_new"));
         var create = Operation(new EnsureTableIntent(Child(), SafeMigrationTableMode.StrictDefinition));
@@ -1074,7 +1384,10 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         var result = projection.Project(ensure, UnknownLivePrerequisite());
 
         // Assert
-        Assert.Equal(dropExactOwner ? SafeMigrationObservedState.Missing : SafeMigrationObservedState.Different,
+        Assert.Equal(
+            dropExactOwner
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.Different,
             result.ObservedState);
     }
 
@@ -1115,8 +1428,12 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         for (var ordinal = 0; ordinal < count; ordinal++)
         {
             var name = "child_" + ordinal;
-            operations.Add(Operation(new EnsureTableIntent(Child(table: name),
-                SafeMigrationTableMode.StrictDefinition)));
+            operations.Add(
+                Operation(
+                    new EnsureTableIntent(
+                        Child(table: name),
+                        SafeMigrationTableMode.StrictDefinition)));
+
             operations.Add(Operation(new EnsureForeignKeyIntent(ForeignKey(name))));
         }
 
@@ -1124,11 +1441,23 @@ public sealed partial class SqlServerStandaloneForeignKeyProjectionTests
         await ReadGraph(connection, operations, cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(1, connection.Statements.Count(static sql => sql.StartsWith("SELECT i.object_id",
-            StringComparison.Ordinal)));
-        Assert.Equal(3, connection.Statements.Count(static sql => sql.Contains("CONVERT(bit, CASE WHEN 1 = 1",
-            StringComparison.Ordinal)));
-        Assert.All(connection.Statements, static sql => Assert.InRange(Encoding.UTF8.GetByteCount(sql), 1,
-            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes));
+        Assert.Equal(
+            1,
+            connection.Statements.Count(static sql => sql.StartsWith(
+                "SELECT i.object_id",
+                StringComparison.Ordinal)));
+
+        Assert.Equal(
+            3,
+            connection.Statements.Count(static sql => sql.Contains(
+                "CONVERT(bit, CASE WHEN 1 = 1",
+                StringComparison.Ordinal)));
+
+        Assert.All(
+            connection.Statements,
+            static sql => Assert.InRange(
+                Encoding.UTF8.GetByteCount(sql),
+                1,
+                SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes));
     }
 }

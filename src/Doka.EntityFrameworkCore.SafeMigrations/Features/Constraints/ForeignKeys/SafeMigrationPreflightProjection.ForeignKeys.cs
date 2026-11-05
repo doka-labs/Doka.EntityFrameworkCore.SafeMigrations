@@ -36,8 +36,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         if (!TryGet(intent.Definition.Table, intent.Definition.Schema, out var table))
         {
             if (_prerequisites.TryGetValue(
-                    new TableKey(intent.Definition.Table, intent.Definition.Schema),
-                    out var prerequisites))
+                new TableKey(intent.Definition.Table, intent.Definition.Schema),
+                out var prerequisites))
             {
                 if (!prerequisites.NewlyCreated
                     && liveAnalysis is
@@ -79,7 +79,8 @@ internal sealed partial class SafeMigrationPreflightProjection
                             || (prerequisites.ForeignKeys.ResolveMutation(
                                     intent.Definition.Name,
                                     intent.Definition,
-                                    Analysis(SafeMigrationObservedState.Missing)) == ProjectedDefinitionMutation.Unknown
+                                    Analysis(SafeMigrationObservedState.Missing))
+                                == ProjectedDefinitionMutation.Unknown
                                 && HasCurrentForeignKeyReplacementPrerequisites(intent, prerequisites))))
                     {
                         // WHY: Exact accepted FK proof survives only unchanged endpoints
@@ -145,7 +146,10 @@ internal sealed partial class SafeMigrationPreflightProjection
     /// <param name="physicalName">The accepted physical object's name, not the requested alias.</param>
     private static SafeMigrationProviderAnalysis MatchingForeignKey(
         string physicalName
-    ) => new(SafeMigrationObservedState.Matching, SafeMigrationRepairCapability.None, true,
+    ) => new(
+        SafeMigrationObservedState.Matching,
+        SafeMigrationRepairCapability.None,
+        true,
         StateCode(SafeMigrationObservedState.Matching))
     {
         MatchedObjectName = physicalName,
@@ -174,7 +178,9 @@ internal sealed partial class SafeMigrationPreflightProjection
         && !HasUnanalyzedDataChanges(intent.Definition.Table, intent.Definition.Schema)
         && !HasUnanalyzedDataChanges(intent.Definition.PrincipalTable, intent.Definition.PrincipalSchema)
         && !HasProjectedKeyColumnChange(intent.Definition.Table, intent.Definition.Schema, intent.Definition.Columns)
-        && !HasProjectedKeyColumnChange(intent.Definition.PrincipalTable, intent.Definition.PrincipalSchema,
+        && !HasProjectedKeyColumnChange(
+            intent.Definition.PrincipalTable,
+            intent.Definition.PrincipalSchema,
             intent.Definition.PrincipalColumns)
         && !_projectedCandidateKeyMutationTables.Contains(
             new TableKey(intent.Definition.PrincipalTable, intent.Definition.PrincipalSchema));
@@ -183,7 +189,7 @@ internal sealed partial class SafeMigrationPreflightProjection
     /// <param name="definition">The requested foreign-key definition.</param>
     private bool ForeignKeyProjectedColumnsAllowSetNull(
         ExpectedForeignKeyDefinition definition
-    ) => definition.OnDelete != ReferentialAction.SetNull && definition.OnUpdate != ReferentialAction.SetNull
+    ) => (definition.OnDelete != ReferentialAction.SetNull && definition.OnUpdate != ReferentialAction.SetNull)
         || definition.Columns.All(column => !TryGetProjectedColumnDefinition(
                 definition.Table,
                 definition.Schema,
@@ -206,8 +212,8 @@ internal sealed partial class SafeMigrationPreflightProjection
         return hasUnanalyzedDataChanges
             && analysis.ObservedState is SafeMigrationObservedState.Missing
                 or SafeMigrationObservedState.PrerequisiteMissing
-            ? DataStateUnknown()
-            : analysis;
+                ? DataStateUnknown()
+                : analysis;
     }
 
     private SafeMigrationProviderAnalysis Project(
@@ -221,9 +227,12 @@ internal sealed partial class SafeMigrationPreflightProjection
                     ? SafeMigrationObservedState.Matching
                     : SafeMigrationObservedState.Missing)
             : _prerequisites.TryGetValue(new TableKey(intent.Table, intent.Schema), out var prerequisites)
-                && prerequisites.ForeignKeys.TryGetPhysicalState(intent.Name, out var present)
-                    ? Analysis(present ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Missing)
-                    : liveAnalysis;
+            && prerequisites.ForeignKeys.TryGetPhysicalState(intent.Name, out var present)
+                ? Analysis(
+                    present
+                        ? SafeMigrationObservedState.Matching
+                        : SafeMigrationObservedState.Missing)
+                : liveAnalysis;
 
     private void Observe(
         EnsureForeignKeyIntent intent,
@@ -262,10 +271,12 @@ internal sealed partial class SafeMigrationPreflightProjection
     {
         if (liveAnalysis is { ObservedState: SafeMigrationObservedState.Matching, MatchedObjectName: { } physicalName }
             && CanReuseMatchingLiveForeignKeyPrerequisites(intent, liveAnalysis)
-            && (!_prerequisites.TryGetValue(new TableKey(intent.Definition.Table, intent.Definition.Schema),
+            && (!_prerequisites.TryGetValue(
+                    new TableKey(intent.Definition.Table, intent.Definition.Schema),
                     out var prerequisites)
                 || !prerequisites.ForeignKeys.TryGetPhysicalState(physicalName, out var present)
-                || (present && prerequisites.ForeignKeys.TryGetValue(physicalName, out var definition)
+                || (present
+                    && prerequisites.ForeignKeys.TryGetValue(physicalName, out var definition)
                     && prerequisites.ForeignKeys.SemanticallyEquals(definition, intent.Definition))))
         {
             // WHY: Two physical FKs may have identical semantics. Replacing an

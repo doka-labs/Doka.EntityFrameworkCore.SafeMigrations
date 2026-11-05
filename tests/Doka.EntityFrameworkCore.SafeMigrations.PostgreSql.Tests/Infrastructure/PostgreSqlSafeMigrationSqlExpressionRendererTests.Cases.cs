@@ -3,7 +3,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
 {
     /// <summary>Restores the original inputs without serializing expression objects through xUnit v2.</summary>
-    private static (SafeMigrationSqlExpression Expression, string Sql) StructuredNodeCase(string caseId)
+    private static (SafeMigrationSqlExpression Expression, string Sql) StructuredNodeCase(
+        string caseId
+    )
     {
         var value = SafeMigrationSql.Identifier("app", "Value");
 
@@ -42,12 +44,16 @@ public sealed partial class PostgreSqlSafeMigrationSqlExpressionRendererTests
     }
 
     /// <summary>Keeps the original unsupported inputs independently discoverable with stable IDs.</summary>
-    private static SafeMigrationSqlExpression UnsupportedExpressionCase(string caseId) => caseId switch
+    private static SafeMigrationSqlExpression UnsupportedExpressionCase(
+        string caseId
+    ) => caseId switch
     {
         "unmapped-literal" => SafeMigrationSql.Literal(new object()),
-        "unsafe-cast-literal" => SafeMigrationSql.Cast(SafeMigrationSql.Literal(1),
+        "unsafe-cast-literal" => SafeMigrationSql.Cast(
+            SafeMigrationSql.Literal(1),
             "integer); DROP TABLE items; --"),
-        "unsafe-cast-identifier" => SafeMigrationSql.Cast(SafeMigrationSql.Identifier("value"),
+        "unsafe-cast-identifier" => SafeMigrationSql.Cast(
+            SafeMigrationSql.Identifier("value"),
             "integer); DROP TABLE items; --"),
         "foreign-fragment" => SafeMigrationSql.ProviderFragment("other", "CURRENT_USER"),
         _ => throw new ArgumentOutOfRangeException(nameof(caseId), caseId, "Unknown unsupported-input case."),

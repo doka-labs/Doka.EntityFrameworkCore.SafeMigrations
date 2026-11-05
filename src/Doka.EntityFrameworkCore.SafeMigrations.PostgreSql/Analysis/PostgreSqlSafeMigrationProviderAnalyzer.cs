@@ -1,3 +1,5 @@
+using System.Data;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
 internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMigrationProviderAnalyzer,
@@ -10,10 +12,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
     // fixed signed bigint therefore avoids coercing the database's unsigned OID
     // into an integer while retaining one package-owned analysis lock domain.
     internal const string AnalysisAdvisoryLockSql = "SELECT pg_catalog.pg_advisory_xact_lock(1397574913::bigint);";
+    private readonly PostgreSqlSafeMigrationCatalogSqlBuilder _catalogSqlBuilder;
+    private readonly ISqlGenerationHelper _sqlGenerationHelper;
 
     private readonly IRelationalTypeMappingSource _typeMappingSource;
-    private readonly ISqlGenerationHelper _sqlGenerationHelper;
-    private readonly PostgreSqlSafeMigrationCatalogSqlBuilder _catalogSqlBuilder;
 
     /// <summary>Shares native mapping and identifier services across invocation-local analysis phases.</summary>
     /// <param name="typeMappingSource">The active provider's type mapping source.</param>
@@ -30,9 +32,6 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         _sqlGenerationHelper = sqlGenerationHelper;
         _catalogSqlBuilder = new PostgreSqlSafeMigrationCatalogSqlBuilder(typeMappingSource, sqlGenerationHelper);
     }
-
-    /// <inheritdoc />
-    public string ProviderId => "npgsql_postgresql";
 
     /// <summary>Shares provider-certified index dependencies with ordered Core state projection.</summary>
     /// <param name="intent">The immutable authored index operation.</param>
@@ -72,6 +71,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
     }
 
     /// <inheritdoc />
+    public string ProviderId => "npgsql_postgresql";
+
+    /// <inheritdoc />
     public void ValidateContext(
         DbContext context
     ) => ArgumentNullException.ThrowIfNull(context);
@@ -85,7 +87,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         ArgumentNullException.ThrowIfNull(context);
 
         var connection = context.Database.GetDbConnection();
-        var openedHere = connection.State != System.Data.ConnectionState.Open;
+        var openedHere = connection.State != ConnectionState.Open;
         if (openedHere)
         {
             await connection.OpenAsync(cancellationToken);
@@ -119,8 +121,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
             if (currentTransaction is null)
             {
                 transaction = await context.Database.BeginTransactionAsync(
-                    System.Data.IsolationLevel.RepeatableRead,
+                    IsolationLevel.RepeatableRead,
                     cancellationToken);
+
                 _ = await context.Database.ExecuteSqlRawAsync("SET TRANSACTION READ ONLY;", cancellationToken);
             }
             else
@@ -154,40 +157,6 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         }
     }
 
-    private static async Task ValidateCallerOwnedTransactionAsync(
-        IDbContextTransaction transaction,
-        int? commandTimeout,
-        CancellationToken cancellationToken
-    )
-    {
-        var dbTransaction = transaction.GetDbTransaction();
-        if (dbTransaction.IsolationLevel is not (System.Data.IsolationLevel.RepeatableRead
-            or System.Data.IsolationLevel.Serializable))
-        {
-            throw new InvalidOperationException(
-                "PostgreSQL SafeMigrations analysis requires a caller-owned transaction "
-                + "to use RepeatableRead or Serializable isolation.");
-        }
-
-        var connection = dbTransaction.Connection
-            ?? throw new InvalidOperationException(
-                "The caller-owned PostgreSQL analysis transaction has no active connection.");
-
-        await using var command = connection.CreateCommand();
-        command.Transaction = dbTransaction;
-        ApplyCommandTimeout(command, commandTimeout);
-        command.CommandText = "SHOW transaction_read_only;";
-        var readOnly = Convert.ToString(
-            await command.ExecuteScalarAsync(cancellationToken),
-            CultureInfo.InvariantCulture);
-
-        if (!StringComparer.OrdinalIgnoreCase.Equals(readOnly, "on"))
-        {
-            throw new InvalidOperationException(
-                "PostgreSQL SafeMigrations analysis requires a caller-owned transaction to be read-only.");
-        }
-    }
-
     /// <inheritdoc />
     public async Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
         DbContext context,
@@ -211,7 +180,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         }
 
         var connection = context.Database.GetDbConnection();
-        var openedHere = connection.State != System.Data.ConnectionState.Open;
+        var openedHere = connection.State != ConnectionState.Open;
         if (openedHere)
         {
             await connection.OpenAsync(cancellationToken);
@@ -245,9 +214,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
             var trailerBytes = Encoding.UTF8.GetByteCount(SafeMigrationCatalogQueryLimits.Trailer);
             var operationOffset = 0;
             foreach (var operationWindow in operations.Chunk(
-                         SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture))
+                SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture))
             {
                 cancellationToken.ThrowIfCancellationRequested();
+
                 // WHY: Map window-local ordinals back to their original analysis slots.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery
@@ -256,7 +226,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                     if (shortCircuitStates[operationOffset + localOrdinal] is { } shortCircuitState)
                     {
                         results[operationOffset + localOrdinal] = ShortCircuitAnalysis(
-                            operationOffset + localOrdinal, shortCircuitState, operationWindow[localOrdinal].Intent);
+                            operationOffset + localOrdinal,
+                            shortCircuitState,
+                            operationWindow[localOrdinal].Intent);
                     }
                 }
 
@@ -281,7 +253,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                     var batchParameterCount = 0;
                     var batchPayloadBytes = 0;
                     while (batch.Count < SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch
-                           && workIndex < workOrder.Length)
+                        && workIndex < workOrder.Length)
                     {
                         var command = batch.CreateCommand();
                         var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
@@ -298,7 +270,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
 
                         var sqlBytes = trailerBytes;
                         while (workIndex < workOrder.Length
-                               && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+                            && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
                         {
                             var localOrdinal = workOrder[workIndex];
                             var ordinal = operationOffset + localOrdinal;
@@ -318,8 +290,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                             PostgreSqlDataProbeResult? dataProbeResult = plan.DataProbe is null
                                 ? null
                                 : dataProbeResults[ordinal]
-                                    ?? throw new InvalidOperationException(
-                                        "The PostgreSQL narrowing probe returned no classification result.");
+                                ?? throw new InvalidOperationException(
+                                    "The PostgreSQL narrowing probe returned no classification result.");
 
                             var stateExpression = plan.DataProbe is null
                                 ? plan.RenderStateExpression()
@@ -343,22 +315,27 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                                 : plan.RenderClassificationCodeExpression(dataProbeResult!.Value.IsBlocked) ?? "NULL";
 
                             var postcondition = plan.Postcondition;
-                            if (plan.PrerequisiteExpression == "TRUE" && plan.ObjectIdentityGuardExpression != "TRUE")
+                            if (plan.PrerequisiteExpression == "TRUE"
+                                && plan.ObjectIdentityGuardExpression != "TRUE")
                             {
                                 // WHY: These plans evaluate catalog metadata only. Fold the
                                 // owner proof into their existing classification instead of
                                 // introducing a prerequisite round trip for a pruned constant.
                                 // Plans which read rows retain their earlier identity-first
                                 // prerequisite query before any data probe is submitted.
-                                var rejectedIdentity = "NOT COALESCE((" + plan.ObjectIdentityGuardExpression
+                                var rejectedIdentity = "NOT COALESCE(("
+                                    + plan.ObjectIdentityGuardExpression
                                     + "), FALSE)";
 
                                 stateExpression = $"CASE WHEN {rejectedIdentity} THEN 'unsupported' "
                                     + $"ELSE ({stateExpression}) END";
+
                                 classificationCode = $"CASE WHEN {rejectedIdentity} "
                                     + $"THEN '{SchemaIdentityMismatchCode}' ELSE ({classificationCode}) END";
+
                                 postcondition = $"CASE WHEN {rejectedIdentity} THEN FALSE "
                                     + $"ELSE ({postcondition}) END";
+
                                 repairPrecondition = $"CASE WHEN {rejectedIdentity} THEN FALSE "
                                     + $"ELSE ({repairPrecondition}) END";
                             }
@@ -379,15 +356,17 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                                 + $"COALESCE(({nullabilityProofRequired}), FALSE)";
 
                             var selectionBytes = Encoding.UTF8.GetByteCount(selection)
-                                + (selections.Count == 0 ? 0 : separatorBytes);
+                                + (selections.Count == 0
+                                    ? 0
+                                    : separatorBytes);
 
                             var statementPayload = sqlBytes + selectionBytes + parameters.Utf8PayloadBytes;
                             var prospectiveBatchParameters = batchParameterCount + parameters.Count;
                             var prospectiveBatchPayload = batchPayloadBytes + statementPayload;
                             if (SafeMigrationCatalogQueryLimits.Exceeded(
-                                    prospectiveBatchParameters,
-                                    prospectiveBatchPayload,
-                                    SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes))
+                                prospectiveBatchParameters,
+                                prospectiveBatchPayload,
+                                SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes))
                             {
                                 parameters.Rollback(checkpoint);
                                 if (selections.Count == 0)
@@ -401,8 +380,6 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                                             prospectiveBatchParameters,
                                             prospectiveBatchPayload);
                                     }
-
-                                    break;
                                 }
 
                                 break;
@@ -423,6 +400,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
 
                         command.CommandText = string.Join(SafeMigrationCatalogQueryLimits.Separator, selections)
                             + SafeMigrationCatalogQueryLimits.Trailer;
+
                         batchParameterCount += parameters.Count;
                         batchPayloadBytes += sqlBytes + parameters.Utf8PayloadBytes;
                     }
@@ -462,10 +440,18 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                 cancellationToken);
 
             await PopulateLivePrerequisiteEvidenceAsync(
-                connection, operations, results, commandTimeout, cancellationToken);
+                connection,
+                operations,
+                results,
+                commandTimeout,
+                cancellationToken);
 
             await PopulateIndexDataProofsAsync(
-                connection, operations, results, commandTimeout, cancellationToken);
+                connection,
+                operations,
+                results,
+                commandTimeout,
+                cancellationToken);
 
             return Array.AsReadOnly(results);
         }
@@ -475,6 +461,40 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
             {
                 await connection.CloseAsync();
             }
+        }
+    }
+
+    private static async Task ValidateCallerOwnedTransactionAsync(
+        IDbContextTransaction transaction,
+        int? commandTimeout,
+        CancellationToken cancellationToken
+    )
+    {
+        var dbTransaction = transaction.GetDbTransaction();
+        if (dbTransaction.IsolationLevel is not (IsolationLevel.RepeatableRead
+            or IsolationLevel.Serializable))
+        {
+            throw new InvalidOperationException(
+                "PostgreSQL SafeMigrations analysis requires a caller-owned transaction "
+                + "to use RepeatableRead or Serializable isolation.");
+        }
+
+        var connection = dbTransaction.Connection
+            ?? throw new InvalidOperationException(
+                "The caller-owned PostgreSQL analysis transaction has no active connection.");
+
+        await using var command = connection.CreateCommand();
+        command.Transaction = dbTransaction;
+        ApplyCommandTimeout(command, commandTimeout);
+        command.CommandText = "SHOW transaction_read_only;";
+        var readOnly = Convert.ToString(
+            await command.ExecuteScalarAsync(cancellationToken),
+            CultureInfo.InvariantCulture);
+
+        if (!StringComparer.OrdinalIgnoreCase.Equals(readOnly, "on"))
+        {
+            throw new InvalidOperationException(
+                "PostgreSQL SafeMigrations analysis requires a caller-owned transaction to be read-only.");
         }
     }
 
@@ -521,7 +541,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
             var batchParameterCount = 0;
             var batchPayloadBytes = 0;
             while (batch.Count < SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch
-                   && ordinal < operations.Count)
+                && ordinal < operations.Count)
             {
                 var command = batch.CreateCommand();
                 var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
@@ -538,7 +558,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
 
                 var sqlBytes = trailerBytes;
                 while (ordinal < operations.Count
-                       && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+                    && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
                 {
                     var operation = operations[ordinal]
                         ?? throw new ArgumentException(
@@ -547,6 +567,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
 
                     var checkpoint = parameters.Capture();
                     var prerequisite = builder.BuildPrerequisiteExpression(operation);
+
                     // WHY: This exact builder constant needs no live catalog
                     // proof before classification, which evaluates metadata
                     // only for these operations and folds in their native owner
@@ -561,7 +582,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
 
                     var identityGuard = builder.BuildObjectIdentityGuard(operation.Intent);
                     var indexInputState = "NULL";
-                    if (operation.Intent is EnsureIndexIntent index && !operation.GetAnnotations().Any()
+                    if (operation.Intent is EnsureIndexIntent index
+                        && !operation
+                            .GetAnnotations()
+                            .Any()
                         && builder.GetUnsupportedFeature(operation.Intent) is null)
                     {
                         indexInputState = builder.BuildIndexInputRoutingState(index);
@@ -574,15 +598,17 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                         + $"ELSE ({indexInputState}) END";
 
                     var selectionBytes = Encoding.UTF8.GetByteCount(selection)
-                        + (selections.Count == 0 ? 0 : separatorBytes);
+                        + (selections.Count == 0
+                            ? 0
+                            : separatorBytes);
 
                     var statementPayload = sqlBytes + selectionBytes + parameters.Utf8PayloadBytes;
                     var prospectiveBatchParameters = batchParameterCount + parameters.Count;
                     var prospectiveBatchPayload = batchPayloadBytes + statementPayload;
                     if (SafeMigrationCatalogQueryLimits.Exceeded(
-                            prospectiveBatchParameters,
-                            prospectiveBatchPayload,
-                            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes))
+                        prospectiveBatchParameters,
+                        prospectiveBatchPayload,
+                        SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes))
                     {
                         parameters.Rollback(checkpoint);
                         if (selections.Count == 0)
@@ -616,6 +642,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
 
                 command.CommandText = string.Join(SafeMigrationCatalogQueryLimits.Separator, selections)
                     + SafeMigrationCatalogQueryLimits.Trailer;
+
                 batchParameterCount += parameters.Count;
                 batchPayloadBytes += sqlBytes + parameters.Utf8PayloadBytes;
             }
@@ -634,8 +661,13 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
 
         if (indexInputOrdinals is not null)
         {
-            await FindIndexInputStatesAsync(connection, operations, states, indexInputOrdinals,
-                commandTimeout, cancellationToken);
+            await FindIndexInputStatesAsync(
+                connection,
+                operations,
+                states,
+                indexInputOrdinals,
+                commandTimeout,
+                cancellationToken);
         }
     }
 
@@ -665,7 +697,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
             var batchParameterCount = 0;
             var batchPayloadBytes = 0;
             while (batch.Count < SafeMigrationCatalogQueryLimits.MaximumStatementsPerBatch
-                   && ordinal < operations.Count)
+                && ordinal < operations.Count)
             {
                 var command = batch.CreateCommand();
                 var parameters = new PostgreSqlCatalogQueryParameters(command, _typeMappingSource);
@@ -678,9 +710,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                 var selections = new List<string>(SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
                 var statementOrdinals = new List<StateEvaluationGuardRequest>(
                     SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement);
+
                 var sqlBytes = trailerBytes;
                 while (ordinal < operations.Count
-                       && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+                    && selections.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
                 {
                     var operation = operations[ordinal]
                         ?? throw new ArgumentException(
@@ -699,7 +732,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
 
                     var checkpoint = parameters.Capture();
                     var plan = builder.Build(operation, includeRuntimeIndexInputGuard: false);
-                    if (states[ordinal] is null && !_columnConstraintCatalogReadable
+                    if (states[ordinal] is null
+                        && !_columnConstraintCatalogReadable
                         && plan.ColumnTransitionTargetCatalogGuardExpression is not null)
                     {
                         // WHY: Required-target equality itself needs pg_constraint.
@@ -732,15 +766,17 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                         + $"CASE WHEN {guardFailed} THEN ({failureCode}) ELSE NULL END";
 
                     var selectionBytes = Encoding.UTF8.GetByteCount(selection)
-                        + (selections.Count == 0 ? 0 : separatorBytes);
+                        + (selections.Count == 0
+                            ? 0
+                            : separatorBytes);
 
                     var statementPayload = sqlBytes + selectionBytes + parameters.Utf8PayloadBytes;
                     var prospectiveBatchParameters = batchParameterCount + parameters.Count;
                     var prospectiveBatchPayload = batchPayloadBytes + statementPayload;
                     if (SafeMigrationCatalogQueryLimits.Exceeded(
-                            prospectiveBatchParameters,
-                            prospectiveBatchPayload,
-                            SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes))
+                        prospectiveBatchParameters,
+                        prospectiveBatchPayload,
+                        SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes))
                     {
                         parameters.Rollback(checkpoint);
                         if (selections.Count == 0)
@@ -754,16 +790,18 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                                     prospectiveBatchParameters,
                                     prospectiveBatchPayload);
                             }
-
-                            break;
                         }
 
                         break;
                     }
 
                     selections.Add(selection);
-                    statementOrdinals.Add(new StateEvaluationGuardRequest(ordinal, defaultCode,
-                        plan.StateEvaluationGuardFailureCodeExpression is not null));
+                    statementOrdinals.Add(
+                        new StateEvaluationGuardRequest(
+                            ordinal,
+                            defaultCode,
+                            plan.StateEvaluationGuardFailureCodeExpression is not null));
+
                     sqlBytes += selectionBytes;
                     ordinal++;
                 }
@@ -777,6 +815,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
 
                 command.CommandText = string.Join(SafeMigrationCatalogQueryLimits.Separator, selections)
                     + SafeMigrationCatalogQueryLimits.Trailer;
+
                 batchParameterCount += parameters.Count;
                 batchPayloadBytes += sqlBytes + parameters.Utf8PayloadBytes;
                 selectedOrdinals.AddRange(statementOrdinals);
@@ -845,19 +884,22 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                         : reader.GetString(4);
 
                     var emptyGeneratedDropSet = DecodeGeneratedDropCompleteness(
-                        operations[ordinal].Intent, state, ref code);
+                        operations[ordinal].Intent,
+                        state,
+                        ref code);
+
                     CaptureColumnPreservingIndexDrop(operations[ordinal].Intent, state, ref code);
 
                     var evidence = plan.ModelManagedRowEvidenceExpression is null
                         ? null
                         : SafeMigrationModelManagedDataEvidence.Parse(
-                                reader.GetString(5),
-                                plan.ModelManagedRowCount,
-                                plan.ModelManagedDependencyCountsExpression is null
-                                    ? string.Empty
-                                    : reader.GetString(6),
-                                plan.ModelManagedDependencyCount,
-                                "PostgreSQL");
+                            reader.GetString(5),
+                            plan.ModelManagedRowCount,
+                            plan.ModelManagedDependencyCountsExpression is null
+                                ? string.Empty
+                                : reader.GetString(6),
+                            plan.ModelManagedDependencyCount,
+                            "PostgreSQL");
 
                     IReadOnlyList<SafeMigrationFacetDifference> differences;
                     if (state == SafeMigrationObservedState.Different
@@ -870,11 +912,11 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                     else
                     {
                         differences = state is not (SafeMigrationObservedState.Different
-                            or SafeMigrationObservedState.DataBlocked
-                            or SafeMigrationObservedState.Unsupported)
+                                or SafeMigrationObservedState.DataBlocked
+                                or SafeMigrationObservedState.Unsupported)
                             || reader.IsDBNull(7)
-                            ? []
-                            : SafeMigrationFacetDifferenceParser.Parse(reader.GetString(7), "PostgreSQL");
+                                ? []
+                                : SafeMigrationFacetDifferenceParser.Parse(reader.GetString(7), "PostgreSQL");
                     }
 
                     var operationalImpact = state == SafeMigrationObservedState.DataBlocked
@@ -904,6 +946,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                                 : null,
                         ModelManagedDataEvidence = evidence,
                         DropLeavesNoGeneratedColumns = emptyGeneratedDropSet,
+
                         // WHY: Every VARCHAR transition carries a probe template,
                         // but widening is catalog-only. Only a catalog-confirmed
                         // narrowing or nullable-to-required result becomes stale
@@ -935,13 +978,17 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                 while (await reader.ReadAsync(token))
                 {
                     var resultOrdinal = reader.GetInt32(0);
-                    if (rowsRead >= selectedOrdinals.Count || resultOrdinal != selectedOrdinals[rowsRead])
+                    if (rowsRead >= selectedOrdinals.Count
+                        || resultOrdinal != selectedOrdinals[rowsRead])
                     {
                         throw new InvalidOperationException(
                             "The PostgreSQL SafeMigrations prerequisite classifier returned an invalid ordinal.");
                     }
 
-                    var state = reader.IsDBNull(1) ? null : reader.GetString(1);
+                    var state = reader.IsDBNull(1)
+                        ? null
+                        : reader.GetString(1);
+
                     if (state == "index_input_required")
                     {
                         (indexInputOrdinals ??= []).Add(resultOrdinal);
@@ -957,12 +1004,14 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                         {
                             (_indexInputShortCircuitCodes ??= []).Add(resultOrdinal, state);
                             states[resultOrdinal] = state == "index_input_operator_class"
-                        ? SafeMigrationObservedState.Unsupported
-                        : SafeMigrationObservedState.PrerequisiteMissing;
+                                ? SafeMigrationObservedState.Unsupported
+                                : SafeMigrationObservedState.PrerequisiteMissing;
                         }
                         else
                         {
-                            states[resultOrdinal] = state is null ? null : ParseState(state);
+                            states[resultOrdinal] = state is null
+                                ? null
+                                : ParseState(state);
                         }
                     }
 
@@ -994,7 +1043,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
             {
                 while (await reader.ReadAsync(token))
                 {
-                    if (reader.FieldCount != 3 || row >= selectedOrdinals.Count
+                    if (reader.FieldCount != 3
+                        || row >= selectedOrdinals.Count
                         || reader.GetValue(0) is not int resultOrdinal
                         || resultOrdinal != selectedOrdinals[row].Ordinal)
                     {
@@ -1017,16 +1067,21 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
                     {
                         if (reader.GetValue(1) is not string stateValue
                             || reader.GetValue(2) is not string code
-                            || (code != request.DefaultCode && !(request.HasCapturedBinding
-                                && code is "captured_sql_identifier" or "captured_sql_type_binding"
-                                    or "captured_sql_function_binding" or "captured_sql_operator_binding")))
+                            || (code != request.DefaultCode
+                                && !(request.HasCapturedBinding
+                                    && code is "captured_sql_identifier"
+                                        or "captured_sql_type_binding"
+                                        or "captured_sql_function_binding"
+                                        or "captured_sql_operator_binding")))
                         {
                             throw InvalidStateEvaluationGuardEvidence();
                         }
 
                         var state = ParseState(stateValue);
-                        if (code is "captured_sql_identifier" or "captured_sql_type_binding"
-                                or "captured_sql_function_binding" or "captured_sql_operator_binding"
+                        if (code is "captured_sql_identifier"
+                                or "captured_sql_type_binding"
+                                or "captured_sql_function_binding"
+                                or "captured_sql_operator_binding"
                             && state != SafeMigrationObservedState.Unsupported)
                         {
                             throw InvalidStateEvaluationGuardEvidence();
@@ -1058,15 +1113,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
     /// Rejects malformed native proof rows without copying their untrusted contents into diagnostics.
     /// </summary>
     private static InvalidOperationException InvalidStateEvaluationGuardEvidence()
-        => new("The PostgreSQL SafeMigrations state-evaluation guard classifier "
+        => new(
+            "The PostgreSQL SafeMigrations state-evaluation guard classifier "
             + "returned invalid capability evidence.");
-
-    /// <summary>Scopes one ordered guard result to its exact expected bounded capability-code family.</summary>
-    /// <param name="Ordinal">The immutable operation-stream ordinal.</param>
-    /// <param name="DefaultCode">The existing reason retained when the earlier provider guard fails.</param>
-    /// <param name="HasCapturedBinding">Whether native source keyword/type binding reasons are permitted.</param>
-    internal readonly record struct StateEvaluationGuardRequest(
-        int Ordinal, string DefaultCode, bool HasCapturedBinding);
 
     private static void ApplyCommandTimeout(
         DbCommand command,
@@ -1095,7 +1144,9 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         // WHY: An all-missing search path has no current schema, but explicit
         // qualified objects remain valid. Preserve absence rather than inventing
         // an empty identifier or rejecting their semantic-alias inventory.
-        return value is null or DBNull ? null : value as string
+        return value is null or DBNull
+            ? null
+            : value as string
             ?? throw new InvalidOperationException("PostgreSQL returned invalid current-schema identity evidence.");
     }
 
@@ -1126,6 +1177,16 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer : ISafeMig
         SafeMigrationObservedState.TransitionReady => "classified_transition_ready",
         _ => throw new ArgumentOutOfRangeException(nameof(state)),
     };
+
+    /// <summary>Scopes one ordered guard result to its exact expected bounded capability-code family.</summary>
+    /// <param name="Ordinal">The immutable operation-stream ordinal.</param>
+    /// <param name="DefaultCode">The existing reason retained when the earlier provider guard fails.</param>
+    /// <param name="HasCapturedBinding">Whether native source keyword/type binding reasons are permitted.</param>
+    internal readonly record struct StateEvaluationGuardRequest(
+        int Ordinal,
+        string DefaultCode,
+        bool HasCapturedBinding
+    );
 
     private sealed class AnalysisScope : IAsyncDisposable
     {

@@ -8,7 +8,9 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [InlineData("add")]
     [InlineData("change")]
     [InlineData("recreate")]
-    public async Task StandaloneGeneratedDropRefreshesDependencyAfterPreflight(string mutation)
+    public async Task StandaloneGeneratedDropRefreshesDependencyAfterPreflight(
+        string mutation
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -16,28 +18,55 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("unrelated", "generated_sparse_drop");
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("standalone-generated-before-concurrent-change"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("standalone-generated-before-concurrent-change"),
+                CancellationToken.None);
 
         // Act
-        await ExecuteSqlAsync(connectionString, SparseDropConcurrentMutation(mutation),
+        await ExecuteSqlAsync(
+            connectionString,
+            SparseDropConcurrentMutation(mutation),
             cancellationToken: CancellationToken.None);
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
-        var after = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("standalone-generated-after-concurrent-change"), CancellationToken.None);
+        var after = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("standalone-generated-after-concurrent-change"),
+                CancellationToken.None);
 
-        var unrelated = await SparseDropColumnCountAsync(connectionString, "unrelated",
+        var unrelated = await SparseDropColumnCountAsync(
+            connectionString,
+            "unrelated",
             cancellationToken: CancellationToken.None);
 
-        var retained = await SparseDropRetainedOriginalRowsAsync(connectionString,
+        var retained = await SparseDropRetainedOriginalRowsAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.Apply, Assert.Single(preflight.Assessments).Action);
-        Assert.Equal("doka_sm_unsupported", Assert.IsType<SafeMigrationExecutionException>(failure).GuardCode);
-        Assert.Equal(SafeMigrationAction.RejectUnsupported, Assert.Single(after.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.Apply,
+            Assert.Single(preflight.Assessments)
+                .Action);
+
+        Assert.Equal("doka_sm_unsupported",
+            Assert.IsType<SafeMigrationExecutionException>(failure)
+                .GuardCode);
+
+        Assert.Equal(SafeMigrationAction.RejectUnsupported,
+            Assert.Single(after.Assessments)
+                .Action);
+
         Assert.Equal(1, unrelated);
         Assert.Equal(2, retained);
     }
@@ -49,17 +78,25 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [InlineData("change")]
     [InlineData("recreate")]
     [InlineData("replace-target")]
-    public async Task StandaloneGeneratedDropNativeGuardRejectsPostClassificationDependency(string mutation)
+    public async Task StandaloneGeneratedDropNativeGuardRejectsPostClassificationDependency(
+        string mutation
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await SeedSparseDropConcurrencyAsync(connectionString, cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE generated_sparse_control LIKE generated_sparse_drop; "
             + "ALTER TABLE generated_sparse_control "
             + "ADD COLUMN dependent int GENERATED ALWAYS AS (unrelated + 1) VIRTUAL;",
             cancellationToken: CancellationToken.None);
-        var gateName = "sm-sparse-drop-" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture);
+
+        var gateName = "sm-sparse-drop-"
+            + Guid
+                .NewGuid()
+                .ToString("N", CultureInfo.InvariantCulture);
+
         var checkpoint = new SparseDropCheckpointInterceptor(gateName);
         await using var context = CreateRuntimeContext(connectionString, checkpoint);
         context.Database.SetCommandTimeout(60);
@@ -77,8 +114,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         }
 
         // Act
-        var controlFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(connectionString,
-            "ALTER TABLE generated_sparse_control DROP COLUMN unrelated;", cancellationToken: deadline.Token));
+        var controlFailure = await Record.ExceptionAsync(() => ExecuteSqlAsync(
+            connectionString,
+            "ALTER TABLE generated_sparse_control DROP COLUMN unrelated;",
+            cancellationToken: deadline.Token));
 
         var execution = Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, executionCancellation.Token));
@@ -107,19 +146,28 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             }
         }
 
-        var unrelated = await SparseDropColumnCountAsync(connectionString, "unrelated",
+        var unrelated = await SparseDropColumnCountAsync(
+            connectionString,
+            "unrelated",
             cancellationToken: CancellationToken.None);
 
-        var retained = await SparseDropRetainedOriginalRowsAsync(connectionString,
+        var retained = await SparseDropRetainedOriginalRowsAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
-        var after = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("standalone-generated-race-replay"), CancellationToken.None);
+        var after = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("standalone-generated-race-replay"),
+                CancellationToken.None);
 
         // Assert
         Assert.True(checkpoint.WasInjected);
         Assert.True(observed);
         Assert.True(mutated);
+
         // WHY: This interleaving is after the owned guard. A native dependency
         // error, not another owned preflight refusal, proves the final boundary.
         var nativeControl = Assert.IsType<MySqlException>(controlFailure);
@@ -131,21 +179,30 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         Assert.DoesNotContain("doka_sm_", native.Message, StringComparison.Ordinal);
         Assert.Equal(1, unrelated);
         Assert.Equal(2, retained);
-        Assert.Equal(SafeMigrationAction.RejectUnsupported, Assert.Single(after.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.RejectUnsupported,
+            Assert.Single(after.Assessments)
+                .Action);
     }
 
     /// <summary>Creates anonymous rows and a separately committed checkpoint, never production fixtures.</summary>
     /// <param name="cancellationToken">The caller's operation cancellation.</param>
-    private static Task SeedSparseDropConcurrencyAsync(string connectionString, CancellationToken cancellationToken)
-        => ExecuteSqlAsync(connectionString,
+    private static Task SeedSparseDropConcurrencyAsync(
+        string connectionString,
+        CancellationToken cancellationToken
+    )
+        => ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE generated_sparse_drop (id int NOT NULL PRIMARY KEY, source int NULL, "
             + "unrelated int NULL, result int GENERATED ALWAYS AS (source + 1) VIRTUAL); "
             + "INSERT INTO generated_sparse_drop (id, source, unrelated) VALUES (1, 3, 11), (2, 7, 13); "
             + "CREATE TABLE generated_drop_checkpoint (id int NOT NULL PRIMARY KEY, reached int NOT NULL); "
-            + "INSERT INTO generated_drop_checkpoint VALUES (1, 0);", cancellationToken: cancellationToken);
+            + "INSERT INTO generated_drop_checkpoint VALUES (1, 0);",
+            cancellationToken: cancellationToken);
 
     /// <summary>Describes a committed dependency change without accepting arbitrary fixture SQL.</summary>
-    private static string SparseDropConcurrentMutation(string mutation) => mutation switch
+    private static string SparseDropConcurrentMutation(
+        string mutation
+    ) => mutation switch
     {
         "add" => "ALTER TABLE generated_sparse_drop "
             + "ADD COLUMN dependent int GENERATED ALWAYS AS (unrelated + 1) VIRTUAL;",
@@ -169,7 +226,9 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         string connectionString,
         CancellationToken cancellationToken
     )
-        => ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM generated_sparse_drop "
+        => ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM generated_sparse_drop "
             + "WHERE (id = 1 AND source = 3 AND unrelated = 11) OR (id = 2 AND source = 7 AND unrelated = 13);",
             cancellationToken: cancellationToken);
 
@@ -193,7 +252,10 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     }
 
     /// <summary>Releases only the unique test-owned named gate, including failed interleavings.</summary>
-    private static async Task ReleaseSparseDropGateAsync(MySqlConnection writer, string gateName)
+    private static async Task ReleaseSparseDropGateAsync(
+        MySqlConnection writer,
+        string gateName
+    )
     {
         await using var command = writer.CreateCommand();
         command.CommandText = $"DO RELEASE_LOCK('{gateName}');";
@@ -211,11 +273,15 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
 
         /// <inheritdoc />
         public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
-            DbCommand command, CommandEventData eventData, InterceptionResult<int> result,
-            CancellationToken cancellationToken = default)
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default
+        )
         {
             var position = command.CommandText.IndexOf(ApplyPrefix, StringComparison.Ordinal);
-            if (position >= 0 && Interlocked.CompareExchange(ref _injected, 1, 0) == 0)
+            if (position >= 0
+                && Interlocked.CompareExchange(ref _injected, 1, 0) == 0)
             {
                 // WHY: A named gate survives the writer's implicit DDL commits;
                 // a row-lock gate would release before the adversarial ALTER.

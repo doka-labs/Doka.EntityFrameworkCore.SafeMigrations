@@ -23,32 +23,53 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
     [InlineData(true, false, true)]
     [InlineData(true, true, true)]
     public async Task EventTriggers_ActivationRemainsIndependentOfUnrelatedDmlTrigger(
-        bool eventEnabled, bool dmlEnabled, bool catalogReadable)
+        bool eventEnabled,
+        bool dmlEnabled,
+        bool catalogReadable
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         if (dmlEnabled)
         {
-            await ExecuteSqlAsync(connectionString,
+            await ExecuteSqlAsync(
+                connectionString,
                 "CREATE TABLE activation_dml_rows (id integer); "
                 + "CREATE FUNCTION activation_dml_noop() RETURNS trigger LANGUAGE plpgsql "
                 + "AS $$ BEGIN RETURN NEW; END; $$; "
                 + "CREATE TRIGGER activation_dml_noop BEFORE INSERT ON activation_dml_rows "
-                + "FOR EACH ROW EXECUTE FUNCTION activation_dml_noop();", cancellationToken: CancellationToken.None);
+                + "FOR EACH ROW EXECUTE FUNCTION activation_dml_noop();",
+                cancellationToken: CancellationToken.None);
         }
 
         if (eventEnabled)
         {
-            await InstallEventTriggerAsync(connectionString, "PERFORM 1;", "ENABLE",
+            await InstallEventTriggerAsync(
+                connectionString,
+                "PERFORM 1;",
+                "ENABLE",
                 cancellationToken: CancellationToken.None);
         }
 
-        var role = catalogReadable ? null : "activation_reader_" + Guid.NewGuid().ToString("N");
+        var role = catalogReadable
+            ? null
+            : "activation_reader_"
+            + Guid
+                .NewGuid()
+                .ToString("N");
+
         if (role is not null)
         {
-            await ExecuteSqlAsync(connectionString, "CREATE ROLE " + role + "; "
-                + "GRANT USAGE, CREATE ON SCHEMA public TO " + role + "; "
-                + "REVOKE SELECT ON pg_catalog.pg_depend FROM PUBLIC;", cancellationToken: CancellationToken.None);
+            await ExecuteSqlAsync(
+                connectionString,
+                "CREATE ROLE "
+                + role
+                + "; "
+                + "GRANT USAGE, CREATE ON SCHEMA public TO "
+                + role
+                + "; "
+                + "REVOKE SELECT ON pg_catalog.pg_depend FROM PUBLIC;",
+                cancellationToken: CancellationToken.None);
         }
 
         try
@@ -66,14 +87,27 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
             AppendEventTriggerCheck(builder);
 
             // Act
-            var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-                new SafeMigrationRunOptions("postgresql-independent-trigger-activation"), CancellationToken.None);
+            var report = await context
+                .GetService<ISafeMigrationRunner>()
+                .AnalyzeAsync(
+                    context,
+                    builder.Operations,
+                    new SafeMigrationRunOptions("postgresql-independent-trigger-activation"),
+                    CancellationToken.None);
 
             // Assert
-            Assert.Equal(eventEnabled ? SafeMigrationReportStatus.RuntimeValidationRequired
-                : SafeMigrationReportStatus.Ready, report.Status);
-            Assert.Equal(eventEnabled ? SafeMigrationAction.ValidateAtRuntime : SafeMigrationAction.Apply,
+            Assert.Equal(
+                eventEnabled
+                    ? SafeMigrationReportStatus.RuntimeValidationRequired
+                    : SafeMigrationReportStatus.Ready,
+                report.Status);
+
+            Assert.Equal(
+                eventEnabled
+                    ? SafeMigrationAction.ValidateAtRuntime
+                    : SafeMigrationAction.Apply,
                 report.Assessments[1].Action);
+
             if (eventEnabled)
             {
                 Assert.Equal("projected_event_trigger_state_unknown", report.Assessments[1].AnalysisCode);
@@ -87,7 +121,8 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
         {
             if (role is not null)
             {
-                await ExecuteSqlAsync(connectionString,
+                await ExecuteSqlAsync(
+                    connectionString,
                     "REVOKE USAGE, CREATE ON SCHEMA public FROM " + role + "; DROP ROLE " + role + ";",
                     cancellationToken: CancellationToken.None);
             }
@@ -101,26 +136,42 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
     [InlineData(false, "ENABLE")]
     [InlineData(true, "ENABLE")]
     [InlineData(false, "ENABLE ALWAYS")]
-    public async Task EventTriggers_CreateThenCheckDefersTriggerRows(bool typedCreate, string enabledMode)
+    public async Task EventTriggers_CreateThenCheckDefersTriggerRows(
+        bool typedCreate,
+        string enabledMode
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await InstallEventTriggerAsync(connectionString, "INSERT INTO event_created_values VALUES (-1);", enabledMode,
+        await InstallEventTriggerAsync(
+            connectionString,
+            "INSERT INTO event_created_values VALUES (-1);",
+            enabledMode,
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         AppendEventTriggerCreate(builder, typedCreate);
         AppendEventTriggerCheck(builder);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-event-trigger-rows"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("postgresql-event-trigger-rows"),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [builder.Operations[0]], CancellationToken.None);
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [builder.Operations[1]],
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [builder.Operations[1]],
             CancellationToken.None));
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM event_created_values WHERE id=-1;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM event_created_values WHERE id=-1;",
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -128,8 +179,14 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
         var assessment = report.Assessments[1];
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, assessment.Action);
         Assert.Equal("projected_event_trigger_state_unknown", assessment.AnalysisCode);
-        Assert.Equal(0, Assert.IsType<SafeMigrationDeferredOrigin>(assessment.DeferredOrigin).OperationOrdinal);
-        Assert.Equal("P1003", Assert.IsType<PostgresException>(exception).SqlState);
+        Assert.Equal(0,
+            Assert.IsType<SafeMigrationDeferredOrigin>(assessment.DeferredOrigin)
+                .OperationOrdinal);
+
+        Assert.Equal("P1003",
+            Assert.IsType<PostgresException>(exception)
+                .SqlState);
+
         Assert.Equal(1, rows);
     }
 
@@ -138,23 +195,36 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
     [Theory]
     [InlineData("DISABLE")]
     [InlineData("ENABLE REPLICA")]
-    public async Task EventTriggers_InactiveTriggerRetainsReady(string enabledMode)
+    public async Task EventTriggers_InactiveTriggerRetainsReady(
+        string enabledMode
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await InstallEventTriggerAsync(connectionString, "INSERT INTO event_created_values VALUES (-1);", enabledMode,
+        await InstallEventTriggerAsync(
+            connectionString,
+            "INSERT INTO event_created_values VALUES (-1);",
+            enabledMode,
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         AppendEventTriggerCreate(builder, typedCreate: false);
         AppendEventTriggerCheck(builder);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-event-trigger-inactive"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("postgresql-event-trigger-inactive"),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM event_created_values;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM event_created_values;",
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -169,27 +239,42 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE event_existing_values(id integer NOT NULL, value integer); "
             + "CREATE INDEX ix_event_existing ON event_existing_values(id);",
             cancellationToken: CancellationToken.None);
-        await InstallEventTriggerAsync(connectionString, "DROP INDEX ix_event_existing; "
-            + "CREATE INDEX ix_event_existing ON event_existing_values(value);", "ENABLE",
+
+        await InstallEventTriggerAsync(
+            connectionString,
+            "DROP INDEX ix_event_existing; "
+            + "CREATE INDEX ix_event_existing ON event_existing_values(value);",
+            "ENABLE",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         AppendEventTriggerCreate(builder, typedCreate: false);
         builder.CreateIndexIfNotExists("ix_event_existing", "event_existing_values", ["id"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-event-trigger-structure"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("postgresql-event-trigger-structure"),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [builder.Operations[0]], CancellationToken.None);
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [builder.Operations[1]],
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            [builder.Operations[1]],
             CancellationToken.None));
 
-        var changed = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM pg_catalog.pg_indexes "
+        var changed = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM pg_catalog.pg_indexes "
             + "WHERE indexname='ix_event_existing' AND indexdef LIKE '%(value)%';",
             cancellationToken: CancellationToken.None);
 
@@ -197,7 +282,10 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, report.Assessments[1].Action);
         Assert.Equal("projected_event_trigger_state_unknown", report.Assessments[1].AnalysisCode);
-        Assert.Equal("P1001", Assert.IsType<PostgresException>(exception).SqlState);
+        Assert.Equal("P1001",
+            Assert.IsType<PostgresException>(exception)
+                .SqlState);
+
         Assert.Equal(1, changed);
     }
 
@@ -207,21 +295,35 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE event_created_values(id integer NOT NULL);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE event_created_values(id integer NOT NULL);",
             cancellationToken: CancellationToken.None);
-        await InstallEventTriggerAsync(connectionString, "INSERT INTO event_created_values VALUES (-1);", "ENABLE",
+
+        await InstallEventTriggerAsync(
+            connectionString,
+            "INSERT INTO event_created_values VALUES (-1);",
+            "ENABLE",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         AppendEventTriggerCreate(builder, typedCreate: false);
         AppendEventTriggerCheck(builder);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-event-trigger-noop"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("postgresql-event-trigger-noop"),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM event_created_values;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM event_created_values;",
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -238,19 +340,33 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await InstallEventTriggerAsync(connectionString, "INSERT INTO event_created_values VALUES (-1);", "ENABLE",
+        await InstallEventTriggerAsync(
+            connectionString,
+            "INSERT INTO event_created_values VALUES (-1);",
+            "ENABLE",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         AppendEventTriggerCreate(builder, typedCreate: false);
+
         // WHY: The SQL helper now structurally parses this simple predicate.
         // Only an explicitly opaque definition exercises unsupported-contract precedence.
-        builder.EnsureCheckConstraint(new ExpectedCheckConstraintDefinition(
-            "ck_event_values", "event_created_values", "id > 0"), SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureCheckConstraint(
+            new ExpectedCheckConstraintDefinition(
+                "ck_event_values",
+                "event_created_values",
+                "id > 0"),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-event-trigger-unsupported"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("postgresql-event-trigger-unsupported"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -264,10 +380,17 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE event_prefix(id integer NOT NULL);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE event_prefix(id integer NOT NULL);",
             cancellationToken: CancellationToken.None);
-        await InstallEventTriggerAsync(connectionString, "INSERT INTO event_created_values VALUES (-1);", "ENABLE",
+
+        await InstallEventTriggerAsync(
+            connectionString,
+            "INSERT INTO event_created_values VALUES (-1);",
+            "ENABLE",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.InsertData("event_prefix", "id", 1);
@@ -275,8 +398,13 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
         AppendEventTriggerCheck(builder);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-event-trigger-ordinal"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("postgresql-event-trigger-ordinal"),
+                CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
@@ -304,30 +432,54 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await InstallEventTriggerAsync(connectionString, "INSERT INTO event_created_values VALUES (-1);", enabledMode,
+        await InstallEventTriggerAsync(
+            connectionString,
+            "INSERT INTO event_created_values VALUES (-1);",
+            enabledMode,
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync();
         await context.Database.ExecuteSqlAsync(
             $"SELECT pg_catalog.set_config('session_replication_role', {replicationRole}, false);");
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         AppendEventTriggerCreate(builder, typedCreate: false);
         AppendEventTriggerCheck(builder);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-event-trigger-replication"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("postgresql-event-trigger-replication"),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [builder.Operations[0]], CancellationToken.None);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM event_created_values;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM event_created_values;",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(fires ? SafeMigrationReportStatus.RuntimeValidationRequired : SafeMigrationReportStatus.Ready,
+        Assert.Equal(
+            fires
+                ? SafeMigrationReportStatus.RuntimeValidationRequired
+                : SafeMigrationReportStatus.Ready,
             report.Status);
-        Assert.Equal(fires ? SafeMigrationAction.ValidateAtRuntime : SafeMigrationAction.Apply,
+
+        Assert.Equal(
+            fires
+                ? SafeMigrationAction.ValidateAtRuntime
+                : SafeMigrationAction.Apply,
             report.Assessments[1].Action);
-        Assert.Equal(fires ? 1 : 0, rows);
+
+        Assert.Equal(
+            fires
+                ? 1
+                : 0,
+            rows);
     }
 
     /// <summary>Session-wide disabling certifies absence; versions without that option retain trigger risk.</summary>
@@ -336,11 +488,17 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await InstallEventTriggerAsync(connectionString, "INSERT INTO event_created_values VALUES (-1);", "ENABLE",
+        await InstallEventTriggerAsync(
+            connectionString,
+            "INSERT INTO event_created_values VALUES (-1);",
+            "ENABLE",
             cancellationToken: CancellationToken.None);
-        var hasOption = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM pg_catalog.pg_settings WHERE name='event_triggers';",
-            cancellationToken: CancellationToken.None) != 0;
+
+        var hasOption = await ScalarIntAsync(
+                connectionString,
+                "SELECT COUNT(*) FROM pg_catalog.pg_settings WHERE name='event_triggers';",
+                cancellationToken: CancellationToken.None)
+            != 0;
 
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync();
@@ -354,19 +512,38 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
         AppendEventTriggerCheck(builder);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-event-trigger-session-disable"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("postgresql-event-trigger-session-disable"),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [builder.Operations[0]], CancellationToken.None);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM event_created_values;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM event_created_values;",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(hasOption ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.RuntimeValidationRequired,
+        Assert.Equal(
+            hasOption
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.RuntimeValidationRequired,
             report.Status);
-        Assert.Equal(hasOption ? SafeMigrationAction.Apply : SafeMigrationAction.ValidateAtRuntime,
+
+        Assert.Equal(
+            hasOption
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.ValidateAtRuntime,
             report.Assessments[1].Action);
-        Assert.Equal(hasOption ? 0 : 1, rows);
+
+        Assert.Equal(
+            hasOption
+                ? 0
+                : 1,
+            rows);
     }
 
     /// <summary>Revoked catalog visibility defers unknown effects rather than proving no trigger exists.</summary>
@@ -375,10 +552,22 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        var role = "event_reader_" + Guid.NewGuid().ToString("N");
-        await ExecuteSqlAsync(connectionString, "CREATE ROLE " + role + " LOGIN PASSWORD 'event-reader-fixture'; "
-            + "GRANT USAGE, CREATE ON SCHEMA public TO " + role + "; "
-            + "REVOKE SELECT ON pg_catalog.pg_event_trigger FROM PUBLIC;", cancellationToken: CancellationToken.None);
+        var role = "event_reader_"
+            + Guid
+                .NewGuid()
+                .ToString("N");
+
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE ROLE "
+            + role
+            + " LOGIN PASSWORD 'event-reader-fixture'; "
+            + "GRANT USAGE, CREATE ON SCHEMA public TO "
+            + role
+            + "; "
+            + "REVOKE SELECT ON pg_catalog.pg_event_trigger FROM PUBLIC;",
+            cancellationToken: CancellationToken.None);
+
         var readerConnectionString = new NpgsqlConnectionStringBuilder(connectionString)
         {
             Username = role,
@@ -391,11 +580,18 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
         AppendEventTriggerCheck(builder);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-event-trigger-visibility"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("postgresql-event-trigger-visibility"),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM event_created_values;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM event_created_values;",
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -416,8 +612,12 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await InstallEventTriggerAsync(connectionString, "INSERT INTO event_created_values VALUES (-1);", "ENABLE",
+        await InstallEventTriggerAsync(
+            connectionString,
+            "INSERT INTO event_created_values VALUES (-1);",
+            "ENABLE",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         AppendEventTriggerCreate(builder, typedCreate: false);
@@ -425,13 +625,22 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var enabled = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-event-trigger-invocation-enabled"), CancellationToken.None);
+        var enabled = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("postgresql-event-trigger-invocation-enabled"),
+            CancellationToken.None);
 
-        await ExecuteSqlAsync(connectionString, "ALTER EVENT TRIGGER event_fixture DISABLE;",
+        await ExecuteSqlAsync(
+            connectionString,
+            "ALTER EVENT TRIGGER event_fixture DISABLE;",
             cancellationToken: CancellationToken.None);
-        var disabled = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-event-trigger-invocation-disabled"), CancellationToken.None);
+
+        var disabled = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("postgresql-event-trigger-invocation-disabled"),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, enabled.Status);
@@ -448,27 +657,45 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE event_created_values(id integer NOT NULL); INSERT INTO event_created_values VALUES(-1);",
             cancellationToken: CancellationToken.None);
-        await InstallEventTriggerAsync(connectionString, "INSERT INTO event_created_values VALUES (-1);", "ENABLE",
+
+        await InstallEventTriggerAsync(
+            connectionString,
+            "INSERT INTO event_created_values VALUES (-1);",
+            "ENABLE",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         AppendEventTriggerCheck(builder);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-event-trigger-initial-live-violation"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("postgresql-event-trigger-initial-live-violation"),
+                CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationAction.RejectDataBlocked, Assert.Single(report.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.RejectDataBlocked,
+            Assert.Single(report.Assessments)
+                .Action);
+
         Assert.Null(report.Assessments[0].DeferredOrigin);
-        Assert.Equal("P1003", Assert.IsType<PostgresException>(exception).SqlState);
+        Assert.Equal("P1003",
+            Assert.IsType<PostgresException>(exception)
+                .SqlState);
     }
 
     /// <summary>The sql_drop family can recreate a dropped owner before the next safe operation.</summary>
@@ -477,26 +704,39 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE event_drop_owner(id integer NOT NULL); "
             + "CREATE FUNCTION event_drop_trigger_fixture() RETURNS event_trigger LANGUAGE plpgsql AS $$ BEGIN "
             + "IF EXISTS (SELECT 1 FROM pg_catalog.pg_event_trigger_dropped_objects() "
             + "WHERE object_type='table' AND schema_name='public' AND object_name='event_drop_owner') THEN "
             + "CREATE TABLE event_drop_owner(id integer NOT NULL, recreated_value integer NULL); "
             + "END IF; END; $$; CREATE EVENT TRIGGER event_drop_fixture ON sql_drop "
-            + "EXECUTE FUNCTION event_drop_trigger_fixture();", cancellationToken: CancellationToken.None);
+            + "EXECUTE FUNCTION event_drop_trigger_fixture();",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropTable("event_drop_owner");
         builder.AddColumnIfNotExists<int>("recreated_value", "event_drop_owner", type: "integer", nullable: true);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("postgresql-sql-drop-recreated-owner"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("postgresql-sql-drop-recreated-owner"),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [builder.Operations[0]], CancellationToken.None);
-        var actual = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [builder.Operations[1]],
-            new SafeMigrationRunOptions("postgresql-sql-drop-actual-owner"), CancellationToken.None);
+        var actual = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                [builder.Operations[1]],
+                new SafeMigrationRunOptions("postgresql-sql-drop-actual-owner"),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [builder.Operations[1]], CancellationToken.None);
 
@@ -509,7 +749,9 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
         Assert.Equal(0, origin.OperationOrdinal);
         Assert.Equal(typeof(DropTableOperation).FullName, origin.OperationType);
         Assert.Equal(SafeMigrationReportStatus.Ready, actual.Status);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(actual.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(actual.Assessments)
+                .Action);
     }
 
     /// <summary>Installs an isolated CREATE TABLE event trigger with caller-selected effects and activation.</summary>
@@ -524,38 +766,55 @@ public sealed class PostgreSqlEventTriggersIntegrationTests : PostgreSqlSafeMigr
         string enabledMode,
         CancellationToken cancellationToken
     )
-        => ExecuteSqlAsync(connectionString, "CREATE FUNCTION event_trigger_fixture() RETURNS event_trigger "
-            + "LANGUAGE plpgsql AS $$ BEGIN " + effect + " END; $$; "
+        => ExecuteSqlAsync(
+            connectionString,
+            "CREATE FUNCTION event_trigger_fixture() RETURNS event_trigger "
+            + "LANGUAGE plpgsql AS $$ BEGIN "
+            + effect
+            + " END; $$; "
             + "CREATE EVENT TRIGGER event_fixture ON ddl_command_end WHEN TAG IN ('CREATE TABLE') "
-            + "EXECUTE FUNCTION event_trigger_fixture(); ALTER EVENT TRIGGER event_fixture " + enabledMode + ";",
+            + "EXECUTE FUNCTION event_trigger_fixture(); ALTER EVENT TRIGGER event_fixture "
+            + enabledMode
+            + ";",
             cancellationToken: cancellationToken);
 
     /// <summary>Appends the structured CHECK whose row proof must survive only certified earlier effects.</summary>
     /// <param name="builder">The ordered fixture operation stream.</param>
-    private static void AppendEventTriggerCheck(MigrationBuilder builder)
-        => builder.EnsureCheckConstraint(ExpectedCheckConstraintDefinition.FromExpression("ck_event_values",
-            "event_created_values", SqlColumnAndInt("id", SafeMigrationSqlBinaryOperator.GreaterThan, 0)),
+    private static void AppendEventTriggerCheck(
+        MigrationBuilder builder
+    )
+        => builder.EnsureCheckConstraint(
+            ExpectedCheckConstraintDefinition.FromExpression(
+                "ck_event_values",
+                "event_created_values",
+                SqlColumnAndInt("id", SafeMigrationSqlBinaryOperator.GreaterThan, 0)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Appends the same table contract through either supported authoring path.</summary>
     /// <param name="builder">The ordered fixture operation stream.</param>
     /// <param name="typedCreate">Whether EF owns the unwrapped creation operation.</param>
-    private static void AppendEventTriggerCreate(MigrationBuilder builder, bool typedCreate)
+    private static void AppendEventTriggerCreate(
+        MigrationBuilder builder,
+        bool typedCreate
+    )
     {
         if (typedCreate)
         {
-            builder.CreateTable("event_created_values", table => new
-            {
-                id = table.Column<int>(type: "integer", nullable: false),
-            });
+            builder.CreateTable(
+                "event_created_values",
+                table => new
+                {
+                    id = table.Column<int>(type: "integer", nullable: false),
+                });
         }
         else
         {
-            builder.CreateTableIfNotExists("event_created_values", table => new
-            {
-                id = table.Column<int>(type: "integer", nullable: false),
-            });
+            builder.CreateTableIfNotExists(
+                "event_created_values",
+                table => new
+                {
+                    id = table.Column<int>(type: "integer", nullable: false),
+                });
         }
     }
-
 }

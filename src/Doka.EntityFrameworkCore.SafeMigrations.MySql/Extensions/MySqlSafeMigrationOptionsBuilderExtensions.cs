@@ -19,7 +19,7 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// </summary>
     /// <param name="optionsBuilder">The EF Core options builder to configure.</param>
     /// <returns>The same options builder so additional calls can be chained.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
     /// <exception cref="InvalidOperationException">
     /// A configured caller-owned connection does not satisfy Doka's required connection contract.
     /// </exception>
@@ -41,7 +41,7 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <param name="configure">The SafeMigrations design-time configuration.</param>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException">
-    /// <paramref name="optionsBuilder"/> or <paramref name="configure"/> is null.
+    /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
     /// <exception cref="InvalidOperationException">
     /// A configured caller-owned connection does not satisfy Doka's required connection contract.
@@ -64,7 +64,7 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <param name="optionsBuilder">The EF Core options builder to configure.</param>
     /// <typeparam name="TCanonicalMigrationContext">The canonical migration context.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
     /// <exception cref="InvalidOperationException">
     /// A configured caller-owned connection does not satisfy Doka's required connection contract.
     /// </exception>
@@ -91,7 +91,7 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TCanonicalMigrationContext">The canonical migration context.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException">
-    /// <paramref name="optionsBuilder"/> or <paramref name="configure"/> is null.
+    /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
     /// <exception cref="InvalidOperationException">
     /// A configured caller-owned connection does not satisfy Doka's required connection contract.
@@ -116,7 +116,7 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <param name="optionsBuilder">The EF Core options builder to configure.</param>
     /// <typeparam name="TContext">The DbContext type being configured.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
     /// <exception cref="InvalidOperationException">
     /// A configured caller-owned connection does not satisfy Doka's required connection contract.
     /// </exception>
@@ -125,7 +125,7 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     )
         where TContext : DbContext
     {
-        UseMySqlSafeMigrations((DbContextOptionsBuilder)optionsBuilder);
+        ((DbContextOptionsBuilder)optionsBuilder).UseMySqlSafeMigrations();
 
         return optionsBuilder;
     }
@@ -138,7 +138,7 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TContext">The DbContext type being configured.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException">
-    /// <paramref name="optionsBuilder"/> or <paramref name="configure"/> is null.
+    /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
     /// <exception cref="InvalidOperationException">
     /// A configured caller-owned connection does not satisfy Doka's required connection contract.
@@ -161,7 +161,7 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TContext">The runtime context type being configured.</typeparam>
     /// <typeparam name="TCanonicalMigrationContext">The canonical migration context.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="optionsBuilder" /> is null.</exception>
     /// <exception cref="InvalidOperationException">
     /// A configured caller-owned connection does not satisfy Doka's required connection contract.
     /// </exception>
@@ -190,7 +190,7 @@ public static class MySqlSafeMigrationOptionsBuilderExtensions
     /// <typeparam name="TCanonicalMigrationContext">The canonical migration context.</typeparam>
     /// <returns>The same options builder so additional calls can be chained.</returns>
     /// <exception cref="ArgumentNullException">
-    /// <paramref name="optionsBuilder"/> or <paramref name="configure"/> is null.
+    /// <paramref name="optionsBuilder" /> or <paramref name="configure" /> is null.
     /// </exception>
     /// <exception cref="InvalidOperationException">
     /// A configured caller-owned connection does not satisfy Doka's required connection contract.

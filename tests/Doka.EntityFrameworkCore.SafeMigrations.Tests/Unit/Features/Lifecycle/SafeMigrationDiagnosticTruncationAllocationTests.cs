@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>Measures display-boundary allocation after an isolated process-wide collection.</summary>
+
 // WHY: The forced collection must not perturb another test class's warmed allocation window.
 [Collection(ProcessWideTestGroup.Name)]
 public sealed class SafeMigrationDiagnosticTruncationAllocationTests

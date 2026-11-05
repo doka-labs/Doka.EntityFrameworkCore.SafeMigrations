@@ -8,7 +8,9 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
 
     /// <summary>Retains per-test database ownership while sharing only the engine lifecycle.</summary>
     /// <param name="fixture">The lazily activated assembly-owned engine.</param>
-    public MySqlNativeUuidIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlNativeUuidIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>Live and projected UUID columns support complete, non-prefixed physical keys.</summary>
     /// <param name="kind">The independently authored primary, unique or ordinary index contract.</param>
@@ -20,13 +22,18 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
     [InlineData("unique", true)]
     [InlineData("index", false)]
     [InlineData("index", true)]
-    public async Task NativeUuidPhysicalKeysApplyAndReplay(string kind, bool projected)
+    public async Task NativeUuidPhysicalKeysApplyAndReplay(
+        string kind,
+        bool projected
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, projected
-            ? "CREATE TABLE `uuid_keys` (`sentinel` int NOT NULL);"
-            : "CREATE TABLE `uuid_keys` (`sentinel` int NOT NULL, `id` uuid NOT NULL);",
+        await ExecuteSqlAsync(
+            connectionString,
+            projected
+                ? "CREATE TABLE `uuid_keys` (`sentinel` int NOT NULL);"
+                : "CREATE TABLE `uuid_keys` (`sentinel` int NOT NULL, `id` uuid NOT NULL);",
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -54,19 +61,29 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-physical-key"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-uuid-physical-key"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-physical-key-postflight"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-uuid-physical-key-postflight"),
+            CancellationToken.None);
 
-        var replay = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-physical-key-replay"), CancellationToken.None);
+        var replay = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-uuid-physical-key-replay"),
+            CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var keys = await ScalarIntAsync(connectionString,
+        var keys = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'uuid_keys' AND COLUMN_NAME = 'id' AND SUB_PART IS NULL;",
             cancellationToken: CancellationToken.None);
@@ -84,13 +101,17 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
     [NativeUuidTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task NativeUuidPrefixesAreRejectedBeforeIndexMutation(bool projected)
+    public async Task NativeUuidPrefixesAreRejectedBeforeIndexMutation(
+        bool projected
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, projected
-            ? "CREATE TABLE `uuid_prefix` (`sentinel` int NOT NULL);"
-            : "CREATE TABLE `uuid_prefix` (`sentinel` int NOT NULL, `id` uuid NULL);",
+        await ExecuteSqlAsync(
+            connectionString,
+            projected
+                ? "CREATE TABLE `uuid_prefix` (`sentinel` int NOT NULL);"
+                : "CREATE TABLE `uuid_prefix` (`sentinel` int NOT NULL, `id` uuid NULL);",
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
@@ -100,22 +121,34 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
             AddNativeUuid(builder, "uuid_prefix", "id", nullable: true);
         }
 
-        builder.EnsureIndex(new ExpectedIndexDefinition("ix_uuid_prefix_id", "uuid_prefix",
-            [new ExpectedIndexKeyDefinition(column: "id", prefixLength: 8)]),
+        builder.EnsureIndex(
+            new ExpectedIndexDefinition(
+                "ix_uuid_prefix_id",
+                "uuid_prefix",
+                [new ExpectedIndexKeyDefinition(column: "id", prefixLength: 8)]),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-prefix"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("native-uuid-prefix"),
+                CancellationToken.None);
 
         // WHY: Runtime protection must reject the index even without a caller
         // running preflight; an earlier independently safe ADD may still apply.
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
-        var indexes = await ScalarIntAsync(connectionString,
+        var indexes = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'uuid_prefix';", cancellationToken: CancellationToken.None);
+            + "AND TABLE_NAME = 'uuid_prefix';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -130,47 +163,75 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
     [NativeUuidTheory]
     [InlineData(764, true)]
     [InlineData(765, false)]
-    public async Task NativeUuidCompositeKeyBudgetRetainsExactBoundary(int length, bool accepted)
+    public async Task NativeUuidCompositeKeyBudgetRetainsExactBoundary(
+        int length,
+        bool accepted
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `uuid_key_budget` (`id` uuid NOT NULL, `value` varchar(700) NOT NULL) "
             + "ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureColumn("uuid_key_budget",
-            new ExpectedColumnDefinition("value", typeof(string), false,
-                "varchar(" + length.ToString(CultureInfo.InvariantCulture) + ")", maxLength: length),
+        builder.EnsureColumn(
+            "uuid_key_budget",
+            new ExpectedColumnDefinition(
+                "value",
+                typeof(string),
+                false,
+                "varchar(" + length.ToString(CultureInfo.InvariantCulture) + ")",
+                maxLength: length),
             SafeMigrationPolicy.RepairIfSafe);
 
         builder.CreateIndexIfNotExists("ix_uuid_key_budget", "uuid_key_budget", ["id", "value"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-key-budget"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("native-uuid-key-budget"),
+                CancellationToken.None);
 
         // WHY: Bypassing preflight may apply the independently safe widening,
         // but an oversized composite key must still fail before index DDL.
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
-        var indexes = await ScalarIntAsync(connectionString,
+        var indexes = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(DISTINCT INDEX_NAME) FROM INFORMATION_SCHEMA.STATISTICS "
             + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'uuid_key_budget';",
             cancellationToken: CancellationToken.None);
 
-        var actualLength = await ScalarIntAsync(connectionString,
+        var actualLength = await ScalarIntAsync(
+            connectionString,
             "SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'uuid_key_budget' AND COLUMN_NAME = 'value';",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(accepted ? SafeMigrationReportStatus.Ready : SafeMigrationReportStatus.Blocked, report.Status);
+        Assert.Equal(
+            accepted
+                ? SafeMigrationReportStatus.Ready
+                : SafeMigrationReportStatus.Blocked,
+            report.Status);
+
         Assert.Equal(SafeMigrationAction.Repair, report.Assessments[0].Action);
-        Assert.Equal(accepted ? SafeMigrationAction.Apply : SafeMigrationAction.RejectUnsupported,
+        Assert.Equal(
+            accepted
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectUnsupported,
             report.Assessments[1].Action);
+
         if (accepted)
         {
             Assert.Null(failure);
@@ -180,7 +241,12 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
             AssertGuard(failure, "doka_sm_unsupported");
         }
 
-        Assert.Equal(accepted ? 1 : 0, indexes);
+        Assert.Equal(
+            accepted
+                ? 1
+                : 0,
+            indexes);
+
         Assert.Equal(length, actualLength);
     }
 
@@ -189,7 +255,9 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
     [NativeUuidTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task NativeUuidForeignKeyAppliesToMatchingStorageAndReplays(bool projected)
+    public async Task NativeUuidForeignKeyAppliesToMatchingStorageAndReplays(
+        bool projected
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -197,51 +265,77 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (projected)
         {
-            builder.CreateTableIfNotExists("uuid_parents", static table => new
+            builder.CreateTableIfNotExists(
+                "uuid_parents",
+                static table => new
                 {
-                    id = table.Column<Guid>(type: "uuid", nullable: false)
+                    id = table
+                        .Column<Guid>(type: "uuid", nullable: false)
                         .Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Uuid),
                 },
                 constraints: static table => table.PrimaryKey("pk_uuid_parents", row => row.id));
 
-            builder.CreateTableIfNotExists("uuid_children", static table => new
-            {
-                row = table.Column<int>(type: "int", nullable: false),
-                owner_id = table.Column<Guid>(type: "uuid", nullable: true)
-                    .Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Uuid),
-            });
+            builder.CreateTableIfNotExists(
+                "uuid_children",
+                static table => new
+                {
+                    row = table.Column<int>(type: "int", nullable: false),
+                    owner_id = table
+                        .Column<Guid>(type: "uuid", nullable: true)
+                        .Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Uuid),
+                });
         }
         else
         {
-            await ExecuteSqlAsync(connectionString,
+            await ExecuteSqlAsync(
+                connectionString,
                 "CREATE TABLE `uuid_parents` (`id` uuid NOT NULL, PRIMARY KEY (`id`)); "
                 + "CREATE TABLE `uuid_children` (`row` int NOT NULL, `owner_id` uuid NULL);",
                 cancellationToken: CancellationToken.None);
         }
 
         builder.CreateIndexIfNotExists("ix_uuid_children_owner", "uuid_children", ["owner_id"]);
-        builder.AddForeignKeyIfNotExists("fk_uuid_children_owner", "uuid_children", ["owner_id"],
-            "uuid_parents", ["id"], onDelete: ReferentialAction.NoAction);
+        builder.AddForeignKeyIfNotExists(
+            "fk_uuid_children_owner",
+            "uuid_children",
+            ["owner_id"],
+            "uuid_parents",
+            ["id"],
+            onDelete: ReferentialAction.NoAction);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-foreign-key"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-uuid-foreign-key"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "INSERT INTO `uuid_parents` VALUES ('00112233-4455-6677-8899-aabbccddeeff'); "
             + "INSERT INTO `uuid_children` VALUES (1, '00112233-4455-6677-8899-aabbccddeeff'), (2, NULL);",
             cancellationToken: CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-foreign-key-postflight"), CancellationToken.None);
 
-        var replay = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-foreign-key-replay"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-uuid-foreign-key-postflight"),
+            CancellationToken.None);
+
+        var replay = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-uuid-foreign-key-replay"),
+            CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `uuid_children`;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `uuid_children`;",
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -257,31 +351,48 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `uuid_parents` (`id` char(36) NOT NULL, PRIMARY KEY (`id`)) "
             + "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
             + "CREATE TABLE `uuid_children` (`owner_id` uuid NULL, KEY `ix_uuid_owner` (`owner_id`));",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AddForeignKeyIfNotExists("fk_uuid_owner", "uuid_children", ["owner_id"],
-            "uuid_parents", ["id"]);
+        builder.AddForeignKeyIfNotExists(
+            "fk_uuid_owner",
+            "uuid_children",
+            ["owner_id"],
+            "uuid_parents",
+            ["id"]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-incompatible-foreign-key"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("native-uuid-incompatible-foreign-key"),
+                CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
-        var foreignKeys = await ScalarIntAsync(connectionString,
+        var foreignKeys = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS "
             + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'uuid_children';",
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing, Assert.Single(report.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.RejectPrerequisiteMissing,
+            Assert.Single(report.Assessments)
+                .Action);
+
         AssertGuard(failure, "doka_sm_prerequisite_missing");
         Assert.Equal(0, foreignKeys);
     }
@@ -292,54 +403,83 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
+
         // WHY: This is endpoint compatibility, not a column-format conversion.
         // The canonical bytes match Doka's Binary16 contract; the FK leaves
         // both original physical storage representations unchanged.
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `uuid_binary_parents` (`id` binary(16) NOT NULL, PRIMARY KEY (`id`)); "
             + "CREATE TABLE `uuid_binary_children` (`owner_id` uuid NULL, KEY `ix_uuid_owner` (`owner_id`)); "
             + "INSERT INTO `uuid_binary_parents` VALUES (0x00112233445566778899AABBCCDDEEFF);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AddForeignKeyIfNotExists("fk_uuid_binary_owner", "uuid_binary_children", ["owner_id"],
-            "uuid_binary_parents", ["id"]);
+        builder.AddForeignKeyIfNotExists(
+            "fk_uuid_binary_owner",
+            "uuid_binary_children",
+            ["owner_id"],
+            "uuid_binary_parents",
+            ["id"]);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-binary-principal"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-uuid-binary-principal"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "INSERT INTO `uuid_binary_children` VALUES ('00112233-4455-6677-8899-aabbccddeeff');",
             cancellationToken: CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-binary-principal-postflight"), CancellationToken.None);
 
-        var replay = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-binary-principal-replay"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-uuid-binary-principal-postflight"),
+            CancellationToken.None);
+
+        var replay = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-uuid-binary-principal-replay"),
+            CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var preserved = await ScalarIntAsync(connectionString,
+        var preserved = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `uuid_binary_parents` p JOIN `uuid_binary_children` c ON c.`owner_id` = p.`id` "
-            + "WHERE p.`id` = 0x00112233445566778899AABBCCDDEEFF;", cancellationToken: CancellationToken.None);
+            + "WHERE p.`id` = 0x00112233445566778899AABBCCDDEEFF;",
+            cancellationToken: CancellationToken.None);
 
-        var binaryColumns = await ScalarIntAsync(connectionString,
+        var binaryColumns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'uuid_binary_parents' AND COLUMN_TYPE = 'binary(16)';",
             cancellationToken: CancellationToken.None);
 
-        var nativeColumns = await ScalarIntAsync(connectionString,
+        var nativeColumns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'uuid_binary_children' AND COLUMN_TYPE = 'uuid';",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.Apply, Assert.Single(preflight.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.Apply,
+            Assert.Single(preflight.Assessments)
+                .Action);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(replay.Assessments)
+                .Action);
+
         Assert.Equal(1, preserved);
         Assert.Equal(1, binaryColumns);
         Assert.Equal(1, nativeColumns);
@@ -352,43 +492,74 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
     [InlineData(false, false)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public async Task RequiredNativeUuidAddRetainsDataAndDefaultGates(bool populated, bool hasDefault)
+    public async Task RequiredNativeUuidAddRetainsDataAndDefaultGates(
+        bool populated,
+        bool hasDefault
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `uuid_add` (`value` int NOT NULL); "
-            + (populated ? "INSERT INTO `uuid_add` VALUES (7);" : string.Empty),
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `uuid_add` (`value` int NOT NULL); "
+            + (populated
+                ? "INSERT INTO `uuid_add` VALUES (7);"
+                : string.Empty),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        AddNativeUuid(builder, "uuid_add", "id", nullable: false, hasDefault ? s_identifier : null);
+        AddNativeUuid(
+            builder,
+            "uuid_add",
+            "id",
+            nullable: false,
+            hasDefault
+                ? s_identifier
+                : null);
+
         var runner = context.GetService<ISafeMigrationRunner>();
         var accepted = !populated || hasDefault;
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-required-add"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-uuid-required-add"),
+            CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
-        var columnCount = await ScalarIntAsync(connectionString,
+        var columnCount = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'uuid_add' AND COLUMN_NAME = 'id' AND DATA_TYPE = 'uuid' AND IS_NULLABLE = 'NO';",
             cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `uuid_add`;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `uuid_add`;",
             cancellationToken: CancellationToken.None);
 
         var defaultRows = accepted && populated
-            ? await ScalarIntAsync(connectionString,
+            ? await ScalarIntAsync(
+                connectionString,
                 "SELECT COUNT(*) FROM `uuid_add` WHERE `value` = 7 "
-                + "AND `id` = '00112233-4455-6677-8899-aabbccddeeff';", cancellationToken: CancellationToken.None)
+                + "AND `id` = '00112233-4455-6677-8899-aabbccddeeff';",
+                cancellationToken: CancellationToken.None)
             : 0;
 
         // Assert
-        Assert.Equal(accepted ? SafeMigrationAction.Apply : SafeMigrationAction.RejectDataBlocked,
-            Assert.Single(preflight.Assessments).Action);
+        Assert.Equal(
+            accepted
+                ? SafeMigrationAction.Apply
+                : SafeMigrationAction.RejectDataBlocked,
+            Assert.Single(preflight.Assessments)
+                .Action);
+
         if (accepted)
         {
             Assert.Null(failure);
@@ -398,9 +569,23 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
             AssertGuard(failure, "doka_sm_data_blocked");
         }
 
-        Assert.Equal(accepted ? 1 : 0, columnCount);
-        Assert.Equal(populated ? 1 : 0, rows);
-        Assert.Equal(populated && hasDefault ? 1 : 0, defaultRows);
+        Assert.Equal(
+            accepted
+                ? 1
+                : 0,
+            columnCount);
+
+        Assert.Equal(
+            populated
+                ? 1
+                : 0,
+            rows);
+
+        Assert.Equal(
+            populated && hasDefault
+                ? 1
+                : 0,
+            defaultRows);
     }
 
     /// <summary>The required-column guard must be fresh even when native UUID preflight saw an empty table.</summary>
@@ -409,30 +594,50 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE `uuid_add_race` (`value` int NOT NULL);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `uuid_add_race` (`value` int NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         AddNativeUuid(builder, "uuid_add_race", "id", nullable: false);
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-required-add-race"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("native-uuid-required-add-race"),
+                CancellationToken.None);
 
-        await ExecuteSqlAsync(connectionString, "INSERT INTO `uuid_add_race` VALUES (7);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "INSERT INTO `uuid_add_race` VALUES (7);",
             cancellationToken: CancellationToken.None);
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
-        var columns = await ScalarIntAsync(connectionString,
+        var columns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'uuid_add_race' AND COLUMN_NAME = 'id';", cancellationToken: CancellationToken.None);
+            + "AND TABLE_NAME = 'uuid_add_race' AND COLUMN_NAME = 'id';",
+            cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `uuid_add_race` WHERE `value` = 7;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `uuid_add_race` WHERE `value` = 7;",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.Apply, Assert.Single(preflight.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.Apply,
+            Assert.Single(preflight.Assessments)
+                .Action);
+
         AssertGuard(failure, "doka_sm_data_blocked");
         Assert.Equal(0, columns);
         Assert.Equal(1, rows);
@@ -445,58 +650,90 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
     [InlineData(false, false)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public async Task NativeUuidNullabilityRepairRetainsCallerOwnedBackfills(bool includeNull, bool hasDefault)
+    public async Task NativeUuidNullabilityRepairRetainsCallerOwnedBackfills(
+        bool includeNull,
+        bool hasDefault
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `uuid_tighten` (`value` int NOT NULL, `owner_id` uuid NULL); "
             + "INSERT INTO `uuid_tighten` VALUES (1, '00112233-4455-6677-8899-aabbccddeeff'); "
-            + (includeNull ? "INSERT INTO `uuid_tighten` VALUES (2, NULL);" : string.Empty),
+            + (includeNull
+                ? "INSERT INTO `uuid_tighten` VALUES (2, NULL);"
+                : string.Empty),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AlterColumnIfDifferentFromModel(operations => operations.AlterColumn<Guid>(
-                "owner_id", "uuid_tighten", type: "uuid", nullable: false,
-                defaultValue: hasDefault ? s_replacement : null,
-                oldClrType: typeof(Guid), oldType: "uuid", oldNullable: true)
+        builder.AlterColumnIfDifferentFromModel(operations => operations
+            .AlterColumn<Guid>(
+                "owner_id",
+                "uuid_tighten",
+                type: "uuid",
+                nullable: false,
+                defaultValue: hasDefault
+                    ? s_replacement
+                    : null,
+                oldClrType: typeof(Guid),
+                oldType: "uuid",
+                oldNullable: true)
             .Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Uuid)
             .Annotation("Doka:MySql:RequiresExplicitBackfill", true)
             .Annotation("Doka:MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.None)
             .OldAnnotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Uuid)
-            .OldAnnotation("Doka:MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.None),
-            SafeMigrationPolicy.RepairIfSafe);
+            .OldAnnotation("Doka:MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.None));
+
         var runner = context.GetService<ISafeMigrationRunner>();
         var accepted = !includeNull || hasDefault;
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-tightening"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-uuid-tightening"),
+            CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
-        var preserved = await ScalarIntAsync(connectionString,
+        var preserved = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `uuid_tighten` WHERE `value` = 1 "
-            + "AND `owner_id` = '00112233-4455-6677-8899-aabbccddeeff';", cancellationToken: CancellationToken.None);
+            + "AND `owner_id` = '00112233-4455-6677-8899-aabbccddeeff';",
+            cancellationToken: CancellationToken.None);
 
-        var nulls = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `uuid_tighten` WHERE `owner_id` IS NULL;", cancellationToken: CancellationToken.None);
+        var nulls = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `uuid_tighten` WHERE `owner_id` IS NULL;",
+            cancellationToken: CancellationToken.None);
 
-        var required = await ScalarIntAsync(connectionString,
+        var required = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'uuid_tighten' AND COLUMN_NAME = 'owner_id' AND IS_NULLABLE = 'NO';",
             cancellationToken: CancellationToken.None);
 
         var replaced = includeNull && hasDefault
-            ? await ScalarIntAsync(connectionString,
+            ? await ScalarIntAsync(
+                connectionString,
                 "SELECT COUNT(*) FROM `uuid_tighten` WHERE `value` = 2 "
-                + "AND `owner_id` = 'ffeeddcc-bbaa-4988-8766-554433221100';", cancellationToken: CancellationToken.None)
+                + "AND `owner_id` = 'ffeeddcc-bbaa-4988-8766-554433221100';",
+                cancellationToken: CancellationToken.None)
             : 0;
 
         // Assert
-        Assert.Equal(accepted ? SafeMigrationAction.Repair : SafeMigrationAction.RejectDataBlocked,
-            Assert.Single(preflight.Assessments).Action);
+        Assert.Equal(
+            accepted
+                ? SafeMigrationAction.Repair
+                : SafeMigrationAction.RejectDataBlocked,
+            Assert.Single(preflight.Assessments)
+                .Action);
+
         if (accepted)
         {
             Assert.Null(failure);
@@ -507,9 +744,23 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
         }
 
         Assert.Equal(1, preserved);
-        Assert.Equal(includeNull && !hasDefault ? 1 : 0, nulls);
-        Assert.Equal(accepted ? 1 : 0, required);
-        Assert.Equal(includeNull && hasDefault ? 1 : 0, replaced);
+        Assert.Equal(
+            includeNull && !hasDefault
+                ? 1
+                : 0,
+            nulls);
+
+        Assert.Equal(
+            accepted
+                ? 1
+                : 0,
+            required);
+
+        Assert.Equal(
+            includeNull && hasDefault
+                ? 1
+                : 0,
+            replaced);
     }
 
     /// <summary>Native UUID neighbors and keys must not block unrelated proven lossless column repairs.</summary>
@@ -519,22 +770,32 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
     [InlineData("alter_varchar")]
     [InlineData("text")]
     [InlineData("boolean")]
-    public async Task NativeUuidSiblingsPermitUnrelatedSafeRepairs(string kind)
+    public async Task NativeUuidSiblingsPermitUnrelatedSafeRepairs(
+        string kind
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `uuid_siblings` (`id` uuid NOT NULL, `value` varchar(10) NULL, "
             + "`flag` tinyint(1) NULL, PRIMARY KEY (`id`)"
-            + (kind is "varchar" or "alter_varchar" ? ", INDEX `ix_uuid_siblings_value` (`value`, `id`)" : string.Empty)
+            + (kind is "varchar" or "alter_varchar"
+                ? ", INDEX `ix_uuid_siblings_value` (`value`, `id`)"
+                : string.Empty)
             + ") ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
             + "INSERT INTO `uuid_siblings` VALUES ('00112233-4455-6677-8899-aabbccddeeff', 'preserved', 1);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var target = kind switch
         {
-            "varchar" or "alter_varchar" => new ExpectedColumnDefinition("value", typeof(string), true,
-                "varchar(200)", maxLength: 200),
+            "varchar" or "alter_varchar" => new ExpectedColumnDefinition(
+                "value",
+                typeof(string),
+                true,
+                "varchar(200)",
+                maxLength: 200),
             "text" => new ExpectedColumnDefinition("value", typeof(string), true, "text"),
             "boolean" => new ExpectedColumnDefinition("flag", typeof(bool), false, "tinyint(1)"),
             _ => throw new UnreachableException(),
@@ -543,7 +804,9 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (kind == "alter_varchar")
         {
-            builder.AlterColumnIfDifferent("uuid_siblings", target,
+            builder.AlterColumnIfDifferent(
+                "uuid_siblings",
+                target,
                 new ExpectedColumnDefinition("value", typeof(string), true, "varchar(10)", maxLength: 10),
                 SafeMigrationPolicy.RepairIfSafe);
         }
@@ -555,25 +818,42 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-unrelated-repair"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-uuid-unrelated-repair"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-unrelated-repair-postflight"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-uuid-unrelated-repair-postflight"),
+            CancellationToken.None);
 
-        var replay = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-unrelated-repair-replay"), CancellationToken.None);
+        var replay = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-uuid-unrelated-repair-replay"),
+            CancellationToken.None);
 
-        var preserved = await ScalarIntAsync(connectionString,
+        var preserved = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `uuid_siblings` WHERE `id` = '00112233-4455-6677-8899-aabbccddeeff' "
-            + "AND `value` = 'preserved' AND `flag` = 1;", cancellationToken: CancellationToken.None);
+            + "AND `value` = 'preserved' AND `flag` = 1;",
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.Repair, Assert.Single(preflight.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.Repair,
+            Assert.Single(preflight.Assessments)
+                .Action);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(replay.Assessments)
+                .Action);
+
         Assert.Equal(1, preserved);
     }
 
@@ -585,8 +865,10 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
     [InlineData(DokaMySqlGuidFormat.Binary16, DokaMySqlGuidFormat.Uuid)]
     [InlineData(DokaMySqlGuidFormat.Uuid, DokaMySqlGuidFormat.Char36)]
     [InlineData(DokaMySqlGuidFormat.Uuid, DokaMySqlGuidFormat.Binary16)]
-    public async Task NativeUuidRepresentationChangesRemainRejected(DokaMySqlGuidFormat source,
-        DokaMySqlGuidFormat target)
+    public async Task NativeUuidRepresentationChangesRemainRejected(
+        DokaMySqlGuidFormat source,
+        DokaMySqlGuidFormat target
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
@@ -595,9 +877,15 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
             ? "0x00112233445566778899AABBCCDDEEFF"
             : "'00112233-4455-6677-8899-aabbccddeeff'";
 
-        await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE `uuid_format` (`id` " + sourceType + " NOT NULL); "
-            + "INSERT INTO `uuid_format` VALUES (" + literal + ");", cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE `uuid_format` (`id` "
+            + sourceType
+            + " NOT NULL); "
+            + "INSERT INTO `uuid_format` VALUES ("
+            + literal
+            + ");",
+            cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
@@ -607,8 +895,14 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
             Name = "id",
             ClrType = typeof(Guid),
             ColumnType = GuidStoreType(target),
-            MaxLength = target == DokaMySqlGuidFormat.Uuid ? null : target == DokaMySqlGuidFormat.Char36 ? 36 : 16,
-            IsFixedLength = target == DokaMySqlGuidFormat.Uuid ? null : true,
+            MaxLength = target == DokaMySqlGuidFormat.Uuid
+                ? null
+                : target == DokaMySqlGuidFormat.Char36
+                    ? 36
+                    : 16,
+            IsFixedLength = target == DokaMySqlGuidFormat.Uuid
+                ? null
+                : true,
             IsNullable = false,
         };
 
@@ -617,23 +911,36 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
         builder.EnsureColumn("uuid_format", definition, SafeMigrationPolicy.RepairIfSafe);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-format-change"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("native-uuid-format-change"),
+                CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
-        var actualType = await ScalarStringAsync(connectionString,
+        var actualType = await ScalarStringAsync(
+            connectionString,
             "SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'uuid_format' AND COLUMN_NAME = 'id';", cancellationToken: CancellationToken.None);
+            + "AND TABLE_NAME = 'uuid_format' AND COLUMN_NAME = 'id';",
+            cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString,
+        var rows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `uuid_format` WHERE `id` = " + literal + ";",
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationAction.RejectDifferent, Assert.Single(report.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.RejectDifferent,
+            Assert.Single(report.Assessments)
+                .Action);
+
         AssertGuard(failure, "doka_sm_different");
         Assert.Equal(sourceType, actualType);
         Assert.Equal(1, rows);
@@ -645,13 +952,17 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
     [InlineData("ensure")]
     [InlineData("update")]
     [InlineData("delete")]
-    public async Task NativeUuidModelManagedValuesApplyAndReplay(string kind)
+    public async Task NativeUuidModelManagedValuesApplyAndReplay(
+        string kind
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `uuid_managed` (`id` uuid NOT NULL, `value` int NOT NULL, PRIMARY KEY (`id`)); "
-            + (kind == "ensure" ? string.Empty
+            + (kind == "ensure"
+                ? string.Empty
                 : "INSERT INTO `uuid_managed` VALUES ('00112233-4455-6677-8899-aabbccddeeff', 7);"),
             cancellationToken: CancellationToken.None);
 
@@ -660,18 +971,37 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
         switch (kind)
         {
             case "ensure":
-                builder.EnsureModelManagedDataFromModel("uuid_managed", ["id"], ["uuid"],
-                    ["id", "value"], ["uuid", "int"], new object?[,] { { s_identifier, 7 } });
+                builder.EnsureModelManagedDataFromModel(
+                    "uuid_managed",
+                    ["id"],
+                    ["uuid"],
+                    ["id", "value"],
+                    ["uuid", "int"],
+                    new object?[,] { { s_identifier, 7 } });
+
                 break;
             case "update":
-                builder.UpdateModelManagedDataFromModel("uuid_managed", ["id"], ["uuid"],
-                    new object?[,] { { s_identifier } }, ["value"], ["int"],
-                    new object?[,] { { 7 } }, new object?[,] { { 11 } });
+                builder.UpdateModelManagedDataFromModel(
+                    "uuid_managed",
+                    ["id"],
+                    ["uuid"],
+                    new object?[,] { { s_identifier } },
+                    ["value"],
+                    ["int"],
+                    new object?[,] { { 7 } },
+                    new object?[,] { { 11 } });
+
                 break;
             case "delete":
-                builder.DeleteModelManagedDataFromModel("uuid_managed", ["id"], ["uuid"],
-                    new object?[,] { { s_identifier } }, ["id", "value"], ["uuid", "int"],
+                builder.DeleteModelManagedDataFromModel(
+                    "uuid_managed",
+                    ["id"],
+                    ["uuid"],
+                    new object?[,] { { s_identifier } },
+                    ["id", "value"],
+                    ["uuid", "int"],
                     new object?[,] { { s_identifier, 7 } });
+
                 break;
             default:
                 throw new UnreachableException();
@@ -680,25 +1010,41 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-model-managed"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-uuid-model-managed"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var postflight = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-model-managed-postflight"), CancellationToken.None);
+        var postflight = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-uuid-model-managed-postflight"),
+            CancellationToken.None);
 
-        var replay = await runner.AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-model-managed-replay"), CancellationToken.None);
+        var replay = await runner.AnalyzeAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("native-uuid-model-managed-replay"),
+            CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var stored = await context.Set<NativeUuidRow>().AsNoTracking()
+        var stored = await context
+            .Set<NativeUuidRow>()
+            .AsNoTracking()
             .SingleOrDefaultAsync(row => row.Id == s_identifier);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
-        Assert.True(Assert.Single(postflight.Assessments).PostconditionSatisfied);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
+        Assert.True(Assert.Single(postflight.Assessments)
+            .PostconditionSatisfied);
+
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(replay.Assessments)
+                .Action);
+
         if (kind == "delete")
         {
             Assert.Null(stored);
@@ -707,9 +1053,12 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
         {
             Assert.NotNull(stored);
             Assert.Equal(s_identifier, stored.Id);
-            Assert.Equal(kind == "update" ? 11 : 7, stored.Value);
+            Assert.Equal(
+                kind == "update"
+                    ? 11
+                    : 7,
+                stored.Value);
         }
-
     }
 
     /// <summary>A matching UUID key cannot hide changed source-controlled values during compare-and-swap.</summary>
@@ -718,27 +1067,48 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `uuid_managed` (`id` uuid NOT NULL, `value` int NOT NULL, PRIMARY KEY (`id`)); "
             + "INSERT INTO `uuid_managed` VALUES ('00112233-4455-6677-8899-aabbccddeeff', 9);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateNativeContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.UpdateModelManagedDataFromModel("uuid_managed", ["id"], ["uuid"],
-            new object?[,] { { s_identifier } }, ["value"], ["int"],
-            new object?[,] { { 7 } }, new object?[,] { { 11 } });
+        builder.UpdateModelManagedDataFromModel(
+            "uuid_managed",
+            ["id"],
+            ["uuid"],
+            new object?[,] { { s_identifier } },
+            ["value"],
+            ["int"],
+            new object?[,] { { 7 } },
+            new object?[,] { { 11 } });
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("native-uuid-model-managed-drift"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("native-uuid-model-managed-drift"),
+                CancellationToken.None);
 
-        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var failure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             CancellationToken.None));
 
-        var stored = await context.Set<NativeUuidRow>().AsNoTracking().SingleAsync();
+        var stored = await context
+            .Set<NativeUuidRow>()
+            .AsNoTracking()
+            .SingleAsync();
 
         // Assert
-        Assert.Equal(SafeMigrationAction.RejectDifferent, Assert.Single(report.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.RejectDifferent,
+            Assert.Single(report.Assessments)
+                .Action);
+
         AssertGuard(failure, "doka_sm_different");
         Assert.Equal(s_identifier, stored.Id);
         Assert.Equal(9, stored.Value);
@@ -747,11 +1117,13 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
     /// <summary>Builds a property-opted-in UUID model without changing the provider-wide Binary16 default.</summary>
     /// <param name="connectionString">The current test's isolated database.</param>
     /// <returns>A context using real native UUID value conversion and SafeMigrations services.</returns>
-    private NativeUuidContext CreateNativeContext(string connectionString)
+    private NativeUuidContext CreateNativeContext(
+        string connectionString
+    )
     {
         var options = new DbContextOptionsBuilder<NativeUuidContext>()
             .UseMySql(connectionString, Fixture.ServerVersion)
-            .UseMySqlSafeMigrations<NativeUuidContext>()
+            .UseMySqlSafeMigrations()
             .Options;
 
         return new NativeUuidContext(options);
@@ -760,13 +1132,86 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
     /// <summary>Maps the three explicitly supported GUID storage identities without equating their bytes.</summary>
     /// <param name="format">The provider-owned representation.</param>
     /// <returns>The exact physical store type.</returns>
-    private static string GuidStoreType(DokaMySqlGuidFormat format) => format switch
+    private static string GuidStoreType(
+        DokaMySqlGuidFormat format
+    ) => format switch
     {
         DokaMySqlGuidFormat.Binary16 => "binary(16)",
         DokaMySqlGuidFormat.Char36 => "char(36)",
         DokaMySqlGuidFormat.Uuid => "uuid",
         _ => throw new UnreachableException(),
     };
+
+    /// <summary>Captures native UUID metadata without copying textual length or fixed-length facets.</summary>
+    /// <param name="builder">The ordered immutable operation stream.</param>
+    /// <param name="table">The owned target table.</param>
+    /// <param name="column">The target UUID column.</param>
+    /// <param name="nullable">Whether old rows may retain NULL.</param>
+    /// <param name="defaultValue">An optional explicitly authored identity for existing rows.</param>
+    private static void AddNativeUuid(
+        MigrationBuilder builder,
+        string table,
+        string column,
+        bool nullable,
+        Guid? defaultValue = null
+    )
+        => builder.AddColumnIfNotExistsFromModel(operations => operations
+            .AddColumn<Guid>(
+                column,
+                table,
+                type: "uuid",
+                nullable: nullable,
+                defaultValue: defaultValue)
+            .Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Uuid)
+            .Annotation("Doka:MySql:RequiresExplicitBackfill", true)
+            .Annotation("Doka:MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.None));
+
+    /// <summary>Requires the owned safety diagnostic rather than treating any provider failure as rejection.</summary>
+    /// <param name="failure">The captured generated-command failure.</param>
+    /// <param name="code">The precise safety guard that must have caused the failure.</param>
+    private static void AssertGuard(
+        Exception? failure,
+        string code
+    )
+    {
+        var diagnostic = Assert.IsType<SafeMigrationExecutionException>(failure);
+        var native = Assert.IsType<MySqlException>(diagnostic.InnerException);
+
+        Assert.Equal(code, diagnostic.GuardCode);
+        Assert.Equal(1062, native.Number);
+        Assert.Equal("23000", native.SqlState);
+        Assert.Contains(code, native.Message, StringComparison.Ordinal);
+        Assert.NotNull(diagnostic.OperationOrdinal);
+    }
+
+    /// <summary>
+    /// Respects the explicit test engine instead of turning unsupported execution into a silent pass.
+    /// </summary>
+    /// <returns>A stable skip explanation on MySQL or old MariaDB; otherwise null.</returns>
+    private static string? NativeUuidSkipReason()
+    {
+        var engine = Environment
+            .GetEnvironmentVariable("SAFE_MIGRATIONS_MYSQL_ENGINE")
+            ?.Trim();
+
+        if (!string.IsNullOrEmpty(engine)
+            && !engine.Equals("mariadb", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Native UUID columns require MariaDB 10.7 or later; MySQL has no native UUID type.";
+        }
+
+        var version = Environment
+            .GetEnvironmentVariable("SAFE_MIGRATIONS_MYSQL_VERSION")
+            ?.Trim();
+
+        if (Version.TryParse(version, out var configured)
+            && configured < new Version(10, 7))
+        {
+            return "Native UUID columns require MariaDB 10.7 or later.";
+        }
+
+        return null;
+    }
 
     /// <summary>The native key and data payload used by the real EF materialization path.</summary>
     private sealed class NativeUuidRow
@@ -782,78 +1227,42 @@ public sealed class MySqlNativeUuidIntegrationTests : MySqlIntegrationTestBase
     private sealed class NativeUuidContext(DbContextOptions<NativeUuidContext> options) : DbContext(options)
     {
         /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        )
         {
             var entity = modelBuilder.Entity<NativeUuidRow>();
             entity.ToTable("uuid_managed");
             entity.HasKey(static row => row.Id);
-            entity.Property(static row => row.Id).HasColumnName("id")
-                .HasMySqlGuidFormat(DokaMySqlGuidFormat.Uuid).ValueGeneratedNever();
-            entity.Property(static row => row.Value).HasColumnName("value");
+            entity
+                .Property(static row => row.Id)
+                .HasColumnName("id")
+                .HasMySqlGuidFormat(DokaMySqlGuidFormat.Uuid)
+                .ValueGeneratedNever();
+
+            entity
+                .Property(static row => row.Value)
+                .HasColumnName("value");
         }
-    }
-
-    /// <summary>Captures native UUID metadata without copying textual length or fixed-length facets.</summary>
-    /// <param name="builder">The ordered immutable operation stream.</param>
-    /// <param name="table">The owned target table.</param>
-    /// <param name="column">The target UUID column.</param>
-    /// <param name="nullable">Whether old rows may retain NULL.</param>
-    /// <param name="defaultValue">An optional explicitly authored identity for existing rows.</param>
-    private static void AddNativeUuid(MigrationBuilder builder, string table, string column, bool nullable,
-        Guid? defaultValue = null)
-        => builder.AddColumnIfNotExistsFromModel(operations => operations.AddColumn<Guid>(column, table,
-                type: "uuid", nullable: nullable, defaultValue: defaultValue)
-            .Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Uuid)
-            .Annotation("Doka:MySql:RequiresExplicitBackfill", true)
-            .Annotation("Doka:MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.None));
-
-    /// <summary>Requires the owned safety diagnostic rather than treating any provider failure as rejection.</summary>
-    /// <param name="failure">The captured generated-command failure.</param>
-    /// <param name="code">The precise safety guard that must have caused the failure.</param>
-    private static void AssertGuard(Exception? failure, string code)
-    {
-        var diagnostic = Assert.IsType<SafeMigrationExecutionException>(failure);
-        var native = Assert.IsType<MySqlException>(diagnostic.InnerException);
-
-        Assert.Equal(code, diagnostic.GuardCode);
-        Assert.Equal(1062, native.Number);
-        Assert.Equal("23000", native.SqlState);
-        Assert.Contains(code, native.Message, StringComparison.Ordinal);
-        Assert.NotNull(diagnostic.OperationOrdinal);
     }
 
     /// <summary>Skips unsupported engines honestly during discovery, before their shared fixture starts.</summary>
     private sealed class NativeUuidFactAttribute : FactAttribute
     {
         /// <summary>Uses the engine selector and MariaDB default shared with the container fixture.</summary>
-        public NativeUuidFactAttribute() => Skip = NativeUuidSkipReason();
+        public NativeUuidFactAttribute()
+        {
+            Skip = NativeUuidSkipReason();
+        }
     }
 
     /// <summary>Skips native UUID theory rows where the configured engine has no native UUID type.</summary>
     private sealed class NativeUuidTheoryAttribute : TheoryAttribute
     {
         /// <summary>Uses the same discovery-time capability boundary as native UUID facts.</summary>
-        public NativeUuidTheoryAttribute() => Skip = NativeUuidSkipReason();
-    }
-
-    /// <summary>
-    /// Respects the explicit test engine instead of turning unsupported execution into a silent pass.
-    /// </summary>
-    /// <returns>A stable skip explanation on MySQL or old MariaDB; otherwise null.</returns>
-    private static string? NativeUuidSkipReason()
-    {
-        var engine = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_MYSQL_ENGINE")?.Trim();
-        if (!string.IsNullOrEmpty(engine) && !engine.Equals("mariadb", StringComparison.OrdinalIgnoreCase))
+        public NativeUuidTheoryAttribute()
         {
-            return "Native UUID columns require MariaDB 10.7 or later; MySQL has no native UUID type.";
+            Skip = NativeUuidSkipReason();
         }
-
-        var version = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_MYSQL_VERSION")?.Trim();
-        if (Version.TryParse(version, out var configured) && configured < new Version(10, 7))
-        {
-            return "Native UUID columns require MariaDB 10.7 or later.";
-        }
-
-        return null;
     }
 }

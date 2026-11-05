@@ -1,3 +1,5 @@
+using Doka.EntityFrameworkCore.SafeMigrations.Sqlite.PackageConsumer;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
 /// <summary>Checks the real CLI/bundle verifier against complete and independently damaged databases.</summary>
@@ -15,17 +17,23 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
         await CreateFixtureAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
-        PackageConsumer.ToolingDatabaseVerifier.Verify(connection, InitialMigrationId, TransitionMigrationId);
+        ToolingDatabaseVerifier.Verify(connection, InitialMigrationId, TransitionMigrationId);
 
         // Assert
-        Assert.Equal(0, await ScalarIntAsync(
-            connection,
-            "SELECT COUNT(*) FROM scaffolding_generated_nodes;",
-            cancellationToken: CancellationToken.None));
-        Assert.Equal(1, await ScalarIntAsync(
-            connection,
-            "SELECT COUNT(*) FROM tooling_entities;",
-            cancellationToken: CancellationToken.None));
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM scaffolding_generated_nodes;",
+                cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM tooling_entities;",
+                cancellationToken: CancellationToken.None));
+
         using var transaction = connection.BeginTransaction();
         Assert.Same(connection, transaction.Connection);
     }
@@ -43,11 +51,16 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
             cancellationToken: CancellationToken.None);
 
         // Act
-        var exception = Record.Exception(() => PackageConsumer.ToolingDatabaseVerifier.Verify(
-            connection, InitialMigrationId, TransitionMigrationId));
+        var exception = Record.Exception(() => ToolingDatabaseVerifier.Verify(
+            connection,
+            InitialMigrationId,
+            TransitionMigrationId));
 
         // Assert
-        Assert.Contains("migration_history", Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains(
+            "migration_history",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
     }
 
@@ -56,21 +69,31 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     [Theory]
     [InlineData(InitialMigrationId)]
     [InlineData(TransitionMigrationId)]
-    public async Task ExtraIndexCannotCompensateForMissingHistory(string missingMigrationId)
+    public async Task ExtraIndexCannotCompensateForMissingHistory(
+        string missingMigrationId
+    )
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateFixtureAsync(connection, cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connection, "DELETE FROM __EFMigrationsHistory WHERE MigrationId = '"
-            + missingMigrationId + "'; CREATE UNIQUE INDEX unrelated_unique ON tooling_entities (Code, Id);",
+        await ExecuteSqlAsync(
+            connection,
+            "DELETE FROM __EFMigrationsHistory WHERE MigrationId = '"
+            + missingMigrationId
+            + "'; CREATE UNIQUE INDEX unrelated_unique ON tooling_entities (Code, Id);",
             cancellationToken: CancellationToken.None);
 
         // Act
-        var exception = Record.Exception(() => PackageConsumer.ToolingDatabaseVerifier.Verify(
-            connection, InitialMigrationId, TransitionMigrationId));
+        var exception = Record.Exception(() => ToolingDatabaseVerifier.Verify(
+            connection,
+            InitialMigrationId,
+            TransitionMigrationId));
 
         // Assert
-        Assert.Contains("migration_history", Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains(
+            "migration_history",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
     }
 
@@ -81,15 +104,25 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateFixtureAsync(connection, cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connection, "UPDATE __EFMigrationsHistory SET MigrationId = '20990101000001_Other' "
-            + "WHERE MigrationId = '" + TransitionMigrationId + "';", cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connection,
+            "UPDATE __EFMigrationsHistory SET MigrationId = '20990101000001_Other' "
+            + "WHERE MigrationId = '"
+            + TransitionMigrationId
+            + "';",
+            cancellationToken: CancellationToken.None);
 
         // Act
-        var exception = Record.Exception(() => PackageConsumer.ToolingDatabaseVerifier.Verify(
-            connection, InitialMigrationId, TransitionMigrationId));
+        var exception = Record.Exception(() => ToolingDatabaseVerifier.Verify(
+            connection,
+            InitialMigrationId,
+            TransitionMigrationId));
 
         // Assert
-        Assert.Contains("migration_history", Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains(
+            "migration_history",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
     }
 
@@ -98,7 +131,9 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     [Theory]
     [InlineData("AddedCode")]
     [InlineData("renamed_code")]
-    public async Task MissingTargetColumnIsRejected(string column)
+    public async Task MissingTargetColumnIsRejected(
+        string column
+    )
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
@@ -109,11 +144,16 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
             cancellationToken: CancellationToken.None);
 
         // Act
-        var exception = Record.Exception(() => PackageConsumer.ToolingDatabaseVerifier.Verify(
-            connection, InitialMigrationId, TransitionMigrationId));
+        var exception = Record.Exception(() => ToolingDatabaseVerifier.Verify(
+            connection,
+            InitialMigrationId,
+            TransitionMigrationId));
 
         // Assert
-        Assert.Contains("target_columns", Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains(
+            "target_columns",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
     }
 
@@ -123,7 +163,9 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     [InlineData("CREATE UNIQUE INDEX unrelated_unique ON tooling_entities (Code)")]
     [InlineData("CREATE UNIQUE INDEX IX_tooling_entities_Code ON tooling_entities (Id)")]
     [InlineData("CREATE INDEX IX_tooling_entities_Code ON tooling_entities (Code)")]
-    public async Task IncorrectCodeIndexIsRejected(string replacement)
+    public async Task IncorrectCodeIndexIsRejected(
+        string replacement
+    )
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
@@ -134,11 +176,16 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
             cancellationToken: CancellationToken.None);
 
         // Act
-        var exception = Record.Exception(() => PackageConsumer.ToolingDatabaseVerifier.Verify(
-            connection, InitialMigrationId, TransitionMigrationId));
+        var exception = Record.Exception(() => ToolingDatabaseVerifier.Verify(
+            connection,
+            InitialMigrationId,
+            TransitionMigrationId));
 
         // Assert
-        Assert.Contains("code_index", Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains(
+            "code_index",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
     }
 
@@ -151,11 +198,16 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
         await CreateFixtureAsync(connection, includeGeneratedTable: false, cancellationToken: CancellationToken.None);
 
         // Act
-        var exception = Record.Exception(() => PackageConsumer.ToolingDatabaseVerifier.Verify(
-            connection, InitialMigrationId, TransitionMigrationId));
+        var exception = Record.Exception(() => ToolingDatabaseVerifier.Verify(
+            connection,
+            InitialMigrationId,
+            TransitionMigrationId));
 
         // Assert
-        Assert.Contains("generated_columns", Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains(
+            "generated_columns",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
     }
 
@@ -166,18 +218,24 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateFixtureAsync(connection, cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connection,
+        await ExecuteSqlAsync(
+            connection,
             "DROP INDEX IX_scaffolding_generated_nodes_HasDescendants_LeftBound_RightBound; "
             + "CREATE INDEX IX_scaffolding_generated_nodes_HasDescendants_LeftBound_RightBound "
             + "ON scaffolding_generated_nodes (HasDescendants, RightBound, LeftBound);",
             cancellationToken: CancellationToken.None);
 
         // Act
-        var exception = Record.Exception(() => PackageConsumer.ToolingDatabaseVerifier.Verify(
-            connection, InitialMigrationId, TransitionMigrationId));
+        var exception = Record.Exception(() => ToolingDatabaseVerifier.Verify(
+            connection,
+            InitialMigrationId,
+            TransitionMigrationId));
 
         // Assert
-        Assert.Contains("generated_index", Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains(
+            "generated_index",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
     }
 
@@ -190,16 +248,24 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
         await CreateFixtureAsync(connection, generatedExpression: "0", cancellationToken: CancellationToken.None);
 
         // Act
-        var exception = Record.Exception(() => PackageConsumer.ToolingDatabaseVerifier.Verify(
-            connection, InitialMigrationId, TransitionMigrationId));
+        var exception = Record.Exception(() => ToolingDatabaseVerifier.Verify(
+            connection,
+            InitialMigrationId,
+            TransitionMigrationId));
 
         // Assert
-        Assert.Contains("generated_values", Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains(
+            "generated_values",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
-        Assert.Equal(0, await ScalarIntAsync(
-            connection,
-            "SELECT COUNT(*) FROM scaffolding_generated_nodes;",
-            cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM scaffolding_generated_nodes;",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>A named but ineffective CHECK must fail its behavioral negative control.</summary>
@@ -207,7 +273,9 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
     [Theory]
     [InlineData(null)]
     [InlineData("1")]
-    public async Task MissingOrIneffectiveCheckIsRejected(string? checkExpression)
+    public async Task MissingOrIneffectiveCheckIsRejected(
+        string? checkExpression
+    )
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
@@ -217,16 +285,24 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
             cancellationToken: CancellationToken.None);
 
         // Act
-        var exception = Record.Exception(() => PackageConsumer.ToolingDatabaseVerifier.Verify(
-            connection, InitialMigrationId, TransitionMigrationId));
+        var exception = Record.Exception(() => ToolingDatabaseVerifier.Verify(
+            connection,
+            InitialMigrationId,
+            TransitionMigrationId));
 
         // Assert
-        Assert.Contains("generated_check", Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains(
+            "generated_check",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
-        Assert.Equal(0, await ScalarIntAsync(
-            connection,
-            "SELECT COUNT(*) FROM scaffolding_generated_nodes;",
-            cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connection,
+                "SELECT COUNT(*) FROM scaffolding_generated_nodes;",
+                cancellationToken: CancellationToken.None));
     }
 
     /// <summary>Foreign-key violations remain fatal even when all selected application objects match.</summary>
@@ -236,18 +312,25 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateFixtureAsync(connection, cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connection, "PRAGMA foreign_keys = OFF; "
+        await ExecuteSqlAsync(
+            connection,
+            "PRAGMA foreign_keys = OFF; "
             + "CREATE TABLE extra_parent (Id INTEGER PRIMARY KEY); "
             + "CREATE TABLE extra_child (ParentId INTEGER REFERENCES extra_parent (Id)); "
             + "INSERT INTO extra_child VALUES (1); PRAGMA foreign_keys = ON;",
             cancellationToken: CancellationToken.None);
 
         // Act
-        var exception = Record.Exception(() => PackageConsumer.ToolingDatabaseVerifier.Verify(
-            connection, InitialMigrationId, TransitionMigrationId));
+        var exception = Record.Exception(() => ToolingDatabaseVerifier.Verify(
+            connection,
+            InitialMigrationId,
+            TransitionMigrationId));
 
         // Assert
-        Assert.Contains("foreign_key_integrity", Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains(
+            "foreign_key_integrity",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
     }
 
@@ -268,14 +351,20 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
             ? "\"old_code\" TEXT NULL, \"LegacyCode\" INTEGER NULL"
             : "\"renamed_code\" TEXT NULL, \"AddedCode\" TEXT NULL";
 
-        await ExecuteSqlAsync(connection,
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE __EFMigrationsHistory (MigrationId TEXT NOT NULL PRIMARY KEY, ProductVersion TEXT NOT NULL); "
-            + "INSERT INTO __EFMigrationsHistory VALUES ('" + InitialMigrationId + "', '10.0.13'); "
-            + (baselineOnly ? string.Empty
+            + "INSERT INTO __EFMigrationsHistory VALUES ('"
+            + InitialMigrationId
+            + "', '10.0.13'); "
+            + (baselineOnly
+                ? string.Empty
                 : "INSERT INTO __EFMigrationsHistory VALUES ('" + TransitionMigrationId + "', '10.0.13'); ")
             + "CREATE TABLE tooling_entities (Id INTEGER NOT NULL PRIMARY KEY, Code TEXT NOT NULL, "
-            + transitionColumns + "); CREATE UNIQUE INDEX IX_tooling_entities_Code ON tooling_entities (Code); "
-            + "INSERT INTO tooling_entities (Id, Code) VALUES (1, 'baseline');", cancellationToken: cancellationToken);
+            + transitionColumns
+            + "); CREATE UNIQUE INDEX IX_tooling_entities_Code ON tooling_entities (Code); "
+            + "INSERT INTO tooling_entities (Id, Code) VALUES (1, 'baseline');",
+            cancellationToken: cancellationToken);
 
         if (includeGeneratedTable)
         {
@@ -283,13 +372,19 @@ public sealed class SqliteToolingDatabaseVerifierTests : SqliteIntegrationTestBa
                 ?? "\"RightBound\" > CASE WHEN \"LeftBound\" = 9223372036854775807 "
                 + "THEN \"LeftBound\" ELSE \"LeftBound\" + 1 END";
 
-            var check = checkExpression is null ? string.Empty
+            var check = checkExpression is null
+                ? string.Empty
                 : ", CONSTRAINT ck_scaffolding_generated_bounds CHECK (" + checkExpression + ")";
 
-            await ExecuteSqlAsync(connection,
+            await ExecuteSqlAsync(
+                connection,
                 "CREATE TABLE scaffolding_generated_nodes (Id INTEGER NOT NULL PRIMARY KEY, "
                 + "LeftBound INTEGER NOT NULL, RightBound INTEGER NOT NULL, HasDescendants INTEGER NOT NULL "
-                + "GENERATED ALWAYS AS (" + expression + ") VIRTUAL" + check + "); "
+                + "GENERATED ALWAYS AS ("
+                + expression
+                + ") VIRTUAL"
+                + check
+                + "); "
                 + "CREATE INDEX IX_scaffolding_generated_nodes_HasDescendants_LeftBound_RightBound "
                 + "ON scaffolding_generated_nodes (HasDescendants, LeftBound, RightBound);",
                 cancellationToken: cancellationToken);

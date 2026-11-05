@@ -5,5 +5,7 @@ public sealed class MySqlTestFramework : SharedContainerTestFramework<MySqlEngin
 {
     /// <summary>Creates the native fixture adapter for the current test assembly execution.</summary>
     /// <param name="messageSink">The xUnit diagnostic message sink.</param>
-    public MySqlTestFramework(Xunit.Abstractions.IMessageSink messageSink) : base(messageSink) { }
+    public MySqlTestFramework(
+        IMessageSink messageSink
+    ) : base(messageSink) { }
 }

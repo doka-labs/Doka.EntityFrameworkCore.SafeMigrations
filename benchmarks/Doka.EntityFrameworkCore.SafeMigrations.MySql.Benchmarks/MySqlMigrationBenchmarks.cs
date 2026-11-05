@@ -5,10 +5,17 @@ public class MySqlMigrationBenchmarks : IDisposable
 {
     private MySqlGenerationContext _context = null!;
     private IMigrationsSqlGenerator _generator = null!;
-    private MySqlSafeMigrationPlanCapture _planCapture = null!;
     private IModel _model = null!;
-    private IReadOnlyList<MigrationOperation> _repairOperations = null!;
     private IReadOnlyList<MigrationOperation> _modelManagedOperations = null!;
+    private MySqlSafeMigrationPlanCapture _planCapture = null!;
+    private IReadOnlyList<MigrationOperation> _repairOperations = null!;
+
+    /// <summary>Releases the owned benchmark context.</summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
 
     /// <summary>Creates the native provider services, model and fixed workloads outside the measurement.</summary>
     [GlobalSetup]
@@ -36,7 +43,8 @@ public class MySqlMigrationBenchmarks : IDisposable
     /// <summary>Generates SQL for 1000 repair operations.</summary>
     /// <returns>The generated command count.</returns>
     [Benchmark]
-    public int GenerateRepairs() => _generator.Generate(_repairOperations, _model).Count;
+    public int GenerateRepairs() => _generator.Generate(_repairOperations, _model)
+        .Count;
 
     /// <summary>Captures the plans for 1000 repair operations.</summary>
     /// <returns>The captured plan count.</returns>
@@ -65,13 +73,6 @@ public class MySqlMigrationBenchmarks : IDisposable
     /// <summary>Disposes the native provider context after measurement.</summary>
     [GlobalCleanup]
     public void Cleanup() => Dispose();
-
-    /// <summary>Releases the owned benchmark context.</summary>
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
 
     /// <summary>Releases managed resources owned by this benchmark fixture.</summary>
     /// <param name="disposing">Whether managed resources should be released.</param>

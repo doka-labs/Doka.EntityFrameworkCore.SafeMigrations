@@ -1,3 +1,5 @@
+using System.Data;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
 internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
@@ -19,7 +21,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         }
 
         var connection = context.Database.GetDbConnection();
-        var openedHere = connection.State != System.Data.ConnectionState.Open;
+        var openedHere = connection.State != ConnectionState.Open;
         if (openedHere)
         {
             await connection.OpenAsync(cancellationToken);
@@ -61,13 +63,14 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         using var chunks = expected
             .Chunk(SafeMigrationCatalogQueryLimits.MaximumInventoryValues)
             .GetEnumerator();
+
         var pending = new Dictionary<int, SafeMigrationExpectedTableInventory[]>();
 
         await SafeMigrationCatalogProbeBatch.ReadAsync(
             connection,
             schemaScopes.Length
-            + ((expected.Count + SafeMigrationCatalogQueryLimits.MaximumInventoryValues - 1)
-                / SafeMigrationCatalogQueryLimits.MaximumInventoryValues),
+            + (expected.Count + SafeMigrationCatalogQueryLimits.MaximumInventoryValues - 1)
+            / SafeMigrationCatalogQueryLimits.MaximumInventoryValues,
             SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes,
             commandTimeout,
             (command, slot) =>
@@ -100,7 +103,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             async (reader, slot, _, token) =>
             {
                 var tablesOnly = slot < schemaScopes.Length;
-                var scope = tablesOnly ? schemaScopes[slot] : pending[slot];
+                var scope = tablesOnly
+                    ? schemaScopes[slot]
+                    : pending[slot];
+
                 pending.Remove(slot);
                 await ReadUnexpectedAsync(
                     reader,
@@ -140,8 +146,8 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
 
         var semanticAliases = new HashSet<int>();
         foreach (var candidates in SafeMigrationSemanticCandidateFactory
-                     .Create(operations, findings, currentSchema)
-                     .Chunk(SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture))
+            .Create(operations, findings, currentSchema)
+            .Chunk(SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture))
         {
             var analyses = await AnalyzeAsync(
                 context,
@@ -186,6 +192,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
         var permittedSchemas = scope
             .Select(static table => table.Schema)
             .ToHashSet(StringComparer.Ordinal);
+
         var permittedTables = scope
             .Select(static table => (table.Schema, table.Table))
             .ToHashSet();
@@ -198,7 +205,10 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
             var schema = reader.GetString(1);
             var tableName = reader.GetString(2);
             var objectName = reader.GetString(3);
-            var currentSchema = reader.IsDBNull(4) ? null : reader.GetString(4);
+            var currentSchema = reader.IsDBNull(4)
+                ? null
+                : reader.GetString(4);
+
             if (kind == SafeMigrationDatabaseObjectKind.Table != tablesOnly
                 || (tablesOnly
                     ? !permittedSchemas.Contains(schema)
@@ -307,7 +317,7 @@ internal sealed partial class PostgreSqlSafeMigrationProviderAnalyzer
     {
         SafeMigrationDatabaseObjectKind.Column => table.Columns.Contains(name),
         SafeMigrationDatabaseObjectKind.Index => table.Indexes.Contains(name),
-        _ => table.Constraints.TryGetValue(name, out var expectedKind) && expectedKind == kind
+        _ => table.Constraints.TryGetValue(name, out var expectedKind) && expectedKind == kind,
     };
 
     /// <summary>Creates a diagnostic-only unexpected object with its stable provider code.</summary>

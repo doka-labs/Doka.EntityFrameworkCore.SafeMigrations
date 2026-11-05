@@ -4,11 +4,11 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite;
 internal sealed class SqliteSafeMigrationCommand : MigrationCommand
 {
     private readonly SqliteSafeMigrationProviderAnalyzer _analyzer;
-    private readonly SqliteSafeMigrationExecutionState _executionState;
-    private readonly SqliteRebuildArtifactContract _rebuildArtifacts;
-    private readonly SafeMigrationOperation _operation;
     private readonly IReadOnlyList<MigrationCommand> _applyCommands;
+    private readonly SqliteSafeMigrationExecutionState _executionState;
+    private readonly SafeMigrationOperation _operation;
     private readonly int _operationOrdinal;
+    private readonly SqliteRebuildArtifactContract _rebuildArtifacts;
 
     /// <summary>Initializes a guarded SQLite migration command.</summary>
     public SqliteSafeMigrationCommand(
@@ -111,7 +111,9 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
         {
             throw new InvalidOperationException(
                 SafeMigrationDiagnosticMessages.FormatPostcondition(
-                    _operation, postcondition, _operationOrdinal));
+                    _operation,
+                    postcondition,
+                    _operationOrdinal));
         }
 
         return affected;
@@ -187,7 +189,9 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
             .Select(RenderExistingIndexKey);
 
         var createSql = "CREATE "
-            + (source.Unique ? "UNIQUE " : string.Empty)
+            + (source.Unique
+                ? "UNIQUE "
+                : string.Empty)
             + "INDEX "
             + Delimit(intent.NewName)
             + " ON "
@@ -195,7 +199,9 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
             + " ("
             + string.Join(", ", keys)
             + ")"
-            + (source.Filter is null ? string.Empty : " WHERE " + source.Filter)
+            + (source.Filter is null
+                ? string.Empty
+                : " WHERE " + source.Filter)
             + ";";
 
         var dropSql = "DROP INDEX " + Delimit(intent.Name) + ";";
@@ -285,6 +291,7 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
             {
                 var row = offset + localRow;
                 var parameters = new string[parameterCountPerRow];
+
                 // WHY: Keep row selectors, declared column types and matrix values aligned by their original ordinals.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery
@@ -310,10 +317,8 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
 
             var keyPredicate = string.Join(
                 " AND ",
-                intent.KeyColumns.Select((
-                        column,
-                        index
-                    ) => $"stored.{Delimit(column)} IS incoming.{Delimit($"key_{index}")}"));
+                intent.KeyColumns.Select((column,
+                        index) => $"stored.{Delimit(column)} IS incoming.{Delimit($"key_{index}")}"));
 
             command.CommandText = $"WITH incoming ({string.Join(", ", cteColumns.Select(Delimit))}) AS ("
                 + $"VALUES {string.Join(", ", rows)}) INSERT INTO {Delimit(intent.Table)} "
@@ -326,6 +331,7 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
                         .Select(static index => $"incoming.\"value_{index}\""))
                 + " FROM incoming WHERE NOT EXISTS ("
                 + $"SELECT 1 FROM {Delimit(intent.Table)} AS stored WHERE {keyPredicate});";
+
             affected += command.ExecuteNonQuery();
         }
 
@@ -339,7 +345,7 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
     )
     {
         var affected = 0;
-        var parameterCountPerRow = intent.KeyColumns.Count + (intent.Columns.Count * 2);
+        var parameterCountPerRow = intent.KeyColumns.Count + intent.Columns.Count * 2;
         var batchSize = Math.Max(1, SqliteSafeMigrationLimits.MaximumParametersPerCommand / parameterCountPerRow);
 
         // WHY: Keep row selectors, declared column types and matrix values aligned by their original ordinals.
@@ -408,16 +414,15 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
             }
 
             var matchPredicate = ModelManagedMatchPredicate(intent, "stored", "incoming", includeSource: true);
-            var assignments = intent.Columns.Select((
-                    column,
-                    index
-                ) => $"{Delimit(column)} = (SELECT incoming.{Delimit($"target_{index}")} "
+            var assignments = intent.Columns.Select((column,
+                    index) => $"{Delimit(column)} = (SELECT incoming.{Delimit($"target_{index}")} "
                 + $"FROM incoming WHERE {matchPredicate} LIMIT 1)");
 
             command.CommandText = $"WITH incoming ({string.Join(", ", cteColumns.Select(Delimit))}) AS ("
                 + $"VALUES {string.Join(", ", rows)}) UPDATE {Delimit(intent.Table)} AS stored "
                 + $"SET {string.Join(", ", assignments)} WHERE EXISTS ("
                 + $"SELECT 1 FROM incoming WHERE {matchPredicate});";
+
             affected += command.ExecuteNonQuery();
         }
 
@@ -461,6 +466,7 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
                 var row = offset + localRow;
                 var parameters = new string[parameterCountPerRow];
                 var parameterIndex = 0;
+
                 // WHY: Pair each key-column slot with the same row and column of its value matrix.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery
@@ -489,6 +495,7 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
             command.CommandText = $"WITH incoming ({string.Join(", ", cteColumns.Select(Delimit))}) AS ("
                 + $"VALUES {string.Join(", ", rows)}) DELETE FROM {Delimit(intent.Table)} AS stored "
                 + $"WHERE EXISTS (SELECT 1 FROM incoming WHERE {matchPredicate});";
+
             affected += command.ExecuteNonQuery();
         }
 
@@ -502,19 +509,21 @@ internal sealed class SqliteSafeMigrationCommand : MigrationCommand
         bool includeSource
     )
     {
-        var predicates = new List<string>(intent.KeyColumns.Count + (includeSource ? intent.Columns.Count : 0));
+        var predicates = new List<string>(
+            intent.KeyColumns.Count
+            + (includeSource
+                ? intent.Columns.Count
+                : 0));
+
         predicates.AddRange(
-            intent.KeyColumns.Select((
-                    column,
-                    index
-                ) => $"{storedAlias}.{Delimit(column)} IS {incomingAlias}.{Delimit($"key_{index}")}"));
+            intent.KeyColumns.Select((column,
+                    index) => $"{storedAlias}.{Delimit(column)} IS {incomingAlias}.{Delimit($"key_{index}")}"));
+
         if (includeSource)
         {
             predicates.AddRange(
-                intent.Columns.Select((
-                        column,
-                        index
-                    ) => $"{storedAlias}.{Delimit(column)} IS {incomingAlias}.{Delimit($"source_{index}")}"));
+                intent.Columns.Select((column,
+                        index) => $"{storedAlias}.{Delimit(column)} IS {incomingAlias}.{Delimit($"source_{index}")}"));
         }
 
         return string.Join(" AND ", predicates);

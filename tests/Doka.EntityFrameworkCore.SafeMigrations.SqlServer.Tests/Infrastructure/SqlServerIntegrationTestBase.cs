@@ -16,7 +16,10 @@ public abstract class SqlServerIntegrationTestBase : IAsyncLifetime, IClassFixtu
     /// </summary>
     protected SqlServerIntegrationTestBase(
         SqlServerContainerFixture fixture
-    ) => Fixture = fixture;
+    )
+    {
+        Fixture = fixture;
+    }
 
     /// <summary>
     /// Gets the fixture used to create a database per test.

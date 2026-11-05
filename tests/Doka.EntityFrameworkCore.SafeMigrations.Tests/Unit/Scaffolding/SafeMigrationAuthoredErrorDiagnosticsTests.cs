@@ -170,7 +170,12 @@ public sealed class SafeMigrationAuthoredErrorDiagnosticsTests
     public void UnsupportedOperationIncludesBoundedOwnerAndCorrectiveAction()
     {
         // Arrange
-        var operation = new AlterTableOperation { Name = "items\nforged-log", Schema = "tenant" };
+        var operation = new AlterTableOperation
+        {
+            Name = "items\nforged-log",
+            Schema = "tenant",
+        };
+
         operation["Test:Secret"] = "sensitive-annotation";
 
         // Act
@@ -206,7 +211,11 @@ public sealed class SafeMigrationAuthoredErrorDiagnosticsTests
     public void UnsupportedOperationBoundsLongMetadataWithoutGuessingAnotherOwner()
     {
         // Arrange
-        var operation = new AlterTableOperation { Name = new string('x', 10_000), Schema = "tenant" };
+        var operation = new AlterTableOperation
+        {
+            Name = new string('x', 10_000),
+            Schema = "tenant",
+        };
 
         // Act
         var exception = SafeMigrationOperationCompatibility.Unsupported(operation);
@@ -235,8 +244,7 @@ public sealed class SafeMigrationAuthoredErrorDiagnosticsTests
             new MissingTableModelDiffer(operation),
             new SafeMigrationScaffoldingConfiguration(
                 true,
-                SafeMigrationScaffoldingMode.Strict,
-                SafeMigrationPolicy.ThrowIfDifferent));
+                SafeMigrationScaffoldingMode.Strict));
 
         // Act
         var exception = Assert.Throws<InvalidOperationException>(() => differ.GetDifferences(null, null));

@@ -16,12 +16,20 @@ public sealed class BenchmarkProgramExportTests
     {
         // Arrange
         using var evidence = new BenchmarkProgramTestEvidence();
-        var reports = BenchmarkProgramTestEvidence.CreateCases()
-            .Select(benchmark => BenchmarkProgramTestEvidence.CreateReport(benchmark, true,
+        var reports = BenchmarkProgramTestEvidence
+            .CreateCases()
+            .Select(benchmark => BenchmarkProgramTestEvidence.CreateReport(
+                benchmark,
+                true,
                 BenchmarkProgramTestEvidence.CreateExecution(nanoseconds, allocatedBytes)))
             .ToArray();
+
         var summary = evidence.CreateSummary(reports);
-        var paths = JsonExporter.Full.ExportToFiles(summary, NullLogger.Instance).ToArray();
+        var paths = JsonExporter
+            .Full
+            .ExportToFiles(summary, NullLogger.Instance)
+            .ToArray();
+
         var path = paths.Single();
 
         // Act
@@ -125,7 +133,8 @@ public sealed class BenchmarkProgramExportTests
     {
         // Arrange
         using var evidence = new BenchmarkProgramTestEvidence();
-        evidence.WriteExport("""
+        evidence.WriteExport(
+            """
             {"Benchmarks":[
               {"Statistics":{"Mean":100},"Measurements":[{"Nanoseconds":100}]},
               {"Statistics":null,"Measurements":[]}

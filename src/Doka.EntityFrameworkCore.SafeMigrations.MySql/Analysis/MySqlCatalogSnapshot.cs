@@ -1,3 +1,5 @@
+using System.Data;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 /// <summary>Holds a session-scoped copy of the catalog views batched classification reads.</summary>
@@ -7,7 +9,6 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 /// Aria table. Replaying a real classification statement of 491 catalog subqueries showed 4,453
 /// internal temporary tables of which 711 on disk, costing 130.1 ms; against a copy of the views
 /// the same statement cost 26.4 ms with 112 temporary tables and one on disk.
-///
 /// Coverage is not negotiable per view. A first attempt left KEY_COLUMN_USAGE on the live view
 /// because the statement reads it only three times; that kept 352 of the 711 on-disk tables and
 /// 65 percent of the remaining cost, because the optimiser re-executes those subqueries per row.
@@ -32,6 +33,7 @@ internal sealed class MySqlCatalogSnapshot : IAsyncDisposable
             "KEY `by_name` (`TABLE_NAME`, `CONSTRAINT_NAME`)"),
         ("INFORMATION_SCHEMA.CHECK_CONSTRAINTS", "CONSTRAINT_SCHEMA = DATABASE()",
             "KEY `by_name` (`CONSTRAINT_NAME`)"),
+
         // WHY: Incoming foreign keys belong to the dependent database, not necessarily the database
         // being analysed. Excluding them would incorrectly certify model-managed parent deletes.
         ("INFORMATION_SCHEMA.KEY_COLUMN_USAGE",
@@ -42,17 +44,18 @@ internal sealed class MySqlCatalogSnapshot : IAsyncDisposable
         ("INFORMATION_SCHEMA.CHARACTER_SETS", null, "KEY `by_name` (`CHARACTER_SET_NAME`)"),
     ];
 
-    private readonly DbConnection _connection;
     private readonly int? _commandTimeout;
-    private readonly string[] _tables = new string[s_views.Length];
-    private int _ownedCount;
-    private bool _disposed;
-    private bool _cleanupSucceeded;
-    private bool _canUseLiveCatalog;
+
+    private readonly DbConnection _connection;
 
     // WHY: Redirection runs once per catalog relation of every rendered expression, so the
     // delimited names are precomputed and handed out rather than formatted per call.
     private readonly Dictionary<string, string> _relations = new(s_views.Length, StringComparer.Ordinal);
+    private readonly string[] _tables = new string[s_views.Length];
+    private bool _canUseLiveCatalog;
+    private bool _cleanupSucceeded;
+    private bool _disposed;
+    private int _ownedCount;
 
     private MySqlCatalogSnapshot(
         DbConnection connection,
@@ -61,7 +64,10 @@ internal sealed class MySqlCatalogSnapshot : IAsyncDisposable
     {
         _connection = connection;
         _commandTimeout = commandTimeout;
-        var identity = Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture);
+        var identity = Guid
+            .NewGuid()
+            .ToString("N", CultureInfo.InvariantCulture);
+
         // WHY: Pair each catalog view with the private snapshot table at the same ordinal.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -74,73 +80,6 @@ internal sealed class MySqlCatalogSnapshot : IAsyncDisposable
             _relations.Add(s_views[index].View, table);
         }
     }
-
-    /// <summary>Copies the catalog views of the connected database into session temporary tables.</summary>
-    /// <param name="connection">The open analysis connection.</param>
-    /// <param name="commandTimeout">The configured command timeout.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The snapshot, or null when temporary-table creation or reliable session cleanup is unavailable.</returns>
-    public static async Task<MySqlCatalogSnapshot?> TryCreateAsync(
-        DbConnection connection,
-        int? commandTimeout,
-        CancellationToken cancellationToken
-    )
-    {
-        ArgumentNullException.ThrowIfNull(connection);
-
-        var settings = new MySqlConnectionStringBuilder(connection.ConnectionString);
-        if (settings.Pooling && !settings.ConnectionReset)
-        {
-            // WHY: A failed DROP must not leak copies into a reused pooled session. ConnectionReset
-            // clears temporary objects before reuse, including MySqlDataSource pools and wrappers;
-            // without that guarantee the existing live-catalog path remains the safe option.
-            return null;
-        }
-
-        var snapshot = new MySqlCatalogSnapshot(connection, commandTimeout);
-        try
-        {
-            var builder = new StringBuilder(512);
-            // WHY: Pair each catalog view with the private snapshot table at the same ordinal.
-            // ReSharper disable once ForCanBeConvertedToForeach
-            // ReSharper disable once LoopCanBeConvertedToQuery
-            for (var index = 0; index < s_views.Length; index++)
-            {
-                var (view, predicate, keys) = s_views[index];
-                // WHY: Catalog views contain TEXT columns, which MEMORY cannot store. Pin the
-                // snapshot engine instead of inheriting the consumer's default temporary engine.
-                builder.Clear().Append("CREATE TEMPORARY TABLE ").Append(snapshot._tables[index])
-                    .Append(" (").Append(keys).Append(") ENGINE=InnoDB AS SELECT * FROM ").Append(view);
-                if (predicate is not null)
-                {
-                    builder.Append(" WHERE ").Append(predicate);
-                }
-
-                // WHY: Inline indexes avoid extra ALTER statements. Separate acknowledgements
-                // establish ownership after each successful CREATE; a failed/colliding target is never dropped.
-                await snapshot.CreateTableAsync(builder.Append(';').ToString(), cancellationToken);
-            }
-        }
-        catch (Exception exception)
-        {
-            var cleaned = await snapshot.DisposeAfterFailureAsync(exception);
-            if (cleaned && connection.State == System.Data.ConnectionState.Open && snapshot._canUseLiveCatalog)
-            {
-                return null;
-            }
-
-            throw;
-        }
-
-        return snapshot;
-    }
-
-    /// <summary>Resolves a catalog relation to the copy that replaces it.</summary>
-    /// <param name="view">The catalog relation a template names.</param>
-    /// <returns>The snapshot table, or the live view when the snapshot does not carry it.</returns>
-    public string Resolve(
-        string view
-    ) => _relations.TryGetValue(view, out var table) ? table : view;
 
     /// <summary>Drops the snapshot tables of this session.</summary>
     /// <returns>A task that completes when the session holds no snapshot.</returns>
@@ -159,7 +98,7 @@ internal sealed class MySqlCatalogSnapshot : IAsyncDisposable
             return;
         }
 
-        if (_connection.State != System.Data.ConnectionState.Open)
+        if (_connection.State != ConnectionState.Open)
         {
             var exception = new InvalidOperationException("The catalog snapshot session is no longer available.");
             await InvalidateConnectionAsync(exception);
@@ -170,17 +109,27 @@ internal sealed class MySqlCatalogSnapshot : IAsyncDisposable
         // WHY: One statement drops every copy, because the analyzer's catalog round trips are
         // bounded by tests and a drop per view would spend that budget on cleanup.
         var builder = new StringBuilder(512).Append("DROP TEMPORARY TABLE IF EXISTS ");
+
         // WHY: Emit only acknowledged snapshot-table slots and separate their names in order.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < _ownedCount; index++)
         {
-            builder.Append(index == 0 ? string.Empty : ", ").Append(_tables[index]);
+            builder
+                .Append(
+                    index == 0
+                        ? string.Empty
+                        : ", ")
+                .Append(_tables[index]);
         }
 
         try
         {
-            await ExecuteAsync(builder.Append(';').ToString(), CancellationToken.None);
+            await ExecuteAsync(builder
+                    .Append(';')
+                    .ToString(),
+                CancellationToken.None);
+
             _ownedCount = 0;
             _cleanupSucceeded = true;
         }
@@ -193,6 +142,92 @@ internal sealed class MySqlCatalogSnapshot : IAsyncDisposable
             throw;
         }
     }
+
+    /// <summary>Copies the catalog views of the connected database into session temporary tables.</summary>
+    /// <param name="connection">The open analysis connection.</param>
+    /// <param name="commandTimeout">The configured command timeout.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The snapshot, or null when temporary-table creation or reliable session cleanup is unavailable.</returns>
+    public static async Task<MySqlCatalogSnapshot?> TryCreateAsync(
+        DbConnection connection,
+        int? commandTimeout,
+        CancellationToken cancellationToken
+    )
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+
+        var settings = new MySqlConnectionStringBuilder(connection.ConnectionString);
+        if (settings.Pooling
+            && !settings.ConnectionReset)
+        {
+            // WHY: A failed DROP must not leak copies into a reused pooled session. ConnectionReset
+            // clears temporary objects before reuse, including MySqlDataSource pools and wrappers;
+            // without that guarantee the existing live-catalog path remains the safe option.
+            return null;
+        }
+
+        var snapshot = new MySqlCatalogSnapshot(connection, commandTimeout);
+        try
+        {
+            var builder = new StringBuilder(512);
+
+            // WHY: Pair each catalog view with the private snapshot table at the same ordinal.
+            // ReSharper disable once ForCanBeConvertedToForeach
+            // ReSharper disable once LoopCanBeConvertedToQuery
+            for (var index = 0; index < s_views.Length; index++)
+            {
+                var (view, predicate, keys) = s_views[index];
+
+                // WHY: Catalog views contain TEXT columns, which MEMORY cannot store. Pin the
+                // snapshot engine instead of inheriting the consumer's default temporary engine.
+                builder
+                    .Clear()
+                    .Append("CREATE TEMPORARY TABLE ")
+                    .Append(snapshot._tables[index])
+                    .Append(" (")
+                    .Append(keys)
+                    .Append(") ENGINE=InnoDB AS SELECT * FROM ")
+                    .Append(view);
+
+                if (predicate is not null)
+                {
+                    builder
+                        .Append(" WHERE ")
+                        .Append(predicate);
+                }
+
+                // WHY: Inline indexes avoid extra ALTER statements. Separate acknowledgements
+                // establish ownership after each successful CREATE; a failed/colliding target is never dropped.
+                await snapshot.CreateTableAsync(builder
+                        .Append(';')
+                        .ToString(),
+                    cancellationToken);
+            }
+        }
+        catch (Exception exception)
+        {
+            var cleaned = await snapshot.DisposeAfterFailureAsync(exception);
+            if (cleaned
+                && connection.State == ConnectionState.Open
+                && snapshot._canUseLiveCatalog)
+            {
+                return null;
+            }
+
+            throw;
+        }
+
+        return snapshot;
+    }
+
+    /// <summary>Resolves a catalog relation to the copy that replaces it.</summary>
+    /// <param name="view">The catalog relation a template names.</param>
+    /// <returns>The snapshot table, or the live view when the snapshot does not carry it.</returns>
+    public string Resolve(
+        string view
+    ) => _relations.TryGetValue(view, out var table)
+        ? table
+        : view;
 
     /// <summary>Cleans up without replacing an exception already raised by analysis or creation.</summary>
     /// <param name="primaryException">The failure whose type and stack must be preserved.</param>
@@ -275,6 +310,7 @@ internal sealed class MySqlCatalogSnapshot : IAsyncDisposable
             }
 
             await command.ExecuteNonQueryAsync(cancellationToken);
+
             // WHY: A command wrapper may throw from DisposeAsync after the server created the table.
             // Ownership must already be recorded so that creation-failure cleanup includes this object.
             _ownedCount++;
@@ -282,6 +318,7 @@ internal sealed class MySqlCatalogSnapshot : IAsyncDisposable
         catch (Exception exception)
         {
             var commandCleaned = await DisposeCommandAfterFailureAsync(command, exception);
+
             // WHY: Capability fallback applies only to the CREATE execution, never a wrapper's
             // disposal error, and only when both command and table cleanup completed successfully.
             _canUseLiveCatalog = commandCleaned && IsUnavailable(exception);

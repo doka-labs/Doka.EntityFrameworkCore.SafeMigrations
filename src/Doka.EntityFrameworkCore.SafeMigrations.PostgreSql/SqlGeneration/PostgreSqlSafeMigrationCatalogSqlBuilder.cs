@@ -2,11 +2,11 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql;
 
 internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 {
-    private readonly IRelationalTypeMappingSource _typeMappingSource;
-    private readonly ISqlGenerationHelper _sqlGenerationHelper;
     private readonly PostgreSqlSafeMigrationSqlExpressionRenderer _expressionRenderer;
-    private readonly RelationalTypeMapping _stringMapping;
     private readonly Func<string, string> _literal;
+    private readonly ISqlGenerationHelper _sqlGenerationHelper;
+    private readonly RelationalTypeMapping _stringMapping;
+    private readonly IRelationalTypeMappingSource _typeMappingSource;
     private readonly Func<object?, string, string> _valueLiteral;
 
     public PostgreSqlSafeMigrationCatalogSqlBuilder(
@@ -51,7 +51,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         ArgumentNullException.ThrowIfNull(operation);
 
         var intent = SafeMigrationCapturedExpressionNormalization.NormalizeIntent(operation.Intent, true);
-        var unsupported = operation.GetAnnotations().Any()
+        var unsupported = operation
+            .GetAnnotations()
+            .Any()
             ? "operation_annotation"
             : GetUnsupportedNativeFeature(intent);
 
@@ -112,7 +114,8 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
             PrerequisiteExpression = BuildNativePrerequisiteExpression(intent),
             ObjectIdentityGuardExpression = identityGuard,
             PostExecutionObjectIdentityGuardExpression = BuildPostExecutionObjectIdentityGuard(
-                intent, identityGuard),
+                intent,
+                identityGuard),
         };
     }
 
@@ -127,7 +130,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
         // WHY: An annotation-rejected operation must not acquire live catalog
         // dependencies merely because only its prerequisite is being rendered.
-        return operation.GetAnnotations().Any()
+        return operation
+            .GetAnnotations()
+            .Any()
             ? "TRUE"
             : BuildPrerequisiteExpression(operation.Intent);
     }
@@ -143,7 +148,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     }
 
     /// <summary>Uses native captured prerequisites without changing immutable capture-key references.</summary>
-    private string BuildNativePrerequisiteExpression(SafeMigrationIntent intent)
+    private string BuildNativePrerequisiteExpression(
+        SafeMigrationIntent intent
+    )
     {
         if (GetUnsupportedNativeFeature(intent) is not null)
         {
@@ -222,10 +229,13 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
     ) => GetUnsupportedNativeFeature(SafeMigrationCapturedExpressionNormalization.NormalizeIntent(intent, true));
 
     /// <summary>Checks only the local native view, preserving caller-owned definitions as evidence keys.</summary>
-    private string? GetUnsupportedNativeFeature(SafeMigrationIntent intent)
+    private string? GetUnsupportedNativeFeature(
+        SafeMigrationIntent intent
+    )
         => GetUnsupportedSqlExpressionFeature(intent)
-        ?? GetUnsupportedColumnFeature(intent) ?? GetUnsupportedIndexFeature(intent)
-        ?? GetUnsupportedGeneratedCaseCheckFeature(intent);
+            ?? GetUnsupportedColumnFeature(intent)
+            ?? GetUnsupportedIndexFeature(intent)
+            ?? GetUnsupportedGeneratedCaseCheckFeature(intent);
 
     public string RenderExpression(
         SafeMigrationSqlExpression expression
@@ -244,7 +254,10 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
                 .Concat(value.Definition.CheckConstraints.Select(CheckExpression)),
             EnsureColumnIntent value => ColumnExpressions(value.Definition),
             AlterColumnIntent value => ColumnExpressions(value.Definition)
-                .Concat(value.OldDefinition is null ? [] : ColumnExpressions(value.OldDefinition)),
+                .Concat(
+                    value.OldDefinition is null
+                        ? []
+                        : ColumnExpressions(value.OldDefinition)),
             EnsureIndexIntent value => IndexExpressions(value.Definition),
             EnsureCheckConstraintIntent value => [CheckExpression(value.Definition)],
             _ => [],
@@ -365,7 +378,9 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
 
     private string SchemaExpression(
         string? schema
-    ) => schema is null ? "current_schema()" : Literal(schema);
+    ) => schema is null
+        ? "current_schema()"
+        : Literal(schema);
 
     private string Literal(
         string value

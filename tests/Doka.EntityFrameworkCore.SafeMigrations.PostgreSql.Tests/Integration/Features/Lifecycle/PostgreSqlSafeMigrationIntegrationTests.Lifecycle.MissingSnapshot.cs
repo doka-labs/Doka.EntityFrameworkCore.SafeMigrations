@@ -3,15 +3,15 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.PostgreSql.Tests;
 /// <summary>Runs the LifecycleMissingSnapshot PostgreSQL feature cases independently.</summary>
 public sealed class PostgreSqlLifecycleMissingSnapshotIntegrationTests : PostgreSqlSafeMigrationIntegrationTests
 {
+    private const string SnapshotFreeCatalogCountSql =
+        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = current_schema() "
+        + "AND table_name IN ('snapshotless_items', '__EFMigrationsHistory');";
+
     /// <summary>Uses the assembly-owned container for this feature.</summary>
     /// <param name="fixture">The shared PostgreSQL container fixture.</param>
     public PostgreSqlLifecycleMissingSnapshotIntegrationTests(
         PostgreSqlContainerFixture fixture
     ) : base(fixture) { }
-
-    private const string SnapshotFreeCatalogCountSql =
-        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = current_schema() "
-        + "AND table_name IN ('snapshotless_items', '__EFMigrationsHistory');";
 
     [Theory]
     [InlineData(false)]
@@ -25,15 +25,19 @@ public sealed class PostgreSqlLifecycleMissingSnapshotIntegrationTests : Postgre
         var assembly = context.GetService<IMigrationsAssembly>();
         var model = context.GetService<IDesignTimeModel>()
             .Model;
+
         var fingerprint = SafeMigrationModelFingerprint.Create(model, context.Database.ProviderName!);
         var options = new SafeMigrationRunOptions(
             "snapshot-free-instance",
-            expectedModelFingerprint: requireExpectedFingerprint ? fingerprint : null);
+            expectedModelFingerprint: requireExpectedFingerprint
+                ? fingerprint
+                : null);
 
         Assert.Equal(
             "Doka.EntityFrameworkCore.SafeMigrations.SafeMigrationMigrationsAssembly",
             assembly.GetType()
                 .FullName);
+
         Assert.Null(assembly.ModelSnapshot);
         Assert.Null(assembly.ModelSnapshot);
         Assert.Empty(assembly.Migrations);
@@ -51,11 +55,16 @@ public sealed class PostgreSqlLifecycleMissingSnapshotIntegrationTests : Postgre
         Assert.Equal(SafeMigrationAction.Apply, preflightAssessment.Action);
         Assert.False(preflightAssessment.PostconditionSatisfied);
         Assert.Equal(
-            System.Data.ConnectionState.Closed,
+            ConnectionState.Closed,
             context.Database.GetDbConnection()
                 .State);
-        Assert.Equal(0, await ScalarIntAsync(connectionString, SnapshotFreeCatalogCountSql,
-            cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                SnapshotFreeCatalogCountSql,
+                cancellationToken: CancellationToken.None));
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
@@ -76,11 +85,16 @@ public sealed class PostgreSqlLifecycleMissingSnapshotIntegrationTests : Postgre
         Assert.True(postflightAssessment.PostconditionSatisfied);
         Assert.Null(assembly.ModelSnapshot);
         Assert.Equal(
-            System.Data.ConnectionState.Closed,
+            ConnectionState.Closed,
             context.Database.GetDbConnection()
                 .State);
-        Assert.Equal(1, await ScalarIntAsync(connectionString, SnapshotFreeCatalogCountSql,
-            cancellationToken: CancellationToken.None));
+
+        Assert.Equal(
+            1,
+            await ScalarIntAsync(
+                connectionString,
+                SnapshotFreeCatalogCountSql,
+                cancellationToken: CancellationToken.None));
     }
 
     [Theory]
@@ -97,10 +111,12 @@ public sealed class PostgreSqlLifecycleMissingSnapshotIntegrationTests : Postgre
             differentModelContext.GetService<IDesignTimeModel>()
                 .Model,
             differentModelContext.Database.ProviderName!);
+
         var actual = SafeMigrationModelFingerprint.Create(
             context.GetService<IDesignTimeModel>()
                 .Model,
             context.Database.ProviderName!);
+
         var options = new SafeMigrationRunOptions("snapshot-free-instance", expectedModelFingerprint: expected);
         var builder = CreateSnapshotFreeOperations(context);
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -108,16 +124,15 @@ public sealed class PostgreSqlLifecycleMissingSnapshotIntegrationTests : Postgre
         var connectionTransitions = 0;
 
         // The final closed state alone would miss an unintended open-and-close cycle.
-        connection.StateChange += (
-            _,
-            _
-        ) => connectionTransitions++;
+        connection.StateChange += (_,
+            _) => connectionTransitions++;
 
         Assert.Null(
             context.GetService<IMigrationsAssembly>()
                 .ModelSnapshot);
+
         Assert.NotEqual(expected, actual);
-        Assert.Equal(System.Data.ConnectionState.Closed, connection.State);
+        Assert.Equal(ConnectionState.Closed, connection.State);
 
         var exception = await Assert.ThrowsAsync<SafeMigrationModelMismatchException>(() =>
             mode == SafeMigrationReportMode.Preflight
@@ -127,9 +142,13 @@ public sealed class PostgreSqlLifecycleMissingSnapshotIntegrationTests : Postgre
         Assert.Equal(expected, exception.ExpectedFingerprint);
         Assert.Equal(actual, exception.ActualFingerprint);
         Assert.Equal(0, connectionTransitions);
-        Assert.Equal(System.Data.ConnectionState.Closed, connection.State);
-        Assert.Equal(0, await ScalarIntAsync(connectionString, SnapshotFreeCatalogCountSql,
-            cancellationToken: CancellationToken.None));
+        Assert.Equal(ConnectionState.Closed, connection.State);
+        Assert.Equal(
+            0,
+            await ScalarIntAsync(
+                connectionString,
+                SnapshotFreeCatalogCountSql,
+                cancellationToken: CancellationToken.None));
     }
 
     private static SnapshotFreeContext CreateSnapshotFreeContext(
@@ -156,5 +175,4 @@ public sealed class PostgreSqlLifecycleMissingSnapshotIntegrationTests : Postgre
 
         return builder;
     }
-
 }

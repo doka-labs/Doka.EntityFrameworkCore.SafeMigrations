@@ -13,14 +13,19 @@ public sealed class SqlServerProjectedIntegerTransitionTests
     [InlineData("unique")]
     [InlineData("check")]
     [InlineData("foreign")]
-    public void NamedDependency_RequiresExactAcceptedDrop(string kind)
+    public void NamedDependency_RequiresExactAcceptedDrop(
+        string kind
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = Analyzer(context);
         var widening = Widening();
-        analyzer.CaptureProjectedIntegerWidening(widening, SafeSource(),
+        analyzer.CaptureProjectedIntegerWidening(
+            widening,
+            SafeSource(),
             [new SqlServerSafeMigrationProviderAnalyzer.TransitionDependency(kind, "dbo", "items", "owned")]);
+
         var blocked = Different();
         var wrongDrop = Drop(kind, "other");
         var exactDrop = Drop(kind, "owned");
@@ -47,10 +52,15 @@ public sealed class SqlServerProjectedIntegerTransitionTests
         using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = Analyzer(context);
         var widening = Widening();
-        analyzer.CaptureProjectedIntegerWidening(widening, SafeSource(),
+        analyzer.CaptureProjectedIntegerWidening(
+            widening,
+            SafeSource(),
             [new SqlServerSafeMigrationProviderAnalyzer.TransitionDependency("index", "dbo", "items", "owned")]);
-        var projection = new SafeMigrationPreflightProjection(providerOperationProjection: analyzer,
-            projectedDependencyAnalyzer: analyzer, projectedColumnAnalyzer: analyzer);
+
+        var projection = new SafeMigrationPreflightProjection(
+            providerOperationProjection: analyzer,
+            projectedDependencyAnalyzer: analyzer,
+            projectedColumnAnalyzer: analyzer);
 
         var drop = Drop("index", "owned");
         var matching = Matching();
@@ -62,7 +72,9 @@ public sealed class SqlServerProjectedIntegerTransitionTests
 
         // Assert
         Assert.Equal(SafeMigrationRepairCapability.Safe, analysis.RepairCapability);
-        Assert.Equal(SafeMigrationAction.Repair, Decision(widening, analysis).Action);
+        Assert.Equal(SafeMigrationAction.Repair,
+            Decision(widening, analysis)
+                .Action);
     }
 
     /// <summary>Interrupted removal reuses independent evidence, never an invented dependency removal.</summary>
@@ -70,32 +82,50 @@ public sealed class SqlServerProjectedIntegerTransitionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void CoreProjection_AbsentIndexDropRequiresAnIndependentlyUnblockedSource(bool capturedDependency)
+    public void CoreProjection_AbsentIndexDropRequiresAnIndependentlyUnblockedSource(
+        bool capturedDependency
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var analyzer = Analyzer(context);
         var widening = Widening();
-        analyzer.CaptureProjectedIntegerWidening(widening, SafeSource(), capturedDependency
-            ? [new SqlServerSafeMigrationProviderAnalyzer.TransitionDependency("index", "dbo", "items", "owned")]
-            : []);
+        analyzer.CaptureProjectedIntegerWidening(
+            widening,
+            SafeSource(),
+            capturedDependency
+                ? [new SqlServerSafeMigrationProviderAnalyzer.TransitionDependency("index", "dbo", "items", "owned")]
+                : []);
 
-        var projection = new SafeMigrationPreflightProjection(providerOperationProjection: analyzer,
-            projectedDependencyAnalyzer: analyzer, projectedColumnAnalyzer: analyzer);
+        var projection = new SafeMigrationPreflightProjection(
+            providerOperationProjection: analyzer,
+            projectedDependencyAnalyzer: analyzer,
+            projectedColumnAnalyzer: analyzer);
 
         var drop = Drop("index", "owned");
-        var missing = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
-            SafeMigrationRepairCapability.None, true, "classified_missing");
+        var missing = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Missing,
+            SafeMigrationRepairCapability.None,
+            true,
+            "classified_missing");
 
         // Act
         projection.Observe(drop, missing, missing, Decision(drop, missing));
         var analysis = projection.Project(widening, Different());
 
         // Assert
-        Assert.Equal(capturedDependency ? SafeMigrationRepairCapability.None : SafeMigrationRepairCapability.Safe,
+        Assert.Equal(
+            capturedDependency
+                ? SafeMigrationRepairCapability.None
+                : SafeMigrationRepairCapability.Safe,
             analysis.RepairCapability);
-        Assert.Equal(capturedDependency ? SafeMigrationAction.RejectDifferent : SafeMigrationAction.Repair,
-            Decision(widening, analysis).Action);
+
+        Assert.Equal(
+            capturedDependency
+                ? SafeMigrationAction.RejectDifferent
+                : SafeMigrationAction.Repair,
+            Decision(widening, analysis)
+                .Action);
     }
 
     /// <summary>A catalog-resolved alias discharges only the physical dependency removed by an accepted drop.</summary>
@@ -112,26 +142,40 @@ public sealed class SqlServerProjectedIntegerTransitionTests
         var analyzer = Analyzer(context);
         var widening = Widening();
         var physical = new SqlServerSafeMigrationProviderAnalyzer.TransitionDependency(
-            "index", "dbo", "items", "IX_owned");
+            "index",
+            "dbo",
+            "items",
+            "IX_owned");
 
         var authored = new SqlServerSafeMigrationProviderAnalyzer.TransitionDependency(
-            "index", "DBO", "ITEMS", "ix_owned");
+            "index",
+            "DBO",
+            "ITEMS",
+            "ix_owned");
 
         analyzer.CaptureProjectedIntegerWidening(widening, SafeSource(), [physical]);
         analyzer.CaptureProjectedTransitionDropIdentity(authored, physical);
-        var drop = new SafeMigrationOperation(new DropIndexIntent("ix_owned", "ITEMS", "DBO"),
+        var drop = new SafeMigrationOperation(
+            new DropIndexIntent("ix_owned", "ITEMS", "DBO"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var state = accepted ? Matching()
-            : new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
-                SafeMigrationRepairCapability.None, false, "classified_missing");
+        var state = accepted
+            ? Matching()
+            : new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.Missing,
+                SafeMigrationRepairCapability.None,
+                false,
+                "classified_missing");
 
         // Act
         analyzer.ObserveAcceptedOperation(drop, state, state, Decision(drop, state));
         var result = analyzer.ValidateProjectedOperation(widening, Different(), new EmptyColumns());
 
         // Assert
-        Assert.Equal(accepted ? SafeMigrationRepairCapability.Safe : SafeMigrationRepairCapability.None,
+        Assert.Equal(
+            accepted
+                ? SafeMigrationRepairCapability.Safe
+                : SafeMigrationRepairCapability.None,
             result.RepairCapability);
     }
 
@@ -149,11 +193,23 @@ public sealed class SqlServerProjectedIntegerTransitionTests
         var analyzer = Analyzer(context);
         var widening = Widening(tightensNullability);
         analyzer.CaptureProjectedIntegerWidening(widening, SafeSource(), []);
-        var data = new SafeMigrationOperation(new EnsureModelManagedDataIntent("other_items", ["Id"], ["int"],
-            ["Id"], ["int"], new object?[,] { { 1 } }, null, null), SafeMigrationPolicy.ThrowIfDifferent);
+        var data = new SafeMigrationOperation(
+            new EnsureModelManagedDataIntent(
+                "other_items",
+                ["Id"],
+                ["int"],
+                ["Id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                null,
+                null),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
-        var missing = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
-            SafeMigrationRepairCapability.None, false, "classified_missing");
+        var missing = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Missing,
+            SafeMigrationRepairCapability.None,
+            false,
+            "classified_missing");
 
         // Act
         analyzer.ObserveAcceptedOperation(data, missing, missing, Decision(data, missing));
@@ -168,7 +224,9 @@ public sealed class SqlServerProjectedIntegerTransitionTests
     [InlineData("sql")]
     [InlineData("rename")]
     [InlineData("drop")]
-    public void SourceIdentityChange_RejectsStaleWidening(string mutation)
+    public void SourceIdentityChange_RejectsStaleWidening(
+        string mutation
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
@@ -184,8 +242,10 @@ public sealed class SqlServerProjectedIntegerTransitionTests
         }
         else
         {
-            var change = new SafeMigrationOperation(mutation == "rename"
-                ? new RenameColumnIntent("Value", "items", "Changed") : new DropColumnIntent("Value", "items"),
+            var change = new SafeMigrationOperation(
+                mutation == "rename"
+                    ? new RenameColumnIntent("Value", "items", "Changed")
+                    : new DropColumnIntent("Value", "items"),
                 SafeMigrationPolicy.ThrowIfDifferent);
 
             analyzer.ObserveAcceptedOperation(change, matching, matching, Decision(change, matching));
@@ -222,31 +282,53 @@ public sealed class SqlServerProjectedIntegerTransitionTests
             },
         };
 
-        var operations = Enumerable.Range(0, count).Select(index => Widening(table: "items_" + index)).ToArray();
-        var ordered = operations.SelectMany(operation => new[]
-        {
-            new SafeMigrationOperation(new DropIndexIntent("ix_alias", ((AlterColumnIntent)operation.Intent).Table),
-                SafeMigrationPolicy.ThrowIfDifferent),
-            operation,
-        }).ToArray();
+        var operations = Enumerable
+            .Range(0, count)
+            .Select(index => Widening(table: "items_" + index))
+            .ToArray();
 
-        var repeated = ordered.Concat(ordered).ToArray();
+        var ordered = operations
+            .SelectMany(operation => new[]
+            {
+                new SafeMigrationOperation(
+                    new DropIndexIntent("ix_alias", ((AlterColumnIntent)operation.Intent).Table),
+                    SafeMigrationPolicy.ThrowIfDifferent),
+                operation,
+            })
+            .ToArray();
+
+        var repeated = ordered
+            .Concat(ordered)
+            .ToArray();
 
         // Act
-        await analyzer.ReadProjectedColumnTransitionsAsync(connection, null, repeated,
-            repeated.Select(static _ => Different()).ToArray(), true, 73,
+        await analyzer.ReadProjectedColumnTransitionsAsync(
+            connection,
+            null,
+            repeated,
+            repeated
+                .Select(static _ => Different())
+                .ToArray(),
+            true,
+            73,
             CancellationToken.None);
+
         var result = analyzer.ValidateProjectedOperation(operations[^1], Different(), new EmptyColumns());
 
         // Assert
         Assert.Equal(SafeMigrationRepairCapability.Safe, result.RepairCapability);
-        Assert.All(connection.BatchPayloadBytes,
+        Assert.All(
+            connection.BatchPayloadBytes,
             size => Assert.InRange(size, 1, SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes));
+
         Assert.All(connection.ObservedTimeouts, timeout => Assert.Equal(73, timeout));
         Assert.True(connection.RecordedStatements.Count > 0);
-        Assert.Contains(connection.RecordedStatements,
+        Assert.Contains(
+            connection.RecordedStatements,
             statement => statement.Contains("i.index_id>0", StringComparison.Ordinal));
-        Assert.Contains(connection.RecordedStatements,
+
+        Assert.Contains(
+            connection.RecordedStatements,
             statement => statement.Contains("COLLATE CATALOG_DEFAULT", StringComparison.Ordinal)
                 && statement.Contains("d.name=", StringComparison.Ordinal));
     }
@@ -267,19 +349,30 @@ public sealed class SqlServerProjectedIntegerTransitionTests
         if (capturesCheckDrop)
         {
             operations.Add(Drop("check", "CK_items"));
-            operations.Add(new SafeMigrationOperation(new EnsureCheckConstraintIntent(
-                new ExpectedCheckConstraintDefinition("CK_items", "items", "[Value]>=0")),
-                SafeMigrationPolicy.ThrowIfDifferent));
+            operations.Add(
+                new SafeMigrationOperation(
+                    new EnsureCheckConstraintIntent(
+                        new ExpectedCheckConstraintDefinition("CK_items", "items", "[Value]>=0")),
+                    SafeMigrationPolicy.ThrowIfDifferent));
         }
 
         // Act
-        await analyzer.ReadProjectedColumnTransitionsAsync(connection, null, operations,
-            operations.Select(static _ => Different()).ToArray(), false, 73,
+        await analyzer.ReadProjectedColumnTransitionsAsync(
+            connection,
+            null,
+            operations,
+            operations
+                .Select(static _ => Different())
+                .ToArray(),
+            false,
+            73,
             CancellationToken.None);
 
         // Assert
-        Assert.DoesNotContain(connection.RecordedStatements,
+        Assert.DoesNotContain(
+            connection.RecordedStatements,
             static statement => statement.Contains("sys.sql_expression_dependencies", StringComparison.Ordinal));
+
         Assert.Equal(capturesCheckDrop, connection.RecordedStatements.Count > 0);
     }
 
@@ -328,14 +421,26 @@ public sealed class SqlServerProjectedIntegerTransitionTests
         };
 
         // Act
-        await analyzer.ReadProjectedColumnTransitionsAsync(connection, null, operations,
-            operations.Select(static _ => Different()).ToArray(), true, 73,
+        await analyzer.ReadProjectedColumnTransitionsAsync(
+            connection,
+            null,
+            operations,
+            operations
+                .Select(static _ => Different())
+                .ToArray(),
+            true,
+            73,
             CancellationToken.None);
+
         var result = analyzer.ValidateProjectedOperation(operations[candidate], Different(), new EmptyColumns());
 
         // Assert
-        Assert.Equal(safe ? SafeMigrationRepairCapability.Safe : SafeMigrationRepairCapability.None,
+        Assert.Equal(
+            safe
+                ? SafeMigrationRepairCapability.Safe
+                : SafeMigrationRepairCapability.None,
             result.RepairCapability);
+
         Assert.Equal(4, connection.RowsRead);
     }
 
@@ -348,22 +453,28 @@ public sealed class SqlServerProjectedIntegerTransitionTests
         bool tightens = false,
         string table = "items"
     )
-        => new(new AlterColumnIntent(table, new ExpectedColumnDefinition("Value", typeof(long), false, "bigint"),
-            new ExpectedColumnDefinition("Value", typeof(int), tightens, "int")), SafeMigrationPolicy.RepairIfSafe);
+        => new(
+            new AlterColumnIntent(
+                table,
+                new ExpectedColumnDefinition("Value", typeof(long), false, "bigint"),
+                new ExpectedColumnDefinition("Value", typeof(int), tightens, "int")),
+            SafeMigrationPolicy.RepairIfSafe);
 
     private static SafeMigrationOperation Drop(
         string kind,
         string name
     )
-        => new(kind switch
-        {
-            "index" => new DropIndexIntent(name, "items"),
-            "primary" => new DropPrimaryKeyIntent(name, "items"),
-            "unique" => new DropUniqueConstraintIntent(name, "items"),
-            "check" => new DropCheckConstraintIntent(name, "items"),
-            "foreign" => new DropForeignKeyIntent(name, "items"),
-            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
-        }, SafeMigrationPolicy.ThrowIfDifferent);
+        => new(
+            kind switch
+            {
+                "index" => new DropIndexIntent(name, "items"),
+                "primary" => new DropPrimaryKeyIntent(name, "items"),
+                "unique" => new DropUniqueConstraintIntent(name, "items"),
+                "check" => new DropCheckConstraintIntent(name, "items"),
+                "foreign" => new DropForeignKeyIntent(name, "items"),
+                _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+            },
+            SafeMigrationPolicy.ThrowIfDifferent);
 
     private static SafeMigrationProviderAnalysis SafeSource()
         => new(SafeMigrationObservedState.Different, SafeMigrationRepairCapability.Safe, false, "candidate_safe");
@@ -378,8 +489,11 @@ public sealed class SqlServerProjectedIntegerTransitionTests
         SafeMigrationOperation operation,
         SafeMigrationProviderAnalysis analysis
     )
-        => SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, analysis.ObservedState,
-            operation.Policy, analysis.RepairCapability);
+        => SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            analysis.ObservedState,
+            operation.Policy,
+            analysis.RepairCapability);
 
     private sealed class EmptyColumns : ISafeMigrationProjectedColumnSource
     {

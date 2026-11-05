@@ -11,6 +11,7 @@ public sealed class SqliteSafeMigrationExecutionIntegrationTests : SqliteSafeMig
             connection,
             "CREATE TABLE cancellation_probe (Id INTEGER NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<string>(
@@ -18,6 +19,7 @@ public sealed class SqliteSafeMigrationExecutionIntegrationTests : SqliteSafeMig
             "cancellation_probe",
             type: "TEXT",
             nullable: true);
+
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
 
@@ -70,18 +72,22 @@ public sealed class SqliteSafeMigrationExecutionIntegrationTests : SqliteSafeMig
                 results,
                 static result => Assert.True(
                     result is ConcurrentExecutionResult.Completed or ConcurrentExecutionResult.Busy));
+
             Assert.Equal(
                 1,
                 await ScalarIntAsync(
                     verification,
                     "SELECT COUNT(*) FROM pragma_table_xinfo('pipeline_state') WHERE name = 'payload';",
                     cancellationToken: CancellationToken.None));
+
             Assert.Equal(
                 1,
                 await ScalarIntAsync(
                     verification,
                     "SELECT COUNT(*) FROM main.sqlite_schema "
-                    + "WHERE type = 'table' AND name = 'pipeline_probe';", cancellationToken: CancellationToken.None));
+                    + "WHERE type = 'table' AND name = 'pipeline_probe';",
+                    cancellationToken: CancellationToken.None));
+
             Assert.Equal(
                 1,
                 await ScalarIntAsync(
@@ -100,12 +106,18 @@ public sealed class SqliteSafeMigrationExecutionIntegrationTests : SqliteSafeMig
     /// <returns>The GUID-qualified native database path owned by its caller.</returns>
     internal static string CreateOwnedDatabasePath() => Path.Combine(
         Path.GetTempPath(),
-        "sqlite-safe-migrations-" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture) + ".db");
+        "sqlite-safe-migrations-"
+        + Guid
+            .NewGuid()
+            .ToString("N", CultureInfo.InvariantCulture)
+        + ".db");
 
     /// <summary>Prevents file ownership from requiring a process-wide pool reset during cleanup.</summary>
     /// <param name="databasePath">The independently allocated path owned by this invocation.</param>
     /// <returns>The same migration-lock connection options with pooling explicitly disabled.</returns>
-    internal static string CreateOwnedFileConnectionString(string databasePath) =>
+    internal static string CreateOwnedFileConnectionString(
+        string databasePath
+    ) =>
         $"Data Source={databasePath};Mode=ReadWriteCreate;Cache=Private;"
         + "Default Timeout=10;Foreign Keys=True;Pooling=False";
 

@@ -10,31 +10,52 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [InlineData(true, "1e0 / 3")]
     [InlineData(false, "9223372036854775808 / 3")]
     [InlineData(true, "9223372036854775808 / 3")]
-    public async Task CapturedGeneratedNumericSourcePreservesNativeEvaluation(bool adoptExisting, string sql)
+    public async Task CapturedGeneratedNumericSourcePreservesNativeEvaluation(
+        bool adoptExisting,
+        string sql
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY); "
-            + $"INSERT INTO `{Table}` VALUES (1);", cancellationToken: CancellationToken.None);
+        await ExecuteSqlAsync(
+            connectionString,
+            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY); "
+            + $"INSERT INTO `{Table}` VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         if (adoptExisting)
         {
-            await ExecuteSqlAsync(connectionString, $"ALTER TABLE `{Table}` ADD COLUMN numeric_result double "
-                + $"GENERATED ALWAYS AS ({sql}) VIRTUAL;", cancellationToken: CancellationToken.None);
+            await ExecuteSqlAsync(
+                connectionString,
+                $"ALTER TABLE `{Table}` ADD COLUMN numeric_result double "
+                + $"GENERATED ALWAYS AS ({sql}) VIRTUAL;",
+                cancellationToken: CancellationToken.None);
         }
 
-        var definition = SafeMigrationExpectedDefinitionFactory.From(new AddColumnOperation
-        {
-            Name = "numeric_result", Table = Table, ClrType = typeof(double), ColumnType = "double",
-            ComputedColumnSql = sql, IsStored = false, IsNullable = true,
-        });
+        var definition = SafeMigrationExpectedDefinitionFactory.From(
+            new AddColumnOperation
+            {
+                Name = "numeric_result",
+                Table = Table,
+                ClrType = typeof(double),
+                ColumnType = "double",
+                ComputedColumnSql = sql,
+                IsStored = false,
+                IsNullable = true,
+            });
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureColumn(Table, definition, SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("captured-generated-numeric-source"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("captured-generated-numeric-source"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(async () =>
         {
@@ -42,11 +63,19 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         });
 
-        var postflight = await context.GetService<ISafeMigrationRunner>().VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("captured-generated-numeric-replay"), CancellationToken.None);
+        var postflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("captured-generated-numeric-replay"),
+                CancellationToken.None);
 
-        var unchanged = await ScalarIntAsync(connectionString, $"SELECT COUNT(*) FROM `{Table}` "
-            + $"WHERE id = 1 AND numeric_result = ({sql});", cancellationToken: CancellationToken.None);
+        var unchanged = await ScalarIntAsync(
+            connectionString,
+            $"SELECT COUNT(*) FROM `{Table}` "
+            + $"WHERE id = 1 AND numeric_result = ({sql});",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
@@ -62,12 +91,19 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY); "
-            + $"INSERT INTO `{Table}` VALUES (1);", cancellationToken: CancellationToken.None);
-        var definition = SafeMigrationExpectedDefinitionFactory.From(new AddCheckConstraintOperation
-        {
-            Name = "ck_numeric_domain", Table = Table, Sql = "id > 0 AND 1e0 / 3 > 0.33332",
-        });
+        await ExecuteSqlAsync(
+            connectionString,
+            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY); "
+            + $"INSERT INTO `{Table}` VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
+        var definition = SafeMigrationExpectedDefinitionFactory.From(
+            new AddCheckConstraintOperation
+            {
+                Name = "ck_numeric_domain",
+                Table = Table,
+                Sql = "id > 0 AND 1e0 / 3 > 0.33332",
+            });
 
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureCheckConstraint(definition, SafeMigrationPolicy.ThrowIfDifferent);
@@ -79,8 +115,13 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
             await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         });
 
-        var report = await context.GetService<ISafeMigrationRunner>().VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("captured-check-numeric-replay"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("captured-check-numeric-replay"),
+                CancellationToken.None);
 
         // Assert
         Assert.True(exception is null, $"{exception}; " + DescribeGeneratedReport(report));
@@ -92,44 +133,83 @@ public sealed partial class MySqlGeneratedCaseIntegrationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task GeneratedCaseCheckSeparatesLiteralAndIdentifierIdentity(bool changeLiteral)
+    public async Task GeneratedCaseCheckSeparatesLiteralAndIdentifierIdentity(
+        bool changeLiteral
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
-        // WHY: The authored utf8mb4_bin CHECK must not inherit latin1 from an older image's database default.
-        await ExecuteSqlAsync(connectionString, $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY) "
-            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
-            + $"INSERT INTO `{Table}` VALUES (1);", cancellationToken: CancellationToken.None);
-        var initial = new MigrationBuilder(context.Database.ProviderName!);
-        initial.EnsureCheckConstraint(StringCaseCheck("Alpha", "id"), SafeMigrationPolicy.ThrowIfDifferent);
-        var creationFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, initial.Operations,
-            CancellationToken.None));
 
-        var native = creationFailure is null ? null : await ScalarStringAsync(connectionString,
-            "SELECT CHECK_CLAUSE FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS "
-            + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_NAME = 'ck_case_literal';",
+        // WHY: The authored utf8mb4_bin CHECK must not inherit latin1 from an older image's database default.
+        await ExecuteSqlAsync(
+            connectionString,
+            $"CREATE TABLE `{Table}` (`id` int NOT NULL PRIMARY KEY) "
+            + "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; "
+            + $"INSERT INTO `{Table}` VALUES (1);",
             cancellationToken: CancellationToken.None);
 
+        var initial = new MigrationBuilder(context.Database.ProviderName!);
+        initial.EnsureCheckConstraint(StringCaseCheck("Alpha", "id"), SafeMigrationPolicy.ThrowIfDifferent);
+        var creationFailure = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            initial.Operations,
+            CancellationToken.None));
+
+        var native = creationFailure is null
+            ? null
+            : await ScalarStringAsync(
+                connectionString,
+                "SELECT CHECK_CLAUSE FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS "
+                + "WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_NAME = 'ck_case_literal';",
+                cancellationToken: CancellationToken.None);
+
         var expected = new MigrationBuilder(context.Database.ProviderName!);
-        expected.EnsureCheckConstraint(StringCaseCheck(changeLiteral ? "alpha" : "Alpha", "ID"),
+        expected.EnsureCheckConstraint(
+            StringCaseCheck(
+                changeLiteral
+                    ? "alpha"
+                    : "Alpha",
+                "ID"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, expected.Operations,
-            new SafeMigrationRunOptions("case-check-token-identity"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                expected.Operations,
+                new SafeMigrationRunOptions("case-check-token-identity"),
+                CancellationToken.None);
 
         // Assert
         Assert.True(creationFailure is null, $"{creationFailure?.Message}; native={native}");
-        Assert.Equal(changeLiteral ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready,
+        Assert.Equal(
+            changeLiteral
+                ? SafeMigrationReportStatus.Blocked
+                : SafeMigrationReportStatus.Ready,
             report.Status);
-        Assert.Equal(changeLiteral ? SafeMigrationObservedState.Different : SafeMigrationObservedState.Matching,
-            Assert.Single(report.Assessments).ObservedState);
+
+        Assert.Equal(
+            changeLiteral
+                ? SafeMigrationObservedState.Different
+                : SafeMigrationObservedState.Matching,
+            Assert.Single(report.Assessments)
+                .ObservedState);
     }
 
     /// <summary>Uses binary string comparison so literal-case drift changes the CHECK's native data contract.</summary>
-    private static ExpectedCheckConstraintDefinition StringCaseCheck(string result, string source) =>
-        ExpectedCheckConstraintDefinition.FromExpression("ck_case_literal", Table,
-            SqlBinary(SafeMigrationSql.Collate(StringCaseColumn(result, source).ComputedExpression!, "utf8mb4_bin"),
-                SafeMigrationSqlBinaryOperator.Equal, SafeMigrationSql.Literal("Alpha")));
+    private static ExpectedCheckConstraintDefinition StringCaseCheck(
+        string result,
+        string source
+    ) =>
+        ExpectedCheckConstraintDefinition.FromExpression(
+            "ck_case_literal",
+            Table,
+            SqlBinary(
+                SafeMigrationSql.Collate(StringCaseColumn(result, source)
+                        .ComputedExpression!,
+                    "utf8mb4_bin"),
+                SafeMigrationSqlBinaryOperator.Equal,
+                SafeMigrationSql.Literal("Alpha")));
 }

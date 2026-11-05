@@ -15,6 +15,7 @@ public sealed class CoreOwnershipDesignTimeDbContextFactory
             provider => provider
                 .MigrationsAssembly(typeof(CoreOwnershipDbContext).Assembly.FullName!)
                 .MigrationsHistoryTable("__SafeMigrationsCoreHistory"));
+
         options.UsePostgreSqlSafeMigrations<CoreOwnershipDbContext>();
 
         return new CoreOwnershipDbContext(options.Options);
@@ -36,6 +37,7 @@ public sealed class CustomOwnershipDesignTimeDbContextFactory
             provider => provider
                 .MigrationsAssembly(typeof(CustomOwnershipDbContext).Assembly.FullName!)
                 .MigrationsHistoryTable("__SafeMigrationsCustomHistory"));
+
         options.UsePostgreSqlSafeMigrations<CustomOwnershipDbContext>(safeMigrations =>
             safeMigrations.ExcludeModelManagedDataForExcludedTables());
 

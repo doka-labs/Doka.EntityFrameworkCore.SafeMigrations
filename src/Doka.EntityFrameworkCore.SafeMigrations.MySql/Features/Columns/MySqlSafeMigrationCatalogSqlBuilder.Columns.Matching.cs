@@ -10,6 +10,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     private string ColumnCommentMatches(
         string? comment
     ) =>
+
         // WHY: MariaDB metadata equality can fold comment case or trailing
         // spaces. Comments are contract values, not provider identifiers; the
         // same byte-exact predicate must govern state and its digest diagnostic.
@@ -52,8 +53,12 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             collationContract.MatchExpression,
             BuildComputedMatches(definition, isMariaDb),
             BuildValueGenerationMatches(definition, temporalRowVersion),
-            includeRepairableFacets ? BuildColumnNullabilityMatches(table, definition, isMariaDb) : string.Empty,
-            includeRepairableFacets ? ColumnCommentMatches(definition.Comment) : string.Empty,
+            includeRepairableFacets
+                ? BuildColumnNullabilityMatches(table, definition, isMariaDb)
+                : string.Empty,
+            includeRepairableFacets
+                ? ColumnCommentMatches(definition.Comment)
+                : string.Empty,
             includeRepairableFacets
                 ? BuildDefaultMatches(
                     table,
@@ -65,7 +70,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     isMariaDb,
                     temporalRowVersion)
                 : string.Empty,
-            requireRepairSafeExtra ? OrdinaryColumnExtraMatches() : string.Empty,
+            requireRepairSafeExtra
+                ? OrdinaryColumnExtraMatches()
+                : string.Empty,
             requireExactIdentity || requireNativeOwnerIdentity
                 ? BuildRequiredColumnAddOwnerMatches("c.TABLE_SCHEMA", "DATABASE()")
                 : string.Empty,
@@ -114,10 +121,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         return string.Create(
             length,
             new ColumnMatchComposition(tableLiteral, nameLiteral, conditions),
-            static (
-                destination,
-                state
-            ) =>
+            static (destination,
+                state) =>
             {
                 var offset = 0;
                 AppendColumnMatchPiece(ColumnMatchPrefix, destination, ref offset);
@@ -151,24 +156,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         value
             .AsSpan()
             .CopyTo(destination[offset..]);
+
         offset += value.Length;
-    }
-
-    /// <summary>Retains borrowed predicate pieces only across the synchronous string.Create callback.</summary>
-    private readonly ref struct ColumnMatchComposition(
-        string tableLiteral,
-        string nameLiteral,
-        ReadOnlySpan<string> conditions
-    )
-    {
-        /// <summary>Gets the already rendered owner literal without another mapping call.</summary>
-        internal string TableLiteral { get; } = tableLiteral;
-
-        /// <summary>Gets the already rendered column literal without changing placeholder order.</summary>
-        internal string NameLiteral { get; } = nameLiteral;
-
-        /// <summary>Gets immutable borrowed facets whose lifetime ends with synchronous emission.</summary>
-        internal ReadOnlySpan<string> Conditions { get; } = conditions;
     }
 
     /// <summary>Verifies every expected column of a table definition through one catalog probe.</summary>
@@ -177,7 +166,6 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// column, so a wide table produced one correlated lookup per column in a single statement.
     /// This form reads the catalog once per table and counts how many columns at the expected
     /// positions match, while every facet predicate stays verbatim and server-side.
-    ///
     /// The expected set deliberately does not become a derived table joined against the catalog.
     /// MariaDB cannot use the table name as an information_schema lookup value once it sits in a
     /// join condition, so it opens every table definition in the schema for each such join. In a
@@ -185,7 +173,6 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
     /// 167 ms in this one, and 3,611 ms against 132 ms with 1,000 further tables in the schema,
     /// while MySQL 8.4 stayed within one percent of itself either way. Counting matches keeps the
     /// name a plain lookup value.
-    ///
     /// Counting is equivalent to testing each expected column separately: ORDINAL_POSITION is
     /// unique per table, so at most one row can satisfy each arm. A missing column, a mismatching
     /// facet and a facet predicate that evaluates to NULL all leave the count short, the last one
@@ -229,6 +216,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                 : null;
 
         var arms = new StringBuilder(definition.Columns.Count * 256);
+
         // WHY: Keep each CASE arm's one-based selector aligned with its column facets.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -254,7 +242,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         // count, but it lets the engine drop surplus columns before evaluating any facet.
         return "(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS c WHERE c.TABLE_SCHEMA = DATABASE() "
             + $"AND c.TABLE_NAME = {Literal(table)} AND c.ORDINAL_POSITION <= {columnCount} "
-            + (sharedCollation is null ? string.Empty : $"AND {sharedCollation} ")
+            + (sharedCollation is null
+                ? string.Empty
+                : $"AND {sharedCollation} ")
             + $"AND (CASE c.ORDINAL_POSITION{arms} END)) = {columnCount}";
     }
 
@@ -328,6 +318,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var typeExpression = storeType
             .AsSpan()
             .Trim();
+
         var memberStart = typeExpression.IndexOf('(');
         if (memberStart > 0
             && (typeExpression[..memberStart]
@@ -345,7 +336,8 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             return "LOWER(c.DATA_TYPE) = 'longtext'";
         }
 
-        if (!isMariaDb && typeExpression.Equals("integer", StringComparison.OrdinalIgnoreCase))
+        if (!isMariaDb
+            && typeExpression.Equals("integer", StringComparison.OrdinalIgnoreCase))
         {
             // WHY: MySQL persists the documented INTEGER synonym as INT.
             // Normalize only this exact signed spelling; modifier, unsigned
@@ -365,7 +357,10 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
 
         var type = normalized.AsSpan();
         var separator = type.IndexOf(' ');
-        var name = separator < 0 ? type : type[..separator];
+        var name = separator < 0
+            ? type
+            : type[..separator];
+
         var canonicalType = name switch
         {
             "tinyint" => "tinyint",
@@ -393,7 +388,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             }
         }
 
-        var expected = expectedUnsigned ? $"{canonicalType} unsigned" : canonicalType;
+        var expected = expectedUnsigned
+            ? $"{canonicalType} unsigned"
+            : canonicalType;
 
         return $"CONCAT(LOWER(c.DATA_TYPE), "
             + $"CASE WHEN LOCATE('unsigned', LOWER(c.COLUMN_TYPE)) > 0 "
@@ -418,7 +415,7 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
         var candidates = new[]
             {
                 MySqlExpressionCanonicalizer.CreateComparisonCandidate(expression),
-                MySqlExpressionCanonicalizer.CreateComparisonCandidate($"({expression})")
+                MySqlExpressionCanonicalizer.CreateComparisonCandidate($"({expression})"),
             }
             .Concat(
                 MySqlExpressionCanonicalizer.BuildComparisonCandidates(
@@ -432,10 +429,29 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
                     definition.CapturedComputedSql is not null))
             .DistinctBy(static candidate => candidate.Text, StringComparer.Ordinal);
 
-        var storage = definition.IsStored == true ? "STORED GENERATED" : "VIRTUAL GENERATED";
+        var storage = definition.IsStored == true
+            ? "STORED GENERATED"
+            : "VIRTUAL GENERATED";
 
         return MySqlExpressionCatalogComparison.Build("c.GENERATION_EXPRESSION", candidates, Literal)
             + " "
             + $"AND LOCATE({Literal(storage)}, c.EXTRA) > 0";
+    }
+
+    /// <summary>Retains borrowed predicate pieces only across the synchronous string.Create callback.</summary>
+    private readonly ref struct ColumnMatchComposition(
+        string tableLiteral,
+        string nameLiteral,
+        ReadOnlySpan<string> conditions
+    )
+    {
+        /// <summary>Gets the already rendered owner literal without another mapping call.</summary>
+        internal string TableLiteral { get; } = tableLiteral;
+
+        /// <summary>Gets the already rendered column literal without changing placeholder order.</summary>
+        internal string NameLiteral { get; } = nameLiteral;
+
+        /// <summary>Gets immutable borrowed facets whose lifetime ends with synchronous emission.</summary>
+        internal ReadOnlySpan<string> Conditions { get; } = conditions;
     }
 }

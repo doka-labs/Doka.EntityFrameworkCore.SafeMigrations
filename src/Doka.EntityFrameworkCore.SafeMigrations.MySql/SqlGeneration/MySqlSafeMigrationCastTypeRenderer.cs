@@ -206,6 +206,7 @@ internal static class MySqlSafeMigrationCastTypeRenderer
 
         castType = $"DECIMAL({precision.ToString(CultureInfo.InvariantCulture)},"
             + $"{scale.ToString(CultureInfo.InvariantCulture)})";
+
         return true;
     }
 

@@ -8,10 +8,24 @@ public sealed class SafeMigrationOperationCompatibilityTests
         { new DropSchemaOperation { Name = "archive" }, typeof(DropSchemaIntent) },
         { CreateTable(), typeof(EnsureTableIntent) },
         { new DropTableOperation { Name = "items" }, typeof(DropTableIntent) },
-        { new RenameTableOperation { Name = "items", NewName = "products" }, typeof(RenameTableIntent) },
+        {
+            new RenameTableOperation
+            {
+                Name = "items",
+                NewName = "products",
+            },
+            typeof(RenameTableIntent)
+        },
         { CreateColumn<AddColumnOperation>(), typeof(EnsureColumnIntent) },
         { CreateAlterColumn(), typeof(AlterColumnIntent) },
-        { new DropColumnOperation { Name = "caption", Table = "items" }, typeof(DropColumnIntent) },
+        {
+            new DropColumnOperation
+            {
+                Name = "caption",
+                Table = "items",
+            },
+            typeof(DropColumnIntent)
+        },
         {
             new RenameColumnOperation
             {
@@ -57,7 +71,11 @@ public sealed class SafeMigrationOperationCompatibilityTests
             typeof(EnsurePrimaryKeyIntent)
         },
         {
-            new DropPrimaryKeyOperation { Name = "pk_items", Table = "items" },
+            new DropPrimaryKeyOperation
+            {
+                Name = "pk_items",
+                Table = "items",
+            },
             typeof(DropPrimaryKeyIntent)
         },
         {
@@ -70,7 +88,11 @@ public sealed class SafeMigrationOperationCompatibilityTests
             typeof(EnsureUniqueConstraintIntent)
         },
         {
-            new DropUniqueConstraintOperation { Name = "uq_items_caption", Table = "items" },
+            new DropUniqueConstraintOperation
+            {
+                Name = "uq_items_caption",
+                Table = "items",
+            },
             typeof(DropUniqueConstraintIntent)
         },
         {
@@ -83,7 +105,11 @@ public sealed class SafeMigrationOperationCompatibilityTests
             typeof(EnsureCheckConstraintIntent)
         },
         {
-            new DropCheckConstraintOperation { Name = "ck_items_id", Table = "items" },
+            new DropCheckConstraintOperation
+            {
+                Name = "ck_items_id",
+                Table = "items",
+            },
             typeof(DropCheckConstraintIntent)
         },
         {
@@ -98,7 +124,11 @@ public sealed class SafeMigrationOperationCompatibilityTests
             typeof(EnsureForeignKeyIntent)
         },
         {
-            new DropForeignKeyOperation { Name = "fk_items_groups", Table = "items" },
+            new DropForeignKeyOperation
+            {
+                Name = "fk_items_groups",
+                Table = "items",
+            },
             typeof(DropForeignKeyIntent)
         },
     };
@@ -110,8 +140,16 @@ public sealed class SafeMigrationOperationCompatibilityTests
         new CreateSequenceOperation { Name = "item_ids" },
         new AlterSequenceOperation { Name = "item_ids" },
         new DropSequenceOperation { Name = "item_ids" },
-        new RenameSequenceOperation { Name = "item_ids", NewName = "product_ids" },
-        new RestartSequenceOperation { Name = "item_ids", StartValue = 42 },
+        new RenameSequenceOperation
+        {
+            Name = "item_ids",
+            NewName = "product_ids",
+        },
+        new RestartSequenceOperation
+        {
+            Name = "item_ids",
+            StartValue = 42,
+        },
         new SqlOperation { Sql = "SELECT 1;" },
         new InsertDataOperation
         {

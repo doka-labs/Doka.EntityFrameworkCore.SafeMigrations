@@ -8,7 +8,8 @@ internal static partial class SqlServerLocalCatalogDiagnostics
         SqlConnection root,
         string rootString,
         string output,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -21,13 +22,16 @@ internal static partial class SqlServerLocalCatalogDiagnostics
             await SqlServerScalarProofRegressionTests.VerifyLocalAsync(
                 connection,
                 cancellationToken: cancellationToken);
+
             await ExecuteAsync(
                 connection,
                 "CREATE TYPE dbo.guard_alias FROM int;",
                 cancellationToken: cancellationToken);
+
             using var context = new SafeMigrationDbContext(connectionString);
             var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
-                context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+                context.GetService<IRelationalTypeMappingSource>(),
+                context.GetService<ISqlGenerationHelper>());
 
             (string Actual, string Expected, bool Matches)[] contracts =
             [
@@ -48,23 +52,38 @@ internal static partial class SqlServerLocalCatalogDiagnostics
                     connection,
                     "DROP TABLE IF EXISTS dbo.managed_types;",
                     cancellationToken: cancellationToken);
+
                 if (contract.Actual != "missing_table")
                 {
-                    var column = contract.Actual == "missing_column" ? "OtherValue int" : "Value " + contract.Actual;
-                    await ExecuteAsync(connection,
+                    var column = contract.Actual == "missing_column"
+                        ? "OtherValue int"
+                        : "Value " + contract.Actual;
+
+                    await ExecuteAsync(
+                        connection,
                         "CREATE TABLE dbo.managed_types (Id int NOT NULL PRIMARY KEY, " + column + " NULL);",
                         cancellationToken: cancellationToken);
                 }
 
-                var intent = new EnsureModelManagedDataIntent("managed_types", ["Id"], ["int"],
-                    ["Id", "Value"], ["int", contract.Expected], new object?[,] { { 1, null } }, null, null);
+                var intent = new EnsureModelManagedDataIntent(
+                    "managed_types",
+                    ["Id"],
+                    ["int"],
+                    ["Id", "Value"],
+                    ["int", contract.Expected],
+                    new object?[,] { { 1, null } },
+                    null,
+                    null);
 
-                var guard = catalog.BuildModelManagedDataAnalysisGuard(intent).Guard;
+                var guard = catalog.BuildModelManagedDataAnalysisGuard(intent)
+                    .Guard;
+
                 await VerifyManagedGuardAsync(
                     connection,
                     guard,
                     contract.Matches,
                     cancellationToken: cancellationToken);
+
                 evidence.Add(contract.Actual + " -> " + contract.Expected + ": " + contract.Matches);
             }
 
@@ -72,29 +91,61 @@ internal static partial class SqlServerLocalCatalogDiagnostics
                 connection,
                 "CREATE TABLE dbo.identity_types (Id int IDENTITY NOT NULL PRIMARY KEY);",
                 cancellationToken: cancellationToken);
+
             ModelManagedDataIntent[] identities =
             [
-                new EnsureModelManagedDataIntent("identity_types", ["Id"], ["int"], ["Id"], ["int"],
-                    new object?[,] { { 1 } }, null, null),
-                new UpdateModelManagedDataIntent("identity_types", ["Id"], ["int"], new object?[,] { { 1 } },
-                    ["Id"], ["int"], new object?[,] { { 1 } }, new object?[,] { { 1 } }, null, null),
-                new DeleteModelManagedDataIntent("identity_types", ["Id"], ["int"], new object?[,] { { 1 } },
-                    ["Id"], ["int"], new object?[,] { { 1 } }, null, []),
+                new EnsureModelManagedDataIntent(
+                    "identity_types",
+                    ["Id"],
+                    ["int"],
+                    ["Id"],
+                    ["int"],
+                    new object?[,] { { 1 } },
+                    null,
+                    null),
+                new UpdateModelManagedDataIntent(
+                    "identity_types",
+                    ["Id"],
+                    ["int"],
+                    new object?[,] { { 1 } },
+                    ["Id"],
+                    ["int"],
+                    new object?[,] { { 1 } },
+                    new object?[,] { { 1 } },
+                    null,
+                    null),
+                new DeleteModelManagedDataIntent(
+                    "identity_types",
+                    ["Id"],
+                    ["int"],
+                    new object?[,] { { 1 } },
+                    ["Id"],
+                    ["int"],
+                    new object?[,] { { 1 } },
+                    null,
+                    []),
             ];
 
             foreach (var intent in identities)
             {
-                var guard = catalog.BuildModelManagedDataAnalysisGuard(intent).Guard;
+                var guard = catalog.BuildModelManagedDataAnalysisGuard(intent)
+                    .Guard;
+
                 await VerifyManagedGuardAsync(
                     connection,
                     guard,
                     intent is not UpdateModelManagedDataIntent,
                     cancellationToken: cancellationToken);
-                evidence.Add(intent.GetType().Name + ": verified");
+
+                evidence.Add(intent.GetType()
+                        .Name
+                    + ": verified");
             }
 
             await ExecuteAsync(connection, "CREATE SCHEMA audit;", cancellationToken: cancellationToken);
-            await ExecuteAsync(connection, "CREATE TABLE dbo.type_principals (Id int NOT NULL PRIMARY KEY, "
+            await ExecuteAsync(
+                connection,
+                "CREATE TABLE dbo.type_principals (Id int NOT NULL PRIMARY KEY, "
                 + "Code bigint NOT NULL); CREATE TABLE dbo.type_dependents (ReferenceId int NULL);",
                 cancellationToken: cancellationToken);
 
@@ -110,10 +161,14 @@ internal static partial class SqlServerLocalCatalogDiagnostics
                     connection,
                     "DROP TABLE IF EXISTS audit.type_dependents;",
                     cancellationToken: cancellationToken);
+
                 if (dependent.Mode != "missing_table")
                 {
-                    var column = dependent.Mode == "missing_column" ? "OtherId int"
-                        : dependent.Mode == "wrong_type" ? "ReferenceId bigint" : "ReferenceId int";
+                    var column = dependent.Mode == "missing_column"
+                        ? "OtherId int"
+                        : dependent.Mode == "wrong_type"
+                            ? "ReferenceId bigint"
+                            : "ReferenceId int";
 
                     await ExecuteAsync(
                         connection,
@@ -129,20 +184,34 @@ internal static partial class SqlServerLocalCatalogDiagnostics
 
                 if (dependent.Mode == "conflicting")
                 {
-                    foreignKeys.Add(new ExpectedModelManagedDataForeignKeyDefinition(
-                        "type_dependents", ["ReferenceId"], ["Code"], "dbo"));
+                    foreignKeys.Add(
+                        new ExpectedModelManagedDataForeignKeyDefinition(
+                            "type_dependents",
+                            ["ReferenceId"],
+                            ["Code"],
+                            "dbo"));
                 }
 
-                var intent = new DeleteModelManagedDataIntent("type_principals", ["Id"], ["int"],
-                    new object?[,] { { 1 } }, ["Id", "Code"], ["int", "bigint"],
-                    new object?[,] { { 1, 2L } }, null, foreignKeys.ToArray());
+                var intent = new DeleteModelManagedDataIntent(
+                    "type_principals",
+                    ["Id"],
+                    ["int"],
+                    new object?[,] { { 1 } },
+                    ["Id", "Code"],
+                    ["int", "bigint"],
+                    new object?[,] { { 1, 2L } },
+                    null,
+                    foreignKeys.ToArray());
 
-                var guard = catalog.BuildModelManagedDataAnalysisGuard(intent).Guard;
+                var guard = catalog.BuildModelManagedDataAnalysisGuard(intent)
+                    .Guard;
+
                 await VerifyManagedGuardAsync(
                     connection,
                     guard,
                     dependent.Matches,
                     cancellationToken: cancellationToken);
+
                 evidence.Add("dependent " + dependent.Mode + ": " + dependent.Matches);
             }
 
@@ -163,7 +232,8 @@ internal static partial class SqlServerLocalCatalogDiagnostics
         SqlConnection connection,
         string guard,
         bool expected,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -171,6 +241,10 @@ internal static partial class SqlServerLocalCatalogDiagnostics
         command.CommandText = "SELECT (" + guard + ");";
         var actual = await command.ExecuteScalarAsync(cancellationToken: cancellationToken);
         Assert.NotNull(actual);
-        Assert.Equal(expected ? 1 : 0, Convert.ToInt32(actual, CultureInfo.InvariantCulture));
+        Assert.Equal(
+            expected
+                ? 1
+                : 0,
+            Convert.ToInt32(actual, CultureInfo.InvariantCulture));
     }
 }

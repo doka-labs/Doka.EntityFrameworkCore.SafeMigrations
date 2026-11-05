@@ -24,12 +24,14 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
             constraints: table => table.CheckConstraint(
                 "ck_generated_check_orders_amount",
                 "\"amount\" >= 0"));
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var preflight = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("generated-check-preflight"), CancellationToken.None);
+            new SafeMigrationRunOptions("generated-check-preflight"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
 
@@ -39,14 +41,18 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
         var postflight = await runner.VerifyAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("generated-check-postflight"), CancellationToken.None);
+            new SafeMigrationRunOptions("generated-check-postflight"),
+            CancellationToken.None);
 
         var exception = await Assert.ThrowsAsync<PostgresException>(() => ExecuteSqlAsync(
             connectionString,
-            "INSERT INTO generated_check_orders (amount) VALUES (-1);", cancellationToken: CancellationToken.None));
+            "INSERT INTO generated_check_orders (amount) VALUES (-1);",
+            cancellationToken: CancellationToken.None));
 
         Assert.Equal(SafeMigrationReportStatus.Ready, postflight.Status);
-        Assert.True(Assert.Single(postflight.Assessments).PostconditionSatisfied);
+        Assert.True(Assert.Single(postflight.Assessments)
+            .PostconditionSatisfied);
+
         Assert.Equal(PostgresErrorCodes.CheckViolation, exception.SqlState);
     }
 
@@ -57,7 +63,9 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
         await ExecuteSqlAsync(
             connectionString,
             "CREATE TABLE module_state (id integer NOT NULL PRIMARY KEY); "
-            + "INSERT INTO module_state (id) VALUES (1);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO module_state (id) VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -65,12 +73,14 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
             table => new { Id = table.Column<int>(type: "integer", nullable: false) },
             policy: SafeMigrationPolicy.ExistenceOnly,
             mode: SafeMigrationTableMode.ConvergenceContainer);
+
         builder.AddColumnIfNotExists<string>(
             "display_name",
             "module_state",
             type: "character varying(100)",
             maxLength: 100,
             nullable: true);
+
         builder.CreateIndexIfNotExists("ix_module_state_display_name", "module_state", ["display_name"]);
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
@@ -82,7 +92,9 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
                 connectionString,
                 "SELECT COUNT(*) FROM information_schema.columns "
                 + "WHERE table_schema = current_schema() AND table_name = 'module_state' "
-                + "AND column_name = 'display_name';", cancellationToken: CancellationToken.None));
+                + "AND column_name = 'display_name';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             1,
             await ScalarIntAsync(
@@ -98,8 +110,11 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
     public async Task ExistenceOnly_AcceptsAnExistingTableContainerWithoutMutatingShapeDrift()
     {
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE existence_shape (id character varying(20) NOT NULL);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE existence_shape (id character varying(20) NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.CreateTableIfNotExists(
@@ -113,8 +128,11 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"),
-            CancellationToken.None);
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("test-instance"),
+                CancellationToken.None);
 
         var assessment = Assert.Single(report.Assessments);
         Assert.Equal(SafeMigrationObservedState.Different, assessment.ObservedState);
@@ -128,14 +146,17 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
                 connectionString,
                 "SELECT character_maximum_length FROM information_schema.columns "
                 + "WHERE table_schema = current_schema() AND table_name = 'existence_shape' "
-                + "AND column_name = 'id';", cancellationToken: CancellationToken.None));
+                + "AND column_name = 'id';",
+                cancellationToken: CancellationToken.None));
+
         Assert.Equal(
             0,
             await ScalarIntAsync(
                 connectionString,
                 "SELECT COUNT(*) FROM information_schema.columns "
                 + "WHERE table_schema = current_schema() AND table_name = 'existence_shape' "
-                + "AND column_name = 'Payload';", cancellationToken: CancellationToken.None));
+                + "AND column_name = 'Payload';",
+                cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -143,11 +164,11 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
     {
         var scenarios = SafeMigrationStateSpaceGenerator.GeneratePairwise(
             [
-                new("column", ["missing", "matching", "different"]),
-                new("index", ["missing", "matching", "different"]),
-                new("data", ["empty", "populated"]),
-                new("extras", ["none", "unknown"]),
-                new("history", ["none", "legacy"]),
+                new SafeMigrationStateDimension("column", ["missing", "matching", "different"]),
+                new SafeMigrationStateDimension("index", ["missing", "matching", "different"]),
+                new SafeMigrationStateDimension("data", ["empty", "populated"]),
+                new SafeMigrationStateDimension("extras", ["none", "unknown"]),
+                new SafeMigrationStateDimension("history", ["none", "legacy"]),
             ],
             seed: 0x5AFE2026);
 
@@ -168,10 +189,16 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
                 connectionString,
                 $"CREATE TABLE {table} (id integer NOT NULL, alternate_id integer NOT NULL{columnSql});",
                 cancellationToken: CancellationToken.None);
+
             if (scenario.Values["index"] != "missing")
             {
-                var indexColumn = scenario.Values["index"] == "matching" ? "id" : "alternate_id";
-                await ExecuteSqlAsync(connectionString, $"CREATE INDEX {index} ON {table} ({indexColumn});",
+                var indexColumn = scenario.Values["index"] == "matching"
+                    ? "id"
+                    : "alternate_id";
+
+                await ExecuteSqlAsync(
+                    connectionString,
+                    $"CREATE INDEX {index} ON {table} ({indexColumn});",
                     cancellationToken: CancellationToken.None);
             }
 
@@ -181,7 +208,10 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
                     ? "id, alternate_id"
                     : "id, alternate_id, payload";
 
-                var insertValues = scenario.Values["column"] == "missing" ? "1, 2" : "1, 2, 'legacy'";
+                var insertValues = scenario.Values["column"] == "missing"
+                    ? "1, 2"
+                    : "1, 2, 'legacy'";
+
                 await ExecuteSqlAsync(
                     connectionString,
                     $"INSERT INTO {table} ({insertColumns}) VALUES ({insertValues});",
@@ -190,7 +220,9 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
 
             if (scenario.Values["extras"] == "unknown")
             {
-                await ExecuteSqlAsync(connectionString, $"ALTER TABLE {table} ADD COLUMN legacy_extra integer NULL;",
+                await ExecuteSqlAsync(
+                    connectionString,
+                    $"ALTER TABLE {table} ADD COLUMN legacy_extra integer NULL;",
                     cancellationToken: CancellationToken.None);
             }
 
@@ -214,12 +246,14 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
                 },
                 mode: SafeMigrationTableMode.ConvergenceContainer,
                 policy: SafeMigrationPolicy.ExistenceOnly);
+
             builder.AddColumnIfNotExists<string>(
                 "payload",
                 table,
                 type: "character varying(40)",
                 maxLength: 40,
                 nullable: true);
+
             builder.CreateIndexIfNotExists(index, table, ["id"]);
 
             var beforeColumnLength = await ScalarIntAsync(
@@ -231,8 +265,11 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
 
             var report = await context
                 .GetService<ISafeMigrationRunner>()
-                .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions($"pairwise-{scenario.Index}"),
-                CancellationToken.None);
+                .AnalyzeAsync(
+                    context,
+                    builder.Operations,
+                    new SafeMigrationRunOptions($"pairwise-{scenario.Index}"),
+                    CancellationToken.None);
 
             Assert.Equal(
                 beforeColumnLength,
@@ -246,13 +283,17 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
             var shouldBlock = scenario.Values["column"] == "different" || scenario.Values["index"] == "different";
 
             Assert.Equal(
-                shouldBlock ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready,
+                shouldBlock
+                    ? SafeMigrationReportStatus.Blocked
+                    : SafeMigrationReportStatus.Ready,
                 report.Status);
+
             if (shouldBlock)
             {
                 Assert.Contains(
                     report.Assessments,
                     assessment => assessment.ObservedState == SafeMigrationObservedState.Different);
+
                 continue;
             }
 
@@ -265,7 +306,9 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
                     connectionString,
                     "SELECT character_maximum_length FROM information_schema.columns "
                     + $"WHERE table_schema = current_schema() AND table_name = '{table}' "
-                    + "AND column_name = 'payload';", cancellationToken: CancellationToken.None));
+                    + "AND column_name = 'payload';",
+                    cancellationToken: CancellationToken.None));
+
             Assert.Equal(
                 1,
                 await ScalarIntAsync(
@@ -274,7 +317,8 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
                     + "JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid "
                     + "JOIN pg_catalog.pg_attribute a ON a.attrelid = i.indrelid "
                     + "AND a.attnum = ANY(i.indkey) "
-                    + $"WHERE c.relname = '{index}' AND a.attname = 'id';", cancellationToken: CancellationToken.None));
+                    + $"WHERE c.relname = '{index}' AND a.attname = 'id';",
+                    cancellationToken: CancellationToken.None));
         }
     }
 
@@ -291,7 +335,7 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
             ],
             comment: "strict shape",
             primaryKey: new ExpectedPrimaryKeyDefinition("pk_strict_table", "strict_table", ["id"]),
-            uniqueConstraints: [new ExpectedUniqueConstraintDefinition("uq_strict_code", "strict_table", ["code"]),],
+            uniqueConstraints: [new ExpectedUniqueConstraintDefinition("uq_strict_code", "strict_table", ["code"])],
             checkConstraints:
             [
                 ExpectedCheckConstraintDefinition.FromExpression(
@@ -305,13 +349,18 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "ALTER TABLE strict_table ADD legacy integer NULL;",
+        await ExecuteSqlAsync(
+            connectionString,
+            "ALTER TABLE strict_table ADD legacy integer NULL;",
             cancellationToken: CancellationToken.None);
 
         var report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"),
-            CancellationToken.None);
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("test-instance"),
+                CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(
@@ -323,10 +372,14 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
             connectionString,
             "ALTER TABLE strict_table DROP COLUMN legacy, " + "ADD CONSTRAINT uq_strict_unexpected UNIQUE (id, code);",
             cancellationToken: CancellationToken.None);
+
         report = await context
             .GetService<ISafeMigrationRunner>()
-            .AnalyzeAsync(context, builder.Operations, new SafeMigrationRunOptions("test-instance"),
-            CancellationToken.None);
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("test-instance"),
+                CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(
@@ -344,11 +397,14 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
             "CREATE TABLE transition_parents (id integer NOT NULL, "
             + "CONSTRAINT pk_transition_parents PRIMARY KEY (id)); "
             + "CREATE TABLE transition_children (id integer NOT NULL, parent_id integer NULL, "
-            + "CONSTRAINT pk_transition_children PRIMARY KEY (id));", cancellationToken: CancellationToken.None);
+            + "CONSTRAINT pk_transition_children PRIMARY KEY (id));",
+            cancellationToken: CancellationToken.None);
+
         var options = new DbContextOptionsBuilder<StandaloneForeignKeyContext>()
             .UseNpgsql(connectionString)
-            .UsePostgreSqlSafeMigrations<StandaloneForeignKeyContext>()
+            .UsePostgreSqlSafeMigrations()
             .Options;
+
         await using var context = new StandaloneForeignKeyContext(options);
         var definition = new ExpectedTableDefinition(
             "transition_children",
@@ -360,11 +416,13 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
                 "pk_transition_children",
                 "transition_children",
                 ["id"]));
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(
             definition,
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.AddForeignKeyIfNotExists(
             "fk_transition_children_parent",
             "transition_children",
@@ -372,12 +430,14 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
             "transition_parents",
             ["id"],
             onDelete: ReferentialAction.SetNull);
+
         var runner = context.GetService<ISafeMigrationRunner>();
 
         var pending = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("standalone-fk-pending"), CancellationToken.None);
+            new SafeMigrationRunOptions("standalone-fk-pending"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, pending.Status);
         Assert.Equal(SafeMigrationObservedState.Matching, pending.Assessments[0].ObservedState);
@@ -390,14 +450,17 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
         var replay = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("standalone-fk-replay"), CancellationToken.None);
+            new SafeMigrationRunOptions("standalone-fk-replay"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Ready, replay.Status);
-        Assert.All(replay.Assessments, static assessment =>
-        {
-            Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
-            Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
-        });
+        Assert.All(
+            replay.Assessments,
+            static assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
+            });
 
         await ExecuteSqlAsync(
             connectionString,
@@ -411,11 +474,11 @@ public sealed class PostgreSqlTablesIntegrationTests : PostgreSqlSafeMigrationIn
         var drift = await runner.AnalyzeAsync(
             context,
             builder.Operations,
-            new SafeMigrationRunOptions("standalone-fk-drift"), CancellationToken.None);
+            new SafeMigrationRunOptions("standalone-fk-drift"),
+            CancellationToken.None);
 
         Assert.Equal(SafeMigrationReportStatus.Blocked, drift.Status);
         Assert.Equal(SafeMigrationObservedState.Different, drift.Assessments[0].ObservedState);
         Assert.Equal(SafeMigrationObservedState.Missing, drift.Assessments[1].ObservedState);
     }
-
 }

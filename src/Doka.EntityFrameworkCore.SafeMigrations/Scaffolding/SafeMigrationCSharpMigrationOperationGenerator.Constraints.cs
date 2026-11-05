@@ -64,6 +64,7 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
             operation.Table,
             operation.GetType()
                 .Name);
+
         ValidateCheckConstraint(operation.Name, operation.Sql);
 
         builder
@@ -99,6 +100,7 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
             operation.Table,
             operation.GetType()
                 .Name);
+
         ValidateColumns(operation.Name, operation.Columns, "dependent");
         if (string.IsNullOrWhiteSpace(operation.PrincipalTable))
         {
@@ -356,7 +358,7 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
             $"Check constraint '{SafeMigrationDiagnosticMessages.BoundForDisplay(name)}' uses SQL "
             + "that SafeMigrations cannot compare structurally "
             + $"('{failureCode}'). Replace the generated operation with an explicit "
-            + $"ExpectedCheckConstraintDefinition.FromExpression definition before applying the migration.");
+            + "ExpectedCheckConstraintDefinition.FromExpression definition before applying the migration.");
     }
 
     private static void ValidateStandaloneConstraint(
@@ -366,6 +368,7 @@ internal sealed partial class SafeMigrationCSharpMigrationOperationGenerator
         var annotation = operation
             .GetAnnotations()
             .FirstOrDefault();
+
         if (annotation is null)
         {
             return;

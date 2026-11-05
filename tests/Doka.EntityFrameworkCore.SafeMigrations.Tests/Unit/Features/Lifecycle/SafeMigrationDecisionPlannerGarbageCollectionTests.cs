@@ -19,8 +19,10 @@ public sealed class SafeMigrationDecisionPlannerGarbageCollectionTests
     {
         // Arrange
         _ = SafeMigrationDecisionPlanner.PlanAction(
-            SafeMigrationOperationKind.EnsureColumn, SafeMigrationObservedState.Different,
-            SafeMigrationPolicy.RepairIfSafe, SafeMigrationRepairCapability.Safe);
+            SafeMigrationOperationKind.EnsureColumn,
+            SafeMigrationObservedState.Different,
+            SafeMigrationPolicy.RepairIfSafe,
+            SafeMigrationRepairCapability.Safe);
 
         // Act
         var result = MeasureAfterCollections(collectionCount);
@@ -54,8 +56,10 @@ public sealed class SafeMigrationDecisionPlannerGarbageCollectionTests
             for (var index = 0; index < 1000; index++)
             {
                 action = SafeMigrationDecisionPlanner.PlanAction(
-                    SafeMigrationOperationKind.EnsureColumn, SafeMigrationObservedState.Different,
-                    SafeMigrationPolicy.RepairIfSafe, SafeMigrationRepairCapability.Safe);
+                    SafeMigrationOperationKind.EnsureColumn,
+                    SafeMigrationObservedState.Different,
+                    SafeMigrationPolicy.RepairIfSafe,
+                    SafeMigrationRepairCapability.Safe);
             }
 
             bytes += GC.GetAllocatedBytesForCurrentThread() - before;

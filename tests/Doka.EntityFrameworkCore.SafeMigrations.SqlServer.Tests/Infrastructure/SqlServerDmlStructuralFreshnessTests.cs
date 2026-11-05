@@ -19,22 +19,46 @@ public sealed class SqlServerDmlStructuralFreshnessTests
     [InlineData("insert", true, false)]
     [InlineData("update", true, false)]
     [InlineData("delete", true, false)]
-    public void TypedDml_GlobalTriggerRiskInvalidatesMatchingIndex(string writeKind, bool enabled, bool hasRows)
+    public void TypedDml_GlobalTriggerRiskInvalidatesMatchingIndex(
+        string writeKind,
+        bool enabled,
+        bool hasRows
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         using var analyzer = Analyzer(context);
         analyzer.CaptureProjectedDmlEffects(enabled);
-        var projection = new SafeMigrationPreflightProjection(providerOperationProjection: analyzer,
+        var projection = new SafeMigrationPreflightProjection(
+            providerOperationProjection: analyzer,
             projectedDependencyAnalyzer: analyzer) { CurrentOperationOrdinal = 11 };
 
-        var data = hasRows ? new object?[,] { { 1 } } : new object?[0, 1];
+        var data = hasRows
+            ? new object?[,] { { 1 } }
+            : new object?[0, 1];
+
         MigrationOperation write = writeKind switch
         {
-            "insert" => new InsertDataOperation { Table = "source", Columns = ["Id"], Values = data },
-            "update" => new UpdateDataOperation { Table = "source", KeyColumns = ["Id"], KeyValues = data,
-                Columns = ["Id"], Values = data },
-            "delete" => new DeleteDataOperation { Table = "source", KeyColumns = ["Id"], KeyValues = data },
+            "insert" => new InsertDataOperation
+            {
+                Table = "source",
+                Columns = ["Id"],
+                Values = data,
+            },
+            "update" => new UpdateDataOperation
+            {
+                Table = "source",
+                KeyColumns = ["Id"],
+                KeyValues = data,
+                Columns = ["Id"],
+                Values = data,
+            },
+            "delete" => new DeleteDataOperation
+            {
+                Table = "source",
+                KeyColumns = ["Id"],
+                KeyValues = data,
+            },
             _ => throw new ArgumentOutOfRangeException(nameof(writeKind)),
         };
 
@@ -66,25 +90,45 @@ public sealed class SqlServerDmlStructuralFreshnessTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void SafeDml_NoOpRetainsMetadataFreshness(bool executes)
+    public void SafeDml_NoOpRetainsMetadataFreshness(
+        bool executes
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         using var analyzer = Analyzer(context);
         analyzer.CaptureProjectedDmlEffects(true);
         analyzer.SetCurrentOperationOrdinal(3);
-        var seed = new SafeMigrationOperation(new EnsureModelManagedDataIntent("source", ["Id"], ["int"],
-            ["Id"], ["int"], new object?[,] { { 1 } }, null, null), SafeMigrationPolicy.ThrowIfDifferent);
+        var seed = new SafeMigrationOperation(
+            new EnsureModelManagedDataIntent(
+                "source",
+                ["Id"],
+                ["int"],
+                ["Id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                null,
+                null),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
-        var seedState = new SafeMigrationProviderAnalysis(executes ? SafeMigrationObservedState.Missing
-            : SafeMigrationObservedState.Matching, SafeMigrationRepairCapability.None, !executes, "seed_state");
+        var seedState = new SafeMigrationProviderAnalysis(
+            executes
+                ? SafeMigrationObservedState.Missing
+                : SafeMigrationObservedState.Matching,
+            SafeMigrationRepairCapability.None,
+            !executes,
+            "seed_state");
 
         var index = Index();
         var matching = Matching();
 
         // Act
-        analyzer.ObserveAcceptedOperation(seed, seedState, seedState,
+        analyzer.ObserveAcceptedOperation(
+            seed,
+            seedState,
+            seedState,
             SafeMigrationDecisionPlanner.Plan(seed.Intent.Kind, seedState.ObservedState, seed.Policy));
+
         var result = analyzer.ValidateCapturedProjection(index, matching, new EmptyColumns());
 
         // Assert
@@ -109,12 +153,21 @@ public sealed class SqlServerDmlStructuralFreshnessTests
         using var analyzer = Analyzer(context);
         analyzer.CaptureProjectedDmlEffects(true);
         analyzer.SetCurrentOperationOrdinal(2);
-        var rejected = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
-            SafeMigrationRepairCapability.None, false, "catalog_metadata_not_visible") { IsInvariantUnsupported = true };
+        var rejected = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Unsupported,
+            SafeMigrationRepairCapability.None,
+            false,
+            "catalog_metadata_not_visible") { IsInvariantUnsupported = true };
 
         // Act
-        analyzer.ObserveProviderOperation(new DeleteDataOperation { Table = "source", KeyColumns = ["Id"],
-            KeyValues = new object?[,] { { 1 } } });
+        analyzer.ObserveProviderOperation(
+            new DeleteDataOperation
+            {
+                Table = "source",
+                KeyColumns = ["Id"],
+                KeyValues = new object?[,] { { 1 } },
+            });
+
         var result = analyzer.ValidateCapturedProjection(Index(), rejected, new EmptyColumns());
 
         // Assert
@@ -128,24 +181,45 @@ public sealed class SqlServerDmlStructuralFreshnessTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void TypedAlter_DefaultBackfillInvalidatesMatchingMetadata(bool hasDefault)
+    public void TypedAlter_DefaultBackfillInvalidatesMatchingMetadata(
+        bool hasDefault
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         using var analyzer = Analyzer(context);
         analyzer.CaptureProjectedDmlEffects(true);
-        var alteration = new AlterColumnOperation { Table = "source", Name = "Value", ClrType = typeof(int),
-            ColumnType = "int", IsNullable = false, DefaultValue = hasDefault ? 0 : null,
-            OldColumn = new AddColumnOperation { Table = "source", Name = "Value", ClrType = typeof(int),
-                ColumnType = "int", IsNullable = true } };
+        var alteration = new AlterColumnOperation
+        {
+            Table = "source",
+            Name = "Value",
+            ClrType = typeof(int),
+            ColumnType = "int",
+            IsNullable = false,
+            DefaultValue = hasDefault
+                ? 0
+                : null,
+            OldColumn = new AddColumnOperation
+            {
+                Table = "source",
+                Name = "Value",
+                ClrType = typeof(int),
+                ColumnType = "int",
+                IsNullable = true,
+            },
+        };
 
-        var projection = new SafeMigrationPreflightProjection(providerOperationProjection: analyzer,
+        var projection = new SafeMigrationPreflightProjection(
+            providerOperationProjection: analyzer,
             projectedDependencyAnalyzer: analyzer) { CurrentOperationOrdinal = 6 };
 
         var matching = Matching();
 
         // Act
-        var baseline = context.GetService<ISqlServerSafeMigrationsBaselineGenerator>().Generate([alteration]);
+        var baseline = context
+            .GetService<ISqlServerSafeMigrationsBaselineGenerator>()
+            .Generate([alteration]);
+
         var sql = string.Join("\n", baseline.Select(static command => command.CommandText));
         projection.ObserveProviderPostcondition(alteration);
         projection.CurrentOperationOrdinal = 7;
@@ -173,24 +247,37 @@ public sealed class SqlServerDmlStructuralFreshnessTests
     [InlineData("DBO", false)]
     [InlineData("dbo", true)]
     [InlineData("DBO", true)]
-    public void TypedDboEnsure_ZeroCommandBaselineRetainsFreshness(string schema, bool earlierDrop)
+    public void TypedDboEnsure_ZeroCommandBaselineRetainsFreshness(
+        string schema,
+        bool earlierDrop
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         using var analyzer = Analyzer(context);
         analyzer.CaptureProjectedDdlRowEffects(SqlServerDdlRowEffectRisk.EnabledTrigger);
         var operation = new EnsureSchemaOperation { Name = schema };
-        var projection = new SafeMigrationPreflightProjection(providerOperationProjection: analyzer,
+        var projection = new SafeMigrationPreflightProjection(
+            providerOperationProjection: analyzer,
             projectedDependencyAnalyzer: analyzer) { CurrentOperationOrdinal = 2 };
 
         var matching = Matching();
 
         // Act
-        var baseline = context.GetService<ISqlServerSafeMigrationsBaselineGenerator>().Generate([operation]);
+        var baseline = context
+            .GetService<ISqlServerSafeMigrationsBaselineGenerator>()
+            .Generate([operation]);
+
         if (earlierDrop)
         {
             projection.CurrentOperationOrdinal = 1;
-            projection.ObserveProviderPostcondition(new DropIndexOperation { Name = "IX_old", Table = "source" });
+            projection.ObserveProviderPostcondition(
+                new DropIndexOperation
+                {
+                    Name = "IX_old",
+                    Table = "source",
+                });
+
             projection.CurrentOperationOrdinal = 2;
         }
 
@@ -217,7 +304,9 @@ public sealed class SqlServerDmlStructuralFreshnessTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void SafeAlter_ProvenNullAbsenceEmitsNoTriggeringBackfill(bool text)
+    public void SafeAlter_ProvenNullAbsenceEmitsNoTriggeringBackfill(
+        bool text
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
@@ -225,26 +314,50 @@ public sealed class SqlServerDmlStructuralFreshnessTests
         analyzer.CaptureProjectedDmlEffects(true);
         var source = text
             ? new ExpectedColumnDefinition("Value", typeof(string), true, "varchar(40)")
-            : new ExpectedColumnDefinition("Value", typeof(int), true, "int", defaultValue: SafeMigrationDefaultValue.Literal(0));
+            : new ExpectedColumnDefinition(
+                "Value",
+                typeof(int),
+                true,
+                "int",
+                defaultValue: SafeMigrationDefaultValue.Literal(0));
 
         var target = text
             ? new ExpectedColumnDefinition("Value", typeof(string), false, "varchar(80)")
-            : new ExpectedColumnDefinition("Value", typeof(long), false, "bigint", defaultValue: SafeMigrationDefaultValue.Literal(0L));
+            : new ExpectedColumnDefinition(
+                "Value",
+                typeof(long),
+                false,
+                "bigint",
+                defaultValue: SafeMigrationDefaultValue.Literal(0L));
 
-        var operation = new SafeMigrationOperation(new AlterColumnIntent("source", target, source),
+        var operation = new SafeMigrationOperation(
+            new AlterColumnIntent("source", target, source),
             SafeMigrationPolicy.RepairIfSafe);
 
-        var safe = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Different,
-            SafeMigrationRepairCapability.Safe, false, "proven_source");
+        var safe = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Different,
+            SafeMigrationRepairCapability.Safe,
+            false,
+            "proven_source");
 
         analyzer.SetCurrentOperationOrdinal(2);
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate([operation]);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation]);
+
         var sql = string.Join("\n", commands.Select(static command => command.CommandText));
-        analyzer.ObserveAcceptedOperation(operation, safe, safe,
-            SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, safe.ObservedState, operation.Policy,
+        analyzer.ObserveAcceptedOperation(
+            operation,
+            safe,
+            safe,
+            SafeMigrationDecisionPlanner.Plan(
+                operation.Intent.Kind,
+                safe.ObservedState,
+                operation.Policy,
                 safe.RepairCapability));
+
         var result = analyzer.ValidateCapturedProjection(Index(), Matching(), new EmptyColumns());
 
         // Assert
@@ -255,12 +368,19 @@ public sealed class SqlServerDmlStructuralFreshnessTests
     }
 
     /// <summary>Creates the provider analyzer from the real SQL Server service registrations.</summary>
-    private static SqlServerSafeMigrationProviderAnalyzer Analyzer(DbContext context)
+    private static SqlServerSafeMigrationProviderAnalyzer Analyzer(
+        DbContext context
+    )
         => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     private static SafeMigrationOperation Index()
-        => new(new EnsureIndexIntent(new ExpectedIndexDefinition("IX_matching", "unrelated",
-            [new ExpectedIndexKeyDefinition("Value")])), SafeMigrationPolicy.ThrowIfDifferent);
+        => new(
+            new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "IX_matching",
+                    "unrelated",
+                    [new ExpectedIndexKeyDefinition("Value")])),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
     private static SafeMigrationProviderAnalysis Matching()
         => new(SafeMigrationObservedState.Matching, SafeMigrationRepairCapability.None, true, "classified_matching");
@@ -268,8 +388,12 @@ public sealed class SqlServerDmlStructuralFreshnessTests
     private sealed class EmptyColumns : ISafeMigrationProjectedColumnSource
     {
         /// <inheritdoc />
-        public bool TryGetProjectedColumn(string table, string? schema, string column,
-            [NotNullWhen(true)] out ExpectedColumnDefinition? definition)
+        public bool TryGetProjectedColumn(
+            string table,
+            string? schema,
+            string column,
+            [NotNullWhen(true)] out ExpectedColumnDefinition? definition
+        )
         {
             definition = null;
 

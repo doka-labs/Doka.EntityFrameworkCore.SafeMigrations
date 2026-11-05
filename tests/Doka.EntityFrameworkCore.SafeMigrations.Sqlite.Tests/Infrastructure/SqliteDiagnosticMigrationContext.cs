@@ -9,7 +9,10 @@ internal sealed class SqliteDiagnosticMigrationContext : DbContext
     /// <summary>Initializes the context with the fixture's already-open in-memory database.</summary>
     /// <param name="connection">The fixture's isolated open connection.</param>
     /// <param name="internalServices">The class-owned provider, never a process-wide cache entry.</param>
-    internal SqliteDiagnosticMigrationContext(DbConnection connection, IServiceProvider internalServices)
+    internal SqliteDiagnosticMigrationContext(
+        DbConnection connection,
+        IServiceProvider internalServices
+    )
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(internalServices);
@@ -19,9 +22,12 @@ internal sealed class SqliteDiagnosticMigrationContext : DbContext
     }
 
     /// <inheritdoc />
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    protected override void OnConfiguring(
+        DbContextOptionsBuilder optionsBuilder
+    )
     {
-        optionsBuilder.UseSqlite(_connection,
+        optionsBuilder.UseSqlite(
+            _connection,
             provider => provider.MigrationsAssembly(typeof(SqliteDiagnosticMigrationContext).Assembly.FullName));
 
         // WHY: This additional fixed-family model must not grow EF's global
@@ -40,14 +46,12 @@ public sealed class SqliteDiagnosticGuardMigration : Migration
     public const string MigrationIdentifier = "20261014000300_SqliteDiagnosticGuard";
 
     /// <inheritdoc />
-    protected override void Up(MigrationBuilder migrationBuilder)
-    {
-        migrationBuilder.AddColumnIfNotExists<string>("RequiredValue", "diagnostic_migration", type: "TEXT");
-    }
+    protected override void Up(
+        MigrationBuilder migrationBuilder
+    ) => migrationBuilder.AddColumnIfNotExists<string>("RequiredValue", "diagnostic_migration", type: "TEXT");
 
     /// <inheritdoc />
-    protected override void Down(MigrationBuilder migrationBuilder)
-    {
-        migrationBuilder.DropColumnIfExists("RequiredValue", "diagnostic_migration");
-    }
+    protected override void Down(
+        MigrationBuilder migrationBuilder
+    ) => migrationBuilder.DropColumnIfExists("RequiredValue", "diagnostic_migration");
 }

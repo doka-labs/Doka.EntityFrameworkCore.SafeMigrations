@@ -10,7 +10,10 @@ public sealed class SqliteSqlNormalizerTests
     [InlineData("source + \u2003operand", "source + operand")]
     [InlineData("operand\u00A0 + 1", "operand + 1")]
     [InlineData("((\u00A0operand))", "operand")]
-    public void NonAsciiWhitespaceRemainsPartOfNativeIdentifier(string native, string different)
+    public void NonAsciiWhitespaceRemainsPartOfNativeIdentifier(
+        string native,
+        string different
+    )
     {
         // Arrange
         var actual = native;
@@ -41,7 +44,11 @@ public sealed class SqliteSqlNormalizerTests
     [InlineData("Source == 1", "\"Source\" = 1", false)]
     [InlineData("source + '\u00A0operand'", "\"source\" + '\u00A0operand'", true)]
     [InlineData("\"\u00A0operand\" + 1", "[\u00A0operand] + 1", true)]
-    public void CapturedComparisonPreservesNativeTokenSemantics(string left, string right, bool equivalent)
+    public void CapturedComparisonPreservesNativeTokenSemantics(
+        string left,
+        string right,
+        bool equivalent
+    )
     {
         // Arrange
         var actual = left;
@@ -62,7 +69,11 @@ public sealed class SqliteSqlNormalizerTests
     [InlineData(null, null, true)]
     [InlineData(null, "source", false)]
     [InlineData("source", null, false)]
-    public void CapturedComparisonRetainsAbsentExpressionBoundary(string? left, string? right, bool equivalent)
+    public void CapturedComparisonRetainsAbsentExpressionBoundary(
+        string? left,
+        string? right,
+        bool equivalent
+    )
     {
         // Arrange
         var actual = left;

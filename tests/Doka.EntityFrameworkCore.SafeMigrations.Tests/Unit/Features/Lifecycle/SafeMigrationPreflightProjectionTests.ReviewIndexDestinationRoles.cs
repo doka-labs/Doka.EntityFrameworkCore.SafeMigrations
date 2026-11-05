@@ -23,8 +23,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var projection = new SafeMigrationPreflightProjection();
         if (sourceLifetime == "complete-created")
         {
-            Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("items", [Column("code")]),
-                SafeMigrationTableMode.StrictDefinition));
+            Apply(
+                projection,
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition("items", [Column("code")]),
+                    SafeMigrationTableMode.StrictDefinition));
         }
 
         if (sourceLifetime is "sparse-created" or "complete-created")
@@ -49,11 +52,21 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var decision = SafeMigrationDecisionPlanner.Plan(intent.Kind, analysis.ObservedState, operation.Policy);
 
         // Assert
-        Assert.Equal(sourceAbsent ? SafeMigrationObservedState.Missing
-            : targetSupported ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
+        Assert.Equal(
+            sourceAbsent
+                ? SafeMigrationObservedState.Missing
+                : targetSupported
+                    ? SafeMigrationObservedState.Matching
+                    : SafeMigrationObservedState.Different,
             analysis.ObservedState);
-        Assert.Equal(sourceAbsent ? SafeMigrationAction.NoOp
-            : targetSupported ? SafeMigrationAction.Apply : SafeMigrationAction.RejectDifferent, decision.Action);
+
+        Assert.Equal(
+            sourceAbsent
+                ? SafeMigrationAction.NoOp
+                : targetSupported
+                    ? SafeMigrationAction.Apply
+                    : SafeMigrationAction.RejectDifferent,
+            decision.Action);
     }
 
     /// <summary>An accepted destination tombstone cannot make a reserved role a valid rename target.</summary>
@@ -64,7 +77,8 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var projection = new SafeMigrationPreflightProjection();
 
         ObserveAccepted(projection, new DropIndexIntent("ix_target", "items"), SafeMigrationObservedState.Matching);
-        var operation = new SafeMigrationOperation(new RenameIndexIntent("ix_source", "items", "ix_target"),
+        var operation = new SafeMigrationOperation(
+            new RenameIndexIntent("ix_source", "items", "ix_target"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var live = Live(SafeMigrationObservedState.Different)
@@ -76,7 +90,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Different, analysis.ObservedState);
-        Assert.Equal(SafeMigrationAction.RejectDifferent, SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind,
-            analysis.ObservedState, operation.Policy).Action);
+        Assert.Equal(
+            SafeMigrationAction.RejectDifferent,
+            SafeMigrationDecisionPlanner.Plan(
+                    operation.Intent.Kind,
+                    analysis.ObservedState,
+                    operation.Policy)
+                .Action);
     }
 }

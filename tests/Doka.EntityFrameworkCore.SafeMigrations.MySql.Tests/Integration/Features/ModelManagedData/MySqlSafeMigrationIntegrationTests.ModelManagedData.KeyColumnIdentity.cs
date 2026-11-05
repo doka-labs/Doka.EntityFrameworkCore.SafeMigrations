@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the ModelManagedDataKeyColumnIdentity migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlModelManagedDataKeyColumnIdentityIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlModelManagedDataKeyColumnIdentityIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlModelManagedDataKeyColumnIdentityIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlModelManagedDataKeyColumnIdentityIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>
     /// Native key-column case aliases identify the same row across ordered final-writer verification.
@@ -15,8 +17,11 @@ public sealed partial class MySqlModelManagedDataKeyColumnIdentityIntegrationTes
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ModelManagedKeyColumnIdentityFixtureSql("managed_key_items"),
+        await ExecuteSqlAsync(
+            connectionString,
+            ModelManagedKeyColumnIdentityFixtureSql("managed_key_items"),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = ModelManagedKeyColumnIdentityOperations(context.Database.ProviderName!, "ID");
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -24,24 +29,40 @@ public sealed partial class MySqlModelManagedDataKeyColumnIdentityIntegrationTes
 
         // Act
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
-        var whole = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("model-managed-key-case-whole"), CancellationToken.None);
+        var whole = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("model-managed-key-case-whole"),
+            CancellationToken.None);
 
-        var freshFinal = await runner.VerifyAsync(context, [finalOperation],
-            new SafeMigrationRunOptions("model-managed-key-case-final"), CancellationToken.None);
+        var freshFinal = await runner.VerifyAsync(
+            context,
+            [finalOperation],
+            new SafeMigrationRunOptions("model-managed-key-case-final"),
+            CancellationToken.None);
 
-        var replay = await runner.AnalyzeAsync(context, [finalOperation],
-            new SafeMigrationRunOptions("model-managed-key-case-replay"), CancellationToken.None);
+        var replay = await runner.AnalyzeAsync(
+            context,
+            [finalOperation],
+            new SafeMigrationRunOptions("model-managed-key-case-replay"),
+            CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [finalOperation], CancellationToken.None);
-        var afterReplay = await runner.VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("model-managed-key-case-after-replay"), CancellationToken.None);
+        var afterReplay = await runner.VerifyAsync(
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("model-managed-key-case-after-replay"),
+            CancellationToken.None);
 
-        var retainedRows = await ScalarIntAsync(connectionString,
+        var retainedRows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `managed_key_items` WHERE `Id` = 1 "
-            + "AND CAST(`value` AS BINARY) = CAST('new' AS BINARY);", cancellationToken: CancellationToken.None);
+            + "AND CAST(`value` AS BINARY) = CAST('new' AS BINARY);",
+            cancellationToken: CancellationToken.None);
 
-        var totalRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `managed_key_items`;",
+        var totalRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `managed_key_items`;",
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -51,8 +72,13 @@ public sealed partial class MySqlModelManagedDataKeyColumnIdentityIntegrationTes
         Assert.True(whole.Assessments[1].PostconditionSatisfied);
         Assert.Equal(SafeMigrationObservedState.Matching, whole.Assessments[1].ObservedState);
         Assert.Equal(SafeMigrationReportStatus.Ready, freshFinal.Status);
-        Assert.True(Assert.Single(freshFinal.Assessments).PostconditionSatisfied);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
+        Assert.True(Assert.Single(freshFinal.Assessments)
+            .PostconditionSatisfied);
+
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(replay.Assessments)
+                .Action);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, afterReplay.Status);
         Assert.Equal("postcondition_superseded", afterReplay.Assessments[0].Code);
         Assert.Equal(1, retainedRows);
@@ -65,8 +91,11 @@ public sealed partial class MySqlModelManagedDataKeyColumnIdentityIntegrationTes
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ModelManagedKeyColumnIdentityFixtureSql("managed_key_items"),
+        await ExecuteSqlAsync(
+            connectionString,
+            ModelManagedKeyColumnIdentityFixtureSql("managed_key_items"),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = ModelManagedKeyColumnIdentityOperations(context.Database.ProviderName!, "Id");
         var runner = context.GetService<ISafeMigrationRunner>();
@@ -75,29 +104,53 @@ public sealed partial class MySqlModelManagedDataKeyColumnIdentityIntegrationTes
 
         // Act
         await ExecuteOperationsAsync(context, [ensure], CancellationToken.None);
-        var original = await runner.VerifyAsync(context, [ensure],
-            new SafeMigrationRunOptions("model-managed-exact-key-original"), CancellationToken.None);
+        var original = await runner.VerifyAsync(
+            context,
+            [ensure],
+            new SafeMigrationRunOptions("model-managed-exact-key-original"),
+            CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [update], CancellationToken.None);
-        var final = await runner.VerifyAsync(context, [update],
-            new SafeMigrationRunOptions("model-managed-exact-key-final"), CancellationToken.None);
+        var final = await runner.VerifyAsync(
+            context,
+            [update],
+            new SafeMigrationRunOptions("model-managed-exact-key-final"),
+            CancellationToken.None);
 
-        var replay = await runner.AnalyzeAsync(context, [update],
-            new SafeMigrationRunOptions("model-managed-exact-key-replay"), CancellationToken.None);
+        var replay = await runner.AnalyzeAsync(
+            context,
+            [update],
+            new SafeMigrationRunOptions("model-managed-exact-key-replay"),
+            CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [update], CancellationToken.None);
-        var retainedRows = await ScalarIntAsync(connectionString,
+        var retainedRows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `managed_key_items` WHERE `Id` = 1 "
-            + "AND CAST(`value` AS BINARY) = CAST('new' AS BINARY);", cancellationToken: CancellationToken.None);
+            + "AND CAST(`value` AS BINARY) = CAST('new' AS BINARY);",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, original.Status);
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(original.Assessments).ObservedState);
-        Assert.True(Assert.Single(original.Assessments).PostconditionSatisfied);
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(original.Assessments)
+                .ObservedState);
+
+        Assert.True(Assert.Single(original.Assessments)
+            .PostconditionSatisfied);
+
         Assert.Equal(SafeMigrationReportStatus.Ready, final.Status);
-        Assert.Equal(SafeMigrationObservedState.Matching, Assert.Single(final.Assessments).ObservedState);
-        Assert.True(Assert.Single(final.Assessments).PostconditionSatisfied);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(replay.Assessments).Action);
+        Assert.Equal(SafeMigrationObservedState.Matching,
+            Assert.Single(final.Assessments)
+                .ObservedState);
+
+        Assert.True(Assert.Single(final.Assessments)
+            .PostconditionSatisfied);
+
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(replay.Assessments)
+                .Action);
+
         Assert.Equal(1, retainedRows);
     }
 
@@ -109,23 +162,36 @@ public sealed partial class MySqlModelManagedDataKeyColumnIdentityIntegrationTes
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ModelManagedKeyColumnIdentityFixtureSql("managed_key_items"),
+        await ExecuteSqlAsync(
+            connectionString,
+            ModelManagedKeyColumnIdentityFixtureSql("managed_key_items"),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = ModelManagedKeyColumnIdentityOperations(context.Database.ProviderName!, "Id");
 
         // Act
-        var exception = await Record.ExceptionAsync(() => context.GetService<ISafeMigrationRunner>().VerifyAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("model-managed-exact-key-duplicate-batch"),
-            CancellationToken.None));
+        var exception = await Record.ExceptionAsync(() => context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("model-managed-exact-key-duplicate-batch"),
+                CancellationToken.None));
 
-        var originalRows = await ScalarIntAsync(connectionString,
+        var originalRows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `managed_key_items` WHERE `Id` = 1 "
-            + "AND CAST(`value` AS BINARY) = CAST('old' AS BINARY);", cancellationToken: CancellationToken.None);
+            + "AND CAST(`value` AS BINARY) = CAST('old' AS BINARY);",
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Contains("same typed model-managed key more than once",
-            Assert.IsType<InvalidOperationException>(exception).Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "same typed model-managed key more than once",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
+            StringComparison.Ordinal);
+
         Assert.Equal(1, originalRows);
     }
 
@@ -135,21 +201,34 @@ public sealed partial class MySqlModelManagedDataKeyColumnIdentityIntegrationTes
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ModelManagedKeyColumnIdentityFixtureSql("managed_key_items"),
+        await ExecuteSqlAsync(
+            connectionString,
+            ModelManagedKeyColumnIdentityFixtureSql("managed_key_items"),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = ModelManagedKeyColumnIdentityOperations(context.Database.ProviderName!, "ID");
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Act
-        await ExecuteSqlAsync(connectionString, "UPDATE `managed_key_items` SET `value` = 'wrong' WHERE `Id` = 1;",
+        await ExecuteSqlAsync(
+            connectionString,
+            "UPDATE `managed_key_items` SET `value` = 'wrong' WHERE `Id` = 1;",
             cancellationToken: CancellationToken.None);
-        var report = await context.GetService<ISafeMigrationRunner>().VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("model-managed-key-case-wrong-value"), CancellationToken.None);
 
-        var retainedRows = await ScalarIntAsync(connectionString,
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("model-managed-key-case-wrong-value"),
+                CancellationToken.None);
+
+        var retainedRows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `managed_key_items` WHERE `Id` = 1 "
-            + "AND CAST(`value` AS BINARY) = CAST('wrong' AS BINARY);", cancellationToken: CancellationToken.None);
+            + "AND CAST(`value` AS BINARY) = CAST('wrong' AS BINARY);",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -166,29 +245,45 @@ public sealed partial class MySqlModelManagedDataKeyColumnIdentityIntegrationTes
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, ModelManagedKeyColumnIdentityFixtureSql("managed_key_items")
+        await ExecuteSqlAsync(
+            connectionString,
+            ModelManagedKeyColumnIdentityFixtureSql("managed_key_items")
             + ModelManagedKeyColumnIdentityFixtureSql("managed_other_items"),
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
-        var builder = ModelManagedKeyColumnIdentityOperations(context.Database.ProviderName!, "ID",
+        var builder = ModelManagedKeyColumnIdentityOperations(
+            context.Database.ProviderName!,
+            "ID",
             updateTable: "managed_other_items");
 
         await ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None);
 
         // Act
-        await ExecuteSqlAsync(connectionString, "UPDATE `managed_key_items` SET `value` = 'wrong' WHERE `Id` = 1;",
+        await ExecuteSqlAsync(
+            connectionString,
+            "UPDATE `managed_key_items` SET `value` = 'wrong' WHERE `Id` = 1;",
             cancellationToken: CancellationToken.None);
-        var report = await context.GetService<ISafeMigrationRunner>().VerifyAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("model-managed-key-case-wrong-owner"), CancellationToken.None);
 
-        var sourceRows = await ScalarIntAsync(connectionString,
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .VerifyAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("model-managed-key-case-wrong-owner"),
+                CancellationToken.None);
+
+        var sourceRows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `managed_key_items` WHERE `Id` = 1 "
-            + "AND CAST(`value` AS BINARY) = CAST('wrong' AS BINARY);", cancellationToken: CancellationToken.None);
+            + "AND CAST(`value` AS BINARY) = CAST('wrong' AS BINARY);",
+            cancellationToken: CancellationToken.None);
 
-        var targetRows = await ScalarIntAsync(connectionString,
+        var targetRows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `managed_other_items` WHERE `Id` = 1 "
-            + "AND CAST(`value` AS BINARY) = CAST('new' AS BINARY);", cancellationToken: CancellationToken.None);
+            + "AND CAST(`value` AS BINARY) = CAST('new' AS BINARY);",
+            cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
@@ -213,12 +308,23 @@ public sealed partial class MySqlModelManagedDataKeyColumnIdentityIntegrationTes
     )
     {
         var builder = new MigrationBuilder(providerName);
-        _ = builder.EnsureModelManagedDataFromModel("managed_key_items", ["Id"], ["int"],
-            ["Id", "value"], ["int", "varchar(32)"], new object?[,] { { 1, "old" } });
+        _ = builder.EnsureModelManagedDataFromModel(
+            "managed_key_items",
+            ["Id"],
+            ["int"],
+            ["Id", "value"],
+            ["int", "varchar(32)"],
+            new object?[,] { { 1, "old" } });
 
-        _ = builder.UpdateModelManagedDataFromModel(updateTable, [updateKeyColumn], ["int"],
-            new object?[,] { { 1 } }, ["value"], ["varchar(32)"],
-            new object?[,] { { "old" } }, new object?[,] { { "new" } });
+        _ = builder.UpdateModelManagedDataFromModel(
+            updateTable,
+            [updateKeyColumn],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["value"],
+            ["varchar(32)"],
+            new object?[,] { { "old" } },
+            new object?[,] { { "new" } });
 
         return builder;
     }
@@ -228,8 +334,13 @@ public sealed partial class MySqlModelManagedDataKeyColumnIdentityIntegrationTes
     /// </summary>
     /// <param name="table">The anonymous test-owned table, also used for the distinct-owner control.</param>
     /// <returns>The isolated InnoDB fixture and its explicit original value.</returns>
-    private static string ModelManagedKeyColumnIdentityFixtureSql(string table)
-        => "CREATE TABLE " + AtomicRequiredAddDelimited(table)
+    private static string ModelManagedKeyColumnIdentityFixtureSql(
+        string table
+    )
+        => "CREATE TABLE "
+            + AtomicRequiredAddDelimited(table)
             + " (`Id` int NOT NULL PRIMARY KEY, `value` varchar(32) NOT NULL) ENGINE=InnoDB; "
-            + "INSERT INTO " + AtomicRequiredAddDelimited(table) + " (`Id`, `value`) VALUES (1, 'old');";
+            + "INSERT INTO "
+            + AtomicRequiredAddDelimited(table)
+            + " (`Id`, `value`) VALUES (1, 'old');";
 }

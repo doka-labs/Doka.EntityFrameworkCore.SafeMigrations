@@ -10,10 +10,16 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public void NativeCapturedBindingsPreserveQuotedIdentityAndOriginalSource(bool quoted, bool tableOwned)
+    public void NativeCapturedBindingsPreserveQuotedIdentityAndOriginalSource(
+        bool quoted,
+        bool tableOwned
+    )
     {
         // Arrange
-        var sql = quoted ? "\"Left_Bound\" + 1" : "Left_Bound + 1";
+        var sql = quoted
+            ? "\"Left_Bound\" + 1"
+            : "Left_Bound + 1";
+
         var computed = CaptureProjectionComputed(sql);
         var projection = new SafeMigrationPreflightProjection(
             objectIdentityNormalizer: new CapturedNativeBindingNormalizer());
@@ -22,14 +28,19 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             ? [Column("left_bound"), Column("Left_Bound"), computed]
             : [Column("left_bound"), Column("Left_Bound")];
 
-        Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("items", columns),
-            SafeMigrationTableMode.StrictDefinition));
+        Apply(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition("items", columns),
+                SafeMigrationTableMode.StrictDefinition));
+
         if (!tableOwned)
         {
             Apply(projection, new EnsureColumnIntent("items", computed));
         }
 
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items", computed),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", computed),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -43,7 +54,12 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.NotNull(stored);
         var native = new HashSet<string>(StringComparer.Ordinal);
         SafeMigrationSqlExpressionInspector.CollectIdentifiers(stored.ComputedExpression!, native);
-        Assert.Equal(quoted ? "Left_Bound" : "left_bound", Assert.Single(native));
+        Assert.Equal(
+            quoted
+                ? "Left_Bound"
+                : "left_bound",
+            Assert.Single(native));
+
         Assert.Same(sql, stored.CapturedComputedSql);
         var original = new HashSet<string>(StringComparer.Ordinal);
         SafeMigrationSqlExpressionInspector.CollectIdentifiers(computed.ComputedExpression!, original);
@@ -60,10 +76,17 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             objectIdentityNormalizer: new CapturedNativeBindingNormalizer());
 
         var quoted = CaptureProjectionComputed("\"Left_Bound\" + 1");
-        Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("items",
-            [Column("left_bound"), Column("Left_Bound"), quoted]), SafeMigrationTableMode.StrictDefinition));
+        Apply(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "items",
+                    [Column("left_bound"), Column("Left_Bound"), quoted]),
+                SafeMigrationTableMode.StrictDefinition));
+
         var target = CaptureProjectionComputed("Left_Bound + 1");
-        var operation = new SafeMigrationOperation(new EnsureColumnIntent("items", target),
+        var operation = new SafeMigrationOperation(
+            new EnsureColumnIntent("items", target),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
@@ -78,17 +101,25 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void NativeCapturedCheckViewsNeverReplaceProviderCallbackIdentity(bool reject)
+    public void NativeCapturedCheckViewsNeverReplaceProviderCallbackIdentity(
+        bool reject
+    )
     {
         // Arrange
         var guard = new CapturedReferenceGuard(reject);
-        var projection = new SafeMigrationPreflightProjection(projectedDependencyAnalyzer: guard,
+        var projection = new SafeMigrationPreflightProjection(
+            projectedDependencyAnalyzer: guard,
             objectIdentityNormalizer: new CapturedNativeBindingNormalizer());
 
-        Apply(projection, new EnsureTableIntent(new ExpectedTableDefinition("items", [Column("left_bound")]),
-            SafeMigrationTableMode.StrictDefinition));
+        Apply(
+            projection,
+            new EnsureTableIntent(
+                new ExpectedTableDefinition("items", [Column("left_bound")]),
+                SafeMigrationTableMode.StrictDefinition));
+
         var check = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_items", "items", "Left_Bound > 0", null);
-        var operation = new SafeMigrationOperation(new EnsureCheckConstraintIntent(check),
+        var operation = new SafeMigrationOperation(
+            new EnsureCheckConstraintIntent(check),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         guard.Expected = operation;
@@ -96,8 +127,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         // Act
         var analysis = projection.Project(operation, live);
-        var decision = SafeMigrationDecisionPlanner.Plan(operation.Intent.Kind, analysis.ObservedState,
-            operation.Policy, analysis.RepairCapability);
+        var decision = SafeMigrationDecisionPlanner.Plan(
+            operation.Intent.Kind,
+            analysis.ObservedState,
+            operation.Policy,
+            analysis.RepairCapability);
 
         projection.Observe(operation, live, analysis, decision);
 
@@ -105,9 +139,17 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.True(guard.CapturedReferenceRetained);
         Assert.True(guard.ProjectedReferenceRetained);
         Assert.Equal(!reject, guard.AcceptedReferenceRetained);
-        Assert.Equal(reject ? SafeMigrationObservedState.Unsupported : SafeMigrationObservedState.Missing,
+        Assert.Equal(
+            reject
+                ? SafeMigrationObservedState.Unsupported
+                : SafeMigrationObservedState.Missing,
             analysis.ObservedState);
-        Assert.Equal(reject ? SafeMigrationAction.RejectUnsupported : SafeMigrationAction.Apply, decision.Action);
+
+        Assert.Equal(
+            reject
+                ? SafeMigrationAction.RejectUnsupported
+                : SafeMigrationAction.Apply,
+            decision.Action);
     }
 
     private sealed class CapturedNativeBindingNormalizer : ISafeMigrationProviderObjectIdentityNormalizer
@@ -115,9 +157,18 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         public StringComparer IdentifierComparer => StringComparer.Ordinal;
         public char? CapturedSqlIdentifierDelimiter => '"';
         public bool FoldUnquotedCapturedSqlIdentifiers => true;
-        public string NormalizeIdentifier(string identifier) => identifier;
-        public string? NormalizeSchema(string? schema) => schema;
-        public bool IsObjectIdentityMismatch(SafeMigrationProviderAnalysis analysis) => false;
+
+        public string NormalizeIdentifier(
+            string identifier
+        ) => identifier;
+
+        public string? NormalizeSchema(
+            string? schema
+        ) => schema;
+
+        public bool IsObjectIdentityMismatch(
+            SafeMigrationProviderAnalysis analysis
+        ) => false;
     }
 
     private sealed class CapturedReferenceGuard(bool reject) : ISafeMigrationProjectedDependencyAnalyzer
@@ -127,8 +178,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         public bool ProjectedReferenceRetained { get; private set; }
         public bool AcceptedReferenceRetained { get; private set; }
 
-        public SafeMigrationProviderAnalysis? ValidateCapturedProjection(SafeMigrationOperation operation,
-            SafeMigrationProviderAnalysis liveAnalysis, ISafeMigrationProjectedColumnSource columns)
+        public SafeMigrationProviderAnalysis? ValidateCapturedProjection(
+            SafeMigrationOperation operation,
+            SafeMigrationProviderAnalysis liveAnalysis,
+            ISafeMigrationProjectedColumnSource columns
+        )
         {
             if (operation.Intent is EnsureCheckConstraintIntent)
             {
@@ -138,8 +192,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             return null;
         }
 
-        public SafeMigrationProviderAnalysis ValidateProjectedOperation(SafeMigrationOperation operation,
-            SafeMigrationProviderAnalysis projectedAnalysis, ISafeMigrationProjectedColumnSource columns)
+        public SafeMigrationProviderAnalysis ValidateProjectedOperation(
+            SafeMigrationOperation operation,
+            SafeMigrationProviderAnalysis projectedAnalysis,
+            ISafeMigrationProjectedColumnSource columns
+        )
         {
             if (operation.Intent is not EnsureCheckConstraintIntent)
             {
@@ -153,14 +210,20 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             // provider's captured operation would skip its real rejection,
             // making this regression fail instead of silently passing.
             return reject && ProjectedReferenceRetained
-                ? new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Unsupported,
-                    SafeMigrationRepairCapability.None, false, "native_check_guard_rejected")
+                ? new SafeMigrationProviderAnalysis(
+                    SafeMigrationObservedState.Unsupported,
+                    SafeMigrationRepairCapability.None,
+                    false,
+                    "native_check_guard_rejected")
                 : projectedAnalysis;
         }
 
-        public void ObserveAcceptedOperation(SafeMigrationOperation operation,
-            SafeMigrationProviderAnalysis liveAnalysis, SafeMigrationProviderAnalysis analysis,
-            SafeMigrationDecision decision)
+        public void ObserveAcceptedOperation(
+            SafeMigrationOperation operation,
+            SafeMigrationProviderAnalysis liveAnalysis,
+            SafeMigrationProviderAnalysis analysis,
+            SafeMigrationDecision decision
+        )
         {
             if (operation.Intent is EnsureCheckConstraintIntent)
             {
@@ -168,8 +231,8 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             }
         }
 
-        public void ObserveProviderOperation(MigrationOperation operation)
-        {
-        }
+        public void ObserveProviderOperation(
+            MigrationOperation operation
+        ) { }
     }
 }

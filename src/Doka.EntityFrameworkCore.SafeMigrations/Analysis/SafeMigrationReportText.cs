@@ -54,9 +54,16 @@ public static class SafeMigrationReportText
         foreach (var assessment in report.Assessments)
         {
             selectedCount += SafeMigrationReportJson.ShouldIncludeAssessment(report.Mode, assessment, selection)
-                ? 1 : 0;
-            blockedCount += SafeMigrationReportJson.IsBlockingAssessment(report.Mode, assessment) ? 1 : 0;
-            deferredCount += assessment.Action == SafeMigrationAction.ValidateAtRuntime ? 1 : 0;
+                ? 1
+                : 0;
+
+            blockedCount += SafeMigrationReportJson.IsBlockingAssessment(report.Mode, assessment)
+                ? 1
+                : 0;
+
+            deferredCount += assessment.Action == SafeMigrationAction.ValidateAtRuntime
+                ? 1
+                : 0;
         }
 
         SafeMigrationReportJson.ValidateBlockingSelection(report, selection, selectedCount);
@@ -81,9 +88,10 @@ public static class SafeMigrationReportText
         writer.Write("; provider: ");
         writer.Write(SafeMigrationDiagnosticMessages.BoundForDisplay(report.Environment.ProviderId));
         writer.Write("; target migration: ");
-        writer.WriteLine(report.TargetMigrationId is { } migrationId
-            ? SafeMigrationDiagnosticMessages.BoundForDisplay(migrationId)
-            : "unknown");
+        writer.WriteLine(
+            report.TargetMigrationId is { } migrationId
+                ? SafeMigrationDiagnosticMessages.BoundForDisplay(migrationId)
+                : "unknown");
 
         // WHY: Bound detail emission independently of report cardinality.
         // Large migrations retain complete immutable JSON evidence, while
@@ -129,6 +137,7 @@ public static class SafeMigrationReportText
         writer.Write("Unexpected objects (informational): ");
         writer.WriteLine(report.UnexpectedObjects.Count.ToString(CultureInfo.InvariantCulture));
         var displayedCount = Math.Min(report.UnexpectedObjects.Count, MaximumDisplayedUnexpectedObjects);
+
         // WHY: Emit only the bounded prefix and compute omitted objects from the untouched snapshot.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -138,13 +147,17 @@ public static class SafeMigrationReportText
             writer.Write("Unexpected ");
             writer.Write(value.ObjectKind.ToString());
             writer.Write(": schema=");
-            writer.Write(value.Schema is { } schema
-                ? SafeMigrationDiagnosticMessages.BoundForDisplay(schema)
-                : "<provider-default>");
+            writer.Write(
+                value.Schema is { } schema
+                    ? SafeMigrationDiagnosticMessages.BoundForDisplay(schema)
+                    : "<provider-default>");
+
             writer.Write("; table=");
-            writer.Write(value.Table is { } table
-                ? SafeMigrationDiagnosticMessages.BoundForDisplay(table)
-                : "<not-applicable>");
+            writer.Write(
+                value.Table is { } table
+                    ? SafeMigrationDiagnosticMessages.BoundForDisplay(table)
+                    : "<not-applicable>");
+
             writer.Write("; name=");
             writer.Write(SafeMigrationDiagnosticMessages.BoundForDisplay(value.Name));
             writer.Write("; code=");

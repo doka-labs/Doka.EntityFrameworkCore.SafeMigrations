@@ -51,12 +51,23 @@ public sealed class SqlServerPhysicalTableSqlTests
         Assert.Contains("is_filetable = 1", gate, StringComparison.Ordinal);
         Assert.Contains("temporal_type <> 0", gate, StringComparison.Ordinal);
         Assert.Contains("N'[dbo].[physical_items]'", gate, StringComparison.Ordinal);
-        Assert.StartsWith("DECLARE @doka_physical int; EXEC sys.sp_executesql N'SELECT @doka_proof = ("
-            + gate.Replace("'", "''", StringComparison.Ordinal) + ");'", classifier, StringComparison.Ordinal);
-        Assert.Contains("@doka_proof = @doka_physical OUTPUT; IF COALESCE(@doka_physical, 0) <> 1 ",
-            classifier, StringComparison.Ordinal);
-        Assert.Contains("@doka_ordinal, N'unsupported', 0, 0, N'physical_table_unproven'",
-            classifier, StringComparison.Ordinal);
+        Assert.StartsWith(
+            "DECLARE @doka_physical int; EXEC sys.sp_executesql N'SELECT @doka_proof = ("
+            + gate.Replace("'", "''", StringComparison.Ordinal)
+            + ");'",
+            classifier,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "@doka_proof = @doka_physical OUTPUT; IF COALESCE(@doka_physical, 0) <> 1 ",
+            classifier,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "@doka_ordinal, N'unsupported', 0, 0, N'physical_table_unproven'",
+            classifier,
+            StringComparison.Ordinal);
+
         var guard = "IF COALESCE((" + gate + "), 0) <> 1\nBEGIN\n    THROW 51002";
         var engineGuard = runtime.IndexOf(guard, StringComparison.Ordinal);
         var stateEvaluation = runtime.IndexOf("DECLARE @doka_state", StringComparison.Ordinal);
@@ -74,9 +85,14 @@ public sealed class SqlServerPhysicalTableSqlTests
 
         // Act
         var gate = catalog.BuildPhysicalTableSupportExpression("absent_items", null);
-        var plan = catalog.Build(new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition(
-            "absent_items", [new ExpectedColumnDefinition("Id", typeof(int), false, "int")]),
-            SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent));
+        var plan = catalog.Build(
+            new SafeMigrationOperation(
+                new EnsureTableIntent(
+                    new ExpectedTableDefinition(
+                        "absent_items",
+                        [new ExpectedColumnDefinition("Id", typeof(int), false, "int")]),
+                    SafeMigrationTableMode.StrictDefinition),
+                SafeMigrationPolicy.ThrowIfDifferent));
 
         // Assert
         Assert.StartsWith("CASE WHEN NOT EXISTS (SELECT 1 FROM sys.tables", gate, StringComparison.Ordinal);
@@ -92,7 +108,8 @@ public sealed class SqlServerPhysicalTableSqlTests
         using var context = new SafeMigrationDbContext(ConnectionString);
 
         // Act
-        var gate = CreateCatalog(context).BuildPhysicalTableSupportExpression("physical_items", null);
+        var gate = CreateCatalog(context)
+            .BuildPhysicalTableSupportExpression("physical_items", null);
 
         // Assert
         Assert.Contains("FROM sys.columns ledger_column", gate, StringComparison.Ordinal);
@@ -106,8 +123,11 @@ public sealed class SqlServerPhysicalTableSqlTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var plan = CreateCatalog(context).Build(new SafeMigrationOperation(new DropIndexIntent("IX_value", "physical_items"),
-            SafeMigrationPolicy.ThrowIfDifferent));
+        var plan = CreateCatalog(context)
+            .Build(
+                new SafeMigrationOperation(
+                    new DropIndexIntent("IX_value", "physical_items"),
+                    SafeMigrationPolicy.ThrowIfDifferent));
 
         // Act
         var selection = SqlServerSafeMigrationProviderAnalyzer.BuildCatalogSelection(257, plan);
@@ -118,7 +138,10 @@ public sealed class SqlServerPhysicalTableSqlTests
         Assert.Null(plan.CatalogPreambleSql);
         Assert.StartsWith("SELECT 257,", selection, StringComparison.Ordinal);
         Assert.DoesNotContain("sp_executesql", selection, StringComparison.Ordinal);
-        Assert.Equal(2, selection.Split(plan.PhysicalTableSupportExpression!, StringSplitOptions.None).Length);
+        Assert.Equal(2,
+            selection.Split(plan.PhysicalTableSupportExpression!)
+                .Length);
+
         Assert.Contains("FROM (SELECT COALESCE((", selection, StringComparison.Ordinal);
         Assert.Contains("doka_physical.supported = 1", selection, StringComparison.Ordinal);
         Assert.Contains("ELSE N'physical_table_unproven' END", selection, StringComparison.Ordinal);
@@ -131,25 +154,50 @@ public sealed class SqlServerPhysicalTableSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var catalog = CreateCatalog(context);
-        var foreignKey = new ExpectedForeignKeyDefinition("FK_physical", "physical_items", ["Id"],
-            "physical_parent", ["Id"], principalSchema: "parent_schema");
+        var foreignKey = new ExpectedForeignKeyDefinition(
+            "FK_physical",
+            "physical_items",
+            ["Id"],
+            "physical_parent",
+            ["Id"],
+            principalSchema: "parent_schema");
 
         SafeMigrationIntent[] intents =
         [
             new RenameTableIntent("physical_items", "renamed_items", "source_schema", "target_schema"),
             new EnsureForeignKeyIntent(foreignKey),
-            new EnsureTableIntent(new ExpectedTableDefinition("physical_items",
-                [new ExpectedColumnDefinition("Id", typeof(int), false, "int")], foreignKeys: [foreignKey]),
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "physical_items",
+                    [new ExpectedColumnDefinition("Id", typeof(int), false, "int")],
+                    foreignKeys: [foreignKey]),
                 SafeMigrationTableMode.StrictDefinition),
-            new DeleteModelManagedDataIntent("physical_items", ["Id"], ["int"], new object?[,] { { 1 } },
-                ["Id"], ["int"], new object?[,] { { 1 } }, null,
-                [new ExpectedModelManagedDataForeignKeyDefinition(
-                    "physical_child", ["ParentId"], ["Id"], "child_schema")]),
+            new DeleteModelManagedDataIntent(
+                "physical_items",
+                ["Id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                ["Id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                null,
+                [
+                    new ExpectedModelManagedDataForeignKeyDefinition(
+                        "physical_child",
+                        ["ParentId"],
+                        ["Id"],
+                        "child_schema"),
+                ]),
         ];
 
         // Act
-        var gates = intents.Select(intent => catalog.Build(new SafeMigrationOperation(
-            intent, SafeMigrationPolicy.ThrowIfDifferent)).PhysicalTableSupportExpression!).ToArray();
+        var gates = intents
+            .Select(intent => catalog.Build(
+                    new SafeMigrationOperation(
+                        intent,
+                        SafeMigrationPolicy.ThrowIfDifferent))
+                .PhysicalTableSupportExpression!)
+            .ToArray();
 
         // Assert
         Assert.Contains("N'[source_schema].[physical_items]'", gates[0], StringComparison.Ordinal);
@@ -181,29 +229,45 @@ public sealed class SqlServerPhysicalTableSqlTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
-        var foreignKey = new ExpectedForeignKeyDefinition("FK_inline", "physical_items", ["Id"],
-            "physical_parent", ["Id"], onDelete: ReferentialAction.Cascade);
+        var foreignKey = new ExpectedForeignKeyDefinition(
+            "FK_inline",
+            "physical_items",
+            ["Id"],
+            "physical_parent",
+            ["Id"],
+            onDelete: ReferentialAction.Cascade);
 
-        var operation = new SafeMigrationOperation(new EnsureTableIntent(new ExpectedTableDefinition("physical_items",
-            [new ExpectedColumnDefinition("Id", typeof(int), false, "int")], foreignKeys: [foreignKey]),
-            SafeMigrationTableMode.StrictDefinition), SafeMigrationPolicy.ThrowIfDifferent);
+        var operation = new SafeMigrationOperation(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "physical_items",
+                    [new ExpectedColumnDefinition("Id", typeof(int), false, "int")],
+                    foreignKeys: [foreignKey]),
+                SafeMigrationTableMode.StrictDefinition),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var plan = CreateCatalog(context).Build(operation);
+        var plan = CreateCatalog(context)
+            .Build(operation);
+
         var runtime = SqlServerGuardedSqlTestContract.GenerateBody(context, operation);
 
         // Assert
         Assert.NotNull(plan.CatalogPreambleSql);
         var declaration = runtime.IndexOf(
-            "EXEC sys.sp_executesql N'DECLARE @doka_fk_graph_safe", StringComparison.Ordinal);
+            "EXEC sys.sp_executesql N'DECLARE @doka_fk_graph_safe",
+            StringComparison.Ordinal);
 
         Assert.True(declaration >= 0);
 
         var stateUse = runtime.IndexOf("WHEN NOT", declaration, StringComparison.Ordinal);
         Assert.True(stateUse > declaration);
         Assert.Contains("@doka_fk_graph_safe", runtime[stateUse..], StringComparison.Ordinal);
-        Assert.Contains("SET @doka_value = (" + plan.StateExpression.Replace("'", "''", StringComparison.Ordinal),
-            runtime, StringComparison.Ordinal);
+        Assert.Contains(
+            "SET @doka_value = (" + plan.StateExpression.Replace("'", "''", StringComparison.Ordinal),
+            runtime,
+            StringComparison.Ordinal);
+
         Assert.DoesNotContain("SET @doka_state = (" + plan.StateExpression, runtime, StringComparison.Ordinal);
     }
 
@@ -214,10 +278,13 @@ public sealed class SqlServerPhysicalTableSqlTests
         // Arrange
         using var context = new SafeMigrationDbContext(ConnectionString);
         var operation = new SafeMigrationOperation(
-            new EnsureSchemaIntent("ordinary"), SafeMigrationPolicy.ThrowIfDifferent);
+            new EnsureSchemaIntent("ordinary"),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
-        var plan = CreateCatalog(context).Build(operation);
+        var plan = CreateCatalog(context)
+            .Build(operation);
+
         var runtime = SqlServerGuardedSqlTestContract.GenerateBody(context, operation);
 
         // Assert
@@ -235,47 +302,90 @@ public sealed class SqlServerPhysicalTableSqlTests
         SafeMigrationOperationKind kind
     ) => kind switch
     {
-        SafeMigrationOperationKind.EnsureTable => new EnsureTableIntent(new ExpectedTableDefinition("physical_items",
-            [new ExpectedColumnDefinition("Id", typeof(int), false, "int")]), SafeMigrationTableMode.StrictDefinition),
+        SafeMigrationOperationKind.EnsureTable => new EnsureTableIntent(
+            new ExpectedTableDefinition(
+                "physical_items",
+                [new ExpectedColumnDefinition("Id", typeof(int), false, "int")]),
+            SafeMigrationTableMode.StrictDefinition),
         SafeMigrationOperationKind.DropTable => new DropTableIntent("physical_items"),
         SafeMigrationOperationKind.RenameTable => new RenameTableIntent("physical_items", "renamed_items"),
         SafeMigrationOperationKind.EnsureColumn => new EnsureColumnIntent("physical_items", Column()),
         SafeMigrationOperationKind.DropColumn => new DropColumnIntent("Value", "physical_items"),
         SafeMigrationOperationKind.RenameColumn => new RenameColumnIntent("Value", "physical_items", "NewValue"),
+
         // WHY: EF omits identical old/new alterations, so widen nullability to exercise real DDL.
         SafeMigrationOperationKind.AlterColumn =>
-            new AlterColumnIntent("physical_items", Column(),
+            new AlterColumnIntent(
+                "physical_items",
+                Column(),
                 oldDefinition: new ExpectedColumnDefinition("Value", typeof(int), false, "int")),
-        SafeMigrationOperationKind.EnsureIndex => new EnsureIndexIntent(new ExpectedIndexDefinition(
-            "IX_physical", "physical_items",
-            [new ExpectedIndexKeyDefinition("Id")])),
+        SafeMigrationOperationKind.EnsureIndex => new EnsureIndexIntent(
+            new ExpectedIndexDefinition(
+                "IX_physical",
+                "physical_items",
+                [new ExpectedIndexKeyDefinition("Id")])),
         SafeMigrationOperationKind.DropIndex => new DropIndexIntent("IX_physical", "physical_items"),
         SafeMigrationOperationKind.RenameIndex => new RenameIndexIntent("IX_physical", "physical_items", "IX_renamed"),
-        SafeMigrationOperationKind.EnsurePrimaryKey => new EnsurePrimaryKeyIntent(new ExpectedPrimaryKeyDefinition(
-            "PK_physical", "physical_items", ["Id"])),
+        SafeMigrationOperationKind.EnsurePrimaryKey => new EnsurePrimaryKeyIntent(
+            new ExpectedPrimaryKeyDefinition(
+                "PK_physical",
+                "physical_items",
+                ["Id"])),
         SafeMigrationOperationKind.DropPrimaryKey => new DropPrimaryKeyIntent("PK_physical", "physical_items"),
         SafeMigrationOperationKind.EnsureUniqueConstraint =>
-            new EnsureUniqueConstraintIntent(new ExpectedUniqueConstraintDefinition(
-            "UQ_physical", "physical_items", ["Id"])),
+            new EnsureUniqueConstraintIntent(
+                new ExpectedUniqueConstraintDefinition(
+                    "UQ_physical",
+                    "physical_items",
+                    ["Id"])),
         SafeMigrationOperationKind.DropUniqueConstraint =>
             new DropUniqueConstraintIntent("UQ_physical", "physical_items"),
         SafeMigrationOperationKind.EnsureCheckConstraint =>
-            new EnsureCheckConstraintIntent(new ExpectedCheckConstraintDefinition(
-            "CK_physical", "physical_items", "[Id] > 0")),
+            new EnsureCheckConstraintIntent(
+                new ExpectedCheckConstraintDefinition(
+                    "CK_physical",
+                    "physical_items",
+                    "[Id] > 0")),
         SafeMigrationOperationKind.DropCheckConstraint =>
             new DropCheckConstraintIntent("CK_physical", "physical_items"),
-        SafeMigrationOperationKind.EnsureForeignKey => new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition(
-            "FK_physical", "physical_items", ["Id"], "physical_parent", ["Id"])),
+        SafeMigrationOperationKind.EnsureForeignKey => new EnsureForeignKeyIntent(
+            new ExpectedForeignKeyDefinition(
+                "FK_physical",
+                "physical_items",
+                ["Id"],
+                "physical_parent",
+                ["Id"])),
         SafeMigrationOperationKind.DropForeignKey => new DropForeignKeyIntent("FK_physical", "physical_items"),
         SafeMigrationOperationKind.EnsureModelManagedData => new EnsureModelManagedDataIntent(
-            "physical_items", ["Id"], ["int"],
-            ["Id"], ["int"], new object?[,] { { 1 } }, null, null),
+            "physical_items",
+            ["Id"],
+            ["int"],
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            null,
+            null),
         SafeMigrationOperationKind.UpdateModelManagedData => new UpdateModelManagedDataIntent(
-            "physical_items", ["Id"], ["int"], new object?[,] { { 1 } }, ["Value"], ["int"],
-            new object?[,] { { 1 } }, new object?[,] { { 2 } }, null, null),
+            "physical_items",
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["Value"],
+            ["int"],
+            new object?[,] { { 1 } },
+            new object?[,] { { 2 } },
+            null,
+            null),
         SafeMigrationOperationKind.DeleteModelManagedData => new DeleteModelManagedDataIntent(
-            "physical_items", ["Id"], ["int"],
-            new object?[,] { { 1 } }, ["Id"], ["int"], new object?[,] { { 1 } }, null, []),
+            "physical_items",
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            null,
+            []),
         _ => throw new ArgumentOutOfRangeException(nameof(kind)),
     };
 

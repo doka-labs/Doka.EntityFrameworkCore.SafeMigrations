@@ -3,9 +3,9 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 /// <summary>Retains ordered child-index collision evidence without inferring complete table ownership.</summary>
 internal sealed class MySqlProjectedForeignKeySupportingIndexes
 {
+    private readonly bool _isMariaDb;
     private readonly Func<string?, string?> _normalizeSchema;
     private readonly Func<string, string> _normalizeTable;
-    private readonly bool _isMariaDb;
     private readonly Dictionary<(string? Schema, string Table), TableIndexes> _tables = [];
     private bool _opaqueBoundary;
 
@@ -126,7 +126,7 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
 
         if (state.Unknown
             || state.UnsafeOpaqueBoundary
-            || _opaqueBoundary && !state.Fresh && !state.Dropped)
+            || (_opaqueBoundary && !state.Fresh && !state.Dropped))
         {
             return true;
         }
@@ -134,7 +134,8 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
         return state.UnsafeAliasHistory.Any(alias => state.Indexes.ContainsKey(alias.Key)
             && (state.UnsafeUnknownAliases.Contains(alias.Key)
                 || alias.Value.Any(prefix => prefix.Count >= definition.Columns.Count
-                    && prefix.Take(definition.Columns.Count)
+                    && prefix
+                        .Take(definition.Columns.Count)
                         .SequenceEqual(definition.Columns, StringComparer.OrdinalIgnoreCase))));
     }
 
@@ -163,8 +164,17 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
         switch (operation.Intent)
         {
             case EnsureIndexIntent index:
-                ReplaceIndex(index.Definition.Table, index.Definition.Schema, index.Definition.Name,
-                    creates ? index.Definition.Keys : null, creates ? index.Definition : null);
+                ReplaceIndex(
+                    index.Definition.Table,
+                    index.Definition.Schema,
+                    index.Definition.Name,
+                    creates
+                        ? index.Definition.Keys
+                        : null,
+                    creates
+                        ? index.Definition
+                        : null);
+
                 break;
             case DropIndexIntent index:
                 DropIndex(index.Table, index.Schema, index.Name);
@@ -173,15 +183,27 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
                 RenameIndex(index.Table, index.Schema, index.Name, index.NewName);
                 break;
             case EnsurePrimaryKeyIntent primary:
-                ReplaceColumns(primary.Definition.Table, primary.Definition.Schema, "PRIMARY",
-                    creates ? primary.Definition.Columns : null);
+                ReplaceColumns(
+                    primary.Definition.Table,
+                    primary.Definition.Schema,
+                    "PRIMARY",
+                    creates
+                        ? primary.Definition.Columns
+                        : null);
+
                 break;
             case DropPrimaryKeyIntent primary:
                 DropIndex(primary.Table, primary.Schema, "PRIMARY");
                 break;
             case EnsureUniqueConstraintIntent unique:
-                ReplaceColumns(unique.Definition.Table, unique.Definition.Schema, unique.Definition.Name,
-                    creates ? unique.Definition.Columns : null);
+                ReplaceColumns(
+                    unique.Definition.Table,
+                    unique.Definition.Schema,
+                    unique.Definition.Name,
+                    creates
+                        ? unique.Definition.Columns
+                        : null);
+
                 break;
             case DropUniqueConstraintIntent unique:
                 DropIndex(unique.Table, unique.Schema, unique.Name);
@@ -200,8 +222,12 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
                 DropTable(table.Table, table.Schema);
                 break;
             case RenameTableIntent table:
-                RenameTable(table.Name, table.Schema,
-                    table.NewName ?? table.Name, table.NewSchema ?? table.Schema);
+                RenameTable(
+                    table.Name,
+                    table.Schema,
+                    table.NewName ?? table.Name,
+                    table.NewSchema ?? table.Schema);
+
                 break;
             case DropColumnIntent column:
                 InvalidateColumn(column.Table, column.Schema, column.Name);
@@ -252,8 +278,12 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
                 DropTable(table.Name, table.Schema);
                 break;
             case RenameTableOperation table:
-                RenameTable(table.Name, table.Schema,
-                    table.NewName ?? table.Name, table.NewSchema ?? table.Schema);
+                RenameTable(
+                    table.Name,
+                    table.Schema,
+                    table.NewName ?? table.Name,
+                    table.NewSchema ?? table.Schema);
+
                 break;
             case DropColumnOperation column:
                 InvalidateColumn(column.Table, column.Schema, column.Name);
@@ -280,10 +310,15 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
             case AddForeignKeyOperation foreignKey:
                 InvalidateTable(foreignKey.Table, foreignKey.Schema);
                 break;
-            case AddColumnOperation or DropForeignKeyOperation
-                or AddCheckConstraintOperation or DropCheckConstraintOperation
-                or InsertDataOperation or UpdateDataOperation or DeleteDataOperation
-                or EnsureSchemaOperation or AlterDatabaseOperation:
+            case AddColumnOperation
+                or DropForeignKeyOperation
+                or AddCheckConstraintOperation
+                or DropCheckConstraintOperation
+                or InsertDataOperation
+                or UpdateDataOperation
+                or DeleteDataOperation
+                or EnsureSchemaOperation
+                or AlterDatabaseOperation:
                 break;
             default:
                 _opaqueBoundary = true;
@@ -311,9 +346,9 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
             || !_tables.TryGetValue(Owner(definition.Table, definition.Schema), out var state)
             || state.Unknown
             || state.Dropped
-            || !state.Fresh
-            && (!state.CapturedRequests.TryGetValue(definition.Name, out var requests)
-                || !requests.Any(columns => SameColumns(columns, definition.Columns))))
+            || (!state.Fresh
+                && (!state.CapturedRequests.TryGetValue(definition.Name, out var requests)
+                    || !requests.Any(columns => SameColumns(columns, definition.Columns)))))
         {
             return null;
         }
@@ -375,7 +410,10 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
             && !state.Indexes.ContainsKey(definition.Name)
             && !state.Indexes.Values.Any(index => index.Covers(definition.Columns, _isMariaDb)))
         {
-            state.GetOrAdd(definition.Name).CapturedPrefixes.Add(definition.Columns);
+            state
+                .GetOrAdd(definition.Name)
+                .CapturedPrefixes
+                .Add(definition.Columns);
         }
     }
 
@@ -387,7 +425,8 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
         IReadOnlyList<string>? columns
     )
     {
-        var keys = columns?
+        var keys = columns
+            ?
             .Select(static column => new ExpectedIndexKeyDefinition(column: column))
             .ToArray();
 
@@ -422,7 +461,12 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
             }
         }
 
-        state.Indexes[name] = new PhysicalIndex { Keys = eligible ? keys : null };
+        state.Indexes[name] = new PhysicalIndex
+        {
+            Keys = eligible
+                ? keys
+                : null,
+        };
     }
 
     /// <summary>Removes precisely the physical index lifetime addressed by this ordered drop.</summary>
@@ -522,7 +566,8 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
     private void InvalidateTable(
         string table,
         string? schema
-    ) => GetOrAdd(table, schema).Unknown = true;
+    ) => GetOrAdd(table, schema)
+        .Unknown = true;
 
     /// <summary>Requires a representable ordinary BTREE shape before accepted creation can mint coverage.</summary>
     private static bool IsEligible(
@@ -555,7 +600,7 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
         for (var ordinal = 0; ordinal < columns.Count; ordinal++)
         {
             if (keys[ordinal].PrefixLength is not null
-                || !isMariaDb && keys[ordinal].SortOrder == SafeMigrationIndexSortOrder.Descending
+                || (!isMariaDb && keys[ordinal].SortOrder == SafeMigrationIndexSortOrder.Descending)
                 || !StringComparer.OrdinalIgnoreCase.Equals(keys[ordinal].Column, columns[ordinal]))
             {
                 return false;
@@ -649,8 +694,10 @@ internal sealed class MySqlProjectedForeignKeySupportingIndexes
         internal bool Covers(
             IReadOnlyList<string> columns,
             bool isMariaDb
-        ) => Keys is not null && MySqlProjectedForeignKeySupportingIndexes.Covers(Keys, columns, isMariaDb)
+        ) => (Keys is not null && MySqlProjectedForeignKeySupportingIndexes.Covers(Keys, columns, isMariaDb))
             || CapturedPrefixes.Any(prefix => prefix.Count >= columns.Count
-                && prefix.Take(columns.Count).SequenceEqual(columns, StringComparer.OrdinalIgnoreCase));
+                && prefix
+                    .Take(columns.Count)
+                    .SequenceEqual(columns, StringComparer.OrdinalIgnoreCase));
     }
 }

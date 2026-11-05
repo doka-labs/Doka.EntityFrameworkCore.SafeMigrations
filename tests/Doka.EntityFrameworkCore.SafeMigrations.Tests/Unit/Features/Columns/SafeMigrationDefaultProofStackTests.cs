@@ -19,10 +19,17 @@ public sealed class SafeMigrationDefaultProofStackTests
     [InlineData("between", false)]
     [InlineData("in", true)]
     [InlineData("in", false)]
-    public void DeepStructuralProofRetainsItsResult(string shape, bool nonNull)
+    public void DeepStructuralProofRetainsItsResult(
+        string shape,
+        bool nonNull
+    )
     {
         // Arrange
-        var expression = SafeMigrationSql.Literal(nonNull ? 1 : null);
+        var expression = SafeMigrationSql.Literal(
+            nonNull
+                ? 1
+                : null);
+
         for (var depth = 0; depth < 20_000; depth++)
         {
             expression = shape switch
@@ -31,9 +38,12 @@ public sealed class SafeMigrationDefaultProofStackTests
                 "collate" => SafeMigrationSql.Collate(expression, "binary"),
                 "coalesce-first" => SafeMigrationSql.Function("COALESCE", expression, SafeMigrationSql.Literal(null)),
                 "coalesce-last" => SafeMigrationSql.Function("COALESCE", SafeMigrationSql.Literal(null), expression),
-                "between" => new SafeMigrationSqlBetweenExpression(SafeMigrationSql.Literal(1),
-                    expression, SafeMigrationSql.Literal(2)),
-                "in" => new SafeMigrationSqlInExpression(SafeMigrationSql.Literal(1),
+                "between" => new SafeMigrationSqlBetweenExpression(
+                    SafeMigrationSql.Literal(1),
+                    expression,
+                    SafeMigrationSql.Literal(2)),
+                "in" => new SafeMigrationSqlInExpression(
+                    SafeMigrationSql.Literal(1),
                     [SafeMigrationSql.Literal(2), expression]),
                 _ => throw new ArgumentOutOfRangeException(nameof(shape)),
             };
@@ -53,13 +63,20 @@ public sealed class SafeMigrationDefaultProofStackTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void DecisiveOperandPreservesShortCircuiting(bool any)
+    public void DecisiveOperandPreservesShortCircuiting(
+        bool any
+    )
     {
         // Arrange
-        var decisive = SafeMigrationSql.Literal(any ? 1 : null);
+        var decisive = SafeMigrationSql.Literal(
+            any
+                ? 1
+                : null);
+
         var expression = any
             ? SafeMigrationSql.Function("COALESCE", decisive, new UnknownExpression())
             : (SafeMigrationSqlExpression)new SafeMigrationSqlInExpression(decisive, [new UnknownExpression()]);
+
         var candidate = SafeMigrationDefaultValue.Sql(expression);
 
         // Act
@@ -74,14 +91,17 @@ public sealed class SafeMigrationDefaultProofStackTests
     public void ReachedUnknownOperandPreservesFailure()
     {
         // Arrange
-        var candidate = SafeMigrationDefaultValue.Sql(SafeMigrationSql.Function(
-            "COALESCE", SafeMigrationSql.Literal(null), new UnknownExpression()));
+        var candidate = SafeMigrationDefaultValue.Sql(
+            SafeMigrationSql.Function(
+                "COALESCE",
+                SafeMigrationSql.Literal(null),
+                new UnknownExpression()));
 
         // Act
         var exception = Record.Exception(() => SafeMigrationColumnRepairHelper.HasProvablyNonNullDefault(candidate));
 
         // Assert
-        Assert.IsType<System.Diagnostics.UnreachableException>(exception);
+        Assert.IsType<UnreachableException>(exception);
     }
 
     /// <summary>No recursion conversion may broaden a provider-dependent conversion/arithmetic/CASE proof.</summary>
@@ -100,8 +120,10 @@ public sealed class SafeMigrationDefaultProofStackTests
         ];
 
         // Act
-        var results = candidates.Select(static value => SafeMigrationColumnRepairHelper.HasProvablyNonNullDefault(
-            SafeMigrationDefaultValue.Sql(value))).ToArray();
+        var results = candidates
+            .Select(static value => SafeMigrationColumnRepairHelper.HasProvablyNonNullDefault(
+                SafeMigrationDefaultValue.Sql(value)))
+            .ToArray();
 
         // Assert
         Assert.All(results, static result => Assert.False(result));

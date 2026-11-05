@@ -6,7 +6,10 @@ internal sealed class SqliteConstraintDropTestContext : DbContext
 
     public SqliteConstraintDropTestContext(
         DbConnection connection
-    ) => _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    )
+    {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    }
 
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
@@ -23,16 +26,29 @@ internal sealed class SqliteConstraintDropTestContext : DbContext
         modelBuilder.Entity<ConstraintDropParent>(entity =>
         {
             entity.ToTable("drop_parents");
-            entity.HasKey(value => value.Id).HasName("pk_drop_parents");
-            entity.Property(value => value.Id).ValueGeneratedNever();
+            entity
+                .HasKey(value => value.Id)
+                .HasName("pk_drop_parents");
+
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
         });
 
         modelBuilder.Entity<ConstraintDropEntity>(entity =>
         {
             entity.ToTable("drop_entities");
-            entity.HasKey(value => value.Id).HasName("pk_drop_entities");
-            entity.Property(value => value.Id).ValueGeneratedNever();
-            entity.Property(value => value.Code).IsRequired();
+            entity
+                .HasKey(value => value.Id)
+                .HasName("pk_drop_entities");
+
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
+
+            entity
+                .Property(value => value.Code)
+                .IsRequired();
         });
     }
 
@@ -57,7 +73,10 @@ internal sealed class SqlitePrimaryKeyDropTestContext : DbContext
 
     public SqlitePrimaryKeyDropTestContext(
         DbConnection connection
-    ) => _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    )
+    {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    }
 
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
@@ -92,7 +111,10 @@ internal sealed class SqliteSelfReferenceRebuildTestContext : DbContext
 
     public SqliteSelfReferenceRebuildTestContext(
         DbConnection connection
-    ) => _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    )
+    {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    }
 
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
@@ -111,14 +133,24 @@ internal sealed class SqliteSelfReferenceRebuildTestContext : DbContext
             entity.ToTable(
                 "self_reference_entities",
                 table => table.HasCheckConstraint("ck_self_reference_entities_positive", "Id > 0"));
-            entity.HasKey(value => value.Id).HasName("pk_self_reference_entities");
-            entity.Property(value => value.Id).ValueGeneratedNever();
-            entity.HasOne<SelfReferenceEntity>()
+
+            entity
+                .HasKey(value => value.Id)
+                .HasName("pk_self_reference_entities");
+
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
+
+            entity
+                .HasOne<SelfReferenceEntity>()
                 .WithMany()
                 .HasForeignKey(value => value.ParentId)
                 .HasConstraintName("fk_self_reference_entities_parent")
                 .OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(value => value.ParentId)
+
+            entity
+                .HasIndex(value => value.ParentId)
                 .HasDatabaseName("ix_self_reference_entities_parent_id");
         });
     }
@@ -137,7 +169,10 @@ internal sealed class SqliteProviderRewriteTestContext : DbContext
 
     public SqliteProviderRewriteTestContext(
         DbConnection connection
-    ) => _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    )
+    {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    }
 
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
@@ -155,8 +190,13 @@ internal sealed class SqliteProviderRewriteTestContext : DbContext
         {
             entity.ToTable("provider_rewrite_entities");
             entity.HasKey(value => value.Id);
-            entity.Property(value => value.Id).ValueGeneratedNever();
-            entity.Property(value => value.Value).HasColumnName("Legacy");
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
+
+            entity
+                .Property(value => value.Value)
+                .HasColumnName("Legacy");
         });
     }
 
@@ -174,7 +214,10 @@ internal sealed class SqliteStructuralSequenceTestContext : DbContext
 
     public SqliteStructuralSequenceTestContext(
         DbConnection connection
-    ) => _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    )
+    {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    }
 
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
@@ -191,9 +234,17 @@ internal sealed class SqliteStructuralSequenceTestContext : DbContext
         modelBuilder.Entity<StructuralPost>(entity =>
         {
             entity.ToTable("structural_posts");
-            entity.HasKey(value => value.Id).HasName("pk_structural_posts");
-            entity.Property(value => value.Id).ValueGeneratedNever();
-            entity.Property(value => value.Title).IsRequired();
+            entity
+                .HasKey(value => value.Id)
+                .HasName("pk_structural_posts");
+
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
+
+            entity
+                .Property(value => value.Title)
+                .IsRequired();
         });
     }
 
@@ -213,7 +264,10 @@ internal sealed class SqliteRebuildShapeTestContext : DbContext
 
     public SqliteRebuildShapeTestContext(
         DbConnection connection
-    ) => _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    )
+    {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    }
 
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
@@ -232,10 +286,21 @@ internal sealed class SqliteRebuildShapeTestContext : DbContext
             entity.ToTable(
                 "rebuild_shape_entities",
                 table => table.HasCheckConstraint("ck_rebuild_shape_entities_id", "Id > 0"));
-            entity.HasKey(value => value.Id).HasName("pk_rebuild_shape_entities");
-            entity.Property(value => value.Id).ValueGeneratedNever();
-            entity.Property(value => value.Code).IsRequired();
-            entity.HasIndex(value => value.Code)
+
+            entity
+                .HasKey(value => value.Id)
+                .HasName("pk_rebuild_shape_entities");
+
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
+
+            entity
+                .Property(value => value.Code)
+                .IsRequired();
+
+            entity
+                .HasIndex(value => value.Code)
                 .HasDatabaseName("ix_rebuild_shape_entities_code");
         });
     }
@@ -254,7 +319,10 @@ internal sealed class SqliteEscapedIdentifierRebuildTestContext : DbContext
 
     public SqliteEscapedIdentifierRebuildTestContext(
         DbConnection connection
-    ) => _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    )
+    {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    }
 
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
@@ -273,8 +341,14 @@ internal sealed class SqliteEscapedIdentifierRebuildTestContext : DbContext
             entity.ToTable(
                 "order\"items",
                 table => table.HasCheckConstraint("ck_order_items_id", "Id > 0"));
-            entity.HasKey(value => value.Id).HasName("pk_order_items");
-            entity.Property(value => value.Id).ValueGeneratedNever();
+
+            entity
+                .HasKey(value => value.Id)
+                .HasName("pk_order_items");
+
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
         });
     }
 
@@ -290,7 +364,10 @@ internal sealed class SqliteAddColumnCheckTestContext : DbContext
 
     public SqliteAddColumnCheckTestContext(
         DbConnection connection
-    ) => _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    )
+    {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    }
 
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
@@ -309,8 +386,14 @@ internal sealed class SqliteAddColumnCheckTestContext : DbContext
             entity.ToTable(
                 "add_column_check_entities",
                 table => table.HasCheckConstraint("ck_add_column_check_entities_id", "Id > 0"));
-            entity.HasKey(value => value.Id).HasName("pk_add_column_check_entities");
-            entity.Property(value => value.Id).ValueGeneratedNever();
+
+            entity
+                .HasKey(value => value.Id)
+                .HasName("pk_add_column_check_entities");
+
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
         });
     }
 
@@ -328,7 +411,10 @@ internal sealed class SqliteAddColumnReferencedCheckTestContext : DbContext
 
     public SqliteAddColumnReferencedCheckTestContext(
         DbConnection connection
-    ) => _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    )
+    {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    }
 
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
@@ -349,9 +435,18 @@ internal sealed class SqliteAddColumnReferencedCheckTestContext : DbContext
                 table => table.HasCheckConstraint(
                     "ck_add_column_referenced_check_entities_description",
                     "length(\"Description\") > 0"));
-            entity.HasKey(value => value.Id).HasName("pk_add_column_referenced_check_entities");
-            entity.Property(value => value.Id).ValueGeneratedNever();
-            entity.Property(value => value.Description).IsRequired();
+
+            entity
+                .HasKey(value => value.Id)
+                .HasName("pk_add_column_referenced_check_entities");
+
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
+
+            entity
+                .Property(value => value.Description)
+                .IsRequired();
         });
     }
 
@@ -369,7 +464,10 @@ internal sealed class SqliteBackfillDefaultRebuildTestContext : DbContext
 
     public SqliteBackfillDefaultRebuildTestContext(
         DbConnection connection
-    ) => _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    )
+    {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    }
 
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
@@ -388,9 +486,18 @@ internal sealed class SqliteBackfillDefaultRebuildTestContext : DbContext
             entity.ToTable(
                 "backfill_default_entities",
                 table => table.HasCheckConstraint("ck_backfill_default_entities_priority", "Priority >= 0"));
-            entity.HasKey(value => value.Id).HasName("pk_backfill_default_entities");
-            entity.Property(value => value.Id).ValueGeneratedNever();
-            entity.Property(value => value.Priority).IsRequired();
+
+            entity
+                .HasKey(value => value.Id)
+                .HasName("pk_backfill_default_entities");
+
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
+
+            entity
+                .Property(value => value.Priority)
+                .IsRequired();
         });
     }
 
@@ -408,7 +515,10 @@ internal sealed class SqliteForeignKeyCollationTestContext : DbContext
 
     public SqliteForeignKeyCollationTestContext(
         DbConnection connection
-    ) => _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    )
+    {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    }
 
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
@@ -427,25 +537,50 @@ internal sealed class SqliteForeignKeyCollationTestContext : DbContext
             entity.ToTable(
                 "collation_parents",
                 table => table.HasCheckConstraint("ck_collation_parents_id", "Id > 0"));
-            entity.HasKey(value => value.Id).HasName("pk_collation_parents");
-            entity.HasAlternateKey(value => value.Code).HasName("uq_collation_parents_code");
-            entity.Property(value => value.Id).ValueGeneratedNever();
-            entity.Property(value => value.Code).UseCollation("NOCASE").IsRequired();
+
+            entity
+                .HasKey(value => value.Id)
+                .HasName("pk_collation_parents");
+
+            entity
+                .HasAlternateKey(value => value.Code)
+                .HasName("uq_collation_parents_code");
+
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
+
+            entity
+                .Property(value => value.Code)
+                .UseCollation("NOCASE")
+                .IsRequired();
         });
 
         modelBuilder.Entity<CollationChild>(entity =>
         {
             entity.ToTable("collation_children");
-            entity.HasKey(value => value.Id).HasName("pk_collation_children");
-            entity.Property(value => value.Id).ValueGeneratedNever();
-            entity.Property(value => value.ParentCode).IsRequired();
-            entity.HasOne<CollationParent>()
+            entity
+                .HasKey(value => value.Id)
+                .HasName("pk_collation_children");
+
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
+
+            entity
+                .Property(value => value.ParentCode)
+                .IsRequired();
+
+            entity
+                .HasOne<CollationParent>()
                 .WithMany()
                 .HasForeignKey(value => value.ParentCode)
                 .HasPrincipalKey(value => value.Code)
                 .HasConstraintName("fk_collation_children_parent")
                 .OnDelete(DeleteBehavior.NoAction);
-            entity.HasIndex(value => value.ParentCode)
+
+            entity
+                .HasIndex(value => value.ParentCode)
                 .HasDatabaseName("ix_collation_children_parent_code");
         });
     }
@@ -471,7 +606,10 @@ internal sealed class SqliteConvertedBackfillDefaultRebuildTestContext : DbConte
 
     public SqliteConvertedBackfillDefaultRebuildTestContext(
         DbConnection connection
-    ) => _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    )
+    {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    }
 
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
@@ -492,9 +630,19 @@ internal sealed class SqliteConvertedBackfillDefaultRebuildTestContext : DbConte
                 table => table.HasCheckConstraint(
                     "ck_converted_backfill_entities_state",
                     "length(\"State\") >= 0"));
-            entity.HasKey(value => value.Id).HasName("pk_converted_backfill_entities");
-            entity.Property(value => value.Id).ValueGeneratedNever();
-            entity.Property(value => value.State).HasConversion<string>().IsRequired();
+
+            entity
+                .HasKey(value => value.Id)
+                .HasName("pk_converted_backfill_entities");
+
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
+
+            entity
+                .Property(value => value.State)
+                .HasConversion<string>()
+                .IsRequired();
         });
     }
 
@@ -518,7 +666,10 @@ internal sealed class SqliteHighByteIdentifierRebuildTestContext : DbContext
 
     public SqliteHighByteIdentifierRebuildTestContext(
         DbConnection connection
-    ) => _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    )
+    {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    }
 
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
@@ -537,8 +688,14 @@ internal sealed class SqliteHighByteIdentifierRebuildTestContext : DbContext
             entity.ToTable(
                 "\u20AC",
                 table => table.HasCheckConstraint("ck_high_byte_identifier_id", "Id > 0"));
-            entity.HasKey(value => value.Id).HasName("pk_high_byte_identifier");
-            entity.Property(value => value.Id).ValueGeneratedNever();
+
+            entity
+                .HasKey(value => value.Id)
+                .HasName("pk_high_byte_identifier");
+
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
         });
     }
 
@@ -554,7 +711,10 @@ internal sealed class SqliteMissingPrincipalForeignKeyTestContext : DbContext
 
     public SqliteMissingPrincipalForeignKeyTestContext(
         DbConnection connection
-    ) => _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    )
+    {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    }
 
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
@@ -571,8 +731,13 @@ internal sealed class SqliteMissingPrincipalForeignKeyTestContext : DbContext
         modelBuilder.Entity<MissingPrincipal>(entity =>
         {
             entity.ToTable("missing_principals");
-            entity.HasKey(value => value.Id).HasName("pk_missing_principals");
-            entity.Property(value => value.Id).ValueGeneratedNever();
+            entity
+                .HasKey(value => value.Id)
+                .HasName("pk_missing_principals");
+
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
         });
 
         modelBuilder.Entity<MissingPrincipalChild>(entity =>
@@ -580,14 +745,24 @@ internal sealed class SqliteMissingPrincipalForeignKeyTestContext : DbContext
             entity.ToTable(
                 "missing_principal_children",
                 table => table.HasCheckConstraint("ck_missing_principal_children_id", "Id > 0"));
-            entity.HasKey(value => value.Id).HasName("pk_missing_principal_children");
-            entity.Property(value => value.Id).ValueGeneratedNever();
-            entity.HasOne<MissingPrincipal>()
+
+            entity
+                .HasKey(value => value.Id)
+                .HasName("pk_missing_principal_children");
+
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
+
+            entity
+                .HasOne<MissingPrincipal>()
                 .WithMany()
                 .HasForeignKey(value => value.ParentId)
                 .HasConstraintName("fk_missing_principal_children_parent")
                 .OnDelete(DeleteBehavior.NoAction);
-            entity.HasIndex(value => value.ParentId)
+
+            entity
+                .HasIndex(value => value.ParentId)
                 .HasDatabaseName("ix_missing_principal_children_parent_id");
         });
     }
@@ -611,7 +786,10 @@ internal sealed class SqliteCheckLiteralRebuildTestContext : DbContext
 
     public SqliteCheckLiteralRebuildTestContext(
         DbConnection connection
-    ) => _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    )
+    {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    }
 
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
@@ -630,9 +808,18 @@ internal sealed class SqliteCheckLiteralRebuildTestContext : DbContext
             entity.ToTable(
                 "check_literal_entities",
                 table => table.HasCheckConstraint("ck_check_literal_entities_id", "Id > 0"));
-            entity.HasKey(value => value.Id).HasName("pk_check_literal_entities");
-            entity.Property(value => value.Id).ValueGeneratedNever();
-            entity.Property(value => value.Note).HasDefaultValue("mycheck(");
+
+            entity
+                .HasKey(value => value.Id)
+                .HasName("pk_check_literal_entities");
+
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
+
+            entity
+                .Property(value => value.Note)
+                .HasDefaultValue("mycheck(");
         });
     }
 

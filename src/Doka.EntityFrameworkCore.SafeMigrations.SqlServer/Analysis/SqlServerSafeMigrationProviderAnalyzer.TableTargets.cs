@@ -1,3 +1,5 @@
+using System.Data;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
@@ -17,13 +19,18 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         ArgumentNullException.ThrowIfNull(operations);
         ArgumentOutOfRangeException.ThrowIfNegative(start);
         ArgumentOutOfRangeException.ThrowIfNegative(count);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(count, SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            count,
+            SafeMigrationCatalogQueryLimits.MaximumOperationsPerPlanCapture);
+
         ArgumentOutOfRangeException.ThrowIfGreaterThan(start, operations.Count - count);
         cancellationToken.ThrowIfCancellationRequested();
 
         var absent = new bool[count];
-        var ordinals = SafeMigrationCatalogWorkOrder.Create(count,
-            index => operations[start + index].Intent is EnsureTableIntent, cancellationToken);
+        var ordinals = SafeMigrationCatalogWorkOrder.Create(
+            count,
+            index => operations[start + index].Intent is EnsureTableIntent,
+            cancellationToken);
 
         if (ordinals.Length == 0)
         {
@@ -37,9 +44,13 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         // WHY: SqlClient's native SqlBatchCommand does not implement CreateParameter.
         // Borrow the sequential command or use one non-executing provider factory per probe;
         // parameters belong to the catalog command, never to the factory's collection.
-        await using var parameterFactory = command.SequentialCommand is null ? connection.CreateCommand() : null;
+        await using var parameterFactory = command.SequentialCommand is null
+            ? connection.CreateCommand()
+            : null;
+
         var parameterHost = command.SequentialCommand ?? parameterFactory!;
         var values = new string[ordinals.Length];
+
         // WHY: Keep target parameters, VALUES slots and requested ordinals aligned.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -50,8 +61,14 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             var table = "@table" + index.ToString(CultureInfo.InvariantCulture);
             AddTargetParameter(command, parameterHost, schema, definition.Schema ?? "dbo");
             AddTargetParameter(command, parameterHost, table, definition.Table);
-            values[index] = "(" + ordinals[index].ToString(CultureInfo.InvariantCulture)
-                + ", " + schema + ", " + table + ")";
+            values[index] = "("
+                + ordinals[index]
+                    .ToString(CultureInfo.InvariantCulture)
+                + ", "
+                + schema
+                + ", "
+                + table
+                + ")";
         }
 
         // WHY: sys.objects, rather than only sys.tables, preserves occupied view/sequence/synonym
@@ -59,21 +76,24 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         command.CommandText = "SELECT requested.ordinal, CASE WHEN target_schema.schema_id IS NOT NULL "
             + "AND NOT EXISTS (SELECT 1 FROM sys.objects occupied "
             + "WHERE occupied.schema_id = target_schema.schema_id AND occupied.name = requested.table_name) "
-            + "THEN 1 ELSE 0 END FROM (VALUES " + string.Join(", ", values)
+            + "THEN 1 ELSE 0 END FROM (VALUES "
+            + string.Join(", ", values)
             + ") requested(ordinal, schema_name, table_name) "
             + "LEFT JOIN sys.schemas target_schema ON target_schema.name = requested.schema_name ORDER BY requested.ordinal;";
 
         activity?.SetTag("safe_migrations.catalog.statement_count", 1);
         var consumed = 0;
-        await batch.ForEachResultSetAsync(async (reader, token) =>
-        {
-            while (await reader.ReadAsync(token))
+        await batch.ForEachResultSetAsync(
+            async (reader, token) =>
             {
-                var ordinal = reader.GetInt32(0);
-                SafeMigrationCatalogWorkOrder.ValidateResultOrdinal(ordinal, ordinals, ref consumed);
-                absent[ordinal] = reader.GetInt32(1) == 1;
-            }
-        }, cancellationToken);
+                while (await reader.ReadAsync(token))
+                {
+                    var ordinal = reader.GetInt32(0);
+                    SafeMigrationCatalogWorkOrder.ValidateResultOrdinal(ordinal, ordinals, ref consumed);
+                    absent[ordinal] = reader.GetInt32(1) == 1;
+                }
+            },
+            cancellationToken);
 
         SafeMigrationCatalogWorkOrder.ValidateCompletion(consumed, ordinals);
 
@@ -89,7 +109,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
     {
         var parameter = parameterHost.CreateParameter();
         parameter.ParameterName = name;
-        parameter.DbType = System.Data.DbType.String;
+        parameter.DbType = DbType.String;
         parameter.Size = 128;
         parameter.Value = value;
         command.Parameters.Add(parameter);

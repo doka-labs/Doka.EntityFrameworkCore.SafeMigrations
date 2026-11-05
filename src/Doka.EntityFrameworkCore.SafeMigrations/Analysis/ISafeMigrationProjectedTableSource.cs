@@ -24,7 +24,8 @@ internal interface ISafeMigrationProjectedTableSource
     bool TryGetProjectedTableState(
         string table,
         string? schema,
-        out SafeMigrationProjectedTableState state);
+        out SafeMigrationProjectedTableState state
+    );
 }
 
 /// <summary>Contains only the table proofs consumed by physical provider validation.</summary>
@@ -36,7 +37,8 @@ internal readonly record struct SafeMigrationProjectedTableState(
     bool IsNewlyCreated,
     bool HasDataMutation,
     bool PrimaryKeyWasDropped,
-    bool HasUnknownStructure)
+    bool HasUnknownStructure
+)
 {
     /// <summary>Gets the original accepted certified column-DROP position in the complete stream.</summary>
     /// <remarks>

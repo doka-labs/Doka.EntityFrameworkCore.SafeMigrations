@@ -8,7 +8,9 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
 
     /// <summary>Shares only provider services; every case owns its native database and model family.</summary>
     /// <param name="services">The class-owned SQLite services.</param>
-    public SqliteProjectedRebuildOwnershipTests(SqliteConstraintShapeServiceFixture services)
+    public SqliteProjectedRebuildOwnershipTests(
+        SqliteConstraintShapeServiceFixture services
+    )
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -46,17 +48,24 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
 
         // Act
         var report = preflight
-            ? await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-                context, builder.Operations, new SafeMigrationRunOptions("sqlite-projected-rebuild-ownership"),
-                cancellationToken: CancellationToken.None)
+            ? await context
+                .GetService<ISafeMigrationRunner>()
+                .AnalyzeAsync(
+                    context,
+                    builder.Operations,
+                    new SafeMigrationRunOptions("sqlite-projected-rebuild-ownership"),
+                    cancellationToken: CancellationToken.None)
             : null;
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
         var artifactAfter = await CountArtifactsAsync(connection, artifact, cancellationToken: CancellationToken.None);
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM rebuild_nodes WHERE id = 1 AND extra = 7 AND derived = 8;",
             cancellationToken: CancellationToken.None);
 
@@ -82,7 +91,9 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task MissingDropDoesNotDemandUnusedRebuildOwnership(bool ownerExists)
+    public async Task MissingDropDoesNotDemandUnusedRebuildOwnership(
+        bool ownerExists
+    )
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
@@ -96,21 +107,38 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         builder.DropColumnIfExists("source", "rebuild_nodes");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-native-missing-drop"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-native-missing-drop"),
+                cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
-        var owners = await ScalarIntAsync(connection,
+        var owners = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'table' AND name = 'rebuild_nodes';",
             cancellationToken: CancellationToken.None);
 
         var triggers = await CountArtifactsAsync(connection, "trigger", cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(report.Assessments).Action);
-        Assert.Equal(ownerExists ? 1 : 0, owners);
-        Assert.Equal(ownerExists ? 1 : 0, triggers);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(report.Assessments)
+                .Action);
+
+        Assert.Equal(
+            ownerExists
+                ? 1
+                : 0,
+            owners);
+
+        Assert.Equal(
+            ownerExists
+                ? 1
+                : 0,
+            triggers);
     }
 
     /// <summary>Mapped owners still permit a real addition followed by an owned, explicitly authored rebuild.</summary>
@@ -118,7 +146,9 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     [Theory]
     [InlineData("drop")]
     [InlineData("alter")]
-    public async Task MappedProjectedRebuildPreservesExistingRows(string operation)
+    public async Task MappedProjectedRebuildPreservesExistingRows(
+        string operation
+    )
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
@@ -127,14 +157,21 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         var builder = CreateOperations(context, operation);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-owned-projected-rebuild"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-owned-projected-rebuild"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM rebuild_nodes WHERE id = 1 AND extra = 7 AND derived = 8;",
             cancellationToken: CancellationToken.None);
 
@@ -150,7 +187,9 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task UnprovenProjectedCheckRemainsBlockedWithoutChangingTheOwner(bool preflight)
+    public async Task UnprovenProjectedCheckRemainsBlockedWithoutChangingTheOwner(
+        bool preflight
+    )
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
@@ -165,17 +204,24 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
 
         // Act
         var report = preflight
-            ? await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-                context, builder.Operations, new SafeMigrationRunOptions("sqlite-unproven-projected-check"),
-                cancellationToken: CancellationToken.None)
+            ? await context
+                .GetService<ISafeMigrationRunner>()
+                .AnalyzeAsync(
+                    context,
+                    builder.Operations,
+                    new SafeMigrationRunOptions("sqlite-unproven-projected-check"),
+                    cancellationToken: CancellationToken.None)
             : null;
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
         var triggersAfter = await CountArtifactsAsync(connection, "trigger", cancellationToken: CancellationToken.None);
-        var retainedRows = await ScalarIntAsync(connection,
+        var retainedRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM rebuild_nodes WHERE id = 1 AND extra = 7 AND derived = 8;",
             cancellationToken: CancellationToken.None);
 
@@ -199,25 +245,31 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task NewlyCreatedValidationOwnerCannotEscapeFinalForeignKeyChecks(bool removeParent)
+    public async Task NewlyCreatedValidationOwnerCannotEscapeFinalForeignKeyChecks(
+        bool removeParent
+    )
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connection,
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE parent_nodes (id INTEGER NOT NULL PRIMARY KEY); INSERT INTO parent_nodes VALUES (7);",
             cancellationToken: CancellationToken.None);
 
         await using var context = new DroppedSourceContext(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.CreateTableIfNotExists("new_children", table => new
-        {
-            id = table.Column<int>(type: "INTEGER", nullable: false),
-            parent_id = table.Column<int>(type: "INTEGER", nullable: false),
-        }, constraints: table =>
-        {
-            table.PrimaryKey("pk_new_children", value => value.id);
-            table.ForeignKey("fk_new_children_parent", value => value.parent_id, "parent_nodes", "id");
-        });
+        builder.CreateTableIfNotExists(
+            "new_children",
+            table => new
+            {
+                id = table.Column<int>(type: "INTEGER", nullable: false),
+                parent_id = table.Column<int>(type: "INTEGER", nullable: false),
+            },
+            constraints: table =>
+            {
+                table.PrimaryKey("pk_new_children", value => value.id);
+                table.ForeignKey("fk_new_children_parent", value => value.parent_id, "parent_nodes", "id");
+            });
 
         builder.DropColumnIfExists("missing", "new_children");
         var mutation = removeParent
@@ -225,9 +277,11 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             : "INSERT INTO new_children (id, parent_id) VALUES (1, 999);";
 
         var baseline = new MutatingForeignKeyBaseline(
-            context.GetService<ISqliteSafeMigrationsBaselineGenerator>(), mutation);
+            context.GetService<ISqliteSafeMigrationsBaselineGenerator>(),
+            mutation);
 
-        var commands = CreateGenerator(context, baseline).Generate(builder.Operations, context.Model);
+        var commands = CreateGenerator(context, baseline)
+            .Generate(builder.Operations, context.Model);
 
         // Act
         var exception = await Record.ExceptionAsync(() => ExecuteCommandsAsync(
@@ -235,7 +289,8 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             commands,
             cancellationToken: CancellationToken.None));
 
-        var newOwners = await ScalarIntAsync(connection,
+        var newOwners = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'table' AND name = 'new_children';",
             cancellationToken: CancellationToken.None);
 
@@ -251,13 +306,17 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
 
         // Assert
         Assert.True(baseline.MutationGenerated);
-        Assert.Contains("foreign_key_validation_failed", Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains(
+            "foreign_key_validation_failed",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
 
         Assert.Equal(0, newOwners);
         Assert.Equal(1, parentRows);
         Assert.Equal(1, enforcement);
-        Assert.Null(context.GetService<IRelationalConnection>().CurrentTransaction);
+        Assert.Null(context.GetService<IRelationalConnection>()
+            .CurrentTransaction);
     }
 
     /// <summary>Filtering absent validation owners must retain checks for their surviving inbound children.</summary>
@@ -267,18 +326,23 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
         await CreateNativeOwnerAsync(connection, "none", cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connection,
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE inbound_children (id INTEGER NOT NULL PRIMARY KEY, parent_id INTEGER NOT NULL, "
             + "FOREIGN KEY (parent_id) REFERENCES parent_nodes (id)); "
-            + "INSERT INTO inbound_children VALUES (1, 7);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO inbound_children VALUES (1, 7);",
+            cancellationToken: CancellationToken.None);
 
         await using var context = new DroppedSourceContext(connection, _internalServices);
         var builder = CreateOperations(context, "drop");
         builder.DropColumnIfExists("missing", "parent_nodes");
         var baseline = new MutatingForeignKeyBaseline(
-            context.GetService<ISqliteSafeMigrationsBaselineGenerator>(), "DROP TABLE parent_nodes;");
+            context.GetService<ISqliteSafeMigrationsBaselineGenerator>(),
+            "DROP TABLE parent_nodes;");
 
-        var commands = CreateGenerator(context, baseline).Generate(builder.Operations, context.Model);
+        var commands = CreateGenerator(context, baseline)
+            .Generate(builder.Operations, context.Model);
+
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
@@ -293,11 +357,13 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             "SELECT COUNT(*) FROM parent_nodes WHERE id = 7;",
             cancellationToken: CancellationToken.None);
 
-        var children = await ScalarIntAsync(connection,
+        var children = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM inbound_children WHERE id = 1 AND parent_id = 7;",
             cancellationToken: CancellationToken.None);
 
-        var ownerRows = await ScalarIntAsync(connection,
+        var ownerRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM rebuild_nodes WHERE id = 1 AND extra = 7 AND derived = 8;",
             cancellationToken: CancellationToken.None);
 
@@ -310,7 +376,8 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         Assert.Equal(1, parents);
         Assert.Equal(1, children);
         Assert.Equal(1, ownerRows);
-        Assert.Null(context.GetService<IRelationalConnection>().CurrentTransaction);
+        Assert.Null(context.GetService<IRelationalConnection>()
+            .CurrentTransaction);
     }
 
     /// <summary>A matching source proves presence, not the safety of rebuilding retained foreign-key rows.</summary>
@@ -318,7 +385,9 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task MatchingSourceCannotEraseRetainedForeignKeyRowBlocker(bool preflight)
+    public async Task MatchingSourceCannotEraseRetainedForeignKeyRowBlocker(
+        bool preflight
+    )
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
@@ -326,30 +395,40 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         await using var context = new DroppedSourceContext(connection, _internalServices);
         var builder = CreateOperations(context, "drop");
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var foreignKeysBefore = await ScalarIntAsync(connection,
+        var foreignKeysBefore = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM pragma_foreign_key_list('orphan_children');",
             cancellationToken: CancellationToken.None);
 
         // Act
         var report = preflight
-            ? await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-                context, builder.Operations, new SafeMigrationRunOptions("sqlite-matching-source-retained-orphan"),
-                cancellationToken: CancellationToken.None)
+            ? await context
+                .GetService<ISafeMigrationRunner>()
+                .AnalyzeAsync(
+                    context,
+                    builder.Operations,
+                    new SafeMigrationRunOptions("sqlite-matching-source-retained-orphan"),
+                    cancellationToken: CancellationToken.None)
             : null;
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var ownerRows = await ScalarIntAsync(connection,
+        var ownerRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM rebuild_nodes WHERE id = 1 AND extra = 7 AND derived = 8 AND source = 42;",
             cancellationToken: CancellationToken.None);
 
-        var childRows = await ScalarIntAsync(connection,
+        var childRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM orphan_children WHERE id = 11 AND owner_id = 999;",
             cancellationToken: CancellationToken.None);
 
-        var foreignKeysAfter = await ScalarIntAsync(connection,
+        var foreignKeysAfter = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM pragma_foreign_key_list('orphan_children');",
             cancellationToken: CancellationToken.None);
 
@@ -368,7 +447,10 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         }
 
-        Assert.Contains("foreign_key_validation_failed", Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains(
+            "foreign_key_validation_failed",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
 
         Assert.Equal(schemaBefore, schemaAfter);
@@ -377,7 +459,8 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         Assert.Equal(1, foreignKeysBefore);
         Assert.Equal(1, foreignKeysAfter);
         Assert.Equal(1, enforcement);
-        Assert.Null(context.GetService<IRelationalConnection>().CurrentTransaction);
+        Assert.Null(context.GetService<IRelationalConnection>()
+            .CurrentTransaction);
     }
 
     /// <summary>Existing or newly added sources with valid references permit the owned rebuild and replay.</summary>
@@ -387,7 +470,10 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     [InlineData(true, false)]
     [InlineData(false, false)]
     [InlineData(false, true)]
-    public async Task MatchingSourceWithValidRetainedForeignKeyCanDropAndReplay(bool sourceExists, bool safeBoundary)
+    public async Task MatchingSourceWithValidRetainedForeignKeyCanDropAndReplay(
+        bool sourceExists,
+        bool safeBoundary
+    )
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
@@ -396,6 +482,7 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             orphan: false,
             sourceExists: sourceExists,
             cancellationToken: CancellationToken.None);
+
         await using var context = new DroppedSourceContext(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("source", "rebuild_nodes", type: "INTEGER", nullable: true);
@@ -407,17 +494,23 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         builder.DropColumnIfExists("source", "rebuild_nodes");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-matching-source-valid-reference"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-matching-source-valid-reference"),
+                cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
-        var ownerRows = await ScalarIntAsync(connection,
+        var ownerRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM rebuild_nodes WHERE id = 1 AND extra = 7 AND derived = 8;",
             cancellationToken: CancellationToken.None);
 
-        var childRows = await ScalarIntAsync(connection,
+        var childRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM orphan_children WHERE id = 11 AND owner_id = 1;",
             cancellationToken: CancellationToken.None);
 
@@ -426,13 +519,19 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             "SELECT COUNT(*) FROM pragma_foreign_key_check;",
             cancellationToken: CancellationToken.None);
 
-        var sources = await ScalarIntAsync(connection,
+        var sources = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('rebuild_nodes') WHERE name = 'source';",
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Equal(sourceExists ? SafeMigrationAction.NoOp : SafeMigrationAction.Apply, report.Assessments[0].Action);
+        Assert.Equal(
+            sourceExists
+                ? SafeMigrationAction.NoOp
+                : SafeMigrationAction.Apply,
+            report.Assessments[0].Action);
+
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[^1].Action);
         Assert.Equal(1, ownerRows);
         Assert.Equal(1, childRows);
@@ -451,6 +550,7 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             orphan: true,
             sourceExists: false,
             cancellationToken: CancellationToken.None);
+
         await using var context = new DroppedSourceContext(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("source", "rebuild_nodes", type: "INTEGER", nullable: true);
@@ -459,16 +559,22 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-safe-boundary-retained-orphan"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-safe-boundary-retained-orphan"),
+                cancellationToken: CancellationToken.None);
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var ownerRows = await ScalarIntAsync(connection,
+        var ownerRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM rebuild_nodes WHERE id = 1 AND extra = 7 AND derived = 8;",
             cancellationToken: CancellationToken.None);
 
-        var childRows = await ScalarIntAsync(connection,
+        var childRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM orphan_children WHERE id = 11 AND owner_id = 999;",
             cancellationToken: CancellationToken.None);
 
@@ -491,7 +597,10 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(false, false)]
-    public async Task AcceptedColumnAliasesRetainConditionalForeignKeyRowProof(bool sourceExists, bool orphan)
+    public async Task AcceptedColumnAliasesRetainConditionalForeignKeyRowProof(
+        bool sourceExists,
+        bool orphan
+    )
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
@@ -504,28 +613,43 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-accepted-column-alias-row-proof"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-accepted-column-alias-row-proof"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var replayException = !orphan
-            ? await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+            ? await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+                context,
+                builder.Operations,
                 cancellationToken: CancellationToken.None))
             : null;
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var ownerRows = await ScalarIntAsync(connection,
+        var ownerRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM rebuild_nodes WHERE id = 1 AND extra = 7 AND derived = 8;",
             cancellationToken: CancellationToken.None);
 
-        var childRows = await ScalarIntAsync(connection,
-            "SELECT COUNT(*) FROM orphan_children WHERE id = 11 AND owner_id = " + (orphan ? "999" : "1") + ";",
+        var childRows = await ScalarIntAsync(
+            connection,
+            "SELECT COUNT(*) FROM orphan_children WHERE id = 11 AND owner_id = "
+            + (orphan
+                ? "999"
+                : "1")
+            + ";",
             cancellationToken: CancellationToken.None);
 
-        var sources = await ScalarIntAsync(connection,
+        var sources = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('rebuild_nodes') WHERE name IN ('source', 'renamed_source');",
             cancellationToken: CancellationToken.None);
 
@@ -538,17 +662,26 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         Assert.Equal(1, ownerRows);
         Assert.Equal(1, childRows);
         Assert.Equal(1, enforcement);
-        Assert.Null(context.GetService<IRelationalConnection>().CurrentTransaction);
+        Assert.Null(context.GetService<IRelationalConnection>()
+            .CurrentTransaction);
+
         if (orphan)
         {
             Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
             Assert.Equal(SafeMigrationAction.RejectDataBlocked, report.Assessments[^1].Action);
             Assert.Equal("table_rebuild_foreign_key_violation", report.Assessments[^1].AnalysisCode);
-            Assert.Contains("foreign_key_validation_failed",
-                Assert.IsType<InvalidOperationException>(exception).Message, StringComparison.Ordinal);
+            Assert.Contains(
+                "foreign_key_validation_failed",
+                Assert.IsType<InvalidOperationException>(exception)
+                    .Message,
+                StringComparison.Ordinal);
 
             Assert.Equal(schemaBefore, schemaAfter);
-            Assert.Equal(sourceExists ? 1 : 0, sources);
+            Assert.Equal(
+                sourceExists
+                    ? 1
+                    : 0,
+                sources);
         }
         else
         {
@@ -569,7 +702,10 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     [InlineData("mixed", "table_rebuild_foreign_key_violation")]
     [InlineData("rename_owner", "projected_structure_state_unknown")]
     [InlineData("rename_column", "projected_structure_state_unknown")]
-    public async Task SourcePresenceTransitionsPreserveIndependentRebuildBlockers(string prefix, string expectedCode)
+    public async Task SourcePresenceTransitionsPreserveIndependentRebuildBlockers(
+        string prefix,
+        string expectedCode
+    )
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
@@ -578,6 +714,7 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             orphan: true,
             sourceExists: prefix == "rename_column",
             cancellationToken: CancellationToken.None);
+
         await using DbContext context = prefix == "rename_owner"
             ? new RenamedOwnerContext(connection, _internalServices)
             : new DroppedSourceContext(connection, _internalServices);
@@ -606,36 +743,58 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             builder.RenameTableIfExists("rebuild_nodes", newName: "renamed_nodes");
         }
 
-        builder.DropColumnIfExists(prefix == "rename_column" ? "renamed_source" : "source",
-            prefix == "rename_owner" ? "renamed_nodes" : "rebuild_nodes");
+        builder.DropColumnIfExists(
+            prefix == "rename_column"
+                ? "renamed_source"
+                : "source",
+            prefix == "rename_owner"
+                ? "renamed_nodes"
+                : "rebuild_nodes");
+
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-missing-source-retained-orphan"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-missing-source-retained-orphan"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var ownerRows = await ScalarIntAsync(connection,
+        var ownerRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM rebuild_nodes WHERE id = 1 AND extra = 7 AND derived = 8;",
             cancellationToken: CancellationToken.None);
 
-        var childRows = await ScalarIntAsync(connection,
+        var childRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM orphan_children WHERE id = 11 AND owner_id = 999;",
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         var rowBlocked = expectedCode == "table_rebuild_foreign_key_violation";
-        Assert.Equal(rowBlocked ? SafeMigrationAction.RejectDataBlocked : SafeMigrationAction.RejectPrerequisiteMissing,
+        Assert.Equal(
+            rowBlocked
+                ? SafeMigrationAction.RejectDataBlocked
+                : SafeMigrationAction.RejectPrerequisiteMissing,
             report.Assessments[^1].Action);
 
         Assert.Equal(expectedCode, report.Assessments[^1].AnalysisCode);
-        Assert.Contains(rowBlocked ? "foreign_key_validation_failed" : "prerequisite_missing",
-            Assert.IsType<InvalidOperationException>(exception).Message, StringComparison.Ordinal);
+        Assert.Contains(
+            rowBlocked
+                ? "foreign_key_validation_failed"
+                : "prerequisite_missing",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
+            StringComparison.Ordinal);
 
         Assert.Equal(schemaBefore, schemaAfter);
         Assert.Equal(1, ownerRows);
@@ -647,7 +806,9 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task MissingSourceNoOpDoesNotDemandUnusedForeignKeyRowProof(bool synchronous)
+    public async Task MissingSourceNoOpDoesNotDemandUnusedForeignKeyRowProof(
+        bool synchronous
+    )
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
@@ -656,17 +817,25 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             orphan: true,
             sourceExists: false,
             cancellationToken: CancellationToken.None);
+
         await using var context = new DroppedSourceContext(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropColumnIfExists("source", "rebuild_nodes");
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-missing-source-no-rebuild"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-missing-source-no-rebuild"),
+                cancellationToken: CancellationToken.None);
 
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
+
         var exception = synchronous
             ? Record.Exception(() => ExecuteCommands(context, commands))
             : await Record.ExceptionAsync(() => ExecuteCommandsAsync(
@@ -675,11 +844,13 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
                 cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var ownerRows = await ScalarIntAsync(connection,
+        var ownerRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM rebuild_nodes WHERE id = 1 AND extra = 7 AND derived = 8;",
             cancellationToken: CancellationToken.None);
 
-        var childRows = await ScalarIntAsync(connection,
+        var childRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM orphan_children WHERE id = 11 AND owner_id = 999;",
             cancellationToken: CancellationToken.None);
 
@@ -690,13 +861,17 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(report.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(report.Assessments)
+                .Action);
+
         Assert.Null(exception);
         Assert.Equal(schemaBefore, schemaAfter);
         Assert.Equal(1, ownerRows);
         Assert.Equal(1, childRows);
         Assert.Equal(1, enforcement);
-        Assert.Null(context.GetService<IRelationalConnection>().CurrentTransaction);
+        Assert.Null(context.GetService<IRelationalConnection>()
+            .CurrentTransaction);
     }
 
     /// <summary>A rejected source addition cannot turn a genuinely absent DROP into a row-dependent rebuild.</summary>
@@ -710,6 +885,7 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             orphan: true,
             sourceExists: false,
             cancellationToken: CancellationToken.None);
+
         await using var context = new DroppedSourceContext(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddColumnIfNotExists<int>("source", "rebuild_nodes", type: "INTEGER", nullable: false);
@@ -717,19 +893,27 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-rejected-source-retained-orphan"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-rejected-source-retained-orphan"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var ownerRows = await ScalarIntAsync(connection,
+        var ownerRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM rebuild_nodes WHERE id = 1 AND extra = 7 AND derived = 8;",
             cancellationToken: CancellationToken.None);
 
-        var childRows = await ScalarIntAsync(connection,
+        var childRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM orphan_children WHERE id = 11 AND owner_id = 999;",
             cancellationToken: CancellationToken.None);
 
@@ -737,7 +921,10 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectDataBlocked, report.Assessments[0].Action);
         Assert.Equal(SafeMigrationAction.NoOp, report.Assessments[1].Action);
-        Assert.Contains("data_blocked", Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains(
+            "data_blocked",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
 
         Assert.Equal(schemaBefore, schemaAfter);
@@ -750,7 +937,9 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ExecutedZeroAffectedRebuildStillValidatesForeignKeys(bool synchronous)
+    public async Task ExecutedZeroAffectedRebuildStillValidatesForeignKeys(
+        bool synchronous
+    )
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
@@ -758,7 +947,9 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         await using var context = new DroppedSourceContext(connection, _internalServices);
         var builder = CreateOperations(context, "drop");
         var baseline = new ZeroAffectedBaseline(context.GetService<ISqliteSafeMigrationsBaselineGenerator>(), context);
-        var commands = CreateGenerator(context, baseline).Generate(builder.Operations, context.Model);
+        var commands = CreateGenerator(context, baseline)
+            .Generate(builder.Operations, context.Model);
+
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
@@ -770,11 +961,13 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
                 cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var ownerRows = await ScalarIntAsync(connection,
+        var ownerRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM rebuild_nodes WHERE id = 1 AND extra = 7 AND derived = 8 AND source = 42;",
             cancellationToken: CancellationToken.None);
 
-        var childRows = await ScalarIntAsync(connection,
+        var childRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM orphan_children WHERE id = 11 AND owner_id = 999;",
             cancellationToken: CancellationToken.None);
 
@@ -785,14 +978,18 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
 
         // Assert
         Assert.True(baseline.CommandsExecuted > 0);
-        Assert.Contains("foreign_key_validation_failed", Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains(
+            "foreign_key_validation_failed",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
 
         Assert.Equal(schemaBefore, schemaAfter);
         Assert.Equal(1, ownerRows);
         Assert.Equal(1, childRows);
         Assert.Equal(1, enforcement);
-        Assert.Null(context.GetService<IRelationalConnection>().CurrentTransaction);
+        Assert.Null(context.GetService<IRelationalConnection>()
+            .CurrentTransaction);
     }
 
     /// <summary>
@@ -811,20 +1008,27 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         builder.DropColumnIfExists("source", "rebuild_nodes");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-explicit-foreign-key-removal"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-explicit-foreign-key-removal"),
+                cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
-        var ownerRows = await ScalarIntAsync(connection,
+        var ownerRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM rebuild_nodes WHERE id = 1 AND extra = 7 AND derived = 8;",
             cancellationToken: CancellationToken.None);
 
-        var childRows = await ScalarIntAsync(connection,
+        var childRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM orphan_children WHERE id = 11 AND owner_id = 999;",
             cancellationToken: CancellationToken.None);
 
-        var foreignKeys = await ScalarIntAsync(connection,
+        var foreignKeys = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM pragma_foreign_key_list('orphan_children');",
             cancellationToken: CancellationToken.None);
 
@@ -848,22 +1052,32 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropTableIfExists("orphan_children");
         builder.DropTableIfExists("rebuild_nodes");
-        builder.CreateTableIfNotExists("rebuild_nodes", table => new
-        {
-            id = table.Column<int>(type: "INTEGER", nullable: false),
-            extra = table.Column<int>(type: "INTEGER", nullable: false),
-            derived = table.Column<int>(type: "INTEGER", nullable: true,
-                computedColumnSql: "extra + 1", stored: false),
-            source = table.Column<int>(type: "INTEGER", nullable: true),
-        }, constraints: table => table.PrimaryKey("pk_rebuild_nodes", value => value.id),
+        builder.CreateTableIfNotExists(
+            "rebuild_nodes",
+            table => new
+            {
+                id = table.Column<int>(type: "INTEGER", nullable: false),
+                extra = table.Column<int>(type: "INTEGER", nullable: false),
+                derived = table.Column<int>(
+                    type: "INTEGER",
+                    nullable: true,
+                    computedColumnSql: "extra + 1",
+                    stored: false),
+                source = table.Column<int>(type: "INTEGER", nullable: true),
+            },
+            constraints: table => table.PrimaryKey("pk_rebuild_nodes", value => value.id),
             mode: SafeMigrationTableMode.ConvergenceContainer);
 
         builder.DropColumnIfExists("source", "rebuild_nodes");
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-recreated-foreign-key-owner"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-recreated-foreign-key-owner"),
+                cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var ownerRows = await ScalarIntAsync(
@@ -871,11 +1085,13 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             "SELECT COUNT(*) FROM rebuild_nodes;",
             cancellationToken: CancellationToken.None);
 
-        var childOwners = await ScalarIntAsync(connection,
+        var childOwners = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM main.sqlite_schema WHERE name = 'orphan_children';",
             cancellationToken: CancellationToken.None);
 
-        var sources = await ScalarIntAsync(connection,
+        var sources = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('rebuild_nodes') WHERE name = 'source';",
             cancellationToken: CancellationToken.None);
 
@@ -901,16 +1117,22 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-unrelated-column-retained-orphan"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-unrelated-column-retained-orphan"),
+                cancellationToken: CancellationToken.None);
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var ownerRows = await ScalarIntAsync(connection,
+        var ownerRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM rebuild_nodes WHERE id = 1 AND extra = 7 AND derived = 8 AND source = 42;",
             cancellationToken: CancellationToken.None);
 
-        var childRows = await ScalarIntAsync(connection,
+        var childRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM orphan_children WHERE id = 11 AND owner_id = 999;",
             cancellationToken: CancellationToken.None);
 
@@ -951,6 +1173,7 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             orphan: true,
             sourceExists: sourceExists,
             cancellationToken: CancellationToken.None);
+
         await using var context = new DroppedSourceContext(connection, _internalServices);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         if (!sourceExists)
@@ -958,7 +1181,14 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             builder.AddColumnIfNotExists<int>("source", "rebuild_nodes", type: "INTEGER", nullable: true);
         }
 
-        builder.DeleteData("orphan_children", "id", "INTEGER", removeOrphan ? 11 : 123);
+        builder.DeleteData(
+            "orphan_children",
+            "id",
+            "INTEGER",
+            removeOrphan
+                ? 11
+                : 123);
+
         if (confirmSource)
         {
             builder.AddColumnIfNotExists<int>("source", "rebuild_nodes", type: "INTEGER", nullable: true);
@@ -968,23 +1198,32 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         var schemaBefore = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-typed-delete-retained-orphan"),
-            cancellationToken: CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("sqlite-typed-delete-retained-orphan"),
+                cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var schemaAfter = await ReadSchemaAsync(connection, cancellationToken: CancellationToken.None);
-        var ownerRows = await ScalarIntAsync(connection,
+        var ownerRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM rebuild_nodes WHERE id = 1 AND extra = 7 AND derived = 8;",
             cancellationToken: CancellationToken.None);
 
-        var childRows = await ScalarIntAsync(connection,
+        var childRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM orphan_children WHERE id = 11 AND owner_id = 999;",
             cancellationToken: CancellationToken.None);
 
-        var sources = await ScalarIntAsync(connection,
+        var sources = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM pragma_table_xinfo('rebuild_nodes') WHERE name = 'source';",
             cancellationToken: CancellationToken.None);
 
@@ -992,10 +1231,20 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         Assert.Equal(SafeMigrationReportStatus.RuntimeValidationRequired, report.Status);
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, report.Assessments[^1].Action);
         Assert.Equal("projected_data_state_unknown", report.Assessments[^1].AnalysisCode);
-        Assert.Equal(sourceExists ? 0 : 1,
-            Assert.IsType<SafeMigrationDeferredOrigin>(report.Assessments[^1].DeferredOrigin).OperationOrdinal);
+        Assert.Equal(
+            sourceExists
+                ? 0
+                : 1,
+            Assert.IsType<SafeMigrationDeferredOrigin>(report.Assessments[^1].DeferredOrigin)
+                .OperationOrdinal);
+
         Assert.Equal(1, ownerRows);
-        Assert.Equal(removeOrphan ? 0 : 1, childRows);
+        Assert.Equal(
+            removeOrphan
+                ? 0
+                : 1,
+            childRows);
+
         if (removeOrphan)
         {
             Assert.Null(exception);
@@ -1003,15 +1252,17 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         }
         else
         {
-            Assert.Contains("foreign_key_validation_failed",
-                Assert.IsType<InvalidOperationException>(exception).Message, StringComparison.Ordinal);
+            Assert.Contains(
+                "foreign_key_validation_failed",
+                Assert.IsType<InvalidOperationException>(exception)
+                    .Message,
+                StringComparison.Ordinal);
 
             Assert.Equal(1, sources);
             if (sourceExists)
             {
                 Assert.Equal(schemaBefore, schemaAfter);
             }
-
         }
     }
 
@@ -1033,18 +1284,26 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             ? "ALTER TABLE rebuild_nodes ADD COLUMN source INTEGER NULL; UPDATE rebuild_nodes SET source = 42; "
             : string.Empty;
 
-        await ExecuteSqlAsync(connection,
-            source + "CREATE TABLE orphan_children (id INTEGER NOT NULL CONSTRAINT pk_orphan_children PRIMARY KEY, "
+        await ExecuteSqlAsync(
+            connection,
+            source
+            + "CREATE TABLE orphan_children (id INTEGER NOT NULL CONSTRAINT pk_orphan_children PRIMARY KEY, "
             + "owner_id INTEGER NULL, CONSTRAINT fk_orphan_owner FOREIGN KEY (owner_id) REFERENCES rebuild_nodes(id)); "
             + "PRAGMA foreign_keys = OFF; INSERT INTO orphan_children VALUES (11, "
-            + (orphan ? "999" : "1") + "); PRAGMA foreign_keys = ON;", cancellationToken: cancellationToken);
+            + (orphan
+                ? "999"
+                : "1")
+            + "); PRAGMA foreign_keys = ON;",
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>Runs the production wrapper with a deliberately adversarial native baseline.</summary>
     private static SqliteSafeMigrationsSqlGenerator CreateGenerator(
         DbContext context,
         ISqliteSafeMigrationsBaselineGenerator baseline
-    ) => new(baseline, context.GetService<ISafeMigrationProviderAnalyzer>(),
+    ) => new(
+        baseline,
+        context.GetService<ISafeMigrationProviderAnalyzer>(),
         context.GetService<SqliteSafeMigrationExecutionState>(),
         context.GetService<MigrationsSqlGeneratorDependencies>());
 
@@ -1053,7 +1312,8 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     private static async Task ExecuteCommandsAsync(
         DbContext context,
         IReadOnlyList<MigrationCommand> commands,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -1065,7 +1325,10 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     }
 
     /// <summary>Uses the same real migration commands at their synchronous transaction boundary.</summary>
-    private static void ExecuteCommands(DbContext context, IReadOnlyList<MigrationCommand> commands)
+    private static void ExecuteCommands(
+        DbContext context,
+        IReadOnlyList<MigrationCommand> commands
+    )
     {
         var connection = context.GetService<IRelationalConnection>();
         foreach (var command in commands)
@@ -1075,11 +1338,20 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     }
 
     /// <summary>Builds only the reviewed source transition, without model-generated migration operations.</summary>
-    private static MigrationBuilder CreateOperations(DbContext context, string operation)
+    private static MigrationBuilder CreateOperations(
+        DbContext context,
+        string operation
+    )
     {
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.AddColumnIfNotExists<int>("source", "rebuild_nodes", type: "INTEGER", nullable: true,
-            defaultValue: operation == "alter" ? 1 : null);
+        builder.AddColumnIfNotExists<int>(
+            "source",
+            "rebuild_nodes",
+            type: "INTEGER",
+            nullable: true,
+            defaultValue: operation == "alter"
+                ? 1
+                : null);
 
         switch (operation)
         {
@@ -1087,12 +1359,22 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
                 builder.DropColumnIfExists("source", "rebuild_nodes");
                 break;
             case "alter":
-                builder.AlterColumnIfDifferent("rebuild_nodes",
-                    new ExpectedColumnDefinition("source", typeof(int), true, storeType: "INTEGER",
+                builder.AlterColumnIfDifferent(
+                    "rebuild_nodes",
+                    new ExpectedColumnDefinition(
+                        "source",
+                        typeof(int),
+                        true,
+                        storeType: "INTEGER",
                         defaultValue: SafeMigrationDefaultValue.Literal(2)),
-                    new ExpectedColumnDefinition("source", typeof(int), true, storeType: "INTEGER",
+                    new ExpectedColumnDefinition(
+                        "source",
+                        typeof(int),
+                        true,
+                        storeType: "INTEGER",
                         defaultValue: SafeMigrationDefaultValue.Literal(1)),
                     SafeMigrationPolicy.RepairIfSafe);
+
                 break;
             default:
                 builder.AddCheckConstraintIfNotExists("ck_source_null", "rebuild_nodes", "source IS NULL");
@@ -1103,7 +1385,10 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     }
 
     /// <summary>Uses distinct context types so EF's cache never mixes the three target models.</summary>
-    private DbContext CreateTargetContext(DbConnection connection, string operation) => operation switch
+    private DbContext CreateTargetContext(
+        DbConnection connection,
+        string operation
+    ) => operation switch
     {
         "drop" => new DroppedSourceContext(connection, _internalServices),
         "alter" => new AlteredSourceContext(connection, _internalServices),
@@ -1115,7 +1400,8 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     private static Task CreateNativeOwnerAsync(
         SqliteConnection connection,
         string artifact,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -1134,17 +1420,23 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             _ => string.Empty,
         };
 
-        return ExecuteSqlAsync(connection,
+        return ExecuteSqlAsync(
+            connection,
             "CREATE TABLE parent_nodes (id INTEGER NOT NULL PRIMARY KEY); INSERT INTO parent_nodes VALUES (7); "
             + "CREATE TABLE rebuild_nodes (id INTEGER NOT NULL CONSTRAINT pk_rebuild_nodes PRIMARY KEY, "
             + "extra INTEGER NOT NULL, derived INTEGER GENERATED ALWAYS AS (extra + 1) VIRTUAL"
-            + suffix + "); INSERT INTO rebuild_nodes (id, extra) VALUES (1, 7); " + after,
+            + suffix
+            + "); INSERT INTO rebuild_nodes (id, extra) VALUES (1, 7); "
+            + after,
             cancellationToken: cancellationToken);
     }
 
     /// <summary>Reads the exact native owner SQL to detect lost constraints or unexpected rebuilds.</summary>
     /// <param name="cancellationToken">The caller's cancellation for this helper operation.</param>
-    private static async Task<string> ReadSchemaAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    private static async Task<string> ReadSchemaAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -1159,20 +1451,26 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     private static Task<int> CountArtifactsAsync(
         SqliteConnection connection,
         string artifact,
-        CancellationToken cancellationToken) =>
-        ScalarIntAsync(connection, artifact switch
-        {
-            "trigger" => "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'trigger' "
-                + "AND name = 'retained_trigger';",
-            "index" => "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'index' AND name = 'retained_index';",
-            "check" => "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'table' AND name = 'rebuild_nodes' "
-                + "AND instr(sql, 'retained_check') > 0;",
-            "foreign_key" => "SELECT COUNT(*) FROM pragma_foreign_key_list('rebuild_nodes');",
-            _ => "SELECT COUNT(*) FROM pragma_table_xinfo('rebuild_nodes') WHERE name = 'retained_payload';",
-        }, cancellationToken: cancellationToken);
+        CancellationToken cancellationToken
+    ) =>
+        ScalarIntAsync(
+            connection,
+            artifact switch
+            {
+                "trigger" => "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'trigger' "
+                    + "AND name = 'retained_trigger';",
+                "index" => "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'index' AND name = 'retained_index';",
+                "check" => "SELECT COUNT(*) FROM main.sqlite_schema WHERE type = 'table' AND name = 'rebuild_nodes' "
+                    + "AND instr(sql, 'retained_check') > 0;",
+                "foreign_key" => "SELECT COUNT(*) FROM pragma_foreign_key_list('rebuild_nodes');",
+                _ => "SELECT COUNT(*) FROM pragma_table_xinfo('rebuild_nodes') WHERE name = 'retained_payload';",
+            },
+            cancellationToken: cancellationToken);
 
     /// <summary>Names the exact independent rebuild guard expected for each native artifact.</summary>
-    private static string ArtifactCode(string artifact) => artifact switch
+    private static string ArtifactCode(
+        string artifact
+    ) => artifact switch
     {
         "trigger" => "table_rebuild_trigger",
         "index" => "table_rebuild_unmanaged_index",
@@ -1182,7 +1480,10 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     };
 
     /// <summary>Shares a fixed model family without turning model wishes into native ownership.</summary>
-    private abstract class RebuildContext(DbConnection connection, IServiceProvider services) : DbContext
+    private abstract class RebuildContext(
+        DbConnection connection,
+        IServiceProvider services
+    ) : DbContext
     {
         /// <summary>Gets the actual target owner's physical name after any explicit rename.</summary>
         protected virtual string TableName => "rebuild_nodes";
@@ -1197,7 +1498,9 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         protected virtual int? SourceDefault => null;
 
         /// <inheritdoc />
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        protected override void OnConfiguring(
+            DbContextOptionsBuilder optionsBuilder
+        )
         {
             optionsBuilder.UseSqlite(connection);
             optionsBuilder.UseSqliteSafeMigrations();
@@ -1205,27 +1508,46 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
         }
 
         /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        )
         {
             modelBuilder.Entity<Row>(entity =>
             {
-                entity.ToTable(TableName, table =>
-                {
-                    if (IncludeCheck)
+                entity.ToTable(
+                    TableName,
+                    table =>
                     {
-                        table.HasCheckConstraint("ck_source_null", "source IS NULL");
-                    }
-                });
+                        if (IncludeCheck)
+                        {
+                            table.HasCheckConstraint("ck_source_null", "source IS NULL");
+                        }
+                    });
 
-                entity.HasKey(value => value.Id).HasName("pk_rebuild_nodes");
-                entity.Property(value => value.Id).HasColumnName("id").ValueGeneratedNever();
-                entity.Property(value => value.Extra).HasColumnName("extra");
-                entity.Property(value => value.Derived).HasColumnName("derived")
+                entity
+                    .HasKey(value => value.Id)
+                    .HasName("pk_rebuild_nodes");
+
+                entity
+                    .Property(value => value.Id)
+                    .HasColumnName("id")
+                    .ValueGeneratedNever();
+
+                entity
+                    .Property(value => value.Extra)
+                    .HasColumnName("extra");
+
+                entity
+                    .Property(value => value.Derived)
+                    .HasColumnName("derived")
                     .HasComputedColumnSql("extra + 1", stored: false);
 
                 if (IncludeSource)
                 {
-                    var source = entity.Property(value => value.Source).HasColumnName("source");
+                    var source = entity
+                        .Property(value => value.Source)
+                        .HasColumnName("source");
+
                     if (SourceDefault is { } value)
                     {
                         source.HasDefaultValue(value);
@@ -1251,11 +1573,17 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     }
 
     /// <summary>Models the actual target after the temporary source is removed.</summary>
-    private sealed class DroppedSourceContext(DbConnection connection, IServiceProvider services)
+    private sealed class DroppedSourceContext(
+        DbConnection connection,
+        IServiceProvider services
+    )
         : RebuildContext(connection, services);
 
     /// <summary>Models the same physical owner after its explicitly authored rename.</summary>
-    private sealed class RenamedOwnerContext(DbConnection connection, IServiceProvider services)
+    private sealed class RenamedOwnerContext(
+        DbConnection connection,
+        IServiceProvider services
+    )
         : RebuildContext(connection, services)
     {
         /// <inheritdoc />
@@ -1263,19 +1591,33 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     }
 
     /// <summary>Owns the explicitly rebuilt child after its authored relationship removal.</summary>
-    private sealed class RemovedForeignKeyContext(DbConnection connection, IServiceProvider services)
+    private sealed class RemovedForeignKeyContext(
+        DbConnection connection,
+        IServiceProvider services
+    )
         : RebuildContext(connection, services)
     {
         /// <inheritdoc />
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        protected override void OnModelCreating(
+            ModelBuilder modelBuilder
+        )
         {
             base.OnModelCreating(modelBuilder);
             modelBuilder.Entity<RemovedForeignKeyRow>(entity =>
             {
                 entity.ToTable("orphan_children");
-                entity.HasKey(value => value.Id).HasName("pk_orphan_children");
-                entity.Property(value => value.Id).HasColumnName("id").ValueGeneratedNever();
-                entity.Property(value => value.OwnerId).HasColumnName("owner_id");
+                entity
+                    .HasKey(value => value.Id)
+                    .HasName("pk_orphan_children");
+
+                entity
+                    .Property(value => value.Id)
+                    .HasColumnName("id")
+                    .ValueGeneratedNever();
+
+                entity
+                    .Property(value => value.OwnerId)
+                    .HasColumnName("owner_id");
             });
         }
 
@@ -1288,7 +1630,10 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     }
 
     /// <summary>Models the actual default-only ALTER target.</summary>
-    private sealed class AlteredSourceContext(DbConnection connection, IServiceProvider services)
+    private sealed class AlteredSourceContext(
+        DbConnection connection,
+        IServiceProvider services
+    )
         : RebuildContext(connection, services)
     {
         /// <inheritdoc />
@@ -1299,7 +1644,10 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     }
 
     /// <summary>Models a requested CHECK without claiming its data prerequisites are proven.</summary>
-    private sealed class CheckedSourceContext(DbConnection connection, IServiceProvider services)
+    private sealed class CheckedSourceContext(
+        DbConnection connection,
+        IServiceProvider services
+    )
         : RebuildContext(connection, services)
     {
         /// <inheritdoc />
@@ -1312,7 +1660,10 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
     /// <summary>
     /// Injects one native integrity violation after real baseline DDL for a non-vacuous safety probe.
     /// </summary>
-    private sealed class MutatingForeignKeyBaseline(ISqliteSafeMigrationsBaselineGenerator inner, string sql)
+    private sealed class MutatingForeignKeyBaseline(
+        ISqliteSafeMigrationsBaselineGenerator inner,
+        string sql
+    )
         : ISqliteSafeMigrationsBaselineGenerator
     {
         /// <summary>Gets whether baseline generation emitted the adversarial native commands.</summary>
@@ -1330,12 +1681,17 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             var mutation = inner.Generate([new SqlOperation { Sql = sql }], model, options);
             MutationGenerated = true;
 
-            return commands.Concat(mutation).ToArray();
+            return commands
+                .Concat(mutation)
+                .ToArray();
         }
     }
 
     /// <summary>Executes actual native baselines while deliberately reporting zero affected rows.</summary>
-    private sealed class ZeroAffectedBaseline(ISqliteSafeMigrationsBaselineGenerator inner, DbContext context)
+    private sealed class ZeroAffectedBaseline(
+        ISqliteSafeMigrationsBaselineGenerator inner,
+        DbContext context
+    )
         : ISqliteSafeMigrationsBaselineGenerator
     {
         /// <summary>Gets how many real baseline commands executed before the relationship guard.</summary>
@@ -1347,15 +1703,27 @@ public sealed class SqliteProjectedRebuildOwnershipTests : SqliteIntegrationTest
             IModel? model = null,
             MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default,
             IReadOnlyList<MigrationOperation>? guardedOperations = null
-        ) => inner.Generate(operations, model, options, guardedOperations)
+        ) => inner
+            .Generate(operations, model, options, guardedOperations)
             .Select(command => new ZeroAffectedCommand(command, context, this))
             .ToArray();
 
         /// <summary>Separates actual native execution from the provider's affected-row result.</summary>
-        private sealed class ZeroAffectedCommand(MigrationCommand inner, DbContext context, ZeroAffectedBaseline owner)
-            : MigrationCommand(context.GetService<MigrationsSqlGeneratorDependencies>().CommandBuilderFactory
-                    .Create().Build(),
-                context, context.GetService<MigrationsSqlGeneratorDependencies>().Logger, inner.TransactionSuppressed)
+        private sealed class ZeroAffectedCommand(
+            MigrationCommand inner,
+            DbContext context,
+            ZeroAffectedBaseline owner
+        )
+            : MigrationCommand(
+                context
+                    .GetService<MigrationsSqlGeneratorDependencies>()
+                    .CommandBuilderFactory
+                    .Create()
+                    .Build(),
+                context,
+                context.GetService<MigrationsSqlGeneratorDependencies>()
+                    .Logger,
+                inner.TransactionSuppressed)
         {
             /// <inheritdoc />
             public override string CommandText => inner.CommandText;

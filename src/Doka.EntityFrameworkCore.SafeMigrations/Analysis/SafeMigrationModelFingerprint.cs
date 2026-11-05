@@ -113,9 +113,7 @@ public sealed class SafeMigrationModelMismatchException : InvalidOperationExcept
     public SafeMigrationModelMismatchException(
         string expectedFingerprint,
         string actualFingerprint
-    ) : this(expectedFingerprint, actualFingerprint, contextType: null)
-    {
-    }
+    ) : this(expectedFingerprint, actualFingerprint, contextType: null) { }
 
     /// <summary>Initializes the unchanged mismatch contract with a known, bounded runtime context label.</summary>
     /// <param name="expectedFingerprint">The canonical migration model fingerprint.</param>
@@ -148,10 +146,11 @@ public sealed class SafeMigrationModelMismatchException : InvalidOperationExcept
         var context = contextType is null
             ? "The runtime DbContext model"
             : "The runtime DbContext '"
-                + SafeMigrationDiagnosticMessages.BoundForDisplay(contextType.FullName ?? contextType.Name)
-                + "' model";
+            + SafeMigrationDiagnosticMessages.BoundForDisplay(contextType.FullName ?? contextType.Name)
+            + "' model";
 
-        return context + " does not match the canonical migration model fingerprint. "
+        return context
+            + " does not match the canonical migration model fingerprint. "
             + "This is a model-contract mismatch, not a live database comparison. Compare the runtime and migration "
             + "model configuration, provider, and canonical context before applying migrations; use the "
             + "ExpectedFingerprint and ActualFingerprint properties for exact contract evidence.";

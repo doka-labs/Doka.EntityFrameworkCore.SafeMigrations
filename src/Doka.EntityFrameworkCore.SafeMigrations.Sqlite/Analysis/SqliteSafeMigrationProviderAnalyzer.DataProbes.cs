@@ -64,7 +64,9 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
             .Keys
             .Select(key => key.Column is not null
                 ? Delimit(key.Column)
-                + (key.Collation is null ? string.Empty : " COLLATE " + Delimit(key.Collation.Name))
+                + (key.Collation is null
+                    ? string.Empty
+                    : " COLLATE " + Delimit(key.Collation.Name))
                 : key.StructuredExpression is not null
                     ? _expressionRenderer.Render(key.StructuredExpression)
                     : key.Expression
@@ -74,6 +76,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
         var predicates = expressions
             .Select(expression => $"({expression}) IS NOT NULL")
             .ToList();
+
         var filter = definition.StructuredFilter is not null
             ? _expressionRenderer.Render(definition.StructuredFilter)
             : definition.Filter;
@@ -178,6 +181,7 @@ internal sealed partial class SqliteSafeMigrationProviderAnalyzer
     )
     {
         var join = new string[columns.Count];
+
         // WHY: Keep dependent-column null tests aligned with the declared FK key positions.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery

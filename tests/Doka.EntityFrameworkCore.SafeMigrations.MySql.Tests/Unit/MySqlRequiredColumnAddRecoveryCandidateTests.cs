@@ -8,12 +8,15 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
     [Theory]
     [InlineData(null)]
     [InlineData("selected")]
-    public void ExactGuardSelectsOriginalOperation(string? schema)
+    public void ExactGuardSelectsOriginalOperation(
+        string? schema
+    )
     {
         // Arrange
         var operation = Operation(schema: schema);
         var guard = MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(
             (EnsureColumnIntent)operation.Intent);
+
         MigrationOperation[] operations = [operation];
         SafeMigrationUnexpectedObject[] findings =
         [
@@ -23,7 +26,9 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
 
         // Act
         var candidates = MySqlSafeMigrationProviderAnalyzer.FindRequiredColumnAddRecoveryCandidates(
-            operations, findings, "selected");
+            operations,
+            findings,
+            "selected");
 
         // Assert
         var candidate = Assert.Single(candidates);
@@ -36,21 +41,29 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void LookalikeGuardDoesNotAcquireCandidate(bool uppercase)
+    public void LookalikeGuardDoesNotAcquireCandidate(
+        bool uppercase
+    )
     {
         // Arrange
         var operation = Operation();
         var guard = MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(
             (EnsureColumnIntent)operation.Intent);
+
         MigrationOperation[] operations = [operation];
         SafeMigrationUnexpectedObject[] findings =
         [
-            Check(uppercase ? guard.ToUpperInvariant() : "doka_sm_add1_nn_not_owned"),
+            Check(
+                uppercase
+                    ? guard.ToUpperInvariant()
+                    : "doka_sm_add1_nn_not_owned"),
         ];
 
         // Act
         var candidates = MySqlSafeMigrationProviderAnalyzer.FindRequiredColumnAddRecoveryCandidates(
-            operations, findings, "selected");
+            operations,
+            findings,
+            "selected");
 
         // Assert
         Assert.Empty(candidates);
@@ -73,6 +86,7 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
         var operation = Operation();
         var guard = MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(
             (EnsureColumnIntent)operation.Intent);
+
         MigrationOperation[] operations = [operation];
         SafeMigrationUnexpectedObject[] findings =
         [
@@ -81,7 +95,9 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
 
         // Act
         var candidates = MySqlSafeMigrationProviderAnalyzer.FindRequiredColumnAddRecoveryCandidates(
-            operations, findings, "selected");
+            operations,
+            findings,
+            "selected");
 
         // Assert
         Assert.Empty(candidates);
@@ -95,12 +111,15 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
         var operation = Operation(schema: "foreign_database");
         var guard = MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(
             (EnsureColumnIntent)operation.Intent);
+
         MigrationOperation[] operations = [operation];
         SafeMigrationUnexpectedObject[] findings = [Check(guard, schema: "foreign_database")];
 
         // Act
         var candidates = MySqlSafeMigrationProviderAnalyzer.FindRequiredColumnAddRecoveryCandidates(
-            operations, findings, "selected");
+            operations,
+            findings,
+            "selected");
 
         // Assert
         Assert.Empty(candidates);
@@ -113,18 +132,24 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
     [InlineData("id", false)]
     [InlineData("ID", false)]
     [InlineData("id", true)]
-    public void RepeatedPhysicalColumnDoesNotAcquireCandidate(string column, bool nullable)
+    public void RepeatedPhysicalColumnDoesNotAcquireCandidate(
+        string column,
+        bool nullable
+    )
     {
         // Arrange
         var operation = Operation();
         var guard = MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(
             (EnsureColumnIntent)operation.Intent);
+
         MigrationOperation[] operations = [operation, Operation(column, nullable), operation];
         SafeMigrationUnexpectedObject[] findings = [Check(guard)];
 
         // Act
         var candidates = MySqlSafeMigrationProviderAnalyzer.FindRequiredColumnAddRecoveryCandidates(
-            operations, findings, "selected");
+            operations,
+            findings,
+            "selected");
 
         // Assert
         Assert.Empty(candidates);
@@ -138,12 +163,15 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
         var operation = Operation();
         var guard = MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(
             (EnsureColumnIntent)operation.Intent);
+
         MigrationOperation[] operations = [operation, Operation(schema: "selected")];
         SafeMigrationUnexpectedObject[] findings = [Check(guard)];
 
         // Act
         var candidates = MySqlSafeMigrationProviderAnalyzer.FindRequiredColumnAddRecoveryCandidates(
-            operations, findings, "selected");
+            operations,
+            findings,
+            "selected");
 
         // Assert
         Assert.Empty(candidates);
@@ -158,12 +186,15 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
         operation["Unknown:Ownership"] = true;
         var guard = MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(
             (EnsureColumnIntent)operation.Intent);
+
         MigrationOperation[] operations = [operation];
         SafeMigrationUnexpectedObject[] findings = [Check(guard)];
 
         // Act
         var candidates = MySqlSafeMigrationProviderAnalyzer.FindRequiredColumnAddRecoveryCandidates(
-            operations, findings, "selected");
+            operations,
+            findings,
+            "selected");
 
         // Assert
         Assert.Empty(candidates);
@@ -177,12 +208,15 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
         var operation = Operation();
         var guard = MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(
             (EnsureColumnIntent)operation.Intent);
+
         MigrationOperation[] operations = [operation];
         SafeMigrationUnexpectedObject[] findings = [Check(guard), Check(guard, schema: "selected")];
 
         // Act
         var candidates = MySqlSafeMigrationProviderAnalyzer.FindRequiredColumnAddRecoveryCandidates(
-            operations, findings, "selected");
+            operations,
+            findings,
+            "selected");
 
         // Assert
         Assert.Empty(candidates);
@@ -196,6 +230,7 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
         var operation = Operation(table: "MixedItems");
         var guard = MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(
             (EnsureColumnIntent)operation.Intent);
+
         MigrationOperation[] operations = [operation];
         SafeMigrationUnexpectedObject[] findings = [Check(guard, table: "mixeditems")];
         Dictionary<string, string?> nativeOwners = new(StringComparer.Ordinal)
@@ -205,7 +240,10 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
 
         // Act
         var candidates = MySqlSafeMigrationProviderAnalyzer.FindRequiredColumnAddRecoveryCandidates(
-            operations, findings, "selected", nativeOwners);
+            operations,
+            findings,
+            "selected",
+            nativeOwners);
 
         // Assert
         var candidate = Assert.Single(candidates);
@@ -219,12 +257,15 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void NativePhysicalTableAliasDoesNotAcquireCandidate(bool nullable)
+    public void NativePhysicalTableAliasDoesNotAcquireCandidate(
+        bool nullable
+    )
     {
         // Arrange
         var operation = Operation(table: "MixedItems");
         var guard = MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(
             (EnsureColumnIntent)operation.Intent);
+
         MigrationOperation[] operations = [operation, Operation(nullable: nullable, table: "MIXEDITEMS")];
         SafeMigrationUnexpectedObject[] findings = [Check(guard, table: "mixeditems")];
         Dictionary<string, string?> nativeOwners = new(StringComparer.Ordinal)
@@ -235,7 +276,10 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
 
         // Act
         var candidates = MySqlSafeMigrationProviderAnalyzer.FindRequiredColumnAddRecoveryCandidates(
-            operations, findings, "selected", nativeOwners);
+            operations,
+            findings,
+            "selected",
+            nativeOwners);
 
         // Assert
         Assert.Empty(candidates);
@@ -249,6 +293,7 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
         var operation = Operation();
         var guard = MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(
             (EnsureColumnIntent)operation.Intent);
+
         MigrationOperation[] operations = [operation];
         SafeMigrationUnexpectedObject[] findings = [Check(guard)];
         Dictionary<string, string?> nativeOwners = new(StringComparer.Ordinal)
@@ -258,7 +303,10 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
 
         // Act
         var candidates = MySqlSafeMigrationProviderAnalyzer.FindRequiredColumnAddRecoveryCandidates(
-            operations, findings, "selected", nativeOwners);
+            operations,
+            findings,
+            "selected",
+            nativeOwners);
 
         // Assert
         Assert.Empty(candidates);
@@ -272,6 +320,7 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
         var operation = Operation(table: "MixedItems");
         var guard = MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(
             (EnsureColumnIntent)operation.Intent);
+
         MigrationOperation[] operations = [operation, Operation(table: "MIXEDITEMS")];
         SafeMigrationUnexpectedObject[] findings = [Check(guard, table: "MixedItems")];
         Dictionary<string, string?> nativeOwners = new(StringComparer.Ordinal)
@@ -282,10 +331,15 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
 
         // Act
         var candidates = MySqlSafeMigrationProviderAnalyzer.FindRequiredColumnAddRecoveryCandidates(
-            operations, findings, "selected", nativeOwners);
+            operations,
+            findings,
+            "selected",
+            nativeOwners);
 
         // Assert
-        Assert.Same(operation, Assert.Single(candidates).Operation);
+        Assert.Same(operation,
+            Assert.Single(candidates)
+                .Operation);
     }
 
     /// <summary>No exact guard-name potential means the native owner phase has no query candidates.</summary>
@@ -298,7 +352,9 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
 
         // Act
         var candidates = MySqlSafeMigrationProviderAnalyzer.FindRequiredColumnAddRecoveryOwnerCandidates(
-            operations, findings, "selected");
+            operations,
+            findings,
+            "selected");
 
         // Assert
         Assert.Empty(candidates.Authored);
@@ -313,6 +369,7 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
         var operation = Operation(table: "MixedItems");
         var guard = MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(
             (EnsureColumnIntent)operation.Intent);
+
         MigrationOperation[] operations =
         [
             operation,
@@ -325,7 +382,9 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
 
         // Act
         var candidates = MySqlSafeMigrationProviderAnalyzer.FindRequiredColumnAddRecoveryOwnerCandidates(
-            operations, findings, "selected");
+            operations,
+            findings,
+            "selected");
 
         // Assert
         Assert.Equal(2, candidates.Authored.Length);
@@ -339,15 +398,21 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
     public void OrdinaryCheckInventoryRequiresNoNativeOwnerWork()
     {
         // Arrange
-        var operations = Enumerable.Range(0, 1024)
-            .Select(index => Operation(table: "items" + index.ToString(CultureInfo.InvariantCulture))).ToArray();
+        var operations = Enumerable
+            .Range(0, 1024)
+            .Select(index => Operation(table: "items" + index.ToString(CultureInfo.InvariantCulture)))
+            .ToArray();
 
-        var findings = Enumerable.Range(0, 1024)
-            .Select(index => Check("user_check_" + index.ToString(CultureInfo.InvariantCulture))).ToArray();
+        var findings = Enumerable
+            .Range(0, 1024)
+            .Select(index => Check("user_check_" + index.ToString(CultureInfo.InvariantCulture)))
+            .ToArray();
 
         // Act
         var candidates = MySqlSafeMigrationProviderAnalyzer.FindRequiredColumnAddRecoveryOwnerCandidates(
-            operations, findings, "selected");
+            operations,
+            findings,
+            "selected");
 
         // Assert
         Assert.Empty(candidates.Authored);
@@ -365,7 +430,9 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
 
         // Act
         var candidates = MySqlSafeMigrationProviderAnalyzer.FindRequiredColumnAddRecoveryOwnerCandidates(
-            operations, findings, "selected");
+            operations,
+            findings,
+            "selected");
 
         // Assert
         Assert.True(MySqlSafeMigrationCatalogSqlBuilder.IsRequiredColumnAddGuardNameCandidate(name));
@@ -378,20 +445,27 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
     public void LargeOwnerCandidateInventoryRetainsIndependentLookupSlots()
     {
         // Arrange
-        var operations = Enumerable.Range(0, 1024)
-            .Select(index => Operation(table: "items" + index.ToString(CultureInfo.InvariantCulture))).ToArray();
+        var operations = Enumerable
+            .Range(0, 1024)
+            .Select(index => Operation(table: "items" + index.ToString(CultureInfo.InvariantCulture)))
+            .ToArray();
 
-        var findings = operations.Select(operation =>
-        {
-            var intent = (EnsureColumnIntent)operation.Intent;
+        var findings = operations
+            .Select(operation =>
+            {
+                var intent = (EnsureColumnIntent)operation.Intent;
 
-            return Check(MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(intent),
-                table: intent.Table);
-        }).ToArray();
+                return Check(
+                    MySqlSafeMigrationCatalogSqlBuilder.GetRequiredColumnAddGuardName(intent),
+                    table: intent.Table);
+            })
+            .ToArray();
 
         // Act
         var candidates = MySqlSafeMigrationProviderAnalyzer.FindRequiredColumnAddRecoveryOwnerCandidates(
-            operations, findings, "selected");
+            operations,
+            findings,
+            "selected");
 
         // Assert
         Assert.Equal(1024, candidates.Authored.Length);
@@ -405,8 +479,10 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
     public void NativeOwnerQueryUsesIndexedCatalogAndExactNativeFilter()
     {
         // Arrange
-        var owners = string.Join(SafeMigrationCatalogQueryLimits.Separator,
-            Enumerable.Range(0, SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+        var owners = string.Join(
+            SafeMigrationCatalogQueryLimits.Separator,
+            Enumerable
+                .Range(0, SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
                 .Select(index => $"SELECT {index.ToString(CultureInfo.InvariantCulture)} AS ordinal, "
                     + $"@owner{index.ToString(CultureInfo.InvariantCulture)} AS owner"));
 
@@ -414,17 +490,25 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
         var query = MySqlSafeMigrationProviderAnalyzer.BuildRequiredColumnAddRecoveryOwnerQuery(owners);
 
         // Assert
-        Assert.Equal(2, query.Split("INFORMATION_SCHEMA.TABLES", StringSplitOptions.None).Length);
+        Assert.Equal(2,
+            query.Split("INFORMATION_SCHEMA.TABLES")
+                .Length);
+
         Assert.Contains("physical_owner.TABLE_SCHEMA = DATABASE()", query, StringComparison.Ordinal);
         Assert.Contains("physical_owner.TABLE_TYPE = 'BASE TABLE'", query, StringComparison.Ordinal);
         Assert.Contains("physical_owner.TABLE_NAME = source_owner.owner", query, StringComparison.Ordinal);
         Assert.Contains("@@lower_case_table_names = 0", query, StringComparison.Ordinal);
         Assert.Contains("@@lower_case_table_names IN (1, 2)", query, StringComparison.Ordinal);
-        Assert.Contains("CAST(physical_owner.TABLE_NAME AS BINARY) = CAST(source_owner.owner AS BINARY)", query,
-            StringComparison.Ordinal);
         Assert.Contains(
-            "CAST(LOWER(physical_owner.TABLE_NAME) AS BINARY) = CAST(LOWER(source_owner.owner) AS BINARY)", query,
+            "CAST(physical_owner.TABLE_NAME AS BINARY) = CAST(source_owner.owner AS BINARY)",
+            query,
             StringComparison.Ordinal);
+
+        Assert.Contains(
+            "CAST(LOWER(physical_owner.TABLE_NAME) AS BINARY) = CAST(LOWER(source_owner.owner) AS BINARY)",
+            query,
+            StringComparison.Ordinal);
+
         Assert.Contains("COUNT(physical_owner.TABLE_NAME) = 1", query, StringComparison.Ordinal);
         Assert.Contains("THEN MIN(physical_owner.TABLE_NAME) ELSE NULL", query, StringComparison.Ordinal);
         Assert.Contains("ELSE NULL END, COUNT(physical_owner.TABLE_NAME) FROM", query, StringComparison.Ordinal);
@@ -443,14 +527,22 @@ public sealed class MySqlRequiredColumnAddRecoveryCandidateTests
         bool nullable = false,
         string? schema = null,
         string table = "items"
-    ) => new(new EnsureColumnIntent(table, new ExpectedColumnDefinition(column, typeof(int), nullable, "int"),
-            schema), SafeMigrationPolicy.ThrowIfDifferent);
+    ) => new(
+        new EnsureColumnIntent(
+            table,
+            new ExpectedColumnDefinition(column, typeof(int), nullable, "int"),
+            schema),
+        SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Creates one reported CHECK identity without claiming anything about its live expression.</summary>
     /// <param name="name">The exact reported constraint identifier.</param>
     /// <param name="schema">The optional physical database qualification.</param>
     /// <param name="table">The exact physical owner returned by the live inventory.</param>
     /// <returns>The reported staging-check candidate requiring a separate live proof.</returns>
-    private static SafeMigrationUnexpectedObject Check(string name, string? schema = null, string table = "items") =>
+    private static SafeMigrationUnexpectedObject Check(
+        string name,
+        string? schema = null,
+        string table = "items"
+    ) =>
         new(SafeMigrationDatabaseObjectKind.CheckConstraint, schema, table, name, "unexpected_check_constraint");
 }

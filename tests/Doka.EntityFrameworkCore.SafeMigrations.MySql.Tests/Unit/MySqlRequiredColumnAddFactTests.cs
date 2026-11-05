@@ -14,7 +14,10 @@ public sealed class MySqlRequiredColumnAddFactTests
     [InlineData("unavailable", "'unavailable'")]
     [InlineData("set_null", "'set_null'")]
     [InlineData("ordinary", "'ordinary'")]
-    public void KnownStatusBindsFixedLiteral(string status, string expected)
+    public void KnownStatusBindsFixedLiteral(
+        string status,
+        string expected
+    )
     {
         // Arrange
         var catalogValue = new string(status.AsSpan());
@@ -37,14 +40,16 @@ public sealed class MySqlRequiredColumnAddFactTests
     [InlineData("staged ")]
     [InlineData("unknown")]
     [InlineData("'complete' OR TRUE")]
-    public void InvalidStatusIsRejected(string? status)
+    public void InvalidStatusIsRejected(
+        string? status
+    )
     {
         // Arrange
         var catalogValue = status;
 
         // Act
-        var exception = Record.Exception(
-            () => MySqlSafeMigrationProviderAnalyzer.RequiredColumnAddStatusBinding(catalogValue));
+        var exception = Record.Exception(() =>
+            MySqlSafeMigrationProviderAnalyzer.RequiredColumnAddStatusBinding(catalogValue));
 
         // Assert
         var invalid = Assert.IsType<InvalidOperationException>(exception);

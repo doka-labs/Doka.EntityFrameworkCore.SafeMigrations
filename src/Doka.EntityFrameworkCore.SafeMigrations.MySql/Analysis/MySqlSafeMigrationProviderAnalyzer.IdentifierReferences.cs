@@ -1,3 +1,5 @@
+using System.Data;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql;
 
 internal sealed partial class MySqlSafeMigrationProviderAnalyzer
@@ -14,6 +16,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
     )
     {
         Dictionary<string, (MySqlSafeMigrationIdentifierReferenceProof Proof, int OperationOrdinal)>? unique = null;
+
         // WHY: Keep window-local plans and result slots aligned with their original operation ordinals.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -50,7 +53,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             var selections = new List<string>();
             var payloadBytes = 0;
             while (offset < pending.Length
-                   && selected.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+                && selected.Count < SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
             {
                 var proof = pending[offset].Proof;
 
@@ -106,7 +109,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             {
                 await using var reader = await command.ExecuteReaderAsync(cancellationToken);
                 while (reader.FieldCount == 0
-                       && await reader.NextResultAsync(cancellationToken)) { }
+                    && await reader.NextResultAsync(cancellationToken)) { }
 
                 if (reader.FieldCount != 2)
                 {
@@ -154,7 +157,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
                 // invocation scope. An independently token cleanup cannot
                 // overwrite caller statements or let cancellation cache TRUE.
                 if (!completed
-                    && connection.State == System.Data.ConnectionState.Open)
+                    && connection.State == ConnectionState.Open)
                 {
                     try
                     {
@@ -190,6 +193,7 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
 
             var bound = new MySqlSafeMigrationIdentifierReferenceProof[plan.IdentifierReferenceProofs.Count];
             var valid = true;
+
             // WHY: Keep window-local plans and result slots aligned with their original operation ordinals.
             // ReSharper disable once ForCanBeConvertedToForeach
             // ReSharper disable once LoopCanBeConvertedToQuery
@@ -197,7 +201,13 @@ internal sealed partial class MySqlSafeMigrationProviderAnalyzer
             {
                 var proof = plan.IdentifierReferenceProofs[index];
                 var proven = facts[proof.RootIdentifier];
-                bound[index] = proof with { Binding = proven ? "TRUE" : "FALSE" };
+                bound[index] = proof with
+                {
+                    Binding = proven
+                        ? "TRUE"
+                        : "FALSE",
+                };
+
                 valid &= proven;
             }
 

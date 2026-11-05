@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>Verifies collectible diagnostic payloads without concurrent process-wide collection.</summary>
+
 // WHY: The payload-lifetime probe forces full process collections that can disturb other allocation contracts.
 [Collection(ProcessWideTestGroup.Name)]
 public sealed class SafeMigrationRuntimeDiagnosticContextGarbageCollectionTests
@@ -28,13 +29,21 @@ public sealed class SafeMigrationRuntimeDiagnosticContextGarbageCollectionTests
 
     // WHY: Isolate the original operation and payload in a non-inlined frame so a conservative
     // JIT stack lifetime cannot masquerade as diagnostic metadata retaining a seed value.
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private static (SafeMigrationRuntimeDiagnosticContext Context, WeakReference<string> Payload)
         CaptureWithPayloadReference()
     {
         var payload = new string('s', 4096);
-        var operation = new SafeMigrationOperation(new EnsureModelManagedDataIntent("Items", ["Id"], ["int"],
-            ["Id", "Value"], ["int", "text"], new object?[,] { { 1, payload } }, null, null),
+        var operation = new SafeMigrationOperation(
+            new EnsureModelManagedDataIntent(
+                "Items",
+                ["Id"],
+                ["int"],
+                ["Id", "Value"],
+                ["int", "text"],
+                new object?[,] { { 1, payload } },
+                null,
+                null),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         return (SafeMigrationRuntimeDiagnosticContext.Create(operation), new WeakReference<string>(payload));

@@ -7,13 +7,20 @@ internal static class PostgreSqlSafeMigrationSchemaIdentity
     /// <param name="schema">The authored optional qualifier.</param>
     /// <param name="currentSchema">The schema read from the active connection, or null without proof.</param>
     /// <returns>The canonical current-schema alias, retaining every other quoted schema identity.</returns>
-    public static string? Normalize(string? schema, string? currentSchema)
-        => schema is not null && StringComparer.Ordinal.Equals(schema, currentSchema) ? null : schema;
+    public static string? Normalize(
+        string? schema,
+        string? currentSchema
+    )
+        => schema is not null && StringComparer.Ordinal.Equals(schema, currentSchema)
+            ? null
+            : schema;
 
     /// <summary>Obtains the owner whose native relation lookup must match catalog classification.</summary>
     /// <param name="intent">The immutable provider-neutral intent.</param>
     /// <returns>The relation owner, or an empty owner for schema-only operations.</returns>
-    public static (string? Table, string? Schema) GetOwner(SafeMigrationIntent intent) => intent switch
+    public static (string? Table, string? Schema) GetOwner(
+        SafeMigrationIntent intent
+    ) => intent switch
     {
         EnsureTableIntent value => (value.Definition.Table, value.Definition.Schema),
         DropTableIntent value => (value.Table, value.Schema),
@@ -35,14 +42,19 @@ internal static class PostgreSqlSafeMigrationSchemaIdentity
         DropForeignKeyIntent value => (value.Table, value.Schema),
         ModelManagedDataIntent value => (value.Table, value.Schema),
         EnsureSchemaIntent or DropSchemaIntent => default,
-        _ => throw new ArgumentOutOfRangeException(nameof(intent), intent.GetType().FullName,
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(intent),
+            intent.GetType()
+                .FullName,
             "Unknown PostgreSQL SafeMigrations relation binding."),
     };
 
     /// <summary>Reads authored ordinary-operation qualifiers without interpreting opaque SQL text.</summary>
     /// <param name="operation">The original typed EF operation in the complete analysis stream.</param>
     /// <returns>The named table or schema-scoped index resource, otherwise an empty owner.</returns>
-    public static (string? Table, string? Schema) GetProviderOwner(MigrationOperation operation) => operation switch
+    public static (string? Table, string? Schema) GetProviderOwner(
+        MigrationOperation operation
+    ) => operation switch
     {
         ColumnOperation value => (value.Table, value.Schema),
         DropColumnOperation value => (value.Table, value.Schema),
@@ -71,7 +83,9 @@ internal static class PostgreSqlSafeMigrationSchemaIdentity
     /// <summary>Recognizes command-local path fences without allocating a native binding set.</summary>
     /// <param name="intent">The authored safe operation and its native dependencies.</param>
     /// <returns>Whether any native owner or principal requires the command-local identity fence.</returns>
-    public static bool HasUnqualifiedNativeBindings(SafeMigrationIntent intent)
+    public static bool HasUnqualifiedNativeBindings(
+        SafeMigrationIntent intent
+    )
     {
         var owner = GetOwner(intent);
         if (owner is { Table: not null, Schema: null })
@@ -117,7 +131,10 @@ internal static class PostgreSqlSafeMigrationSchemaIdentity
     /// <summary>Captures every unqualified native relation used by an operation without folding identifiers.</summary>
     /// <param name="intent">The immutable operation being classified.</param>
     /// <param name="tables">The invocation-owned deduplicating destination.</param>
-    public static void CollectUnqualifiedTables(SafeMigrationIntent intent, HashSet<string> tables)
+    public static void CollectUnqualifiedTables(
+        SafeMigrationIntent intent,
+        HashSet<string> tables
+    )
     {
         var owner = GetOwner(intent);
         Add(owner.Table, owner.Schema, tables);
@@ -155,7 +172,10 @@ internal static class PostgreSqlSafeMigrationSchemaIdentity
     /// <param name="intent">The immutable operation whose baseline can create or consume a relation name.</param>
     /// <param name="currentSchemaCandidate">The runtime-conditioned alias, or null for authored null owners.</param>
     /// <returns>The optional absent binding, or null when every native reference must be proven.</returns>
-    public static string? GetOptionalAbsentNativeBinding(SafeMigrationIntent intent, string? currentSchemaCandidate)
+    public static string? GetOptionalAbsentNativeBinding(
+        SafeMigrationIntent intent,
+        string? currentSchemaCandidate
+    )
     {
         if (intent is EnsureTableIntent table)
         {
@@ -181,9 +201,9 @@ internal static class PostgreSqlSafeMigrationSchemaIdentity
         {
             EnsureTableIntent value => (Name: value.Definition.Table, value.Definition.Schema),
             DropTableIntent value => (Name: value.Table, value.Schema),
-            RenameTableIntent value => (Name: value.Name, value.Schema),
-            DropIndexIntent value => (Name: value.Name, value.Schema),
-            RenameIndexIntent value => (Name: value.Name, value.Schema),
+            RenameTableIntent value => (value.Name, value.Schema),
+            DropIndexIntent value => (value.Name, value.Schema),
+            RenameIndexIntent value => (value.Name, value.Schema),
             _ => default,
         };
 
@@ -191,8 +211,11 @@ internal static class PostgreSqlSafeMigrationSchemaIdentity
         // fallback. DROP/RENAME never execute their native baseline when the
         // exact current-schema source is absent. Other references still need
         // native ownership proof before any row query or executable baseline.
-        return binding.Schema is null || (currentSchemaCandidate is not null
-            && StringComparer.Ordinal.Equals(binding.Schema, currentSchemaCandidate)) ? binding.Name : null;
+        return binding.Schema is null
+            || (currentSchemaCandidate is not null
+                && StringComparer.Ordinal.Equals(binding.Schema, currentSchemaCandidate))
+                ? binding.Name
+                : null;
     }
 
     /// <summary>Removes consumed sources and adds surviving native destination bindings after accepted DDL.</summary>
@@ -236,14 +259,22 @@ internal static class PostgreSqlSafeMigrationSchemaIdentity
 
         return;
 
-        static bool IsCurrentAlias(string? schema, string? candidate)
+        static bool IsCurrentAlias(
+            string? schema,
+            string? candidate
+        )
             => schema is null || (candidate is not null && StringComparer.Ordinal.Equals(schema, candidate));
     }
 
     /// <summary>Records only actual unqualified bindings; explicit schemas never enter a native-path guard.</summary>
-    private static void Add(string? table, string? schema, HashSet<string> tables)
+    private static void Add(
+        string? table,
+        string? schema,
+        HashSet<string> tables
+    )
     {
-        if (table is not null && schema is null)
+        if (table is not null
+            && schema is null)
         {
             tables.Add(table);
         }

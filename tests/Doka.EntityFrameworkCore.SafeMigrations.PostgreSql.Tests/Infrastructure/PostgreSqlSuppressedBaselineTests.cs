@@ -13,7 +13,10 @@ public sealed class PostgreSqlSuppressedBaselineTests
     [InlineData("  SELECT 1\r\n", "  SELECT 1;")]
     [InlineData("", ";")]
     [InlineData(" \t\r\n", ";")]
-    public void BaselineTerminationPreservesExactText(string sql, string expected)
+    public void BaselineTerminationPreservesExactText(
+        string sql,
+        string expected
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -24,7 +27,8 @@ public sealed class PostgreSqlSuppressedBaselineTests
 
         // Act
         _ = generator.Generate(migrationBuilder.Operations, context.Model);
-        var guard = Assert.IsType<SqlOperation>(Assert.Single(baseline.Calls[1].Operations)).Sql;
+        var guard = Assert.IsType<SqlOperation>(Assert.Single(baseline.Calls[1].Operations))
+            .Sql;
 
         // Assert
         Assert.Contains("\n            " + expected + "\n", guard, StringComparison.Ordinal);
@@ -44,7 +48,8 @@ public sealed class PostgreSqlSuppressedBaselineTests
 
         // Act
         _ = generator.Generate(migrationBuilder.Operations, context.Model);
-        var guard = Assert.IsType<SqlOperation>(Assert.Single(baseline.Calls[1].Operations)).Sql;
+        var guard = Assert.IsType<SqlOperation>(Assert.Single(baseline.Calls[1].Operations))
+            .Sql;
 
         // Assert
         Assert.StartsWith("DO $doka_safe_migration_1$", guard, StringComparison.Ordinal);
@@ -125,6 +130,7 @@ public sealed class PostgreSqlSuppressedBaselineTests
                 storeType: "text",
                 collation: new SafeMigrationCollationIdentifier("C", "pg_catalog")),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         baseline.ColumnBaselineCommands =
         [
             baseline.CreateCommand(addTextColumnSql, false), baseline.CreateCommand(collationSql, true),
@@ -189,6 +195,7 @@ public sealed class PostgreSqlSuppressedBaselineTests
         Assert.True(
             guardedOperation.Sql.IndexOf(AddColumnSql, StringComparison.Ordinal)
             < guardedOperation.Sql.IndexOf(CommentColumnSql, StringComparison.Ordinal));
+
         Assert.False(guardedOperation.SuppressTransaction);
         Assert.Same(Assert.Single(baseline.Calls[1].Commands), command);
         Assert.Equal(guardedOperation.Sql, command.CommandText);
@@ -216,6 +223,7 @@ public sealed class PostgreSqlSuppressedBaselineTests
             "items",
             new ExpectedColumnDefinition("value", typeof(int), isNullable: true, storeType: "integer"),
             SafeMigrationPolicy.ThrowIfDifferent);
+
         baseline.ColumnBaselineCommands = [baseline.CreateCommand(AddColumnSql, false)];
 
         var commands = generator.Generate(migrationBuilder.Operations, context.Model);
@@ -244,7 +252,7 @@ public sealed class PostgreSqlSuppressedBaselineTests
     {
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>();
         options.UseNpgsql("Host=localhost;Database=suppression_contract;Username=test;Password=test");
-        ((DbContextOptionsBuilder)options)
+        options
             .UsePostgreSqlSafeMigrations<RecordingBaselineGenerator, SafeMigrationDbContext>();
 
         // SQL generation is synchronous and never opens the configured connection.
@@ -309,24 +317,6 @@ public sealed class PostgreSqlSuppressedBaselineTests
 
         public List<BaselineCall> Calls { get; } = [];
 
-        public MigrationCommand CreateCommand(
-            string sql,
-            bool transactionSuppressed
-        )
-        {
-            var command = _dependencies
-                .CommandBuilderFactory
-                .Create()
-                .Append(sql)
-                .Build();
-
-            return new MigrationCommand(
-                command,
-                _dependencies.CurrentContext.Context,
-                _dependencies.Logger,
-                transactionSuppressed);
-        }
-
         public IReadOnlyList<MigrationCommand> Generate(
             IReadOnlyList<MigrationOperation> operations,
             IModel? model = null,
@@ -348,6 +338,24 @@ public sealed class PostgreSqlSuppressedBaselineTests
 
             Calls.Add(new BaselineCall(operations.ToArray(), model, options, commands));
             return commands;
+        }
+
+        public MigrationCommand CreateCommand(
+            string sql,
+            bool transactionSuppressed
+        )
+        {
+            var command = _dependencies
+                .CommandBuilderFactory
+                .Create()
+                .Append(sql)
+                .Build();
+
+            return new MigrationCommand(
+                command,
+                _dependencies.CurrentContext.Context,
+                _dependencies.Logger,
+                transactionSuppressed);
         }
     }
 }

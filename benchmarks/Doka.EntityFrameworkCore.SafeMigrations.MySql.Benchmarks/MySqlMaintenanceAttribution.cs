@@ -1,13 +1,15 @@
+using Microsoft.EntityFrameworkCore.Storage;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Benchmarks;
 
 /// <summary>Attributes prerequisite extraction and native-profile backfill plan generation without a server.</summary>
 public class MySqlMaintenanceAttribution : IDisposable
 {
-    private ProfileContext _context = null!;
     private MySqlSafeMigrationCatalogSqlBuilder _catalog = null!;
+    private ProfileContext _context = null!;
+    private bool _disposed;
     private SafeMigrationOperation _operation = null!;
     private MySqlMigrationOperationContext _operationContext = null!;
-    private bool _disposed;
 
     /// <summary>Gets or sets whether the real MariaDB rather than MySQL profile is used.</summary>
     [Params(false, true)]
@@ -25,6 +27,13 @@ public class MySqlMaintenanceAttribution : IDisposable
         "nullable_fast_path")]
     public string Workload { get; set; } = "ascii";
 
+    /// <summary>Releases the context owning the native profile services.</summary>
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
     /// <summary>Runs the independent prerequisite and native-profile generation benchmark families.</summary>
     /// <param name="args">The BenchmarkDotNet command-line arguments.</param>
     /// <returns>The shared benchmark runner exit code.</returns>
@@ -39,8 +48,8 @@ public class MySqlMaintenanceAttribution : IDisposable
         _disposed = false;
         _context = new ProfileContext(MariaDb);
         _catalog = new MySqlSafeMigrationCatalogSqlBuilder(
-            _context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalTypeMappingSource>(),
-            _context.GetService<Microsoft.EntityFrameworkCore.Storage.ISqlGenerationHelper>());
+            _context.GetService<IRelationalTypeMappingSource>(),
+            _context.GetService<ISqlGenerationHelper>());
 
         object value = Workload switch
         {
@@ -153,13 +162,6 @@ public class MySqlMaintenanceAttribution : IDisposable
     [GlobalCleanup]
     public void Cleanup() => Dispose();
 
-    /// <summary>Releases the context owning the native profile services.</summary>
-    public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
-
     /// <summary>Releases owned managed resources once while supporting generated benchmark subclasses.</summary>
     /// <param name="disposing">Whether managed resources should be released.</param>
     protected virtual void Dispose(
@@ -193,11 +195,13 @@ public class MySqlMaintenanceAttribution : IDisposable
         MaintenanceAttribution.Require(
             hasCharsetGuard == expectedCharsetGuard,
             $"MySQL attribution scenario '{scenario}' did not reach its exact charset-domain producer.");
+
         MaintenanceAttribution.Require(
-            (plan.DataProbe is not null) == (scenario != "boolean"),
+            plan.DataProbe is not null == (scenario != "boolean"),
             $"MySQL attribution scenario '{scenario}' did not retain its real narrowing probe.");
+
         MaintenanceAttribution.Require(
-            (plan.NullabilityDataProbe is not null) == !nullable,
+            plan.NullabilityDataProbe is not null == !nullable,
             $"MySQL attribution scenario '{scenario}' lost its required-column proof role.");
 
         // WHY: Supplementary literal identity is intentionally rejected before charset selection;
@@ -462,8 +466,8 @@ public class MySqlMaintenanceAttribution : IDisposable
     {
         // WHY: Doka intentionally exposes no public feature/context constructor. This is fixture setup,
         // not timed reflection, and uses its canonical profile rather than an uninitialized capability stub.
-        const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance
-            | System.Reflection.BindingFlags.NonPublic;
+        const BindingFlags flags = BindingFlags.Instance
+            | BindingFlags.NonPublic;
 
         var version = mariaDb
             ? MySqlServerVersion.MariaDb(new Version(11, 8, 8))

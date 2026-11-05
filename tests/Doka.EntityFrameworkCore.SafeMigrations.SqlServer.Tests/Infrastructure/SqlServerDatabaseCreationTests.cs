@@ -13,7 +13,9 @@ public sealed class SqlServerDatabaseCreationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task DiagnosticCreationChecksCancellationBeforeCommandAdmission(bool preCanceled)
+    public async Task DiagnosticCreationChecksCancellationBeforeCommandAdmission(
+        bool preCanceled
+    )
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
@@ -23,12 +25,14 @@ public sealed class SqlServerDatabaseCreationTests
             cancellation.Cancel();
         }
 
-        var creation = typeof(SqlServerLocalCatalogDiagnostics).GetMethod("CreateDatabaseAsync",
+        var creation = typeof(SqlServerLocalCatalogDiagnostics).GetMethod(
+            "CreateDatabaseAsync",
             BindingFlags.Static | BindingFlags.NonPublic)!;
 
         // Act
         var exception = await Record.ExceptionAsync(() => (Task<string>)creation.Invoke(
-            null, [connection, cancellation.Token])!);
+            null,
+            [connection, cancellation.Token])!);
 
         // Assert
         if (preCanceled)
@@ -67,36 +71,40 @@ public sealed class SqlServerDatabaseCreationTests
         var droppedNames = new List<string>();
         var cleanupTokens = new List<CancellationToken>();
         var containerDisposals = 0;
-        using var fixture = new SqlServerContainerFixture(RootConnectionString, (database, token) =>
-        {
-            createdNames.Add(database);
-
-            if (serverCreatedDatabase)
+        using var fixture = new SqlServerContainerFixture(
+            RootConnectionString,
+            (database, token) =>
             {
-                physicalDatabases.Add(database);
-            }
+                createdNames.Add(database);
 
-            if (!cancelResponse)
+                if (serverCreatedDatabase)
+                {
+                    physicalDatabases.Add(database);
+                }
+
+                if (!cancelResponse)
+                {
+                    return Task.FromException(expected);
+                }
+
+                cancellation.Cancel();
+
+                return Task.FromCanceled(token);
+            },
+            (database, token) =>
             {
-                return Task.FromException(expected);
-            }
+                droppedNames.Add(database);
+                cleanupTokens.Add(token);
+                physicalDatabases.Remove(database);
 
-            cancellation.Cancel();
+                return Task.CompletedTask;
+            },
+            () =>
+            {
+                containerDisposals++;
 
-            return Task.FromCanceled(token);
-        }, (database, token) =>
-        {
-            droppedNames.Add(database);
-            cleanupTokens.Add(token);
-            physicalDatabases.Remove(database);
-
-            return Task.CompletedTask;
-        }, () =>
-        {
-            containerDisposals++;
-
-            return Task.CompletedTask;
-        });
+                return Task.CompletedTask;
+            });
 
         // Act
         var observed = await Record.ExceptionAsync(() => fixture.CreateDatabaseAsync(cancellation.Token));
@@ -106,8 +114,10 @@ public sealed class SqlServerDatabaseCreationTests
         // Assert
         if (cancelResponse)
         {
-            Assert.Equal(cancellation.Token,
-                Assert.IsAssignableFrom<OperationCanceledException>(observed).CancellationToken);
+            Assert.Equal(
+                cancellation.Token,
+                Assert.IsAssignableFrom<OperationCanceledException>(observed)
+                    .CancellationToken);
         }
         else
         {
@@ -116,7 +126,12 @@ public sealed class SqlServerDatabaseCreationTests
 
         var database = Assert.Single(createdNames);
 
-        Assert.Equal(serverCreatedDatabase ? 1 : 0, createdBeforeCleanup);
+        Assert.Equal(
+            serverCreatedDatabase
+                ? 1
+                : 0,
+            createdBeforeCleanup);
+
         Assert.StartsWith("sm_", database, StringComparison.Ordinal);
         Assert.True(Guid.TryParseExact(database.AsSpan(3), "N", out _));
         Assert.Equal(createdNames, droppedNames);
@@ -132,24 +147,30 @@ public sealed class SqlServerDatabaseCreationTests
         // Arrange
         var createdNames = new List<string>();
         var droppedNames = new List<string>();
-        using var fixture = new SqlServerContainerFixture(RootConnectionString, (database, _) =>
-        {
-            createdNames.Add(database);
+        using var fixture = new SqlServerContainerFixture(
+            RootConnectionString,
+            (database, _) =>
+            {
+                createdNames.Add(database);
 
-            return Task.CompletedTask;
-        }, (database, _) =>
-        {
-            droppedNames.Add(database);
+                return Task.CompletedTask;
+            },
+            (database, _) =>
+            {
+                droppedNames.Add(database);
 
-            return Task.CompletedTask;
-        }, () => Task.CompletedTask);
+                return Task.CompletedTask;
+            },
+            () => Task.CompletedTask);
 
         // Act
-        var first = new SqlConnectionStringBuilder(await fixture.CreateDatabaseAsync(
-        cancellationToken: CancellationToken.None));
+        var first = new SqlConnectionStringBuilder(
+            await fixture.CreateDatabaseAsync(
+                cancellationToken: CancellationToken.None));
 
-        var second = new SqlConnectionStringBuilder(await fixture.CreateDatabaseAsync(
-        cancellationToken: CancellationToken.None));
+        var second = new SqlConnectionStringBuilder(
+            await fixture.CreateDatabaseAsync(
+                cancellationToken: CancellationToken.None));
 
         await fixture.DisposeAsync();
 
@@ -171,26 +192,30 @@ public sealed class SqlServerDatabaseCreationTests
         var createAttempts = 0;
         var dropAttempts = 0;
         var containerDisposals = 0;
-        using var fixture = new SqlServerContainerFixture("unsupported_fixture_setting=true", (_, _) =>
-        {
-            createAttempts++;
+        using var fixture = new SqlServerContainerFixture(
+            "unsupported_fixture_setting=true",
+            (_, _) =>
+            {
+                createAttempts++;
 
-            return Task.CompletedTask;
-        }, (_, _) =>
-        {
-            dropAttempts++;
+                return Task.CompletedTask;
+            },
+            (_, _) =>
+            {
+                dropAttempts++;
 
-            return Task.CompletedTask;
-        }, () =>
-        {
-            containerDisposals++;
+                return Task.CompletedTask;
+            },
+            () =>
+            {
+                containerDisposals++;
 
-            return Task.CompletedTask;
-        });
+                return Task.CompletedTask;
+            });
 
         // Act
         var observed = await Record.ExceptionAsync(() => fixture.CreateDatabaseAsync(
-        cancellationToken: CancellationToken.None));
+            cancellationToken: CancellationToken.None));
 
         await fixture.DisposeAsync();
 
@@ -210,25 +235,32 @@ public sealed class SqlServerDatabaseCreationTests
         cancellation.Cancel();
         var createAttempts = 0;
         var dropAttempts = 0;
-        using var fixture = new SqlServerContainerFixture(RootConnectionString, (_, _) =>
-        {
-            createAttempts++;
+        using var fixture = new SqlServerContainerFixture(
+            RootConnectionString,
+            (_, _) =>
+            {
+                createAttempts++;
 
-            return Task.CompletedTask;
-        }, (_, _) =>
-        {
-            dropAttempts++;
+                return Task.CompletedTask;
+            },
+            (_, _) =>
+            {
+                dropAttempts++;
 
-            return Task.CompletedTask;
-        }, () => Task.CompletedTask);
+                return Task.CompletedTask;
+            },
+            () => Task.CompletedTask);
 
         // Act
         var observed = await Record.ExceptionAsync(() => fixture.CreateDatabaseAsync(cancellation.Token));
         await fixture.DisposeAsync();
 
         // Assert
-        Assert.Equal(cancellation.Token,
-            Assert.IsAssignableFrom<OperationCanceledException>(observed).CancellationToken);
+        Assert.Equal(
+            cancellation.Token,
+            Assert.IsAssignableFrom<OperationCanceledException>(observed)
+                .CancellationToken);
+
         Assert.Equal(0, createAttempts);
         Assert.Equal(0, dropAttempts);
     }
@@ -243,18 +275,22 @@ public sealed class SqlServerDatabaseCreationTests
         var finishFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var createdNames = new List<string>();
         var droppedNames = new List<string>();
-        using var fixture = new SqlServerContainerFixture(RootConnectionString, (database, _) =>
-        {
-            createdNames.Add(database);
-            firstEntered.SetResult();
+        using var fixture = new SqlServerContainerFixture(
+            RootConnectionString,
+            (database, _) =>
+            {
+                createdNames.Add(database);
+                firstEntered.SetResult();
 
-            return finishFirst.Task;
-        }, (database, _) =>
-        {
-            droppedNames.Add(database);
+                return finishFirst.Task;
+            },
+            (database, _) =>
+            {
+                droppedNames.Add(database);
 
-            return Task.CompletedTask;
-        }, () => Task.CompletedTask);
+                return Task.CompletedTask;
+            },
+            () => Task.CompletedTask);
 
         // Act
         var firstCreation = fixture.CreateDatabaseAsync(cancellationToken: CancellationToken.None);
@@ -270,8 +306,11 @@ public sealed class SqlServerDatabaseCreationTests
 
         // Assert
         Assert.True(waitedForLock);
-        Assert.Equal(cancellation.Token,
-            Assert.IsAssignableFrom<OperationCanceledException>(observed).CancellationToken);
+        Assert.Equal(
+            cancellation.Token,
+            Assert.IsAssignableFrom<OperationCanceledException>(observed)
+                .CancellationToken);
+
         Assert.Equal(1, attemptsBeforeFirstCompleted);
         Assert.Equal([first.InitialCatalog], createdNames);
         Assert.Equal(createdNames, droppedNames);

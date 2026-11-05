@@ -15,42 +15,60 @@ public sealed class SqlServerCheckDropRoleTests
     [InlineData("[R]>0", 2, null)]
     [InlineData("1=1", 0, null)]
     [InlineData("TRY_CONVERT(int,[R])>0", 2, "projected_check_source_dependency_unproven")]
-    public async Task AcceptedCheckDropUsesBoundMemberRoles(string sql, int sourceIdentity, string? expected)
+    public async Task AcceptedCheckDropUsesBoundMemberRoles(
+        string sql,
+        int sourceIdentity,
+        string? expected
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(
             "Server=localhost;Database=drop_roles;Integrated Security=true;");
+
         var analyzer = (SqlServerSafeMigrationProviderAnalyzer)context.GetService<ISafeMigrationProviderAnalyzer>();
         var expression = SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var parsed)
-            ? parsed : throw new InvalidOperationException("The source role fixture must parse.");
+            ? parsed
+            : throw new InvalidOperationException("The source role fixture must parse.");
 
-        var check = new SafeMigrationOperation(new EnsureCheckConstraintIntent(
-            ExpectedCheckConstraintDefinition.FromCapturedExpression("CK_roles", "nodes", expression, sql, null)),
+        var check = new SafeMigrationOperation(
+            new EnsureCheckConstraintIntent(
+                ExpectedCheckConstraintDefinition.FromCapturedExpression("CK_roles", "nodes", expression, sql, null)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        var drop = new SafeMigrationOperation(new DropColumnIntent("L", "nodes"),
+        var drop = new SafeMigrationOperation(
+            new DropColumnIntent("L", "nodes"),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         CaptureRoles(analyzer, sourceIdentity);
         var capture = typeof(SqlServerSafeMigrationProviderAnalyzer).GetMethod(
-            "ReadProjectedCheckRenameDependenciesAsync",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                "ReadProjectedCheckRenameDependenciesAsync",
+                BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("The accepted CHECK dependency capture is unavailable.");
 
-        var read = capture.CreateDelegate<Func<System.Data.Common.DbConnection, System.Data.Common.DbTransaction?,
+        var read = capture.CreateDelegate<Func<DbConnection, DbTransaction?,
             IReadOnlyList<MigrationOperation>, int?, CancellationToken, Task>>(analyzer);
 
         // Act
         await read(context.Database.GetDbConnection(), null, [check, drop], null, CancellationToken.None);
-        var missing = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
-            SafeMigrationRepairCapability.None, false, "classified_missing");
+        var missing = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Missing,
+            SafeMigrationRepairCapability.None,
+            false,
+            "classified_missing");
 
-        analyzer.ObserveAcceptedOperation(check, missing, missing,
+        analyzer.ObserveAcceptedOperation(
+            check,
+            missing,
+            missing,
             SafeMigrationDecisionPlanner.Plan(check.Intent.Kind, missing.ObservedState, check.Policy));
+
         var result = analyzer.ValidateCapturedProjection(drop, missing, new EmptyColumns());
 
         // Assert
-        Assert.Equal(ConnectionState.Closed, context.Database.GetDbConnection().State);
+        Assert.Equal(ConnectionState.Closed,
+            context.Database.GetDbConnection()
+                .State);
+
         if (expected is null)
         {
             Assert.Null(result);
@@ -59,12 +77,18 @@ public sealed class SqlServerCheckDropRoleTests
         {
             Assert.NotNull(result);
             Assert.Equal(expected, result.Code);
-            Assert.Equal(expected.EndsWith("_unproven", StringComparison.Ordinal)
-                ? SafeMigrationObservedState.Unsupported : SafeMigrationObservedState.Different, result.ObservedState);
+            Assert.Equal(
+                expected.EndsWith("_unproven", StringComparison.Ordinal)
+                    ? SafeMigrationObservedState.Unsupported
+                    : SafeMigrationObservedState.Different,
+                result.ObservedState);
         }
     }
 
-    private static void CaptureRoles(SqlServerSafeMigrationProviderAnalyzer analyzer, int sourceIdentity)
+    private static void CaptureRoles(
+        SqlServerSafeMigrationProviderAnalyzer analyzer,
+        int sourceIdentity
+    )
     {
         using var layout = new DataTable();
         layout.Columns.Add("schema", typeof(string));
@@ -75,7 +99,16 @@ public sealed class SqlServerCheckDropRoleTests
         layout.Columns.Add("variables", typeof(int));
         layout.Columns.Add("clustered", typeof(int));
         layout.Columns.Add("known", typeof(bool));
-        layout.Rows.Add("dbo", "nodes", 2, 16, 0, 0, 0, true);
+        layout.Rows.Add(
+            "dbo",
+            "nodes",
+            2,
+            16,
+            0,
+            0,
+            0,
+            true);
+
         using var layoutReader = layout.CreateDataReader();
         layoutReader.Read();
         analyzer.CaptureProjectedColumnLayout(layoutReader);
@@ -104,8 +137,12 @@ public sealed class SqlServerCheckDropRoleTests
     private sealed class EmptyColumns : ISafeMigrationProjectedColumnSource
     {
         /// <inheritdoc />
-        public bool TryGetProjectedColumn(string table, string? schema, string column,
-            [NotNullWhen(true)] out ExpectedColumnDefinition? definition)
+        public bool TryGetProjectedColumn(
+            string table,
+            string? schema,
+            string column,
+            [NotNullWhen(true)] out ExpectedColumnDefinition? definition
+        )
         {
             definition = null;
 

@@ -5,7 +5,9 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTest
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>A nullable alteration cannot bypass a retained physical PRIMARY containing its column.</summary>
     [Fact]
@@ -13,35 +15,54 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTest
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, PrimaryKeyRemovalFixture(supportingIndexExists: true)
+        await ExecuteSqlAsync(
+            connectionString,
+            PrimaryKeyRemovalFixture(supportingIndexExists: true)
             + " ALTER TABLE `key_items` DROP FOREIGN KEY `fk_key_items_user`;",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var operation = PrimaryKeyRemovalOperations()[3];
-        var originalColumn = await PrimaryKeyRemovalColumnStateAsync(connectionString,
+        var originalColumn = await PrimaryKeyRemovalColumnStateAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("retained-primary-nullability"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                new SafeMigrationRunOptions("retained-primary-nullability"),
+                CancellationToken.None);
 
         var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var retained = await PrimaryKeyRemovalSentinelCountAsync(connectionString,
+        var retained = await PrimaryKeyRemovalSentinelCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
-        var primaryMembership = await PrimaryKeyRemovalUserPrimaryMembershipCountAsync(connectionString,
+        var primaryMembership = await PrimaryKeyRemovalUserPrimaryMembershipCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
-        var remainingColumn = await PrimaryKeyRemovalColumnStateAsync(connectionString,
+        var remainingColumn = await PrimaryKeyRemovalColumnStateAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.Equal(SafeMigrationAction.RejectDifferent, Assert.Single(report.Assessments).Action);
-        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
+        Assert.Equal(SafeMigrationAction.RejectDifferent,
+            Assert.Single(report.Assessments)
+                .Action);
+
+        Assert.Contains(
+            "doka_sm_different",
+            AssertOwnedGuardFailure(failure)
+                .Message,
             StringComparison.OrdinalIgnoreCase);
+
         Assert.Equal(1, retained);
         Assert.Equal(1, primaryMembership);
         Assert.Equal(originalColumn, remainingColumn);
@@ -53,40 +74,61 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTest
     [InlineData("comment")]
     [InlineData("default")]
     [InlineData("store-type")]
-    public async Task PrimaryKeyRemovalRejectsExactSourceDrift(string sourceDrift)
+    public async Task PrimaryKeyRemovalRejectsExactSourceDrift(
+        string sourceDrift
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, PrimaryKeyRemovalFixture(supportingIndexExists: true)
+        await ExecuteSqlAsync(
+            connectionString,
+            PrimaryKeyRemovalFixture(supportingIndexExists: true)
             + " ALTER TABLE `key_items` DROP FOREIGN KEY `fk_key_items_user`; "
-            + PrimaryKeyRemovalMutationSql(sourceDrift), cancellationToken: CancellationToken.None);
+            + PrimaryKeyRemovalMutationSql(sourceDrift),
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var operations = PrimaryKeyRemovalOperations();
-        var originalColumn = await PrimaryKeyRemovalColumnStateAsync(connectionString,
+        var originalColumn = await PrimaryKeyRemovalColumnStateAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, operations,
-            new SafeMigrationRunOptions("primary-removal-source-drift"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                operations,
+                new SafeMigrationRunOptions("primary-removal-source-drift"),
+                CancellationToken.None);
 
         var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, operations, CancellationToken.None));
 
-        var retained = await PrimaryKeyRemovalSentinelCountAsync(connectionString,
+        var retained = await PrimaryKeyRemovalSentinelCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
-        var primaryMembership = await PrimaryKeyRemovalUserPrimaryMembershipCountAsync(connectionString,
+        var primaryMembership = await PrimaryKeyRemovalUserPrimaryMembershipCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
-        var remainingColumn = await PrimaryKeyRemovalColumnStateAsync(connectionString,
+        var remainingColumn = await PrimaryKeyRemovalColumnStateAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.True(report.Assessments[^1].Action is SafeMigrationAction.RejectDifferent
-            or SafeMigrationAction.RejectPrerequisiteMissing);
-        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
+        Assert.True(
+            report.Assessments[^1].Action is SafeMigrationAction.RejectDifferent
+                or SafeMigrationAction.RejectPrerequisiteMissing);
+
+        Assert.Contains(
+            "doka_sm_different",
+            AssertOwnedGuardFailure(failure)
+                .Message,
             StringComparison.OrdinalIgnoreCase);
+
         Assert.Equal(1, retained);
         Assert.Equal(0, primaryMembership);
         Assert.Equal(originalColumn, remainingColumn);
@@ -98,38 +140,56 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTest
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, PrimaryKeyRemovalFixture(supportingIndexExists: true),
+        await ExecuteSqlAsync(
+            connectionString,
+            PrimaryKeyRemovalFixture(supportingIndexExists: true),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var operations = PrimaryKeyRemovalOperations();
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AddPrimaryKeyIfNotExists("pk_key_items_recreated", "key_items", ["question_id", "user_id"]);
         operations.Insert(3, Assert.Single(builder.Operations));
-        var originalColumn = await PrimaryKeyRemovalColumnStateAsync(connectionString,
+        var originalColumn = await PrimaryKeyRemovalColumnStateAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, operations,
-            new SafeMigrationRunOptions("primary-removal-recreated"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                operations,
+                new SafeMigrationRunOptions("primary-removal-recreated"),
+                CancellationToken.None);
 
         var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, operations, CancellationToken.None));
 
-        var retained = await PrimaryKeyRemovalSentinelCountAsync(connectionString,
+        var retained = await PrimaryKeyRemovalSentinelCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
-        var primaryMembership = await PrimaryKeyRemovalUserPrimaryMembershipCountAsync(connectionString,
+        var primaryMembership = await PrimaryKeyRemovalUserPrimaryMembershipCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
-        var remainingColumn = await PrimaryKeyRemovalColumnStateAsync(connectionString,
+        var remainingColumn = await PrimaryKeyRemovalColumnStateAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
-        Assert.True(report.Assessments[^1].Action is SafeMigrationAction.RejectDifferent
-            or SafeMigrationAction.RejectPrerequisiteMissing);
-        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
+        Assert.True(
+            report.Assessments[^1].Action is SafeMigrationAction.RejectDifferent
+                or SafeMigrationAction.RejectPrerequisiteMissing);
+
+        Assert.Contains(
+            "doka_sm_different",
+            AssertOwnedGuardFailure(failure)
+                .Message,
             StringComparison.OrdinalIgnoreCase);
+
         Assert.Equal(1, retained);
         Assert.Equal(1, primaryMembership);
         Assert.Equal(originalColumn, remainingColumn);
@@ -142,45 +202,76 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTest
     [InlineData("comment")]
     [InlineData("default")]
     [InlineData("store-type")]
-    public async Task PrimaryKeyRemovalRejectsMutationBetweenPrefixAndAlter(string mutation)
+    public async Task PrimaryKeyRemovalRejectsMutationBetweenPrefixAndAlter(
+        string mutation
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, PrimaryKeyRemovalFixture(supportingIndexExists: true),
+        await ExecuteSqlAsync(
+            connectionString,
+            PrimaryKeyRemovalFixture(supportingIndexExists: true),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var operations = PrimaryKeyRemovalOperations();
 
         // Act
-        var preflight = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, operations,
-            new SafeMigrationRunOptions("primary-removal-runtime-race"), CancellationToken.None);
+        var preflight = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                operations,
+                new SafeMigrationRunOptions("primary-removal-runtime-race"),
+                CancellationToken.None);
 
         preflight.ThrowIfBlocked();
-        await ExecuteOperationsAsync(context, operations.Take(3).ToArray(), CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, PrimaryKeyRemovalMutationSql(mutation),
+        await ExecuteOperationsAsync(context,
+            operations
+                .Take(3)
+                .ToArray(),
+            CancellationToken.None);
+
+        await ExecuteSqlAsync(
+            connectionString,
+            PrimaryKeyRemovalMutationSql(mutation),
             cancellationToken: CancellationToken.None);
-        var racedColumn = await PrimaryKeyRemovalColumnStateAsync(connectionString,
+
+        var racedColumn = await PrimaryKeyRemovalColumnStateAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
         var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operations[3]], CancellationToken.None));
 
-        var retained = await PrimaryKeyRemovalSentinelCountAsync(connectionString,
+        var retained = await PrimaryKeyRemovalSentinelCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
-        var primaryMembership = await PrimaryKeyRemovalUserPrimaryMembershipCountAsync(connectionString,
+        var primaryMembership = await PrimaryKeyRemovalUserPrimaryMembershipCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
-        var remainingColumn = await PrimaryKeyRemovalColumnStateAsync(connectionString,
+        var remainingColumn = await PrimaryKeyRemovalColumnStateAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, preflight.Status);
         Assert.Equal(SafeMigrationAction.Repair, preflight.Assessments[3].Action);
-        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
+        Assert.Contains(
+            "doka_sm_different",
+            AssertOwnedGuardFailure(failure)
+                .Message,
             StringComparison.OrdinalIgnoreCase);
+
         Assert.Equal(1, retained);
-        Assert.Equal(mutation == "primary" ? 1 : 0, primaryMembership);
+        Assert.Equal(
+            mutation == "primary"
+                ? 1
+                : 0,
+            primaryMembership);
+
         Assert.Equal(racedColumn, remainingColumn);
     }
 
@@ -190,34 +281,47 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTest
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, PrimaryKeyRemovalFixture(supportingIndexExists: true)
+        await ExecuteSqlAsync(
+            connectionString,
+            PrimaryKeyRemovalFixture(supportingIndexExists: true)
             + " ALTER TABLE `key_items` DROP FOREIGN KEY `fk_key_items_user`; "
             + "CREATE TABLE `other_key_items` (`id` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.DropPrimaryKeyIfExists("pk_other_key_items", "other_key_items");
         builder.Operations.Add(PrimaryKeyRemovalOperations()[3]);
-        var originalColumn = await PrimaryKeyRemovalColumnStateAsync(connectionString,
+        var originalColumn = await PrimaryKeyRemovalColumnStateAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("unrelated-primary-nullability"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("unrelated-primary-nullability"),
+                CancellationToken.None);
 
         var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
-        var retained = await PrimaryKeyRemovalSentinelCountAsync(connectionString,
+        var retained = await PrimaryKeyRemovalSentinelCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
-        var primaryMembership = await PrimaryKeyRemovalUserPrimaryMembershipCountAsync(connectionString,
+        var primaryMembership = await PrimaryKeyRemovalUserPrimaryMembershipCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
-        var remainingColumn = await PrimaryKeyRemovalColumnStateAsync(connectionString,
+        var remainingColumn = await PrimaryKeyRemovalColumnStateAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
-        var unrelatedPrimary = await ScalarIntAsync(connectionString,
+        var unrelatedPrimary = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE CONSTRAINT_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'other_key_items' AND CONSTRAINT_NAME = 'PRIMARY';",
             cancellationToken: CancellationToken.None);
@@ -225,8 +329,12 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTest
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Blocked, report.Status);
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[1].Action);
-        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
+        Assert.Contains(
+            "doka_sm_different",
+            AssertOwnedGuardFailure(failure)
+                .Message,
             StringComparison.OrdinalIgnoreCase);
+
         Assert.Equal(1, retained);
         Assert.Equal(1, primaryMembership);
         Assert.Equal(0, unrelatedPrimary);
@@ -239,34 +347,50 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTest
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, PrimaryKeyRemovalFixture(supportingIndexExists: true),
+        await ExecuteSqlAsync(
+            connectionString,
+            PrimaryKeyRemovalFixture(supportingIndexExists: true),
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var operations = PrimaryKeyRemovalOperations();
         operations.Insert(3, new SqlOperation { Sql = PrimaryKeyRemovalMutationSql("primary") });
-        var originalColumn = await PrimaryKeyRemovalColumnStateAsync(connectionString,
+        var originalColumn = await PrimaryKeyRemovalColumnStateAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, operations,
-            new SafeMigrationRunOptions("opaque-primary-recreation"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                operations,
+                new SafeMigrationRunOptions("opaque-primary-recreation"),
+                CancellationToken.None);
 
         var failure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, operations, CancellationToken.None));
 
-        var retained = await PrimaryKeyRemovalSentinelCountAsync(connectionString,
+        var retained = await PrimaryKeyRemovalSentinelCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
-        var primaryMembership = await PrimaryKeyRemovalUserPrimaryMembershipCountAsync(connectionString,
+        var primaryMembership = await PrimaryKeyRemovalUserPrimaryMembershipCountAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
-        var remainingColumn = await PrimaryKeyRemovalColumnStateAsync(connectionString,
+        var remainingColumn = await PrimaryKeyRemovalColumnStateAsync(
+            connectionString,
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.ValidateAtRuntime, report.Assessments[^1].Action);
-        Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(failure).Message,
+        Assert.Contains(
+            "doka_sm_different",
+            AssertOwnedGuardFailure(failure)
+                .Message,
             StringComparison.OrdinalIgnoreCase);
+
         Assert.Equal(1, retained);
         Assert.Equal(1, primaryMembership);
         Assert.Equal(originalColumn, remainingColumn);
@@ -275,7 +399,9 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTest
     /// <summary>Creates native-valid drift or restores the same composite physical PRIMARY.</summary>
     /// <param name="mutation">The exact schema mutation to inject before the guarded alteration.</param>
     /// <returns>The isolated native DDL for the requested adversarial mutation.</returns>
-    private static string PrimaryKeyRemovalMutationSql(string mutation)
+    private static string PrimaryKeyRemovalMutationSql(
+        string mutation
+    )
         => mutation switch
         {
             "primary" => "ALTER TABLE `key_items` ADD PRIMARY KEY (`question_id`, `user_id`);",
@@ -297,15 +423,16 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTest
         string connectionString,
         CancellationToken cancellationToken
     )
-        => ScalarStringAsync(connectionString,
+        => ScalarStringAsync(
+            connectionString,
             "SELECT CONCAT(COLUMN_TYPE, '|', IS_NULLABLE, '|', COALESCE(COLUMN_DEFAULT, '<none>'), '|', "
             + "COLUMN_COMMENT) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
-            + "AND TABLE_NAME = 'key_items' AND COLUMN_NAME = 'user_id';", cancellationToken: cancellationToken);
+            + "AND TABLE_NAME = 'key_items' AND COLUMN_NAME = 'user_id';",
+            cancellationToken: cancellationToken);
 }
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-
     /// <summary>Counts the complete deterministic sentinel rather than only total rows.</summary>
     /// <param name="connectionString">The isolated test database connection.</param>
     /// <returns>The number of unchanged sentinel rows.</returns>
@@ -314,7 +441,8 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         string connectionString,
         CancellationToken cancellationToken
     )
-        => ScalarIntAsync(connectionString,
+        => ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `key_items` WHERE `question_id` = "
             + "'00000000-0000-0000-0000-000000000001' AND `user_id` = "
             + "'00000000-0000-0000-0000-000000000002' AND `payload` = 'retained';",
@@ -323,7 +451,6 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 
 public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
-
     /// <summary>Reads physical PRIMARY membership independently of the logical operation name.</summary>
     /// <param name="connectionString">The isolated test database connection.</param>
     /// <returns>The number of physical PRIMARY entries containing the altered column.</returns>
@@ -332,7 +459,8 @@ public sealed partial class MySqlColumnsPrimaryKeyRemovalNegativeIntegrationTest
         string connectionString,
         CancellationToken cancellationToken
     )
-        => ScalarIntAsync(connectionString,
+        => ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE CONSTRAINT_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'key_items' AND CONSTRAINT_NAME = 'PRIMARY' AND COLUMN_NAME = 'user_id';",
             cancellationToken: cancellationToken);

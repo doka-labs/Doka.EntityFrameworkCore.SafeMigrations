@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.Sqlite.Tests;
 
 /// <summary>Exercises catalog streaming with independently owned SQLite state.</summary>
@@ -21,6 +23,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
                 connection,
                 $"CREATE TABLE counted_{table} (Id INTEGER, Code TEXT);",
                 cancellationToken: CancellationToken.None);
+
             for (var index = 0; index < indexesPerTable; index++)
             {
                 await ExecuteSqlAsync(
@@ -59,6 +62,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             connection,
             $"PRAGMA foreign_keys = {foreignKeys}; PRAGMA legacy_alter_table = {legacyAlterTable};",
             cancellationToken: CancellationToken.None);
+
         using var versionCommand = connection.CreateCommand();
         versionCommand.CommandText = "SELECT sqlite_version();";
         var version = versionCommand.ExecuteScalar();
@@ -118,10 +122,17 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             parentTable.PrimaryKeyColumns,
             column => Assert.Equal("A", column),
             column => Assert.Equal("B", column));
+
         Assert.True(parentTable.PrimaryKeyKeys[0].Descending);
         Assert.Equal("NOCASE", parentTable.PrimaryKeyKeys[0].Collation);
-        Assert.Equal("uq_parent", Assert.Single(parentTable.UniqueConstraints).Name);
-        Assert.Equal("ck_parent", Assert.Single(parentTable.Checks).Name);
+        Assert.Equal("uq_parent",
+            Assert.Single(parentTable.UniqueConstraints)
+                .Name);
+
+        Assert.Equal("ck_parent",
+            Assert.Single(parentTable.Checks)
+                .Name);
+
         Assert.True(childTable.Columns["Id"].AutoIncrement);
         Assert.Equal("pk child", childTable.PrimaryKeyName);
         Assert.Equal("RTRIM", childTable.Columns["Code"].Collation);
@@ -141,23 +152,37 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
         Assert.Equal("ParentB IS NOT NULL", expressionIndex.Filter);
         Assert.Equal(
             "RTRIM",
-            Assert.Single(childTable.Indexes, index => index.Name == "ix inherited").Keys[0].Collation);
+            Assert
+                .Single(childTable.Indexes, index => index.Name == "ix inherited")
+                .Keys[0].Collation);
+
         var implicitForeignKey = Assert.Single(childTable.ForeignKeys, key => key.Name == "fk implicit");
         Assert.Collection(
             implicitForeignKey.Columns,
             column => Assert.Equal("ParentA", column),
             column => Assert.Equal("ParentB", column));
+
         Assert.Collection(
             implicitForeignKey.PrincipalColumns,
             column => Assert.Equal(string.Empty, column),
             column => Assert.Equal(string.Empty, column));
-        Assert.True(SqliteCatalogEquivalence.ForeignKeyMatches(
-            snapshot, implicitForeignKey, parent, ["ParentA", "ParentB"], ["A", "B"],
-            ReferentialAction.Cascade, ReferentialAction.SetNull));
+
+        Assert.True(
+            SqliteCatalogEquivalence.ForeignKeyMatches(
+                snapshot,
+                implicitForeignKey,
+                parent,
+                ["ParentA", "ParentB"],
+                ["A", "B"],
+                ReferentialAction.Cascade,
+                ReferentialAction.SetNull));
+
         Assert.Collection(
-            Assert.Single(childTable.ForeignKeys, key => key.Name == "fk explicit").PrincipalColumns,
+            Assert.Single(childTable.ForeignKeys, key => key.Name == "fk explicit")
+                .PrincipalColumns,
             column => Assert.Equal("B", column),
             column => Assert.Equal("A", column));
+
         Assert.Contains(snapshot.OtherObjects, value => value.Type == "view" && value.Name == "v quoted");
         Assert.Contains(snapshot.OtherObjects, value => value.Type == "trigger" && value.Name == "tr quoted");
     }
@@ -200,6 +225,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             connection,
             $"CREATE VIRTUAL TABLE keyword_module USING fts5({arguments});",
             cancellationToken: CancellationToken.None);
+
         using var counter = new SnapshotCountingConnection(connection);
 
         // Act
@@ -230,15 +256,21 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             + "CREATE TABLE other.isolated (AttachedColumn INTEGER); "
             + "CREATE INDEX other.shared_index ON isolated(AttachedColumn); "
             + "CREATE TABLE other.attached_only (Id INTEGER); "
-            + "CREATE TEMP TABLE temporary_only (Id INTEGER);", cancellationToken: CancellationToken.None);
+            + "CREATE TEMP TABLE temporary_only (Id INTEGER);",
+            cancellationToken: CancellationToken.None);
 
         // Act
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
 
         // Assert
-        var table = Assert.Single(snapshot.Tables).Value;
+        var table = Assert.Single(snapshot.Tables)
+            .Value;
+
         Assert.Equal("isolated", table.Name);
-        Assert.Equal("MainColumn", Assert.Single(table.Columns).Key);
+        Assert.Equal("MainColumn",
+            Assert.Single(table.Columns)
+                .Key);
+
         var index = Assert.Single(table.Indexes);
         Assert.Equal("shared_index", index.Name);
         Assert.Equal("MainColumn", index.Keys[0].Column);
@@ -247,6 +279,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
         Assert.DoesNotContain(
             snapshot.OtherObjects,
             value => value.Sql.Contains("TempColumn", StringComparison.Ordinal));
+
         Assert.DoesNotContain(
             snapshot.OtherObjects,
             value => value.Sql.Contains("AttachedColumn", StringComparison.Ordinal));
@@ -262,6 +295,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             connection,
             "CREATE TABLE changing (Id INTEGER);",
             cancellationToken: CancellationToken.None);
+
         using var transaction = connection.BeginTransaction();
         using var counter = new SnapshotCountingConnection(connection);
         var first = SqliteSafeMigrationCatalog.Read(counter, transaction);
@@ -278,10 +312,21 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
         Assert.Equal(10, counter.DisposedCommandCount);
         Assert.All(counter.Transactions, actual => Assert.Same(transaction, actual));
         Assert.All(counter.Readers, reader => Assert.True(reader.IsClosed));
-        Assert.False(first.Tables["changing"].Columns.ContainsKey("Later"));
+        Assert.False(first
+            .Tables["changing"]
+            .Columns
+            .ContainsKey("Later"));
+
         Assert.Empty(first.Tables["changing"].Indexes);
-        Assert.True(second.Tables["changing"].Columns.ContainsKey("Later"));
-        Assert.Equal("ix_later", Assert.Single(second.Tables["changing"].Indexes).Name);
+        Assert.True(second
+            .Tables["changing"]
+            .Columns
+            .ContainsKey("Later"));
+
+        Assert.Equal("ix_later",
+            Assert.Single(second.Tables["changing"].Indexes)
+                .Name);
+
         transaction.Rollback();
         Assert.Equal(ConnectionState.Open, connection.State);
     }
@@ -296,6 +341,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             connection,
             "CREATE TABLE failure_items (Id INTEGER);",
             cancellationToken: CancellationToken.None);
+
         using var transaction = connection.BeginTransaction();
         using var counter = new SnapshotCountingConnection(connection, "pragma_index_list", "execute");
 
@@ -341,7 +387,9 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             "CREATE TABLE owner_parent (Id INTEGER PRIMARY KEY); "
             + "CREATE TABLE owner_child (Id INTEGER, "
             + "CONSTRAINT fk_owner_child FOREIGN KEY(Id) REFERENCES owner_parent(Id)); "
-            + "CREATE INDEX ix_owner_child ON owner_child(Id);", cancellationToken: CancellationToken.None);
+            + "CREATE INDEX ix_owner_child ON owner_child(Id);",
+            cancellationToken: CancellationToken.None);
+
         using var counter = new SnapshotCountingConnection(connection, segment, fault);
 
         // Act
@@ -398,7 +446,9 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE declared_parent (Id INTEGER PRIMARY KEY); "
-            + $"CREATE TABLE declared_child ({declaration});", cancellationToken: CancellationToken.None);
+            + $"CREATE TABLE declared_child ({declaration});",
+            cancellationToken: CancellationToken.None);
+
         using var counter = new SnapshotCountingConnection(connection, "pragma_foreign_key_list", "empty_collection");
 
         // Act
@@ -427,13 +477,16 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             connection,
             $"CREATE TABLE empty_collections ({columns});",
             cancellationToken: CancellationToken.None);
+
         using var counter = new SnapshotCountingConnection(connection);
 
         // Act
         var snapshot = SqliteSafeMigrationCatalog.Read(counter, transaction: null);
 
         // Assert
-        var table = Assert.Single(snapshot.Tables).Value;
+        var table = Assert.Single(snapshot.Tables)
+            .Value;
+
         Assert.Empty(table.Indexes);
         Assert.Empty(table.ForeignKeys);
         Assert.Equal(5, counter.ExecutionCount);
@@ -457,6 +510,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             + "CONSTRAINT fk_second REFERENCES all_parent(Id), "
             + "TableReference INTEGER, FOREIGN KEY(TableReference) REFERENCES all_parent(Id));",
             cancellationToken: CancellationToken.None);
+
         using var counter = new SnapshotCountingConnection(connection);
 
         // Act
@@ -470,15 +524,27 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
         var anonymous = Assert.Single(table.ForeignKeys, value => value.Columns[0] == "Anonymous");
         Assert.Null(anonymous.Name);
         Assert.Equal(string.Empty, Assert.Single(anonymous.PrincipalColumns));
-        Assert.True(SqliteCatalogEquivalence.ForeignKeyMatches(
-            snapshot, anonymous, "all_parent", ["Anonymous"], ["Id"],
-            ReferentialAction.NoAction, ReferentialAction.Cascade));
-        Assert.Equal("fk_inline", Assert.Single(table.ForeignKeys, value => value.Columns[0] == "Named").Name);
+        Assert.True(
+            SqliteCatalogEquivalence.ForeignKeyMatches(
+                snapshot,
+                anonymous,
+                "all_parent",
+                ["Anonymous"],
+                ["Id"],
+                ReferentialAction.NoAction,
+                ReferentialAction.Cascade));
+
+        Assert.Equal("fk_inline",
+            Assert.Single(table.ForeignKeys, value => value.Columns[0] == "Named")
+                .Name);
+
         Assert.Collection(
             table.ForeignKeys.Where(value => value.Columns[0] == "Repeated"),
             key => Assert.Equal("fk_second", key.Name),
             key => Assert.Equal("fk_first", key.Name));
-        Assert.Null(Assert.Single(table.ForeignKeys, value => value.Columns[0] == "TableReference").Name);
+
+        Assert.Null(Assert.Single(table.ForeignKeys, value => value.Columns[0] == "TableReference")
+            .Name);
     }
 
     /// <summary>Declaration validation accepts SQLite identifier quoting and unquoted non-ASCII names.</summary>
@@ -499,7 +565,9 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
         await ExecuteSqlAsync(
             connection,
             $"CREATE TABLE {QuoteCatalogIdentifier(parent)} (Id INTEGER CONSTRAINT pk_parent PRIMARY KEY); "
-            + $"CREATE TABLE quoted_child ({declaration});", cancellationToken: CancellationToken.None);
+            + $"CREATE TABLE quoted_child ({declaration});",
+            cancellationToken: CancellationToken.None);
+
         using var counter = new SnapshotCountingConnection(connection);
 
         // Act
@@ -534,6 +602,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             + $"CONSTRAINT {quotedName} REFERENCES quoted_name_parent(Id), "
             + "Literal TEXT DEFAULT 'CONSTRAINT phantom REFERENCES missing(Id)');",
             cancellationToken: CancellationToken.None);
+
         using var counter = new SnapshotCountingConnection(connection);
 
         // Act
@@ -542,7 +611,10 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
         // Assert
         var table = snapshot.Tables["quoted_name_child"];
         AssertLegacyCatalogParity(connection, table);
-        Assert.Equal(expectedName, Assert.Single(table.ForeignKeys).Name);
+        Assert.Equal(expectedName,
+            Assert.Single(table.ForeignKeys)
+                .Name);
+
         Assert.Equal("'CONSTRAINT phantom REFERENCES missing(Id)'", table.Columns["Literal"].DefaultSql);
         Assert.Equal(5, counter.ExecutionCount);
     }
@@ -562,7 +634,9 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
         await ExecuteSqlAsync(
             connection,
             "CREATE TABLE parent (Id INTEGER PRIMARY KEY); "
-            + $"CREATE TABLE token_child ({declaration});", cancellationToken: CancellationToken.None);
+            + $"CREATE TABLE token_child ({declaration});",
+            cancellationToken: CancellationToken.None);
+
         using var counter = new SnapshotCountingConnection(connection);
 
         // Act
@@ -587,30 +661,75 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
         var columns = ReadLegacyRows(connection, $"PRAGMA main.table_xinfo({QuoteCatalogIdentifier(table.Name)});");
         Assert.Equal(
             columns,
-            table.Columns.Values.Select(column => CatalogRow(
-                column.Ordinal, column.Name, column.StoreType, column.IsNullable ? 0 : 1,
-                column.DefaultSql, column.PrimaryKeyOrdinal, column.HiddenKind)).ToArray());
+            table
+                .Columns
+                .Values
+                .Select(column => CatalogRow(
+                    column.Ordinal,
+                    column.Name,
+                    column.StoreType,
+                    column.IsNullable
+                        ? 0
+                        : 1,
+                    column.DefaultSql,
+                    column.PrimaryKeyOrdinal,
+                    column.HiddenKind))
+                .ToArray());
+
         var indexes = ReadLegacyRows(connection, $"PRAGMA main.index_list({QuoteCatalogIdentifier(table.Name)});");
         Assert.Equal(
-            indexes.Select(row => row[(row.IndexOf('|') + 1)..]).ToArray(),
-            table.Indexes.Select(index => CatalogRow(
-                    index.Name, index.Unique ? 1 : 0, index.Origin, index.Partial ? 1 : 0))
+            indexes
+                .Select(row => row[(row.IndexOf('|') + 1)..])
+                .ToArray(),
+            table
+                .Indexes
+                .Select(index => CatalogRow(
+                    index.Name,
+                    index.Unique
+                        ? 1
+                        : 0,
+                    index.Origin,
+                    index.Partial
+                        ? 1
+                        : 0))
                 .ToArray());
+
         foreach (var index in table.Indexes)
         {
             Assert.Equal(
                 ReadLegacyRows(connection, $"PRAGMA main.index_xinfo({QuoteCatalogIdentifier(index.Name)});"),
-                index.Keys.Select(key => CatalogRow(
-                    key.Ordinal, key.ColumnId, key.Column, key.Descending ? 1 : 0, key.Collation, key.IsKey ? 1 : 0))
+                index
+                    .Keys
+                    .Select(key => CatalogRow(
+                        key.Ordinal,
+                        key.ColumnId,
+                        key.Column,
+                        key.Descending
+                            ? 1
+                            : 0,
+                        key.Collation,
+                        key.IsKey
+                            ? 1
+                            : 0))
                     .ToArray());
         }
 
         Assert.Equal(
             ReadLegacyRows(connection, $"PRAGMA main.foreign_key_list({QuoteCatalogIdentifier(table.Name)});"),
-            table.ForeignKeys.SelectMany(key => key.Columns.Select((column, ordinal) => CatalogRow(
-                key.Id, ordinal, key.PrincipalTable, column,
-                key.PrincipalColumns[ordinal].Length == 0 ? null : key.PrincipalColumns[ordinal],
-                CatalogReferentialAction(key.OnUpdate), CatalogReferentialAction(key.OnDelete), key.Match))).ToArray());
+            table
+                .ForeignKeys
+                .SelectMany(key => key.Columns.Select((column, ordinal) => CatalogRow(
+                    key.Id,
+                    ordinal,
+                    key.PrincipalTable,
+                    column,
+                    key.PrincipalColumns[ordinal].Length == 0
+                        ? null
+                        : key.PrincipalColumns[ordinal],
+                    CatalogReferentialAction(key.OnUpdate),
+                    CatalogReferentialAction(key.OnDelete),
+                    key.Match)))
+                .ToArray());
     }
 
     private static string CatalogReferentialAction(
@@ -646,9 +765,11 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
 
     private static string CatalogRow(
         params object?[] values
-    ) => string.Join('|', values.Select(value => value is null or DBNull
-        ? "<null>"
-        : Convert.ToString(value, CultureInfo.InvariantCulture)));
+    ) => string.Join(
+        '|',
+        values.Select(value => value is null or DBNull
+            ? "<null>"
+            : Convert.ToString(value, CultureInfo.InvariantCulture)));
 
     private static string QuoteCatalogIdentifier(
         string value
@@ -656,9 +777,9 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
 
     private sealed class SnapshotCountingConnection : DbConnection
     {
+        private readonly string? _fault;
         private readonly SqliteConnection _inner;
         private readonly string? _segment;
-        private readonly string? _fault;
 
         public SnapshotCountingConnection(
             SqliteConnection inner,
@@ -679,7 +800,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
 
         public List<DbTransaction?> Transactions { get; } = [];
 
-        [System.Diagnostics.CodeAnalysis.AllowNull]
+        [AllowNull]
         public override string ConnectionString
         {
             get => _inner.ConnectionString;
@@ -770,7 +891,9 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
                 }
                 else if (_fault == "ordinal")
                 {
-                    values[_segment == "pragma_index_list" ? 9 : 2] = 100;
+                    values[_segment == "pragma_index_list"
+                        ? 9
+                        : 2] = 100;
                 }
                 else if (_fault == "empty_collection")
                 {
@@ -791,8 +914,8 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
 
         private sealed class SnapshotCountingCommand : DbCommand
         {
-            private readonly SnapshotCountingConnection _owner;
             private readonly DbCommand _inner;
+            private readonly SnapshotCountingConnection _owner;
             private bool _disposed;
 
             public SnapshotCountingCommand(
@@ -804,7 +927,7 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
                 _inner = inner;
             }
 
-            [System.Diagnostics.CodeAnalysis.AllowNull]
+            [AllowNull]
             public override string CommandText
             {
                 get => _inner.CommandText;
@@ -838,7 +961,9 @@ public sealed class SqliteSafeMigrationCatalogStreamingIntegrationTests : Sqlite
             protected override DbConnection? DbConnection
             {
                 get => _owner;
-                set => _inner.Connection = value is SnapshotCountingConnection counter ? counter._inner : value;
+                set => _inner.Connection = value is SnapshotCountingConnection counter
+                    ? counter._inner
+                    : value;
             }
 
             protected override DbTransaction? DbTransaction

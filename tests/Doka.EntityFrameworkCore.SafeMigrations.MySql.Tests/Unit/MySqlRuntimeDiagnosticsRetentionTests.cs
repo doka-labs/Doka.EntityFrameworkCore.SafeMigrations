@@ -9,7 +9,9 @@ public sealed class MySqlRuntimeDiagnosticsRetentionTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void GeneratedCommandsReleaseManagedPayloadWithoutLosingUsableContext(bool retainSource)
+    public void GeneratedCommandsReleaseManagedPayloadWithoutLosingUsableContext(
+        bool retainSource
+    )
     {
         // Arrange
         using var context = MySqlRuntimeDiagnosticsTests.OfflineContext();
@@ -39,8 +41,11 @@ public sealed class MySqlRuntimeDiagnosticsRetentionTests
     /// <summary>Keeps the authored source outside the test frame so JIT local lifetime cannot falsify collection.</summary>
     /// <param name="context">The provider service owner, which outlives both generation and collection.</param>
     /// <param name="retainSource">Whether the positive control explicitly retains the original source.</param>
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private static ManagedPayloadRetentionFixture CreateManagedPayloadRetentionFixture(DbContext context, bool retainSource)
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static ManagedPayloadRetentionFixture CreateManagedPayloadRetentionFixture(
+        DbContext context,
+        bool retainSource
+    )
     {
         var values = new object?[32, 2];
         for (var row = 0; row < values.GetLength(0); row++)
@@ -49,18 +54,39 @@ public sealed class MySqlRuntimeDiagnosticsRetentionTests
             values[row, 1] = new byte[256];
         }
 
-        var intent = new EnsureModelManagedDataIntent("diagnostic_seed_items", ["id"], ["int"], ["id", "payload"],
-            ["int", "varbinary(256)"], values, schema: null, uniqueKeys: null);
+        var intent = new EnsureModelManagedDataIntent(
+            "diagnostic_seed_items",
+            ["id"],
+            ["int"],
+            ["id", "payload"],
+            ["int", "varbinary(256)"],
+            values,
+            schema: null,
+            uniqueKeys: null);
 
         var operation = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate([operation], context.Model);
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate([operation], context.Model);
 
-        return new ManagedPayloadRetentionFixture(commands, new WeakReference(operation), new WeakReference(intent.KeyValues),
-            new WeakReference(intent.Values), new WeakReference(intent.Values.GetUnsafeValue(0, 1)!),
-            retainSource ? operation : null);
+        return new ManagedPayloadRetentionFixture(
+            commands,
+            new WeakReference(operation),
+            new WeakReference(intent.KeyValues),
+            new WeakReference(intent.Values),
+            new WeakReference(intent.Values.GetUnsafeValue(0, 1)!),
+            retainSource
+                ? operation
+                : null);
     }
 
     /// <summary>Separates live generated commands, weak source probes and an intentional non-vacuous retention control.</summary>
-    private sealed record ManagedPayloadRetentionFixture(IReadOnlyList<MigrationCommand> Commands, WeakReference Operation,
-        WeakReference Keys, WeakReference Values, WeakReference Cell, SafeMigrationOperation? RetainedSource);
+    private sealed record ManagedPayloadRetentionFixture(
+        IReadOnlyList<MigrationCommand> Commands,
+        WeakReference Operation,
+        WeakReference Keys,
+        WeakReference Values,
+        WeakReference Cell,
+        SafeMigrationOperation? RetainedSource
+    );
 }

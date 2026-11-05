@@ -1,6 +1,7 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>Verifies exact process-wide Meter measurements without competing telemetry emitters.</summary>
+
 // WHY: MeterListener observes every matching instrument in this process, not only this test's emissions.
 [Collection(ProcessWideTestGroup.Name)]
 public sealed class SafeMigrationTelemetryMeasurementTests
@@ -12,10 +13,8 @@ public sealed class SafeMigrationTelemetryMeasurementTests
         // Arrange
         var measurements = new List<KeyValuePair<string, object?>[]>();
         using var listener = new MeterListener();
-        listener.InstrumentPublished = (
-            instrument,
-            meterListener
-        ) =>
+        listener.InstrumentPublished = (instrument,
+            meterListener) =>
         {
             if (instrument.Meter.Name == SafeMigrationDiagnostics.MeterName
                 && instrument.Name == SafeMigrationDiagnostics.RunFailureCountMetricName)
@@ -23,12 +22,12 @@ public sealed class SafeMigrationTelemetryMeasurementTests
                 meterListener.EnableMeasurementEvents(instrument);
             }
         };
-        listener.SetMeasurementEventCallback<long>((
-            _,
+
+        listener.SetMeasurementEventCallback<long>((_,
             _,
             tags,
-            _
-        ) => measurements.Add(tags.ToArray()));
+            _) => measurements.Add(tags.ToArray()));
+
         listener.Start();
 
         // Act
@@ -43,6 +42,7 @@ public sealed class SafeMigrationTelemetryMeasurementTests
         Assert.Contains(
             tags,
             value => value.Key == "safe_migrations.failure_code" && Equals(value.Value, "runtime_contract_invalid"));
+
         Assert.DoesNotContain(
             tags,
             value => Convert
@@ -58,10 +58,8 @@ public sealed class SafeMigrationTelemetryMeasurementTests
         // Arrange
         var measurements = new List<(string Instrument, KeyValuePair<string, object?>[] Tags)>();
         using var listener = new MeterListener();
-        listener.InstrumentPublished = (
-            instrument,
-            meterListener
-        ) =>
+        listener.InstrumentPublished = (instrument,
+            meterListener) =>
         {
             if (instrument.Meter.Name == SafeMigrationDiagnostics.MeterName
                 && instrument.Name is SafeMigrationDiagnostics.RunCountMetricName
@@ -71,18 +69,17 @@ public sealed class SafeMigrationTelemetryMeasurementTests
                 meterListener.EnableMeasurementEvents(instrument);
             }
         };
-        listener.SetMeasurementEventCallback<long>((
-            instrument,
+
+        listener.SetMeasurementEventCallback<long>((instrument,
             _,
             tags,
-            _
-        ) => measurements.Add((instrument.Name, tags.ToArray())));
-        listener.SetMeasurementEventCallback<double>((
-            instrument,
+            _) => measurements.Add((instrument.Name, tags.ToArray())));
+
+        listener.SetMeasurementEventCallback<double>((instrument,
             _,
             tags,
-            _
-        ) => measurements.Add((instrument.Name, tags.ToArray())));
+            _) => measurements.Add((instrument.Name, tags.ToArray())));
+
         listener.Start();
 
         // Act
@@ -103,6 +100,7 @@ public sealed class SafeMigrationTelemetryMeasurementTests
                 SafeMigrationDiagnostics.OperationCountMetricName,
             ],
             measurements.Select(static measurement => measurement.Instrument));
+
         Assert.All(
             measurements,
             measurement =>
@@ -111,13 +109,16 @@ public sealed class SafeMigrationTelemetryMeasurementTests
                 Assert.Contains(
                     measurement.Tags,
                     value => value.Key == "db.system.name" && Equals(value.Value, "postgresql"));
+
                 Assert.DoesNotContain(measurement.Tags, value => value.Key == "db.system");
                 Assert.Contains(
                     measurement.Tags,
                     value => value.Key == "safe_migrations.provider" && Equals(value.Value, "npgsql_postgresql"));
+
                 Assert.Contains(
                     measurement.Tags,
                     value => value.Key == "safe_migrations.mode" && Equals(value.Value, "preflight"));
+
                 Assert.Contains(
                     measurement.Tags,
                     value => value.Key == "safe_migrations.status" && Equals(value.Value, "ready"));

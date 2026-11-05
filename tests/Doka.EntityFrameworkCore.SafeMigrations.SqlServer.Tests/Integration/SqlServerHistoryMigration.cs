@@ -11,15 +11,19 @@ public sealed class SqlServerHistoryMigration : Migration
     public const string MigrationIdentifier = "20260930000100_SqlServerHistory";
 
     /// <inheritdoc />
-    protected override void Up(MigrationBuilder migrationBuilder)
+    protected override void Up(
+        MigrationBuilder migrationBuilder
+    )
     {
         migrationBuilder.CreateTable(
             "ordinary_pipeline_probe",
             table => new { Id = table.Column<int>(type: "int", nullable: false) });
+
         migrationBuilder.CreateTableIfNotExists(
             "safe_history_probe",
             table => new { Id = table.Column<int>(type: "int", nullable: false) },
             constraints: table => table.PrimaryKey("PK_safe_history_probe", row => row.Id));
+
         migrationBuilder.AddColumnIfNotExists<string>(
             "Caption",
             "safe_history_probe",
@@ -27,6 +31,7 @@ public sealed class SqlServerHistoryMigration : Migration
             maxLength: 80,
             nullable: false,
             defaultValue: "ready");
+
         migrationBuilder.AddCheckConstraintIfNotExists(
             "CK_safe_history_probe_Id",
             "safe_history_probe",
@@ -34,7 +39,9 @@ public sealed class SqlServerHistoryMigration : Migration
     }
 
     /// <inheritdoc />
-    protected override void Down(MigrationBuilder migrationBuilder)
+    protected override void Down(
+        MigrationBuilder migrationBuilder
+    )
     {
         migrationBuilder.DropTableIfExists("safe_history_probe");
         migrationBuilder.DropTable("ordinary_pipeline_probe");

@@ -6,7 +6,10 @@ internal sealed class SqliteColumnTransitionTestContext : DbContext
 
     public SqliteColumnTransitionTestContext(
         DbConnection connection
-    ) => _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    )
+    {
+        _connection = connection ?? throw new ArgumentNullException(nameof(connection));
+    }
 
     protected override void OnConfiguring(
         DbContextOptionsBuilder optionsBuilder
@@ -24,8 +27,14 @@ internal sealed class SqliteColumnTransitionTestContext : DbContext
         {
             entity.ToTable("column_transition");
             entity.HasKey(value => value.Id);
-            entity.Property(value => value.Id).ValueGeneratedNever();
-            entity.Property(value => value.RenamedCode).HasColumnName("renamed_code");
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
+
+            entity
+                .Property(value => value.RenamedCode)
+                .HasColumnName("renamed_code");
+
             entity.Property(value => value.AddedCode);
         });
 
@@ -33,8 +42,13 @@ internal sealed class SqliteColumnTransitionTestContext : DbContext
         {
             entity.ToTable("rename_target");
             entity.HasKey(value => value.Id);
-            entity.Property(value => value.Id).ValueGeneratedNever();
-            entity.Property(value => value.RenamedCode).HasColumnName("renamed_code");
+            entity
+                .Property(value => value.Id)
+                .ValueGeneratedNever();
+
+            entity
+                .Property(value => value.RenamedCode)
+                .HasColumnName("renamed_code");
         });
     }
 

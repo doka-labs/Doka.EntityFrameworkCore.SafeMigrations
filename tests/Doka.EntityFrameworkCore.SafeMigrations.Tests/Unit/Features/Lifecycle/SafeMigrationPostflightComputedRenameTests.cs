@@ -12,7 +12,8 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         var final = Table("renamed");
         var analyzer = new FinalCatalogAnalyzer(final);
         var operations = RenameOperations(initial, final);
-        operations[0].AddAnnotation("Test:CapturedMetadata", "preserved");
+        operations[0]
+            .AddAnnotation("Test:CapturedMetadata", "preserved");
 
         // Act
         var report = await VerifyAsync(operations, analyzer, cancellationToken: CancellationToken.None);
@@ -20,13 +21,21 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         // Assert
         Assert.All(report.Assessments, static assessment => Assert.True(assessment.PostconditionSatisfied));
         Assert.Equal([3, 1], analyzer.Batches.Select(static batch => batch.Length));
-        var rewritten = Assert.IsType<EnsureTableIntent>(Assert.Single(analyzer.Batches[1]).Intent).Definition;
+        var rewritten = Assert.IsType<EnsureTableIntent>(Assert.Single(analyzer.Batches[1])
+                .Intent)
+            .Definition;
+
         Assert.True(SafeMigrationDefinitionEquivalence.Table(final, rewritten));
-        Assert.Equal("preserved", analyzer.Batches[1][0]["Test:CapturedMetadata"]);
+        Assert.Equal("preserved",
+            analyzer
+                .Batches[1][0]["Test:CapturedMetadata"]);
+
         Assert.Equal("classified_matching", report.Assessments[0].AnalysisCode);
         Assert.NotEqual("postcondition_superseded", report.Assessments[0].Code);
-        Assert.Same(initial,
-            Assert.IsType<EnsureTableIntent>(((SafeMigrationOperation)operations[0]).Intent).Definition);
+        Assert.Same(
+            initial,
+            Assert.IsType<EnsureTableIntent>(((SafeMigrationOperation)operations[0]).Intent)
+                .Definition);
     }
 
     /// <summary>Unrelated facets remain observable after an intentional referenced-member rename.</summary>
@@ -36,7 +45,9 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
     [InlineData("column_comment")]
     [InlineData("default")]
     [InlineData("unique_key")]
-    public async Task ComputedRenameDoesNotHideUnrelatedFinalTableDrift(string drift)
+    public async Task ComputedRenameDoesNotHideUnrelatedFinalTableDrift(
+        string drift
+    )
     {
         // Arrange
         var initial = Table("source");
@@ -67,7 +78,9 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         var report = await VerifyAsync(operations, analyzer, cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.True(Assert.Single(report.Assessments).PostconditionSatisfied);
+        Assert.True(Assert.Single(report.Assessments)
+            .PostconditionSatisfied);
+
         Assert.Single(analyzer.Batches);
         Assert.Same(operations[0], Assert.Single(analyzer.Batches[0]));
     }
@@ -99,19 +112,25 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
     [InlineData("sql")]
     [InlineData("provider")]
     [InlineData("drop_source")]
-    public async Task UnprovenBoundaryDoesNotRewriteEarlierTable(string boundary)
+    public async Task UnprovenBoundaryDoesNotRewriteEarlierTable(
+        string boundary
+    )
     {
         // Arrange
         var initial = Table("source");
         var final = Table("renamed");
         var analyzer = new FinalCatalogAnalyzer(final);
-        var operations = RenameOperations(initial, final).ToList();
-        operations.Insert(1, boundary switch
-        {
-            "sql" => new SqlOperation { Sql = "SELECT 1;", },
-            "provider" => new AlterTableOperation { Name = "source_nodes", },
-            _ => Safe(new DropColumnIntent("source", "source_nodes")),
-        });
+        var operations = RenameOperations(initial, final)
+            .ToList();
+
+        operations.Insert(
+            1,
+            boundary switch
+            {
+                "sql" => new SqlOperation { Sql = "SELECT 1;" },
+                "provider" => new AlterTableOperation { Name = "source_nodes" },
+                _ => Safe(new DropColumnIntent("source", "source_nodes")),
+            });
 
         // Act
         var report = await VerifyAsync(operations, analyzer, cancellationToken: CancellationToken.None);
@@ -129,7 +148,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         // Arrange
         var initial = Table("source");
         var final = Table("renamed");
-        var analyzer = new FinalCatalogAnalyzer(initial) { RenameSatisfied = false, };
+        var analyzer = new FinalCatalogAnalyzer(initial) { RenameSatisfied = false };
         var operations = RenameOperations(initial, final);
 
         // Act
@@ -148,7 +167,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         // Arrange
         var initial = Table("source");
         var final = Table("renamed");
-        var analyzer = new FinalCatalogAnalyzer(final) { HistoricalIdentityProven = false, };
+        var analyzer = new FinalCatalogAnalyzer(final) { HistoricalIdentityProven = false };
         var operations = RenameOperations(initial, final);
 
         // Act
@@ -188,7 +207,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         var final = Table("renamed");
         var analyzer = new FinalCatalogAnalyzer(final);
         MigrationOperation[] operations =
-            [new SqlOperation { Sql = "SELECT 1;", }, .. RenameOperations(initial, final)];
+            [new SqlOperation { Sql = "SELECT 1;" }, .. RenameOperations(initial, final)];
 
         var tableModel = new ModelBuilder().FinalizeModel();
         List<IModel?> models = [null, tableModel, new ModelBuilder().FinalizeModel(), null];
@@ -211,16 +230,22 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         // Arrange
         var initial = Table("source");
         var final = Table("renamed");
-        var analyzer = new FinalCatalogAnalyzer(final) { MalformedSecondResult = true, };
+        var analyzer = new FinalCatalogAnalyzer(final) { MalformedSecondResult = true };
         var operations = RenameOperations(initial, final);
 
         // Act
-        var exception = await Record.ExceptionAsync(() => VerifyAsync(operations, analyzer,
+        var exception = await Record.ExceptionAsync(() => VerifyAsync(
+            operations,
+            analyzer,
             cancellationToken: CancellationToken.None));
 
         // Assert
-        Assert.Contains("table analyzer returned an inconsistent result count",
-            Assert.IsType<InvalidOperationException>(exception).Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "table analyzer returned an inconsistent result count",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
+            StringComparison.Ordinal);
+
         Assert.Equal(2, analyzer.Batches.Count);
     }
 
@@ -231,7 +256,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         // Arrange
         var initial = Table("source");
         var final = Table("renamed");
-        var analyzer = new FinalCatalogAnalyzer(final) { ResetIdentityAfterSubset = true, };
+        var analyzer = new FinalCatalogAnalyzer(final) { ResetIdentityAfterSubset = true };
         MigrationOperation[] operations =
         [
             .. RenameOperations(initial, final),
@@ -256,7 +281,7 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         // Arrange
         var initial = Table("source");
         var final = Table("renamed");
-        var analyzer = new FinalCatalogAnalyzer(final) { FirstUnprovenOrdinal = 2, };
+        var analyzer = new FinalCatalogAnalyzer(final) { FirstUnprovenOrdinal = 2 };
         var operations = RenameOperations(initial, final);
 
         // Act
@@ -302,17 +327,29 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
     [InlineData("ensure_column", false)]
     [InlineData("ensure_index", true)]
     [InlineData("ensure_column", true)]
-    public async Task ShapeNeutralOperationsPreserveSuccessiveRenameLineage(string intermediate, bool drift)
+    public async Task ShapeNeutralOperationsPreserveSuccessiveRenameLineage(
+        string intermediate,
+        bool drift
+    )
     {
         // Arrange
         var initial = Table("source");
         var middle = Table("renamed");
         var expected = Table("final");
-        var analyzer = new FinalCatalogAnalyzer(Table("final", drift ? "default" : null));
+        var analyzer = new FinalCatalogAnalyzer(
+            Table(
+                "final",
+                drift
+                    ? "default"
+                    : null));
+
         SafeMigrationIntent neutral = intermediate switch
         {
-            "ensure_index" => new EnsureIndexIntent(new ExpectedIndexDefinition(
-                "ix_source", "source_nodes", [new ExpectedIndexKeyDefinition(column: "renamed")])),
+            "ensure_index" => new EnsureIndexIntent(
+                new ExpectedIndexDefinition(
+                    "ix_source",
+                    "source_nodes",
+                    [new ExpectedIndexKeyDefinition(column: "renamed")])),
             "drop_index" => new DropIndexIntent("ix_source", "source_nodes"),
             "rename_index" => new RenameIndexIntent("ix_source", "source_nodes", "ix_renamed"),
             _ => new EnsureColumnIntent("source_nodes", middle.Columns[2]),
@@ -332,9 +369,17 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
 
         // Assert
         Assert.Equal(!drift, report.Assessments[0].PostconditionSatisfied);
-        Assert.Equal(drift ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready, report.Status);
+        Assert.Equal(
+            drift
+                ? SafeMigrationReportStatus.Blocked
+                : SafeMigrationReportStatus.Ready,
+            report.Status);
+
         Assert.Equal([5, 1], analyzer.Batches.Select(static batch => batch.Length));
-        var probe = Assert.IsType<EnsureTableIntent>(Assert.Single(analyzer.Batches[1]).Intent).Definition;
+        var probe = Assert.IsType<EnsureTableIntent>(Assert.Single(analyzer.Batches[1])
+                .Intent)
+            .Definition;
+
         Assert.True(SafeMigrationDefinitionEquivalence.Table(expected, probe));
     }
 
@@ -343,7 +388,9 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task OpaqueBoundaryAfterRenameInvalidatesPendingTableProbe(bool providerOwned)
+    public async Task OpaqueBoundaryAfterRenameInvalidatesPendingTableProbe(
+        bool providerOwned
+    )
     {
         // Arrange
         var initial = Table("source");
@@ -353,8 +400,8 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         [
             .. RenameOperations(initial, final),
             providerOwned
-                ? new AlterTableOperation { Name = "source_nodes", }
-                : new SqlOperation { Sql = "SELECT 1;", },
+                ? new AlterTableOperation { Name = "source_nodes" }
+                : new SqlOperation { Sql = "SELECT 1;" },
         ];
 
         // Act
@@ -390,12 +437,20 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ExactRenamedCheckReassertionRetainsFullTablePostcondition(bool unrelatedDrift)
+    public async Task ExactRenamedCheckReassertionRetainsFullTablePostcondition(
+        bool unrelatedDrift
+    )
     {
         // Arrange
         var initial = Table("source");
         var expected = Table("renamed");
-        var analyzer = new FinalCatalogAnalyzer(Table("renamed", unrelatedDrift ? "default" : null));
+        var analyzer = new FinalCatalogAnalyzer(
+            Table(
+                "renamed",
+                unrelatedDrift
+                    ? "default"
+                    : null));
+
         MigrationOperation[] operations =
         [
             .. RenameOperations(initial, expected),
@@ -407,10 +462,17 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
 
         // Assert
         Assert.Equal(!unrelatedDrift, report.Assessments[0].PostconditionSatisfied);
-        Assert.Equal(unrelatedDrift ? SafeMigrationReportStatus.Blocked : SafeMigrationReportStatus.Ready,
+        Assert.Equal(
+            unrelatedDrift
+                ? SafeMigrationReportStatus.Blocked
+                : SafeMigrationReportStatus.Ready,
             report.Status);
+
         Assert.Equal([4, 1], analyzer.Batches.Select(static batch => batch.Length));
-        var probe = Assert.IsType<EnsureTableIntent>(Assert.Single(analyzer.Batches[1]).Intent).Definition;
+        var probe = Assert.IsType<EnsureTableIntent>(Assert.Single(analyzer.Batches[1])
+                .Intent)
+            .Definition;
+
         Assert.True(SafeMigrationDefinitionEquivalence.Table(expected, probe));
     }
 
@@ -433,35 +495,67 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
     {
         var sql = $"CASE WHEN \"{sourceName}\" > 0 THEN \"{sourceName}\" ELSE 0 END";
         var computed = nestedOpaqueComputed
-            ? new ExpectedColumnDefinition("derived", typeof(int), false, "int", computedExpression:
-                SafeMigrationSql.Binary(SafeMigrationSql.Opaque("unknown()"), SafeMigrationSqlBinaryOperator.Add,
+            ? new ExpectedColumnDefinition(
+                "derived",
+                typeof(int),
+                false,
+                "int",
+                computedExpression:
+                SafeMigrationSql.Binary(
+                    SafeMigrationSql.Opaque("unknown()"),
+                    SafeMigrationSqlBinaryOperator.Add,
                     SafeMigrationSql.Literal(1)))
             : opaqueComputed
-            ? new ExpectedColumnDefinition("derived", typeof(int), false, "int", computedColumnSql: sql)
-            : SafeMigrationExpectedDefinitionFactory.From(new AddColumnOperation
-            {
-                Name = "derived", Table = "source_nodes", ClrType = typeof(int), ColumnType = "int",
-                IsNullable = false, ComputedColumnSql = sql,
-            });
+                ? new ExpectedColumnDefinition("derived", typeof(int), false, "int", computedColumnSql: sql)
+                : SafeMigrationExpectedDefinitionFactory.From(
+                    new AddColumnOperation
+                    {
+                        Name = "derived",
+                        Table = "source_nodes",
+                        ClrType = typeof(int),
+                        ColumnType = "int",
+                        IsNullable = false,
+                        ComputedColumnSql = sql,
+                    });
 
-        return new ExpectedTableDefinition("source_nodes",
+        return new ExpectedTableDefinition(
+            "source_nodes",
             [
                 new ExpectedColumnDefinition(sourceName, typeof(int), false, "int"),
-                new ExpectedColumnDefinition("payload", typeof(int), false, "int",
-                    comment: drift == "column_comment" ? "drift" : "retained",
-                    defaultValue: SafeMigrationDefaultValue.Literal(drift == "default" ? 2 : 1)),
+                new ExpectedColumnDefinition(
+                    "payload",
+                    typeof(int),
+                    false,
+                    "int",
+                    comment: drift == "column_comment"
+                        ? "drift"
+                        : "retained",
+                    defaultValue: SafeMigrationDefaultValue.Literal(
+                        drift == "default"
+                            ? 2
+                            : 1)),
                 computed,
             ],
-            comment: drift == "table_comment" ? "drift" : "retained table",
+            comment: drift == "table_comment"
+                ? "drift"
+                : "retained table",
             primaryKey: new ExpectedPrimaryKeyDefinition("pk_nodes", "source_nodes", [sourceName]),
-            uniqueConstraints: drift == "unique_key" ? [] :
-                [new ExpectedUniqueConstraintDefinition("uq_payload", "source_nodes", ["payload"])],
+            uniqueConstraints: drift == "unique_key"
+                ? []
+                : [new ExpectedUniqueConstraintDefinition("uq_payload", "source_nodes", ["payload"])],
             checkConstraints:
-                [SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_source", "source_nodes",
-                    $"\"{sourceName}\" >= 0", null)]);
+            [
+                SafeMigrationExpectedDefinitionFactory.CheckConstraint(
+                    "ck_source",
+                    "source_nodes",
+                    $"\"{sourceName}\" >= 0",
+                    null),
+            ]);
     }
 
-    private static SafeMigrationOperation Safe(SafeMigrationIntent intent) =>
+    private static SafeMigrationOperation Safe(
+        SafeMigrationIntent intent
+    ) =>
         new(intent, SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Verifies the ordered postflight contract through the production dispatch loop.</summary>
@@ -481,18 +575,20 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
 
         using var context = new DbContext(new DbContextOptionsBuilder().Options);
         var runner = new SafeMigrationRunner(analyzer);
-        var method = typeof(SafeMigrationRunner).GetMethod("AnalyzeOperationsAsync",
+        var method = typeof(SafeMigrationRunner).GetMethod(
+            "AnalyzeOperationsAsync",
             BindingFlags.Instance | BindingFlags.NonPublic)!;
 
         // WHY: Exercise the production report/projection loop with deterministic
         // complete catalog definitions, not a fabricated report or a live DB.
-        var task = (Task<SafeMigrationRunReport>)method.Invoke(runner,
-        [
-            context, operations, SafeMigrationReportMode.Postflight, new SafeMigrationRunOptions("isolated"),
-            $"safe-relational-model:v1:sqlite:sha256:{new string('a', 64)}", new string('b', 64),
-            DateTimeOffset.UnixEpoch, new SafeMigrationProviderEnvironment("sqlite", "sqlite", "test"),
-            targetModels, null, cancellationToken,
-        ])!;
+        var task = (Task<SafeMigrationRunReport>)method.Invoke(
+            runner,
+            [
+                context, operations, SafeMigrationReportMode.Postflight, new SafeMigrationRunOptions("isolated"),
+                $"safe-relational-model:v1:sqlite:sha256:{new string('a', 64)}", new string('b', 64),
+                DateTimeOffset.UnixEpoch, new SafeMigrationProviderEnvironment("sqlite", "sqlite", "test"),
+                targetModels, null, cancellationToken,
+            ])!;
 
         return await task;
     }
@@ -511,26 +607,19 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         public int? FirstUnprovenOrdinal { get; init; }
         public string? CurrentSchema { get; private set; } = "custom";
         public string ProviderId => "sqlite";
-        public StringComparer IdentifierComparer => StringComparer.Ordinal;
-        public char? CapturedSqlIdentifierDelimiter => '"';
-        public string NormalizeIdentifier(string identifier) => identifier;
-        public string? NormalizeSchema(string? schema) => ResetIdentityAfterSubset ? schema ?? CurrentSchema : schema;
-        public bool IsObjectIdentityMismatch(SafeMigrationProviderAnalysis analysis) => false;
-        public bool IsPostflightIdentityProven(SafeMigrationIntent intent, int ordinal) =>
-            HistoricalIdentityProven && (FirstUnprovenOrdinal is null || ordinal < FirstUnprovenOrdinal);
 
-        public ISafeMigrationProviderObjectIdentityNormalizer GetPostflightIdentityNormalizer(
-            IReadOnlyList<MigrationOperation> operations
-        ) => new IdentitySnapshot(ResetIdentityAfterSubset ? CurrentSchema : null,
-            HistoricalIdentityProven, FirstUnprovenOrdinal);
-        public void ValidateContext(DbContext context) => ArgumentNullException.ThrowIfNull(context);
+        public void ValidateContext(
+            DbContext context
+        ) => ArgumentNullException.ThrowIfNull(context);
 
         public Task<SafeMigrationProviderEnvironment> GetEnvironmentAsync(
-            DbContext context, CancellationToken cancellationToken
+            DbContext context,
+            CancellationToken cancellationToken
         ) => throw new NotSupportedException("The ordered seam receives its environment.");
 
         public Task<IAsyncDisposable> AcquireAnalysisScopeAsync(
-            DbContext context, CancellationToken cancellationToken
+            DbContext context,
+            CancellationToken cancellationToken
         ) => throw new NotSupportedException("The isolated ordered seam performs no I/O.");
 
         public Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
@@ -550,43 +639,104 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
                 return Task.FromResult<IReadOnlyList<SafeMigrationProviderAnalysis>>([]);
             }
 
-            return Task.FromResult<IReadOnlyList<SafeMigrationProviderAnalysis>>(operations.Select(operation =>
-            {
-                if (operation.Intent is ModelManagedDataIntent managed && FinalManagedContracts is { } contracts)
-                {
-                    var missing = managed.KeyColumns.Concat(managed.Columns).Any(member =>
-                        !finalTable.Columns.Any(column => StringComparer.Ordinal.Equals(column.Name, member)));
+            return Task.FromResult<IReadOnlyList<SafeMigrationProviderAnalysis>>(
+                operations
+                    .Select(operation =>
+                    {
+                        if (operation.Intent is ModelManagedDataIntent managed
+                            && FinalManagedContracts is { } contracts)
+                        {
+                            var missing = managed
+                                .KeyColumns
+                                .Concat(managed.Columns)
+                                .Any(member =>
+                                    !finalTable.Columns.Any(column =>
+                                        StringComparer.Ordinal.Equals(column.Name, member)));
 
-                    var rowMatches = !missing && contracts.Any(expected => StringComparer.Ordinal.Equals(
-                        SafeMigrationContractFingerprint.Create([Safe(managed)]),
-                        SafeMigrationContractFingerprint.Create([Safe(expected)])));
+                            var rowMatches = !missing
+                                && contracts.Any(expected => StringComparer.Ordinal.Equals(
+                                    SafeMigrationContractFingerprint.Create([Safe(managed)]),
+                                    SafeMigrationContractFingerprint.Create([Safe(expected)])));
 
-                    var state = rowMatches ? SafeMigrationObservedState.Matching
-                        : missing ? SafeMigrationObservedState.PrerequisiteMissing
-                        : SafeMigrationObservedState.Different;
+                            var state = rowMatches
+                                ? SafeMigrationObservedState.Matching
+                                : missing
+                                    ? SafeMigrationObservedState.PrerequisiteMissing
+                                    : SafeMigrationObservedState.Different;
 
-                    return new SafeMigrationProviderAnalysis(state, SafeMigrationRepairCapability.None, rowMatches,
-                        rowMatches ? "classified_matching" : missing
-                            ? "classified_prerequisite_missing" : "classified_different");
-                }
+                            return new SafeMigrationProviderAnalysis(
+                                state,
+                                SafeMigrationRepairCapability.None,
+                                rowMatches,
+                                rowMatches
+                                    ? "classified_matching"
+                                    : missing
+                                        ? "classified_prerequisite_missing"
+                                        : "classified_different");
+                        }
 
-                var matching = operation.Intent switch
-                {
-                    EnsureTableIntent table => SafeMigrationDefinitionEquivalence.Table(table.Definition, finalTable),
-                    RenameColumnIntent => RenameSatisfied,
-                    EnsureColumnIntent column => finalTable.Columns.Any(actual =>
-                        SafeMigrationDefinitionEquivalence.Column(actual, column.Definition)),
-                    EnsureCheckConstraintIntent check => finalTable.CheckConstraints.Any(actual =>
-                        SafeMigrationDefinitionEquivalence.CheckConstraintSemantics(actual, check.Definition)),
-                    _ => true,
-                };
+                        var matching = operation.Intent switch
+                        {
+                            EnsureTableIntent table => SafeMigrationDefinitionEquivalence.Table(table.Definition,
+                                finalTable),
+                            RenameColumnIntent => RenameSatisfied,
+                            EnsureColumnIntent column => finalTable.Columns.Any(actual =>
+                                SafeMigrationDefinitionEquivalence.Column(actual, column.Definition)),
+                            EnsureCheckConstraintIntent check => finalTable.CheckConstraints.Any(actual =>
+                                SafeMigrationDefinitionEquivalence.CheckConstraintSemantics(actual, check.Definition)),
+                            _ => true,
+                        };
 
-                return new SafeMigrationProviderAnalysis(matching
-                        ? SafeMigrationObservedState.Matching : SafeMigrationObservedState.Different,
-                    SafeMigrationRepairCapability.None, matching,
-                    matching ? "classified_matching" : "classified_different");
-            }).ToArray());
+                        return new SafeMigrationProviderAnalysis(
+                            matching
+                                ? SafeMigrationObservedState.Matching
+                                : SafeMigrationObservedState.Different,
+                            SafeMigrationRepairCapability.None,
+                            matching,
+                            matching
+                                ? "classified_matching"
+                                : "classified_different");
+                    })
+                    .ToArray());
         }
+
+        public Task<IReadOnlyList<SafeMigrationUnexpectedObject>> FindUnexpectedObjectsAsync(
+            DbContext context,
+            IReadOnlyList<MigrationOperation> operations,
+            CancellationToken cancellationToken
+        ) => Task.FromResult<IReadOnlyList<SafeMigrationUnexpectedObject>>([]);
+
+        public StringComparer IdentifierComparer => StringComparer.Ordinal;
+        public char? CapturedSqlIdentifierDelimiter => '"';
+
+        public string NormalizeIdentifier(
+            string identifier
+        ) => identifier;
+
+        public string? NormalizeSchema(
+            string? schema
+        ) => ResetIdentityAfterSubset
+            ? schema ?? CurrentSchema
+            : schema;
+
+        public bool IsObjectIdentityMismatch(
+            SafeMigrationProviderAnalysis analysis
+        ) => false;
+
+        public bool IsPostflightIdentityProven(
+            SafeMigrationIntent intent,
+            int ordinal
+        ) =>
+            HistoricalIdentityProven && (FirstUnprovenOrdinal is null || ordinal < FirstUnprovenOrdinal);
+
+        public ISafeMigrationProviderObjectIdentityNormalizer GetPostflightIdentityNormalizer(
+            IReadOnlyList<MigrationOperation> operations
+        ) => new IdentitySnapshot(
+            ResetIdentityAfterSubset
+                ? CurrentSchema
+                : null,
+            HistoricalIdentityProven,
+            FirstUnprovenOrdinal);
 
         public Task<IReadOnlyList<SafeMigrationProviderAnalysis>> AnalyzeAsync(
             DbContext context,
@@ -597,25 +747,40 @@ public sealed partial class SafeMigrationPostflightComputedRenameTests
         {
             ModelBatches.Add(targetModels?.ToArray());
 
-            return AnalyzeAsync(context, operations.OfType<SafeMigrationOperation>().ToArray(), cancellationToken);
+            return AnalyzeAsync(context,
+                operations
+                    .OfType<SafeMigrationOperation>()
+                    .ToArray(),
+                cancellationToken);
         }
-
-        public Task<IReadOnlyList<SafeMigrationUnexpectedObject>> FindUnexpectedObjectsAsync(
-            DbContext context,
-            IReadOnlyList<MigrationOperation> operations,
-            CancellationToken cancellationToken
-        ) => Task.FromResult<IReadOnlyList<SafeMigrationUnexpectedObject>>([]);
     }
 
-    private sealed class IdentitySnapshot(string? schema, bool historicalProven, int? firstUnproven)
+    private sealed class IdentitySnapshot(
+        string? schema,
+        bool historicalProven,
+        int? firstUnproven
+    )
         : ISafeMigrationProviderObjectIdentityNormalizer
     {
         public StringComparer IdentifierComparer => StringComparer.Ordinal;
         public char? CapturedSqlIdentifierDelimiter => '"';
-        public string NormalizeIdentifier(string identifier) => identifier;
-        public string? NormalizeSchema(string? value) => value ?? schema;
-        public bool IsObjectIdentityMismatch(SafeMigrationProviderAnalysis analysis) => false;
-        public bool IsPostflightIdentityProven(SafeMigrationIntent intent, int ordinal) =>
+
+        public string NormalizeIdentifier(
+            string identifier
+        ) => identifier;
+
+        public string? NormalizeSchema(
+            string? value
+        ) => value ?? schema;
+
+        public bool IsObjectIdentityMismatch(
+            SafeMigrationProviderAnalysis analysis
+        ) => false;
+
+        public bool IsPostflightIdentityProven(
+            SafeMigrationIntent intent,
+            int ordinal
+        ) =>
             historicalProven && (firstUnproven is null || ordinal < firstUnproven);
     }
 }

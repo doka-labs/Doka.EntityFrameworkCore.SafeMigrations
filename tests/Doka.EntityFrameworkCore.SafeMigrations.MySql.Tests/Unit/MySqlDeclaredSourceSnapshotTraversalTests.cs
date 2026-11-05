@@ -18,23 +18,40 @@ public sealed class MySqlDeclaredSourceSnapshotTraversalTests
     [InlineData(128, false, true, false)]
     [InlineData(1, false, false, true)]
     [InlineData(128, false, false, true)]
-    public void CompleteSourceScanRetainsIndependentProofs(int width, bool missing, bool ambiguous, bool nullable)
+    public void CompleteSourceScanRetainsIndependentProofs(
+        int width,
+        bool missing,
+        bool ambiguous,
+        bool nullable
+    )
     {
         // Arrange
         var sourceName = "c" + (width - 1).ToString(CultureInfo.InvariantCulture);
-        var columns = Enumerable.Range(0, width)
-            .Select(index => new ExpectedColumnDefinition("c" + index.ToString(CultureInfo.InvariantCulture),
-                typeof(int), index == width - 1 && nullable, "int"))
+        var columns = Enumerable
+            .Range(0, width)
+            .Select(index => new ExpectedColumnDefinition(
+                "c" + index.ToString(CultureInfo.InvariantCulture),
+                typeof(int),
+                index == width - 1 && nullable,
+                "int"))
             .ToArray();
 
         var declared = ambiguous
-            ? columns.Append(new ExpectedColumnDefinition(sourceName.ToUpperInvariant(), typeof(int), false, "int"))
+            ? columns
+                .Append(new ExpectedColumnDefinition(sourceName.ToUpperInvariant(), typeof(int), false, "int"))
                 .ToArray()
             : columns;
 
         var table = new ExpectedTableDefinition("items", declared);
-        var generated = new ExpectedColumnDefinition("derived", typeof(int), false, "int",
-            computedExpression: SafeMigrationSql.Identifier(missing ? "absent" : sourceName));
+        var generated = new ExpectedColumnDefinition(
+            "derived",
+            typeof(int),
+            false,
+            "int",
+            computedExpression: SafeMigrationSql.Identifier(
+                missing
+                    ? "absent"
+                    : sourceName));
 
         // WHY: A cached scan length is valid only for the owned snapshot, never the caller's mutable array.
         declared[^1] = new ExpectedColumnDefinition("caller_mutation", typeof(int), true, "int");
@@ -46,7 +63,13 @@ public sealed class MySqlDeclaredSourceSnapshotTraversalTests
         // Assert
         Assert.Equal(!missing && !ambiguous, sourcesExist);
         Assert.Equal(!missing && !ambiguous && !nullable, requiredResult);
-        Assert.Equal(width + (ambiguous ? 1 : 0), table.Columns.Count);
+        Assert.Equal(
+            width
+            + (ambiguous
+                ? 1
+                : 0),
+            table.Columns.Count);
+
         Assert.DoesNotContain(table.Columns, static column => column.Name == "caller_mutation");
     }
 }

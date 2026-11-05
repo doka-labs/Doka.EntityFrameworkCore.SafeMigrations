@@ -87,22 +87,26 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                     GetTable(key.Definition.Table, key.Definition.Schema),
                     key.Definition.Name,
                     key.Definition.Columns);
+
                 RegisterConstraint(
                     GetTable(key.Definition.Table, key.Definition.Schema),
                     key.Definition.Schema,
                     key.Definition.Name,
                     "PK");
+
                 break;
             case EnsureUniqueConstraintIntent key:
                 AddCandidateKey(
                     GetTable(key.Definition.Table, key.Definition.Schema),
                     key.Definition.Name,
                     key.Definition.Columns);
+
                 RegisterConstraint(
                     GetTable(key.Definition.Table, key.Definition.Schema),
                     key.Definition.Schema,
                     key.Definition.Name,
                     "UQ");
+
                 break;
             case DropPrimaryKeyIntent key:
                 _candidateKeys.Remove(GetTable(key.Table, key.Schema), key.Name);
@@ -118,6 +122,7 @@ internal sealed partial class SqlServerProjectedDependencyGraph
                     check.Definition.Schema,
                     check.Definition.Name,
                     "C");
+
                 break;
             case DropCheckConstraintIntent check:
                 RemoveConstraint(GetTable(check.Table, check.Schema), check.Schema, check.Name, "C");
@@ -293,9 +298,9 @@ internal sealed partial class SqlServerProjectedDependencyGraph
         var id = GetTable(table, schema);
 
         foreach (var name in _constraintNames
-                     .Where(pair => pair.Value.Owner == id || pair.Value.Object == id)
-                     .Select(static pair => pair.Key)
-                     .ToArray())
+            .Where(pair => pair.Value.Owner == id || pair.Value.Object == id)
+            .Select(static pair => pair.Key)
+            .ToArray())
         {
             _constraintNames.Remove(name);
         }
@@ -306,15 +311,17 @@ internal sealed partial class SqlServerProjectedDependencyGraph
         _triggers.Remove(id);
         _candidateKeys.RemoveTable(id);
         foreach (var key in _columns
-                     .Keys
-                     .Where(key => key.Table == id)
-                     .ToArray())
+            .Keys
+            .Where(key => key.Table == id)
+            .ToArray())
         {
             _columns.Remove(key);
             _columnIds.Remove(key);
         }
 
-        foreach (var pair in _foreignKeys.Where(pair => pair.Value.Dependent == id).ToArray())
+        foreach (var pair in _foreignKeys
+            .Where(pair => pair.Value.Dependent == id)
+            .ToArray())
         {
             _foreignKeys.Remove(pair.Key);
         }
@@ -453,8 +460,8 @@ internal sealed partial class SqlServerProjectedDependencyGraph
             // the table. Move accepted ownership rather than resurrecting
             // names from the original authored definition after a prior DROP.
             foreach (var pair in _constraintNames
-                         .Where(pair => pair.Value.Owner == id)
-                         .ToArray())
+                .Where(pair => pair.Value.Owner == id)
+                .ToArray())
             {
                 _constraintNames.Remove(pair.Key);
                 RegisterSchemaObject(newSchema, pair.Key.Name, pair.Value);

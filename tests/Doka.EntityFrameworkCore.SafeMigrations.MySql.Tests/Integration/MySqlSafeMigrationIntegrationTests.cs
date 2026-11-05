@@ -34,8 +34,6 @@ public abstract partial class MySqlSafeMigrationIntegrationTests : MySqlIntegrat
         string column
     ) => SafeMigrationSql.Function(name, SqlColumn(column));
 
-    protected sealed class UnmappedValue;
-
     protected static string MySqlMaximumIdentifier(
         string prefix
     ) => prefix + new string('x', 64 - prefix.Length);
@@ -75,18 +73,32 @@ public abstract partial class MySqlSafeMigrationIntegrationTests : MySqlIntegrat
 
     /// <summary>Requires the owned atomic-add CHECK, not ordinary constraint or MODIFY errors.</summary>
     /// <param name="exception">The failure from the admitted staged required-column migration body.</param>
-    protected MySqlException AssertOwnedAtomicCheckFailure(Exception? exception)
+    protected MySqlException AssertOwnedAtomicCheckFailure(
+        Exception? exception
+    )
     {
         var diagnostic = Assert.IsType<SafeMigrationExecutionException>(exception);
         var native = Assert.IsType<MySqlException>(diagnostic.InnerException);
         Assert.Equal("doka_sm_data_blocked", diagnostic.GuardCode);
         Assert.Equal("column_atomic_add_check_failed", diagnostic.ReasonCode);
-        Assert.Equal(Fixture.IsMariaDb ? 4025 : 3819, native.Number);
-        Assert.Equal(Fixture.IsMariaDb ? "23000" : "HY000", native.SqlState);
+        Assert.Equal(
+            Fixture.IsMariaDb
+                ? 4025
+                : 3819,
+            native.Number);
+
+        Assert.Equal(
+            Fixture.IsMariaDb
+                ? "23000"
+                : "HY000",
+            native.SqlState);
+
         Assert.NotNull(diagnostic.OperationOrdinal);
 
         return native;
     }
+
+    protected sealed class UnmappedValue;
 
     protected sealed class ConflictingSafeMigrationHandler : IMySqlMigrationOperationHandler
     {
@@ -115,7 +127,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests : MySqlIntegrat
                     ["SET @safe_migrations_cleanup_probe = CONNECTION_ID();"],
                     "DO 0;",
                     ["SELECT * FROM `__doka_missing_cleanup_table`;"],
-                    transactionSuppressed: true)
+                    transactionSuppressed: true),
             ],
             "cleanup_failure_probe");
     }

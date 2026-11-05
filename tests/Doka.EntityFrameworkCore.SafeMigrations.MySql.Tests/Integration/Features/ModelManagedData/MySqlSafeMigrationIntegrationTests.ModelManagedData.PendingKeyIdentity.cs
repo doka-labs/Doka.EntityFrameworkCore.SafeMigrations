@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the ModelManagedDataPendingKeyIdentity migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlModelManagedDataPendingKeyIdentityIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlModelManagedDataPendingKeyIdentityIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlModelManagedDataPendingKeyIdentityIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlModelManagedDataPendingKeyIdentityIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>Two pending migrations may transition the same typed composite key in their migration order.</summary>
     [Fact]
@@ -13,7 +15,8 @@ public sealed partial class MySqlModelManagedDataPendingKeyIdentityIntegrationTe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `managed_pending_keys` (`Id` int NOT NULL, `Code` int NOT NULL, "
             + "`Marker` int NOT NULL, PRIMARY KEY (`Id`, `Code`)) ENGINE=InnoDB;",
             cancellationToken: CancellationToken.None);
@@ -22,34 +25,46 @@ public sealed partial class MySqlModelManagedDataPendingKeyIdentityIntegrationTe
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzePendingMigrationsAsync(context,
-            new SafeMigrationRunOptions("model-managed-pending-key-identity"), CancellationToken.None);
+        var preflight = await runner.AnalyzePendingMigrationsAsync(
+            context,
+            new SafeMigrationRunOptions("model-managed-pending-key-identity"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await context.Database.MigrateAsync(cancellationToken: CancellationToken.None);
-        var completed = await runner.AnalyzePendingMigrationsAsync(context,
-            new SafeMigrationRunOptions("model-managed-pending-key-identity-completed"), CancellationToken.None);
+        var completed = await runner.AnalyzePendingMigrationsAsync(
+            context,
+            new SafeMigrationRunOptions("model-managed-pending-key-identity-completed"),
+            CancellationToken.None);
 
         await context.Database.MigrateAsync(cancellationToken: CancellationToken.None);
-        var rerun = await runner.AnalyzePendingMigrationsAsync(context,
-            new SafeMigrationRunOptions("model-managed-pending-key-identity-rerun"), CancellationToken.None);
+        var rerun = await runner.AnalyzePendingMigrationsAsync(
+            context,
+            new SafeMigrationRunOptions("model-managed-pending-key-identity-rerun"),
+            CancellationToken.None);
 
         var pending = await context.Database.GetPendingMigrationsAsync(CancellationToken.None);
         var applied = await context.Database.GetAppliedMigrationsAsync(CancellationToken.None);
-        var historyRows = await ScalarIntAsync(connectionString,
-            "SELECT COUNT(*) FROM `__ModelManagedPendingKeyHistory`;", cancellationToken: CancellationToken.None);
+        var historyRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `__ModelManagedPendingKeyHistory`;",
+            cancellationToken: CancellationToken.None);
 
-        var retainedRows = await ScalarIntAsync(connectionString,
+        var retainedRows = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `managed_pending_keys` WHERE `Id` = 1 AND `Code` = 7 AND `Marker` = 1;",
             cancellationToken: CancellationToken.None);
 
-        var totalRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `managed_pending_keys`;",
+        var totalRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `managed_pending_keys`;",
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(2, preflight.Assessments.Count);
         Assert.Equal(SafeMigrationObservedState.Missing, preflight.Assessments[0].ObservedState);
         Assert.Equal(SafeMigrationAction.Apply, preflight.Assessments[0].Action);
+
         // WHY: The accepted guarded Ensure establishes this exact row, not
         // table-wide completeness. Canonical paired keys let the following
         // explicit transition use that row proof rather than stale live absence.
@@ -62,19 +77,20 @@ public sealed partial class MySqlModelManagedDataPendingKeyIdentityIntegrationTe
         Assert.Equal(SafeMigrationReportStatus.NoOperations, rerun.Status);
         Assert.Empty(rerun.Assessments);
         Assert.Empty(pending);
-        var expectedApplied = new[]
-        {
-            "20261013000001_ModelManagedKeyEnsure",
-            "20261013000002_ModelManagedKeyUpdate",
-        };
+        var expectedApplied = new[] { "20261013000001_ModelManagedKeyEnsure", "20261013000002_ModelManagedKeyUpdate" };
 
         Assert.Equal(expectedApplied, applied);
         Assert.Equal(2, historyRows);
         Assert.Equal(1, retainedRows);
         Assert.Equal(1, totalRows);
-        Assert.Empty(context.GetService<IDesignTimeModel>().Model.GetEntityTypes());
+        Assert.Empty(context
+            .GetService<IDesignTimeModel>()
+            .Model
+            .GetEntityTypes());
+
         var snapshot = Assert.IsType<ModelManagedPendingKeyModelSnapshot>(
-            context.GetService<IMigrationsAssembly>().ModelSnapshot);
+            context.GetService<IMigrationsAssembly>()
+                .ModelSnapshot);
 
         Assert.Empty(snapshot.Model.GetEntityTypes());
     }
@@ -89,24 +105,34 @@ public sealed class ModelManagedPendingKeyDbContext : DbContext
     /// <summary>Initializes the engine fixture without borrowing another test context's history.</summary>
     /// <param name="connectionString">The isolated test-owned native database.</param>
     /// <param name="serverVersion">The active MySQL or MariaDB server version.</param>
-    public ModelManagedPendingKeyDbContext(string connectionString, MySqlServerVersion serverVersion)
+    public ModelManagedPendingKeyDbContext(
+        string connectionString,
+        MySqlServerVersion serverVersion
+    )
     {
         _connectionString = connectionString;
         _serverVersion = serverVersion;
     }
 
     /// <inheritdoc />
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    protected override void OnConfiguring(
+        DbContextOptionsBuilder optionsBuilder
+    )
     {
-        optionsBuilder.UseMySql(_connectionString, _serverVersion,
-            provider => provider.MigrationsAssembly(typeof(ModelManagedPendingKeyDbContext).Assembly.FullName)
+        optionsBuilder.UseMySql(
+            _connectionString,
+            _serverVersion,
+            provider => provider
+                .MigrationsAssembly(typeof(ModelManagedPendingKeyDbContext).Assembly.FullName)
                 .MigrationsHistoryTable("__ModelManagedPendingKeyHistory"));
 
         optionsBuilder.UseMySqlSafeMigrations<ModelManagedPendingKeyDbContext>();
     }
 
     /// <inheritdoc />
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    protected override void OnModelCreating(
+        ModelBuilder modelBuilder
+    )
     {
         // WHY: The physical owner is an existing brownfield table and each
         // operation freezes all column types explicitly. This data-only
@@ -121,7 +147,9 @@ public sealed class ModelManagedPendingKeyDbContext : DbContext
 public sealed class ModelManagedPendingKeyModelSnapshot : ModelSnapshot
 {
     /// <inheritdoc />
-    protected override void BuildModel(ModelBuilder modelBuilder)
+    protected override void BuildModel(
+        ModelBuilder modelBuilder
+    )
         => ArgumentNullException.ThrowIfNull(modelBuilder);
 }
 
@@ -131,16 +159,27 @@ public sealed class ModelManagedPendingKeyModelSnapshot : ModelSnapshot
 public sealed class ModelManagedPendingKeyEnsureMigration : Migration
 {
     /// <inheritdoc />
-    protected override void Up(MigrationBuilder migrationBuilder)
-        => migrationBuilder.EnsureModelManagedDataFromModel("managed_pending_keys", ["Id", "Code"], ["int", "int"],
-            ["Id", "Code", "Marker"], ["int", "int", "int"], new object?[,] { { 1, 7, 0 } });
+    protected override void Up(
+        MigrationBuilder migrationBuilder
+    )
+        => migrationBuilder.EnsureModelManagedDataFromModel(
+            "managed_pending_keys",
+            ["Id", "Code"],
+            ["int", "int"],
+            ["Id", "Code", "Marker"],
+            ["int", "int", "int"],
+            new object?[,] { { 1, 7, 0 } });
 
     /// <inheritdoc />
-    protected override void BuildTargetModel(ModelBuilder modelBuilder)
+    protected override void BuildTargetModel(
+        ModelBuilder modelBuilder
+    )
         => ArgumentNullException.ThrowIfNull(modelBuilder);
 
     /// <inheritdoc />
-    protected override void Down(MigrationBuilder migrationBuilder)
+    protected override void Down(
+        MigrationBuilder migrationBuilder
+    )
         => throw new NotSupportedException("The anonymous typed-key fixture is forward-only.");
 }
 
@@ -150,16 +189,28 @@ public sealed class ModelManagedPendingKeyEnsureMigration : Migration
 public sealed class ModelManagedPendingKeyUpdateMigration : Migration
 {
     /// <inheritdoc />
-    protected override void Up(MigrationBuilder migrationBuilder)
-        => migrationBuilder.UpdateModelManagedDataFromModel("managed_pending_keys", ["Code", "Id"], ["int", "int"],
-            new object?[,] { { 7, 1 } }, ["Marker"], ["int"],
-            new object?[,] { { 0 } }, new object?[,] { { 1 } });
+    protected override void Up(
+        MigrationBuilder migrationBuilder
+    )
+        => migrationBuilder.UpdateModelManagedDataFromModel(
+            "managed_pending_keys",
+            ["Code", "Id"],
+            ["int", "int"],
+            new object?[,] { { 7, 1 } },
+            ["Marker"],
+            ["int"],
+            new object?[,] { { 0 } },
+            new object?[,] { { 1 } });
 
     /// <inheritdoc />
-    protected override void BuildTargetModel(ModelBuilder modelBuilder)
+    protected override void BuildTargetModel(
+        ModelBuilder modelBuilder
+    )
         => ArgumentNullException.ThrowIfNull(modelBuilder);
 
     /// <inheritdoc />
-    protected override void Down(MigrationBuilder migrationBuilder)
+    protected override void Down(
+        MigrationBuilder migrationBuilder
+    )
         => throw new NotSupportedException("The anonymous typed-key fixture is forward-only.");
 }

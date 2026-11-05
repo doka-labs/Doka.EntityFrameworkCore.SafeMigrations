@@ -13,10 +13,15 @@ public sealed class SqliteConstraintShapeCapacityTests
     [InlineData(255, true)]
     [InlineData(256, true)]
     [InlineData(257, true)]
-    public void StackAndPoolBoundariesPreserveInjectiveCapacity(int length, bool extraDuplicate)
+    public void StackAndPoolBoundariesPreserveInjectiveCapacity(
+        int length,
+        bool extraDuplicate
+    )
     {
         // Arrange
-        var allowed = Enumerable.Range(0, length).Select(ordinal => ordinal.ToString(CultureInfo.InvariantCulture))
+        var allowed = Enumerable
+            .Range(0, length)
+            .Select(ordinal => ordinal.ToString(CultureInfo.InvariantCulture))
             .ToArray();
 
         var actual = allowed.ToArray();
@@ -27,7 +32,10 @@ public sealed class SqliteConstraintShapeCapacityTests
 
         // Act
         var matching = SqliteConstraintShapeCapacity.Matches(
-            actual, allowed, allowed, static (left, right) => StringComparer.Ordinal.Equals(left, right));
+            actual,
+            allowed,
+            allowed,
+            static (left, right) => StringComparer.Ordinal.Equals(left, right));
 
         // Assert
         Assert.Equal(!extraDuplicate, matching);
@@ -38,7 +46,9 @@ public sealed class SqliteConstraintShapeCapacityTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void RequiredDuplicateCapacityIsExplicitlyProviderBound(bool coalesceRequired)
+    public void RequiredDuplicateCapacityIsExplicitlyProviderBound(
+        bool coalesceRequired
+    )
     {
         // Arrange
         string[] actual = ["A"];
@@ -46,8 +56,12 @@ public sealed class SqliteConstraintShapeCapacityTests
         string[] required = ["A", "A"];
 
         // Act
-        var matching = SqliteConstraintShapeCapacity.Matches(actual, allowed, required,
-            static (left, right) => StringComparer.Ordinal.Equals(left, right), coalesceRequired);
+        var matching = SqliteConstraintShapeCapacity.Matches(
+            actual,
+            allowed,
+            required,
+            static (left, right) => StringComparer.Ordinal.Equals(left, right),
+            coalesceRequired);
 
         // Assert
         Assert.Equal(coalesceRequired, matching);
@@ -58,7 +72,9 @@ public sealed class SqliteConstraintShapeCapacityTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void RequiredWitnessReuseDependsOnCoalescingRatherThanTotalCapacity(bool coalesceRequired)
+    public void RequiredWitnessReuseDependsOnCoalescingRatherThanTotalCapacity(
+        bool coalesceRequired
+    )
     {
         // Arrange
         string[] actual = ["A", "B"];
@@ -68,8 +84,12 @@ public sealed class SqliteConstraintShapeCapacityTests
         // WHY: Equal total sizes bypass the early capacity guard, so the
         // non-coalescing negative must exercise required-slot consumption.
         // Act
-        var matching = SqliteConstraintShapeCapacity.Matches(actual, allowed, required,
-            static (left, right) => StringComparer.Ordinal.Equals(left, right), coalesceRequired);
+        var matching = SqliteConstraintShapeCapacity.Matches(
+            actual,
+            allowed,
+            required,
+            static (left, right) => StringComparer.Ordinal.Equals(left, right),
+            coalesceRequired);
 
         // Assert
         Assert.Equal(coalesceRequired, matching);
@@ -80,7 +100,9 @@ public sealed class SqliteConstraintShapeCapacityTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void AllowedCapacityRemainsInjectiveWhenRequiredShapesCoalesce(bool coalesceRequired)
+    public void AllowedCapacityRemainsInjectiveWhenRequiredShapesCoalesce(
+        bool coalesceRequired
+    )
     {
         // Arrange
         string[] actual = ["A", "A"];
@@ -88,8 +110,12 @@ public sealed class SqliteConstraintShapeCapacityTests
         string[] required = ["A"];
 
         // Act
-        var matching = SqliteConstraintShapeCapacity.Matches(actual, allowed, required,
-            static (left, right) => StringComparer.Ordinal.Equals(left, right), coalesceRequired);
+        var matching = SqliteConstraintShapeCapacity.Matches(
+            actual,
+            allowed,
+            required,
+            static (left, right) => StringComparer.Ordinal.Equals(left, right),
+            coalesceRequired);
 
         // Assert
         Assert.False(matching);
@@ -100,7 +126,9 @@ public sealed class SqliteConstraintShapeCapacityTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void RequiredCoalescingStillRequiresEveryDistinctShape(bool coalesceRequired)
+    public void RequiredCoalescingStillRequiresEveryDistinctShape(
+        bool coalesceRequired
+    )
     {
         // Arrange
         string[] actual = ["A", "A"];
@@ -108,8 +136,12 @@ public sealed class SqliteConstraintShapeCapacityTests
         string[] required = ["A", "B"];
 
         // Act
-        var matching = SqliteConstraintShapeCapacity.Matches(actual, allowed, required,
-            static (left, right) => StringComparer.Ordinal.Equals(left, right), coalesceRequired);
+        var matching = SqliteConstraintShapeCapacity.Matches(
+            actual,
+            allowed,
+            required,
+            static (left, right) => StringComparer.Ordinal.Equals(left, right),
+            coalesceRequired);
 
         // Assert
         Assert.False(matching);

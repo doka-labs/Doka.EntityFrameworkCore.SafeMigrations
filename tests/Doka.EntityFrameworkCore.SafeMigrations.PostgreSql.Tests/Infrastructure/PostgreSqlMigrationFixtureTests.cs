@@ -14,12 +14,15 @@ public sealed class PostgreSqlMigrationFixtureTests
     {
         // Arrange
         using var context = new SafeMigrationDbContext(
-            "Host=127.0.0.1;Database=fixture_identity;", registerSafeMigrations);
+            "Host=127.0.0.1;Database=fixture_identity;",
+            registerSafeMigrations);
 
         var idGenerator = context.GetService<IMigrationsIdGenerator>();
 
         // Act
-        var ids = typeof(PostgreSqlMigrationFixtureTests).Assembly.GetTypes()
+        var ids = typeof(PostgreSqlMigrationFixtureTests)
+            .Assembly
+            .GetTypes()
             .Where(static type => typeof(Migration).IsAssignableFrom(type))
             .SelectMany(static type => type.GetCustomAttributes(typeof(MigrationAttribute), inherit: false))
             .Cast<MigrationAttribute>()

@@ -2,56 +2,6 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 public sealed partial class SafeMigrationPreflightProjectionTests
 {
-    private sealed class ProjectionPrecedenceProbe(
-        bool sequenceAware
-    ) : ISafeMigrationProviderOperationProjection, ISafeMigrationProviderObjectIdentityNormalizer
-    {
-        /// <summary>Gets how often physical identity was checked before projection.</summary>
-        public int IdentityChecks { get; private set; }
-
-        /// <summary>Gets how often lower-priority ordered provider evidence was consulted.</summary>
-        public int SequenceChecks { get; private set; }
-
-        /// <inheritdoc />
-        public StringComparer IdentifierComparer => StringComparer.Ordinal;
-
-        /// <inheritdoc />
-        public string NormalizeIdentifier(
-            string identifier
-        ) => identifier;
-
-        /// <inheritdoc />
-        public string? NormalizeSchema(
-            string? schema
-        ) => schema;
-
-        /// <inheritdoc />
-        public bool IsObjectIdentityMismatch(
-            SafeMigrationProviderAnalysis analysis
-        )
-        {
-            IdentityChecks++;
-
-            return StringComparer.Ordinal.Equals(analysis.Code, "database_qualifier_mismatch");
-        }
-
-        /// <inheritdoc />
-        public bool PreservesExistingTableState(
-            MigrationOperation operation
-        ) => false;
-
-        /// <inheritdoc />
-        public bool IsSequenceAwareAnalysis(
-            SafeMigrationOperation operation,
-            SafeMigrationProviderAnalysis analysis
-        )
-        {
-            SequenceChecks++;
-
-            return sequenceAware;
-        }
-    }
-
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -176,7 +126,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.Equal(expectedState, analysis.ObservedState);
         Assert.Equal(opaqueSql, analysis.IsOpaqueProjectionUnknown);
         Assert.Equal(1, probe.IdentityChecks);
-        Assert.Equal(opaqueSql ? 0 : 1, probe.SequenceChecks);
+        Assert.Equal(
+            opaqueSql
+                ? 0
+                : 1,
+            probe.SequenceChecks);
     }
 
     [Fact]
@@ -241,31 +195,6 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Assert.True(analysis.IsOpaqueProjectionUnknown);
         Assert.Equal(1, probe.IdentityChecks);
         Assert.Equal(1, probe.SequenceChecks);
-    }
-
-    private sealed class AlterDatabaseProjection : ISafeMigrationProviderOperationProjection
-    {
-        public bool PreservesExistingTableState(
-            MigrationOperation operation
-        ) => operation is AlterDatabaseOperation;
-    }
-
-    private sealed class RenameAbsenceProjection : ISafeMigrationProviderOperationProjection
-    {
-        public bool WasQueried { get; private set; }
-
-        public bool PreservesExistingTableState(
-            MigrationOperation operation
-        ) => false;
-
-        public bool PreservesUnrelatedColumnAbsence(
-            RenameColumnIntent operation
-        )
-        {
-            WasQueried = true;
-
-            return true;
-        }
     }
 
     [Fact]
@@ -458,7 +387,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var projection = new SafeMigrationPreflightProjection();
         var definition = new ExpectedTableDefinition("items", [Column("id")]);
 
-        projection.ObserveProviderPostcondition(new DropTableOperation { Name = "items", });
+        projection.ObserveProviderPostcondition(new DropTableOperation { Name = "items" });
 
         var analysis = projection.Project(
             new SafeMigrationOperation(
@@ -474,7 +403,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     public void ProviderCreateTableProjectsItsExactDefinitionForFollowingStrictEnsureTable()
     {
         var projection = new SafeMigrationPreflightProjection();
-        var createTable = new CreateTableOperation { Name = "items", };
+        var createTable = new CreateTableOperation { Name = "items" };
         createTable.Columns.Add(ProviderColumn("id", "items", isNullable: false, defaultValue: 0));
 
         projection.ObserveProviderPostcondition(createTable);
@@ -531,6 +460,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Apply(
             projection,
             new EnsureTableIntent(independent, SafeMigrationTableMode.StrictDefinition));
+
         projection.ObserveProviderPostcondition(
             new DropColumnOperation
             {
@@ -566,7 +496,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             "int");
 
         projection.ObserveProviderPostcondition(
-            new DropColumnOperation { Name = "old_value", Table = "items" });
+            new DropColumnOperation
+            {
+                Name = "old_value",
+                Table = "items",
+            });
 
         var operation = new SafeMigrationOperation(
             new EnsureColumnIntent("items", definition),
@@ -658,6 +592,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Apply(
             projection,
             new EnsureTableIntent(originalTable, SafeMigrationTableMode.StrictDefinition));
+
         projection.ObserveProviderPostcondition(
             ProviderColumn("customer_id", "shipments", isNullable: false, defaultValue: 0));
 
@@ -685,6 +620,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Apply(
             projection,
             new EnsureTableIntent(definition, SafeMigrationTableMode.StrictDefinition));
+
         projection.ObserveProviderPostcondition(new AlterDatabaseOperation());
 
         var analysis = projection.Project(
@@ -708,6 +644,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         Apply(
             projection,
             new EnsureTableIntent(definition, SafeMigrationTableMode.StrictDefinition));
+
         var analysis = ProjectIndex(projection, "artifacts", "id", unique: false);
 
         Assert.Equal(SafeMigrationObservedState.Missing, analysis.ObservedState);
@@ -738,6 +675,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             ProviderColumn("customer_id", "shipments", isNullable: false, defaultValue: 0));
+
         projection.ObserveProviderPostcondition(
             new SqlOperation
             {
@@ -781,21 +719,21 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             {
                 Table = "shipments",
                 Columns = ["id"],
-                Values = new object[,] { { 1, }, },
+                Values = new object[,] { { 1 } },
             },
             new UpdateDataOperation
             {
                 Table = "shipments",
                 KeyColumns = ["id"],
-                KeyValues = new object[,] { { 1, }, },
+                KeyValues = new object[,] { { 1 } },
                 Columns = ["customer_id"],
-                Values = new object[,] { { 7, }, },
+                Values = new object[,] { { 7 } },
             },
             new DeleteDataOperation
             {
                 Table = "shipments",
                 KeyColumns = ["id"],
-                KeyValues = new object[,] { { 1, }, },
+                KeyValues = new object[,] { { 1 } },
             },
         ];
 
@@ -830,12 +768,13 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                     "shipments",
                     [Column("id"), Column("customer_id")]),
                 SafeMigrationTableMode.StrictDefinition));
+
         projection.ObserveProviderPostcondition(
             new InsertDataOperation
             {
                 Table = "shipments",
                 Columns = ["id", "customer_id"],
-                Values = new object[,] { { 1, 7, }, },
+                Values = new object[,] { { 1, 7 } },
             });
 
         var live = Live(SafeMigrationObservedState.PrerequisiteMissing);
@@ -854,6 +793,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             new EnsureTableIntent(
                 new ExpectedTableDefinition("parents", [Column("id")]),
                 SafeMigrationTableMode.StrictDefinition));
+
         Apply(
             projection,
             new EnsureTableIntent(
@@ -861,12 +801,13 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                     "shipments",
                     [Column("id"), Column("customer_id")]),
                 SafeMigrationTableMode.StrictDefinition));
+
         projection.ObserveProviderPostcondition(
             new InsertDataOperation
             {
                 Table = "shipments",
                 Columns = ["id", "customer_id"],
-                Values = new object[,] { { 1, 7, }, },
+                Values = new object[,] { { 1, 7 } },
             });
 
         SafeMigrationIntent[] dataDependentOperations =
@@ -927,7 +868,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             {
                 Table = "shipments",
                 Columns = ["customer_id"],
-                Values = new object[,] { { 7, }, },
+                Values = new object[,] { { 7 } },
             });
 
         var analysis = ProjectIndex(
@@ -950,8 +891,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             {
                 Table = "shipments",
                 Columns = ["id", "customer_id"],
-                Values = new object[,] { { 1, 7, }, },
+                Values = new object[,] { { 1, 7 } },
             });
+
         projection.ObserveProviderPostcondition(
             ProviderColumn("tracking_id", "shipments", isNullable: true));
 
@@ -975,8 +917,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             {
                 Table = "shipments",
                 Columns = ["customer_id"],
-                Values = new object[,] { { 7, }, },
+                Values = new object[,] { { 7 } },
             });
+
         var live = Live(SafeMigrationObservedState.Missing);
 
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: false, live);
@@ -993,8 +936,9 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             {
                 Table = "shipments",
                 Columns = ["id"],
-                Values = new object[,] { { 1, }, },
+                Values = new object[,] { { 1 } },
             });
+
         var operation = new SafeMigrationOperation(
             new EnsureColumnIntent(
                 "shipments",
@@ -1020,10 +964,11 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             {
                 Table = "shipments",
                 KeyColumns = ["id"],
-                KeyValues = new object[,] { { 1, }, },
+                KeyValues = new object[,] { { 1 } },
                 Columns = ["customer_id"],
-                Values = new object?[,] { { null, }, },
+                Values = new object?[,] { { null } },
             });
+
         var oldColumn = new ExpectedColumnDefinition(
             "customer_id",
             typeof(int),
@@ -1055,12 +1000,13 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             new EnsureTableIntent(
                 new ExpectedTableDefinition("shipments", [Column("id")]),
                 SafeMigrationTableMode.StrictDefinition));
+
         projection.ObserveProviderPostcondition(
             new InsertDataOperation
             {
                 Table = "shipments",
                 Columns = ["id"],
-                Values = new object[,] { { 1, }, },
+                Values = new object[,] { { 1 } },
             });
 
         var operation = new SafeMigrationOperation(
@@ -1088,7 +1034,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             {
                 Table = "existing_items",
                 Columns = ["id"],
-                Values = new object[,] { { 1, }, },
+                Values = new object[,] { { 1 } },
             });
 
         Apply(
@@ -1157,6 +1103,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             ProviderColumn("customer_id", "shipments", isNullable: false, defaultValue: 0));
+
         projection.ObserveProviderPostcondition(
             new RenameColumnOperation
             {
@@ -1164,6 +1111,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 NewName = "account_id",
                 Table = "shipments",
             });
+
         projection.ObserveProviderPostcondition(
             new RenameTableOperation
             {
@@ -1215,7 +1163,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
     {
         // Arrange
         var projection = new SafeMigrationPreflightProjection();
-        var createTable = new CreateTableOperation { Name = "items", };
+        var createTable = new CreateTableOperation { Name = "items" };
 
         createTable.Columns.Add(ProviderColumn("external_id", "items", isNullable: false, defaultValue: 0));
 
@@ -1226,7 +1174,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
 
         var projected = ProjectIndex(projection, "items", "external_id", unique: true);
 
-        projection.ObserveProviderPostcondition(new DropTableOperation { Name = "items", });
+        projection.ObserveProviderPostcondition(new DropTableOperation { Name = "items" });
 
         var afterDrop = ProjectIndex(projection, "items", "external_id", unique: true, live);
 
@@ -1265,6 +1213,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             ProviderColumn("customer_id", "shipments", isNullable: false));
+
         ObserveAccepted(
             projection,
             new EnsureIndexIntent(
@@ -1280,6 +1229,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 Name = indexName,
                 Table = "shipments",
             });
+
         var analysis = ProjectIndex(
             projection,
             "shipments",
@@ -1297,6 +1247,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
         var projection = new SafeMigrationPreflightProjection();
         projection.ObserveProviderPostcondition(
             ProviderColumn("customer_id", "shipments", isNullable: false));
+
         ObserveAccepted(
             projection,
             new EnsureIndexIntent(
@@ -1312,6 +1263,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 Name = "customer_id",
                 Table = "shipments",
             });
+
         var analysis = ProjectIndex(
             projection,
             "shipments",
@@ -1333,6 +1285,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             projection,
             new DropIndexIntent(indexName, "records"),
             SafeMigrationObservedState.Matching);
+
         projection.ObserveProviderPostcondition(
             new AlterTableOperation
             {
@@ -1344,6 +1297,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                     Comment = "source table comment",
                 },
             });
+
         projection.ObserveProviderPostcondition(
             new AlterColumnOperation
             {
@@ -1355,6 +1309,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 Collation = "utf8mb4_bin",
                 Comment = "target code comment",
             });
+
         projection.ObserveProviderPostcondition(
             new AlterColumnOperation
             {
@@ -1395,6 +1350,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             projection,
             new DropIndexIntent(indexName, "shipments"),
             SafeMigrationObservedState.Matching);
+
         projection.ObserveProviderPostcondition(
             new SqlOperation
             {
@@ -1424,6 +1380,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 Name = "ix_shipments_customer_id",
                 Table = "shipments",
             });
+
         var live = Live(state);
 
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: true, live);
@@ -1441,6 +1398,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 Name = "ix_shipments_customer_id",
                 Table = "shipments",
             });
+
         var live = Live(SafeMigrationObservedState.Different);
 
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: false, live);
@@ -1459,6 +1417,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 Name = "ix_shipments_customer_id",
                 Table = "shipments",
             });
+
         var live = new SafeMigrationProviderAnalysis(
             SafeMigrationObservedState.Different,
             SafeMigrationRepairCapability.None,
@@ -1481,6 +1440,7 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 Name = "ix_shipments_other",
                 Table = "shipments",
             });
+
         var live = Live(SafeMigrationObservedState.Different);
 
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: false, live);
@@ -1498,12 +1458,14 @@ public sealed partial class SafeMigrationPreflightProjectionTests
                 Name = "ix_shipments_customer_id",
                 Table = "shipments",
             });
+
         projection.ObserveProviderPostcondition(
             new DropIndexOperation
             {
                 Name = "provider_global_index",
                 Table = null,
             });
+
         var live = Live(SafeMigrationObservedState.Different);
 
         var analysis = ProjectIndex(projection, "shipments", "customer_id", unique: false, live);
@@ -1561,5 +1523,80 @@ public sealed partial class SafeMigrationPreflightProjectionTests
             SafeMigrationPolicy.RepairIfSafe);
 
         return projection.Project(operation, live);
+    }
+
+    private sealed class ProjectionPrecedenceProbe(
+        bool sequenceAware
+    ) : ISafeMigrationProviderOperationProjection, ISafeMigrationProviderObjectIdentityNormalizer
+    {
+        /// <summary>Gets how often physical identity was checked before projection.</summary>
+        public int IdentityChecks { get; private set; }
+
+        /// <summary>Gets how often lower-priority ordered provider evidence was consulted.</summary>
+        public int SequenceChecks { get; private set; }
+
+        /// <inheritdoc />
+        public StringComparer IdentifierComparer => StringComparer.Ordinal;
+
+        /// <inheritdoc />
+        public string NormalizeIdentifier(
+            string identifier
+        ) => identifier;
+
+        /// <inheritdoc />
+        public string? NormalizeSchema(
+            string? schema
+        ) => schema;
+
+        /// <inheritdoc />
+        public bool IsObjectIdentityMismatch(
+            SafeMigrationProviderAnalysis analysis
+        )
+        {
+            IdentityChecks++;
+
+            return StringComparer.Ordinal.Equals(analysis.Code, "database_qualifier_mismatch");
+        }
+
+        /// <inheritdoc />
+        public bool PreservesExistingTableState(
+            MigrationOperation operation
+        ) => false;
+
+        /// <inheritdoc />
+        public bool IsSequenceAwareAnalysis(
+            SafeMigrationOperation operation,
+            SafeMigrationProviderAnalysis analysis
+        )
+        {
+            SequenceChecks++;
+
+            return sequenceAware;
+        }
+    }
+
+    private sealed class AlterDatabaseProjection : ISafeMigrationProviderOperationProjection
+    {
+        public bool PreservesExistingTableState(
+            MigrationOperation operation
+        ) => operation is AlterDatabaseOperation;
+    }
+
+    private sealed class RenameAbsenceProjection : ISafeMigrationProviderOperationProjection
+    {
+        public bool WasQueried { get; private set; }
+
+        public bool PreservesExistingTableState(
+            MigrationOperation operation
+        ) => false;
+
+        public bool PreservesUnrelatedColumnAbsence(
+            RenameColumnIntent operation
+        )
+        {
+            WasQueried = true;
+
+            return true;
+        }
     }
 }

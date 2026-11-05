@@ -6,7 +6,8 @@ internal sealed class BenchmarkProgramTestEvidence : IDisposable
     /// <summary>Creates an invocation-local directory for native and synthetic exports.</summary>
     internal BenchmarkProgramTestEvidence()
     {
-        DirectoryPath = Directory.CreateTempSubdirectory("doka-benchmark-program-tests-").FullName;
+        DirectoryPath = Directory.CreateTempSubdirectory("doka-benchmark-program-tests-")
+            .FullName;
     }
 
     /// <summary>Gets the isolated native exporter destination.</summary>
@@ -14,6 +15,9 @@ internal sealed class BenchmarkProgramTestEvidence : IDisposable
 
     /// <summary>Gets a report path that does not exist until the test writes its evidence.</summary>
     internal string ReportPath => Path.Combine(DirectoryPath, "report-full.json");
+
+    /// <summary>Removes only this instance's isolated evidence directory.</summary>
+    public void Dispose() => Directory.Delete(DirectoryPath, recursive: true);
 
     /// <summary>Discovers two native parameterized cases without executing their workload.</summary>
     /// <returns>The distinct cases used to verify complete report aggregation.</returns>
@@ -37,7 +41,14 @@ internal sealed class BenchmarkProgramTestEvidence : IDisposable
         var measurement = new Measurement(1, IterationMode.Workload, stage, 1, 1, nanoseconds);
         var garbageCollection = FormattableString.Invariant($"// GC: 0 0 0 {allocatedBytes} 1");
 
-        return new ExecuteResult(true, exitCode, 1, [measurement.ToString()], [garbageCollection], [], 1);
+        return new ExecuteResult(
+            true,
+            exitCode,
+            1,
+            [measurement.ToString()],
+            [garbageCollection],
+            [],
+            1);
     }
 
     /// <summary>Creates a native report with its success flag independent of its child evidence.</summary>
@@ -80,9 +91,6 @@ internal sealed class BenchmarkProgramTestEvidence : IDisposable
     internal void WriteExport(
         string json
     ) => File.WriteAllText(ReportPath, json);
-
-    /// <summary>Removes only this instance's isolated evidence directory.</summary>
-    public void Dispose() => Directory.Delete(DirectoryPath, recursive: true);
 }
 
 /// <summary>Supplies native discovery metadata; contract tests never execute this workload.</summary>

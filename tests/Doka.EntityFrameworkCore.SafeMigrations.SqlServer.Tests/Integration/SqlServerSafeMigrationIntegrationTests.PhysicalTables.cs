@@ -13,26 +13,42 @@ public sealed class SqlServerSafeMigrationPhysicalTablesIntegrationTests : SqlSe
     [SqlServerLiveTheory]
     [InlineData("memory")]
     [InlineData("history")]
-    public async Task PhysicalTableEngine_AllTableIntentsAreInvariantUnsupportedWithoutMutation(string engine)
+    public async Task PhysicalTableEngine_AllTableIntentsAreInvariantUnsupportedWithoutMutation(
+        string engine
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, PhysicalTableSetupSql(engine),
-            cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
-            "CREATE TABLE dbo.ordinary_child (Id int NOT NULL); "
-            + "CREATE TABLE dbo.engine_ddl_events (Id int NOT NULL);", cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
-            "CREATE TRIGGER doka_engine_ddl_audit ON DATABASE FOR DDL_TABLE_EVENTS, DDL_INDEX_EVENTS "
-            + "AS INSERT dbo.engine_ddl_events VALUES (1);", cancellationToken: CancellationToken.None);
-        var originalId = await ScalarIntAsync(connectionString, "SELECT OBJECT_ID(N'dbo.physical_items', N'U');",
+        await ExecuteSqlAsync(
+            connectionString,
+            PhysicalTableSetupSql(engine),
             cancellationToken: CancellationToken.None);
 
-        var originalColumns = await ScalarIntAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE dbo.ordinary_child (Id int NOT NULL); "
+            + "CREATE TABLE dbo.engine_ddl_events (Id int NOT NULL);",
+            cancellationToken: CancellationToken.None);
+
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TRIGGER doka_engine_ddl_audit ON DATABASE FOR DDL_TABLE_EVENTS, DDL_INDEX_EVENTS "
+            + "AS INSERT dbo.engine_ddl_events VALUES (1);",
+            cancellationToken: CancellationToken.None);
+
+        var originalId = await ScalarIntAsync(
+            connectionString,
+            "SELECT OBJECT_ID(N'dbo.physical_items', N'U');",
+            cancellationToken: CancellationToken.None);
+
+        var originalColumns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.physical_items', N'U');",
             cancellationToken: CancellationToken.None);
 
-        var originalRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.physical_items;",
+        var originalRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.physical_items;",
             cancellationToken: CancellationToken.None);
 
         var operations = PhysicalTableOperations();
@@ -51,35 +67,52 @@ public sealed class SqlServerSafeMigrationPhysicalTablesIntegrationTests : SqlSe
         var failures = new List<Exception?>();
         foreach (var operation in operations)
         {
-            failures.Add(await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, [operation],
-                cancellationToken: CancellationToken.None)));
+            failures.Add(
+                await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+                    context,
+                    [operation],
+                    cancellationToken: CancellationToken.None)));
         }
 
-        var remainingId = await ScalarIntAsync(connectionString, "SELECT OBJECT_ID(N'dbo.physical_items', N'U');",
+        var remainingId = await ScalarIntAsync(
+            connectionString,
+            "SELECT OBJECT_ID(N'dbo.physical_items', N'U');",
             cancellationToken: CancellationToken.None);
 
-        var remainingColumns = await ScalarIntAsync(connectionString,
+        var remainingColumns = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.physical_items', N'U');",
             cancellationToken: CancellationToken.None);
 
-        var remainingRows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.physical_items;",
+        var remainingRows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.physical_items;",
             cancellationToken: CancellationToken.None);
 
-        var ddlEvents = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.engine_ddl_events;",
+        var ddlEvents = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.engine_ddl_events;",
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(operations.Length, analyses.Count);
-        Assert.All(analyses, static analysis =>
-        {
-            Assert.Equal(SafeMigrationObservedState.Unsupported, analysis.ObservedState);
-            Assert.Equal("physical_table_unproven", analysis.Code);
-            Assert.True(analysis.IsInvariantUnsupported);
-            Assert.False(analysis.PostconditionSatisfied);
-            Assert.Equal(SafeMigrationRepairCapability.None, analysis.RepairCapability);
-            Assert.Null(analysis.ModelManagedDataEvidence);
-        });
-        Assert.All(failures, static failure => Assert.Equal(51002, Assert.IsType<SqlException>(failure).Number));
+        Assert.All(
+            analyses,
+            static analysis =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Unsupported, analysis.ObservedState);
+                Assert.Equal("physical_table_unproven", analysis.Code);
+                Assert.True(analysis.IsInvariantUnsupported);
+                Assert.False(analysis.PostconditionSatisfied);
+                Assert.Equal(SafeMigrationRepairCapability.None, analysis.RepairCapability);
+                Assert.Null(analysis.ModelManagedDataEvidence);
+            });
+
+        Assert.All(failures,
+            static failure => Assert.Equal(51002,
+                Assert.IsType<SqlException>(failure)
+                    .Number));
+
         Assert.Equal(originalId, remainingId);
         Assert.Equal(originalColumns, remainingColumns);
         Assert.Equal(originalRows, remainingRows);
@@ -92,25 +125,40 @@ public sealed class SqlServerSafeMigrationPhysicalTablesIntegrationTests : SqlSe
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, "CREATE TABLE dbo.ordinary_items (Id int NOT NULL);",
+        await ExecuteSqlAsync(
+            connectionString,
+            "CREATE TABLE dbo.ordinary_items (Id int NOT NULL);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.EnsureTable(new ExpectedTableDefinition("ordinary_items",
-            [new ExpectedColumnDefinition("Id", typeof(int), false, "int")]),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
-        builder.EnsureTable(new ExpectedTableDefinition("absent_items",
-            [new ExpectedColumnDefinition("Id", typeof(int), false, "int")]),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "ordinary_items",
+                [new ExpectedColumnDefinition("Id", typeof(int), false, "int")]),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
+        builder.EnsureTable(
+            new ExpectedTableDefinition(
+                "absent_items",
+                [new ExpectedColumnDefinition("Id", typeof(int), false, "int")]),
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
         var analyzer = context.GetService<ISafeMigrationProviderAnalyzer>();
-        var operations = builder.Operations.Cast<SafeMigrationOperation>().ToArray();
+        var operations = builder
+            .Operations
+            .Cast<SafeMigrationOperation>()
+            .ToArray();
 
         // Act
         var before = await analyzer.AnalyzeAsync(context, operations, cancellationToken: CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var after = await analyzer.AnalyzeAsync(context, operations, cancellationToken: CancellationToken.None);
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
-        var ordinaryEngines = await ScalarIntAsync(connectionString,
+        var ordinaryEngines = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM sys.tables WHERE name IN (N'ordinary_items', N'absent_items') "
             + "AND is_memory_optimized = 0 AND is_filetable = 0 AND temporal_type = 0;",
             cancellationToken: CancellationToken.None);
@@ -124,20 +172,37 @@ public sealed class SqlServerSafeMigrationPhysicalTablesIntegrationTests : SqlSe
 
     private static SafeMigrationOperation[] PhysicalTableOperations()
     {
-        var intents = Enum.GetValues<SafeMigrationOperationKind>()
+        var intents = Enum
+            .GetValues<SafeMigrationOperationKind>()
             .Where(static kind => kind is not SafeMigrationOperationKind.EnsureSchema
                 and not SafeMigrationOperationKind.DropSchema)
             .Select(SqlServerPhysicalTableSqlTests.CreateIntent)
             .ToList();
 
-        intents.Add(new EnsureForeignKeyIntent(new ExpectedForeignKeyDefinition("FK_engine_parent", "ordinary_child",
-            ["Id"], "physical_items", ["Id"])));
-        var inlineForeignKey = new ExpectedForeignKeyDefinition("FK_inline_engine", "new_child", ["Id"],
-            "physical_items", ["Id"]);
+        intents.Add(
+            new EnsureForeignKeyIntent(
+                new ExpectedForeignKeyDefinition(
+                    "FK_engine_parent",
+                    "ordinary_child",
+                    ["Id"],
+                    "physical_items",
+                    ["Id"])));
 
-        intents.Add(new EnsureTableIntent(new ExpectedTableDefinition("new_child",
-            [new ExpectedColumnDefinition("Id", typeof(int), false, "int")], foreignKeys: [inlineForeignKey]),
-            SafeMigrationTableMode.StrictDefinition));
+        var inlineForeignKey = new ExpectedForeignKeyDefinition(
+            "FK_inline_engine",
+            "new_child",
+            ["Id"],
+            "physical_items",
+            ["Id"]);
+
+        intents.Add(
+            new EnsureTableIntent(
+                new ExpectedTableDefinition(
+                    "new_child",
+                    [new ExpectedColumnDefinition("Id", typeof(int), false, "int")],
+                    foreignKeys: [inlineForeignKey]),
+                SafeMigrationTableMode.StrictDefinition));
+
         intents.Add(new RenameTableIntent("absent_source", "physical_items"));
 
         return intents
@@ -145,7 +210,9 @@ public sealed class SqlServerSafeMigrationPhysicalTablesIntegrationTests : SqlSe
             .ToArray();
     }
 
-    private static string PhysicalTableSetupSql(string engine) => engine switch
+    private static string PhysicalTableSetupSql(
+        string engine
+    ) => engine switch
     {
         "memory" => "DECLARE @database sysname = DB_NAME(); "
             + "DECLARE @quoted_database nvarchar(258) = QUOTENAME(@database); "

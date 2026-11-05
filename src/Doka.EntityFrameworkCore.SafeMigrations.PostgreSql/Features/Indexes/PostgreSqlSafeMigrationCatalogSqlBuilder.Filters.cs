@@ -28,9 +28,16 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         // prevents alternate quoting or PostgreSQL's unquoted case folding from changing authored meaning.
         // Trim only PostgreSQL's ASCII SQL whitespace because the raw predicate is preserved for execution.
         var canonical = _sqlGenerationHelper.DelimitIdentifier(identifier.Parts[0])
-            + (nullTest.Negated ? " IS NOT NULL" : " IS NULL");
+            + (nullTest.Negated
+                ? " IS NOT NULL"
+                : " IS NULL");
 
-        return sql.AsSpan().Trim(" \t\n\r\f\v".AsSpan()).SequenceEqual(canonical.AsSpan()) ? nullTest : null;
+        return sql
+            .AsSpan()
+            .Trim(" \t\n\r\f\v".AsSpan())
+            .SequenceEqual(canonical.AsSpan())
+            ? nullTest
+            : null;
     }
 
     /// <summary>Resolves the same exact index-column prerequisites for Core projection and runtime SQL.</summary>
@@ -63,6 +70,7 @@ internal sealed partial class PostgreSqlSafeMigrationCatalogSqlBuilder
         // WHY: Most null filters reference an existing key column. Reuse the immutable dependency list
         // for that case; only a genuinely additional predicate column needs one exact-sized snapshot.
         var result = new string[columns.Count + 1];
+
         // WHY: Copy prerequisite names directly into their corresponding output slots.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery

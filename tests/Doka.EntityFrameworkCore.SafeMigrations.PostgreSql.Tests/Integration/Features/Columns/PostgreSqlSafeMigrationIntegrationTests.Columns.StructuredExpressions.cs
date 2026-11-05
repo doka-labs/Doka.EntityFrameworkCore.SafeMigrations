@@ -106,5 +106,4 @@ public sealed class PostgreSqlColumnsStructuredExpressionsIntegrationTests : Pos
             await ExecuteSqlAsync(connectionString, $"SELECT {expression};", cancellationToken: CancellationToken.None);
         }
     }
-
 }

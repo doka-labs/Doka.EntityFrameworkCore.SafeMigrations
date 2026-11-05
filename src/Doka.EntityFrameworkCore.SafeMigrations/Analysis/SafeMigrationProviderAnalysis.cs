@@ -1,16 +1,18 @@
+using System.Collections.ObjectModel;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations;
 
 /// <summary>Contains one provider's immutable live-state classification.</summary>
 public sealed class SafeMigrationProviderAnalysis
 {
-    private bool _requiresLiveDataProof;
-    private bool _repairPreservesLiveValueDomain;
     private SafeMigrationIndexPhysicalEnvironment? _indexPhysicalEnvironment;
-    private bool? _renameTargetExists;
-    private bool? _renameSourceSupported;
-    private bool? _renameTargetSupported;
-    private bool? _renameIntermediateTargetExists;
     private string? _renameApplyUnsupportedCode;
+    private bool? _renameIntermediateTargetExists;
+    private bool? _renameSourceSupported;
+    private bool? _renameTargetExists;
+    private bool? _renameTargetSupported;
+    private bool _repairPreservesLiveValueDomain;
+    private bool _requiresLiveDataProof;
 
     /// <summary>Initializes a provider analysis.</summary>
     /// <param name="observedState">The provider-classified live state.</param>
@@ -28,9 +30,7 @@ public sealed class SafeMigrationProviderAnalysis
         postconditionSatisfied,
         code,
         SafeMigrationOperationalImpact.NotApplicable,
-        differences: null)
-    {
-    }
+        differences: null) { }
 
     /// <summary>Initializes a provider analysis with bounded diagnostic evidence.</summary>
     /// <param name="observedState">The provider-classified live state.</param>
@@ -155,31 +155,8 @@ public sealed class SafeMigrationProviderAnalysis
         init => _repairPreservesLiveValueDomain = value;
     }
 
-    /// <summary>Refines a value-domain certificate after exact live facet diagnostics are available.</summary>
-    /// <param name="preserves">Whether the complete provider evidence certifies preservation.</param>
-    /// <returns>A copy retaining the existing evidence and refined certificate.</returns>
-    internal SafeMigrationProviderAnalysis WithRepairPreservesLiveValueDomain(bool preserves)
-    {
-        var copy = (SafeMigrationProviderAnalysis)MemberwiseClone();
-
-        copy._repairPreservesLiveValueDomain = preserves;
-
-        return copy;
-    }
-
     /// <summary>Gets whether the provider proved that repair preserves existing physical key definitions.</summary>
     internal bool RepairPreservesPhysicalKeys { get; private set; }
-
-    /// <summary>Certifies key preservation after complete provider physical validation.</summary>
-    /// <returns>A copy retaining all existing evidence and the physical-key preservation certificate.</returns>
-    internal SafeMigrationProviderAnalysis WithRepairPreservesPhysicalKeys()
-    {
-        var copy = (SafeMigrationProviderAnalysis)MemberwiseClone();
-
-        copy.RepairPreservesPhysicalKeys = true;
-
-        return copy;
-    }
 
     /// <summary>Gets whether a current nullable-only repair preserves the column's intrinsic physical layout.</summary>
     /// <remarks>
@@ -187,20 +164,6 @@ public sealed class SafeMigrationProviderAnalysis
     /// current row and dependency lifetimes, and a provider-qualified non-data nullability transition.
     /// </remarks>
     internal bool RepairPreservesIntrinsicColumnLayout { get; private set; }
-
-    /// <summary>Retains exact native endpoint and key layout after bounded nullable-only qualification.</summary>
-    /// <returns>A separate analysis retaining all source evidence and both physical preservation certificates.</returns>
-    internal SafeMigrationProviderAnalysis WithRepairPreservesIntrinsicColumnLayout()
-    {
-        var copy = (SafeMigrationProviderAnalysis)MemberwiseClone();
-
-        // WHY: Widening can preserve values and keys while changing native FK compatibility.
-        // This separate certificate must not grant generic row, NULL or empty-table evidence.
-        copy.RepairPreservesIntrinsicColumnLayout = true;
-        copy.RepairPreservesPhysicalKeys = true;
-
-        return copy;
-    }
 
     /// <summary>Gets independent destination presence for a rename, including when its source is absent.</summary>
     internal bool? RenameTargetExists
@@ -219,35 +182,11 @@ public sealed class SafeMigrationProviderAnalysis
         init => _renameSourceSupported = value;
     }
 
-    /// <summary>Attaches source-kind support without changing destination or other provider certificates.</summary>
-    /// <param name="supported">Whether the captured existing source is independently eligible for this rename.</param>
-    /// <returns>A copy retaining every other provider observation.</returns>
-    internal SafeMigrationProviderAnalysis WithRenameSourceSupported(bool supported)
-    {
-        var copy = (SafeMigrationProviderAnalysis)MemberwiseClone();
-
-        copy._renameSourceSupported = supported;
-
-        return copy;
-    }
-
     /// <summary>Gets support for the authored destination contract independently of source lifetime.</summary>
     internal bool? RenameTargetSupported
     {
         get => _renameTargetSupported;
         init => _renameTargetSupported = value;
-    }
-
-    /// <summary>Attaches destination-contract support without changing source or occupancy evidence.</summary>
-    /// <param name="supported">Whether the provider permits this authored destination.</param>
-    /// <returns>A copy retaining every other provider observation.</returns>
-    internal SafeMigrationProviderAnalysis WithRenameTargetSupported(bool supported)
-    {
-        var copy = (SafeMigrationProviderAnalysis)MemberwiseClone();
-
-        copy._renameTargetSupported = supported;
-
-        return copy;
     }
 
     /// <summary>Gets presence of the source-schema target name used by staged cross-schema renames.</summary>
@@ -262,6 +201,86 @@ public sealed class SafeMigrationProviderAnalysis
     {
         get => _renameApplyUnsupportedCode;
         init => _renameApplyUnsupportedCode = value;
+    }
+
+    /// <summary>Gets captured physical limits and column shapes for projected key validation.</summary>
+    internal SafeMigrationIndexPhysicalEnvironment? IndexPhysicalEnvironment
+    {
+        get => _indexPhysicalEnvironment;
+        init => _indexPhysicalEnvironment = value;
+    }
+
+    /// <summary>Gets the resolved physical name behind an exact or semantic match.</summary>
+    internal string? MatchedObjectName { get; init; }
+
+    /// <summary>Gets captured row and dependency evidence for model-managed data projection.</summary>
+    internal SafeMigrationModelManagedDataEvidence? ModelManagedDataEvidence { get; init; }
+
+    /// <summary>Refines a value-domain certificate after exact live facet diagnostics are available.</summary>
+    /// <param name="preserves">Whether the complete provider evidence certifies preservation.</param>
+    /// <returns>A copy retaining the existing evidence and refined certificate.</returns>
+    internal SafeMigrationProviderAnalysis WithRepairPreservesLiveValueDomain(
+        bool preserves
+    )
+    {
+        var copy = (SafeMigrationProviderAnalysis)MemberwiseClone();
+
+        copy._repairPreservesLiveValueDomain = preserves;
+
+        return copy;
+    }
+
+    /// <summary>Certifies key preservation after complete provider physical validation.</summary>
+    /// <returns>A copy retaining all existing evidence and the physical-key preservation certificate.</returns>
+    internal SafeMigrationProviderAnalysis WithRepairPreservesPhysicalKeys()
+    {
+        var copy = (SafeMigrationProviderAnalysis)MemberwiseClone();
+
+        copy.RepairPreservesPhysicalKeys = true;
+
+        return copy;
+    }
+
+    /// <summary>Retains exact native endpoint and key layout after bounded nullable-only qualification.</summary>
+    /// <returns>A separate analysis retaining all source evidence and both physical preservation certificates.</returns>
+    internal SafeMigrationProviderAnalysis WithRepairPreservesIntrinsicColumnLayout()
+    {
+        var copy = (SafeMigrationProviderAnalysis)MemberwiseClone();
+
+        // WHY: Widening can preserve values and keys while changing native FK compatibility.
+        // This separate certificate must not grant generic row, NULL or empty-table evidence.
+        copy.RepairPreservesIntrinsicColumnLayout = true;
+        copy.RepairPreservesPhysicalKeys = true;
+
+        return copy;
+    }
+
+    /// <summary>Attaches source-kind support without changing destination or other provider certificates.</summary>
+    /// <param name="supported">Whether the captured existing source is independently eligible for this rename.</param>
+    /// <returns>A copy retaining every other provider observation.</returns>
+    internal SafeMigrationProviderAnalysis WithRenameSourceSupported(
+        bool supported
+    )
+    {
+        var copy = (SafeMigrationProviderAnalysis)MemberwiseClone();
+
+        copy._renameSourceSupported = supported;
+
+        return copy;
+    }
+
+    /// <summary>Attaches destination-contract support without changing source or occupancy evidence.</summary>
+    /// <param name="supported">Whether the provider permits this authored destination.</param>
+    /// <returns>A copy retaining every other provider observation.</returns>
+    internal SafeMigrationProviderAnalysis WithRenameTargetSupported(
+        bool supported
+    )
+    {
+        var copy = (SafeMigrationProviderAnalysis)MemberwiseClone();
+
+        copy._renameTargetSupported = supported;
+
+        return copy;
     }
 
     /// <summary>Attaches independently captured destination presence without changing the source analysis.</summary>
@@ -284,13 +303,6 @@ public sealed class SafeMigrationProviderAnalysis
         return copy;
     }
 
-    /// <summary>Gets captured physical limits and column shapes for projected key validation.</summary>
-    internal SafeMigrationIndexPhysicalEnvironment? IndexPhysicalEnvironment
-    {
-        get => _indexPhysicalEnvironment;
-        init => _indexPhysicalEnvironment = value;
-    }
-
     /// <summary>Rebinds key validation to the storage environment of an accepted newly created table.</summary>
     /// <param name="environment">The captured creation environment.</param>
     /// <returns>A copy retaining the existing evidence and selected physical environment.</returns>
@@ -304,12 +316,6 @@ public sealed class SafeMigrationProviderAnalysis
 
         return copy;
     }
-
-    /// <summary>Gets the resolved physical name behind an exact or semantic match.</summary>
-    internal string? MatchedObjectName { get; init; }
-
-    /// <summary>Gets captured row and dependency evidence for model-managed data projection.</summary>
-    internal SafeMigrationModelManagedDataEvidence? ModelManagedDataEvidence { get; init; }
 
     /// <summary>Copies the analysis with replacement diagnostics while preserving every other observation.</summary>
     /// <param name="differences">The bounded diagnostic evidence to snapshot.</param>
@@ -335,7 +341,7 @@ public sealed class SafeMigrationProviderAnalysis
         return copy;
     }
 
-    private static System.Collections.ObjectModel.ReadOnlyCollection<SafeMigrationFacetDifference> SnapshotDifferences(
+    private static ReadOnlyCollection<SafeMigrationFacetDifference> SnapshotDifferences(
         IEnumerable<SafeMigrationFacetDifference> differences
     )
     {

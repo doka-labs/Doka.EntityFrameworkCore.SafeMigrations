@@ -12,20 +12,26 @@ public sealed class SqlServerIdentityInsertCommandTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task RejectedBeforeOwnOn_DoesNotDisableInheritedIdentity(bool asynchronous)
+    public async Task RejectedBeforeOwnOn_DoesNotDisableInheritedIdentity(
+        bool asynchronous
+    )
     {
         // Arrange
         using var session = new RecoveryConnection { InheritedIdentityInsert = true };
-        var options = new DbContextOptionsBuilder().UseSqlServer(session).Options;
+        var options = new DbContextOptionsBuilder().UseSqlServer(session)
+            .Options;
+
         using var context = new DbContext(options);
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
         var failure = new InvalidOperationException("guard rejected before own ON");
         var command = new SqlServerSafeMigrationIdentityInsertCommand(
             new FailingCommand(dependencies, failure, acquireIdentity: false),
-            "SET IDENTITY_INSERT [dbo].[roles] OFF;", dependencies, analyzer);
+            "SET IDENTITY_INSERT [dbo].[roles] OFF;",
+            dependencies,
+            analyzer);
 
-        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+        var connection = context.GetService<IRelationalConnection>();
 
         // Act
         var observed = asynchronous
@@ -54,20 +60,26 @@ public sealed class SqlServerIdentityInsertCommandTests
             IdentityOwner = "foreign ownership marker",
         };
 
-        var options = new DbContextOptionsBuilder().UseSqlServer(session).Options;
+        var options = new DbContextOptionsBuilder().UseSqlServer(session)
+            .Options;
+
         using var context = new DbContext(options);
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var original = new FailingCommand(dependencies, new InvalidOperationException("must not dispatch"));
-        var command = new SqlServerSafeMigrationIdentityInsertCommand(original,
-            "SET IDENTITY_INSERT [dbo].[roles] OFF;", dependencies, CreateAnalyzer(context));
+        var command = new SqlServerSafeMigrationIdentityInsertCommand(
+            original,
+            "SET IDENTITY_INSERT [dbo].[roles] OFF;",
+            dependencies,
+            CreateAnalyzer(context));
 
-        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+        var connection = context.GetService<IRelationalConnection>();
 
         // Act
         var observed = await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(
-            connection, cancellationToken: cancellation.Token));
+            connection,
+            cancellationToken: cancellation.Token));
 
         // Assert
         Assert.IsAssignableFrom<OperationCanceledException>(observed);
@@ -85,7 +97,9 @@ public sealed class SqlServerIdentityInsertCommandTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task BootstrapCreationFailure_DoesNotRecoverOrQuarantineCaller(bool asynchronous)
+    public async Task BootstrapCreationFailure_DoesNotRecoverOrQuarantineCaller(
+        bool asynchronous
+    )
     {
         // Arrange
         using var session = new RecoveryConnection
@@ -95,15 +109,20 @@ public sealed class SqlServerIdentityInsertCommandTests
             FailBootstrapCommandCreation = true,
         };
 
-        var options = new DbContextOptionsBuilder().UseSqlServer(session).Options;
+        var options = new DbContextOptionsBuilder().UseSqlServer(session)
+            .Options;
+
         using var context = new DbContext(options);
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
         var original = new FailingCommand(dependencies, new InvalidOperationException("must not dispatch"));
-        var command = new SqlServerSafeMigrationIdentityInsertCommand(original,
-            "SET IDENTITY_INSERT [dbo].[roles] OFF;", dependencies, analyzer);
+        var command = new SqlServerSafeMigrationIdentityInsertCommand(
+            original,
+            "SET IDENTITY_INSERT [dbo].[roles] OFF;",
+            dependencies,
+            analyzer);
 
-        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+        var connection = context.GetService<IRelationalConnection>();
 
         // Act
         var observed = asynchronous
@@ -126,20 +145,27 @@ public sealed class SqlServerIdentityInsertCommandTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task InitialOpenFailure_DoesNotAttemptIdentityRecovery(bool asynchronous)
+    public async Task InitialOpenFailure_DoesNotAttemptIdentityRecovery(
+        bool asynchronous
+    )
     {
         // Arrange
         using var session = new RecoveryConnection { FailOpen = true };
         session.Close();
-        var options = new DbContextOptionsBuilder().UseSqlServer(session).Options;
+        var options = new DbContextOptionsBuilder().UseSqlServer(session)
+            .Options;
+
         using var context = new DbContext(options);
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
         var original = new FailingCommand(dependencies, new InvalidOperationException("must not dispatch"));
-        var command = new SqlServerSafeMigrationIdentityInsertCommand(original,
-            "SET IDENTITY_INSERT [dbo].[roles] OFF;", dependencies, analyzer);
+        var command = new SqlServerSafeMigrationIdentityInsertCommand(
+            original,
+            "SET IDENTITY_INSERT [dbo].[roles] OFF;",
+            dependencies,
+            analyzer);
 
-        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+        var connection = context.GetService<IRelationalConnection>();
 
         // Act
         var observed = asynchronous
@@ -162,7 +188,9 @@ public sealed class SqlServerIdentityInsertCommandTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task BootstrapAttentionAndObservationFailure_PreservesCallerSessionWithoutOff(bool asynchronous)
+    public async Task BootstrapAttentionAndObservationFailure_PreservesCallerSessionWithoutOff(
+        bool asynchronous
+    )
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
@@ -175,19 +203,25 @@ public sealed class SqlServerIdentityInsertCommandTests
             FailRecoveryObservation = true,
         };
 
-        var options = new DbContextOptionsBuilder().UseSqlServer(session).Options;
+        var options = new DbContextOptionsBuilder().UseSqlServer(session)
+            .Options;
+
         using var context = new DbContext(options);
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
         var original = new FailingCommand(dependencies, new InvalidOperationException("must not dispatch"));
-        var command = new SqlServerSafeMigrationIdentityInsertCommand(original,
-            "SET IDENTITY_INSERT [dbo].[roles] OFF;", dependencies, analyzer);
+        var command = new SqlServerSafeMigrationIdentityInsertCommand(
+            original,
+            "SET IDENTITY_INSERT [dbo].[roles] OFF;",
+            dependencies,
+            analyzer);
 
-        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+        var connection = context.GetService<IRelationalConnection>();
 
         // Act
         var observed = asynchronous
-            ? await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(connection,
+            ? await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(
+                connection,
                 cancellationToken: cancellation.Token))
             : Record.Exception(() => command.ExecuteNonQuery(connection));
 
@@ -199,12 +233,18 @@ public sealed class SqlServerIdentityInsertCommandTests
         Assert.Equal(ConnectionState.Open, session.State);
         Assert.Equal(0, session.CloseCount);
         Assert.Equal(0, session.DisposeCount);
-        Assert.Equal("session_quarantined",
+        Assert.Equal(
+            "session_quarantined",
             failure.Data[SqlServerSafeMigrationIdentityInsertCommand.RecoveryFailureDataKey]);
+
         Assert.IsType<InvalidOperationException>(Record.Exception(() => analyzer.ValidateContext(context)));
-        Assert.DoesNotContain(Assert.Single(session.Commands,
-            static command => command.Sql.StartsWith("DECLARE", StringComparison.Ordinal)).Sql,
-            "SET IDENTITY_INSERT", StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            Assert.Single(
+                    session.Commands,
+                    static command => command.Sql.StartsWith("DECLARE", StringComparison.Ordinal))
+                .Sql,
+            "SET IDENTITY_INSERT",
+            StringComparison.Ordinal);
     }
 
     /// <summary>Cancels between successful bootstrap and original dispatch using ready-only recovery.</summary>
@@ -219,18 +259,24 @@ public sealed class SqlServerIdentityInsertCommandTests
             OnBootstrap = cancellation.Cancel,
         };
 
-        var options = new DbContextOptionsBuilder().UseSqlServer(session).Options;
+        var options = new DbContextOptionsBuilder().UseSqlServer(session)
+            .Options;
+
         using var context = new DbContext(options);
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
         var original = new FailingCommand(dependencies, new InvalidOperationException("must not dispatch"));
-        var command = new SqlServerSafeMigrationIdentityInsertCommand(original,
-            "SET IDENTITY_INSERT [dbo].[roles] OFF;", dependencies, analyzer);
+        var command = new SqlServerSafeMigrationIdentityInsertCommand(
+            original,
+            "SET IDENTITY_INSERT [dbo].[roles] OFF;",
+            dependencies,
+            analyzer);
 
-        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+        var connection = context.GetService<IRelationalConnection>();
 
         // Act
-        var observed = await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(connection,
+        var observed = await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(
+            connection,
             cancellationToken: cancellation.Token));
 
         // Assert
@@ -270,15 +316,20 @@ public sealed class SqlServerIdentityInsertCommandTests
             IdentityPhase = phase,
         };
 
-        var options = new DbContextOptionsBuilder().UseSqlServer(session).Options;
+        var options = new DbContextOptionsBuilder().UseSqlServer(session)
+            .Options;
+
         using var context = new DbContext(options);
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
         var original = new FailingCommand(dependencies, new InvalidOperationException("must not dispatch"));
-        var command = new SqlServerSafeMigrationIdentityInsertCommand(original,
-            "SET IDENTITY_INSERT [dbo].[roles] OFF;", dependencies, analyzer);
+        var command = new SqlServerSafeMigrationIdentityInsertCommand(
+            original,
+            "SET IDENTITY_INSERT [dbo].[roles] OFF;",
+            dependencies,
+            analyzer);
 
-        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+        var connection = context.GetService<IRelationalConnection>();
 
         // Act
         var observed = asynchronous
@@ -303,20 +354,26 @@ public sealed class SqlServerIdentityInsertCommandTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task AttentionBetweenOnAndConfirmation_QuarantinesWithoutBlindOff(bool asynchronous)
+    public async Task AttentionBetweenOnAndConfirmation_QuarantinesWithoutBlindOff(
+        bool asynchronous
+    )
     {
         // Arrange
         using var session = new RecoveryConnection { InheritedIdentityInsert = true };
-        var options = new DbContextOptionsBuilder().UseSqlServer(session).Options;
+        var options = new DbContextOptionsBuilder().UseSqlServer(session)
+            .Options;
+
         using var context = new DbContext(options);
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
         var failure = new OperationCanceledException("attention interrupted acquisition confirmation");
         var command = new SqlServerSafeMigrationIdentityInsertCommand(
             new FailingCommand(dependencies, failure, acquisitionUncertain: true),
-            "SET IDENTITY_INSERT [dbo].[roles] OFF;", dependencies, analyzer);
+            "SET IDENTITY_INSERT [dbo].[roles] OFF;",
+            dependencies,
+            analyzer);
 
-        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+        var connection = context.GetService<IRelationalConnection>();
 
         // Act
         var observed = asynchronous
@@ -327,8 +384,10 @@ public sealed class SqlServerIdentityInsertCommandTests
         Assert.Same(failure, observed);
         Assert.Equal(0, session.IdentityOffCount);
         Assert.Equal(ConnectionState.Closed, session.State);
-        Assert.Equal("session_closed",
+        Assert.Equal(
+            "session_closed",
             failure.Data[SqlServerSafeMigrationIdentityInsertCommand.RecoveryFailureDataKey]);
+
         Assert.IsType<InvalidOperationException>(Record.Exception(() => analyzer.ValidateContext(context)));
     }
 
@@ -338,11 +397,15 @@ public sealed class SqlServerIdentityInsertCommandTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task FailedCommand_RecoversSameSessionAndPreservesOriginalException(bool asynchronous)
+    public async Task FailedCommand_RecoversSameSessionAndPreservesOriginalException(
+        bool asynchronous
+    )
     {
         // Arrange
         using var session = new RecoveryConnection();
-        var options = new DbContextOptionsBuilder().UseSqlServer(session).Options;
+        var options = new DbContextOptionsBuilder().UseSqlServer(session)
+            .Options;
+
         using var context = new DbContext(options);
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
@@ -354,7 +417,7 @@ public sealed class SqlServerIdentityInsertCommandTests
             dependencies,
             analyzer);
 
-        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+        var connection = context.GetService<IRelationalConnection>();
 
         // Act
         var exception = asynchronous
@@ -375,13 +438,15 @@ public sealed class SqlServerIdentityInsertCommandTests
         Assert.Equal(ConnectionState.Open, session.State);
         Assert.Equal(4, session.Commands.Count);
         Assert.Equal(2, session.IdentityOffCount);
-        Assert.All(session.Commands.Where(static command =>
-            command.Sql.StartsWith("DECLARE", StringComparison.Ordinal)), cleanup =>
-        {
-            Assert.Contains("SET IDENTITY_INSERT [dbo].[roles] OFF;", cleanup.Sql, StringComparison.Ordinal);
-            Assert.Contains("SUBSTRING(@doka_identity_scope, 2, 16)", cleanup.Sql, StringComparison.Ordinal);
-            Assert.Equal(30, cleanup.Timeout);
-        });
+        Assert.All(
+            session.Commands.Where(static command =>
+                command.Sql.StartsWith("DECLARE", StringComparison.Ordinal)),
+            cleanup =>
+            {
+                Assert.Contains("SET IDENTITY_INSERT [dbo].[roles] OFF;", cleanup.Sql, StringComparison.Ordinal);
+                Assert.Contains("SUBSTRING(@doka_identity_scope, 2, 16)", cleanup.Sql, StringComparison.Ordinal);
+                Assert.Equal(30, cleanup.Timeout);
+            });
 
         Assert.Equal(0, session.CloseCount);
     }
@@ -394,7 +459,9 @@ public sealed class SqlServerIdentityInsertCommandTests
     {
         // Arrange
         using var session = new RecoveryConnection();
-        var options = new DbContextOptionsBuilder().UseSqlServer(session).Options;
+        var options = new DbContextOptionsBuilder().UseSqlServer(session)
+            .Options;
+
         using var context = new DbContext(options);
         using var transaction = session.BeginTransaction();
         using var contextTransaction = context.Database.UseTransaction(transaction);
@@ -408,7 +475,7 @@ public sealed class SqlServerIdentityInsertCommandTests
             dependencies,
             analyzer);
 
-        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+        var connection = context.GetService<IRelationalConnection>();
 
         // Act
         var exception = await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(
@@ -417,8 +484,10 @@ public sealed class SqlServerIdentityInsertCommandTests
 
         // Assert
         Assert.Same(failure, exception);
-        var cleanup = Assert.Single(session.Commands,
+        var cleanup = Assert.Single(
+            session.Commands,
             static command => command.Sql.StartsWith("DECLARE", StringComparison.Ordinal));
+
         Assert.True(cleanup.Token.CanBeCanceled);
         Assert.False(cleanup.Token.IsCancellationRequested);
         Assert.NotEqual(cancellation.Token, cleanup.Token);
@@ -437,11 +506,15 @@ public sealed class SqlServerIdentityInsertCommandTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task FailedCleanup_ClosesSessionAndPreservesOriginalException(bool asynchronous)
+    public async Task FailedCleanup_ClosesSessionAndPreservesOriginalException(
+        bool asynchronous
+    )
     {
         // Arrange
         using var session = new RecoveryConnection { FailCleanup = true };
-        var options = new DbContextOptionsBuilder().UseSqlServer(session).Options;
+        var options = new DbContextOptionsBuilder().UseSqlServer(session)
+            .Options;
+
         using var context = new DbContext(options);
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
@@ -452,7 +525,7 @@ public sealed class SqlServerIdentityInsertCommandTests
             dependencies,
             analyzer);
 
-        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+        var connection = context.GetService<IRelationalConnection>();
 
         // Act
         var exception = asynchronous
@@ -465,9 +538,14 @@ public sealed class SqlServerIdentityInsertCommandTests
         Assert.Same(failure, exception);
         Assert.Equal(2, session.Commands.Count);
         Assert.Equal(ConnectionState.Closed, session.State);
-        Assert.Equal("session_closed",
+        Assert.Equal(
+            "session_closed",
             failure.Data[SqlServerSafeMigrationIdentityInsertCommand.RecoveryFailureDataKey]);
-        Assert.Contains("requires a new context", Assert.IsType<InvalidOperationException>(quarantine).Message,
+
+        Assert.Contains(
+            "requires a new context",
+            Assert.IsType<InvalidOperationException>(quarantine)
+                .Message,
             StringComparison.Ordinal);
     }
 
@@ -491,10 +569,14 @@ public sealed class SqlServerIdentityInsertCommandTests
         {
             FailCleanup = true,
             CloseFailuresRemaining = 1,
-            DisposeFailuresRemaining = disposalFails ? 1 : 0,
+            DisposeFailuresRemaining = disposalFails
+                ? 1
+                : 0,
         };
 
-        var options = new DbContextOptionsBuilder().UseSqlServer(session).Options;
+        var options = new DbContextOptionsBuilder().UseSqlServer(session)
+            .Options;
+
         using var context = new DbContext(options);
         using var transaction = session.BeginTransaction();
         using var contextTransaction = context.Database.UseTransaction(transaction);
@@ -525,21 +607,24 @@ public sealed class SqlServerIdentityInsertCommandTests
 
         var otherOriginal = new FailingCommand(dependencies, new InvalidOperationException("must not execute"));
         var alreadyGenerated = new SqlServerSafeMigrationGuardedCommand(otherOriginal, dependencies, analyzer);
-        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+        var connection = context.GetService<IRelationalConnection>();
 
         // Act
         var observed = asynchronous
-            ? await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(connection,
+            ? await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(
+                connection,
                 cancellationToken: cancellation.Token))
             : Record.Exception(() => command.ExecuteNonQuery(connection));
 
         var retry = asynchronous
-            ? await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(connection,
+            ? await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(
+                connection,
                 cancellationToken: cancellation.Token))
             : Record.Exception(() => command.ExecuteNonQuery(connection));
 
         var laterCommand = asynchronous
-            ? await Record.ExceptionAsync(() => alreadyGenerated.ExecuteNonQueryAsync(connection,
+            ? await Record.ExceptionAsync(() => alreadyGenerated.ExecuteNonQueryAsync(
+                connection,
                 cancellationToken: cancellation.Token))
             : Record.Exception(() =>
             {
@@ -558,11 +643,17 @@ public sealed class SqlServerIdentityInsertCommandTests
         Assert.Equal(expectedState, session.State);
         Assert.Equal(1, originalCommand.ExecutionCount);
         Assert.Equal(0, otherOriginal.ExecutionCount);
-        Assert.All(new[] { retry, laterCommand, quarantine }, rejected =>
-            Assert.Contains("requires a new context", Assert.IsType<InvalidOperationException>(rejected).Message,
-                StringComparison.Ordinal));
+        Assert.All(
+            new[] { retry, laterCommand, quarantine },
+            rejected =>
+                Assert.Contains(
+                    "requires a new context",
+                    Assert.IsType<InvalidOperationException>(rejected)
+                        .Message,
+                    StringComparison.Ordinal));
 
-        var cleanup = Assert.Single(session.Commands,
+        var cleanup = Assert.Single(
+            session.Commands,
             static command => command.Sql.StartsWith("DECLARE", StringComparison.Ordinal));
 
         Assert.Same(transaction, cleanup.Transaction);
@@ -586,7 +677,9 @@ public sealed class SqlServerIdentityInsertCommandTests
         // Arrange
         using var session = new RecoveryConnection();
         session.Close();
-        var options = new DbContextOptionsBuilder().UseSqlServer(session).Options;
+        var options = new DbContextOptionsBuilder().UseSqlServer(session)
+            .Options;
+
         using var context = new DbContext(options);
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var analyzer = CreateAnalyzer(context);
@@ -597,7 +690,7 @@ public sealed class SqlServerIdentityInsertCommandTests
             dependencies,
             analyzer);
 
-        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+        var connection = context.GetService<IRelationalConnection>();
 
         // Act
         var exception = await Record.ExceptionAsync(() => command.ExecuteNonQueryAsync(connection));
@@ -615,18 +708,22 @@ public sealed class SqlServerIdentityInsertCommandTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task HealthyGuardedCommand_DelegatesOriginalMetadataAndArguments(bool asynchronous)
+    public async Task HealthyGuardedCommand_DelegatesOriginalMetadataAndArguments(
+        bool asynchronous
+    )
     {
         // Arrange
         using var session = new RecoveryConnection();
-        var options = new DbContextOptionsBuilder().UseSqlServer(session).Options;
+        var options = new DbContextOptionsBuilder().UseSqlServer(session)
+            .Options;
+
         using var context = new DbContext(options);
         using var cancellation = new CancellationTokenSource();
         var dependencies = context.GetService<MigrationsSqlGeneratorDependencies>();
         var original = new SuccessfulCommand(dependencies);
         var command = new SqlServerSafeMigrationGuardedCommand(original, dependencies, CreateAnalyzer(context));
-        IReadOnlyDictionary<string, object?> parameters = new Dictionary<string, object?> { ["parameter"] = 7, };
-        var connection = context.GetService<Microsoft.EntityFrameworkCore.Storage.IRelationalConnection>();
+        IReadOnlyDictionary<string, object?> parameters = new Dictionary<string, object?> { ["parameter"] = 7 };
+        var connection = context.GetService<IRelationalConnection>();
 
         original.Text = "SELECT original_virtual_command_text;";
 
@@ -641,15 +738,25 @@ public sealed class SqlServerIdentityInsertCommandTests
         Assert.Same(original.CommandLogger, command.CommandLogger);
         Assert.Equal(original.TransactionSuppressed, command.TransactionSuppressed);
         Assert.Same(parameters, original.Parameters);
-        Assert.Equal(asynchronous ? cancellation.Token : CancellationToken.None, original.Token);
+        Assert.Equal(
+            asynchronous
+                ? cancellation.Token
+                : CancellationToken.None,
+            original.Token);
+
         Assert.Empty(session.Commands);
     }
 
-    private static SqlServerSafeMigrationProviderAnalyzer CreateAnalyzer(DbContext context)
+    private static SqlServerSafeMigrationProviderAnalyzer CreateAnalyzer(
+        DbContext context
+    )
         => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
     private sealed class FailingCommand : MigrationCommand
     {
+        private readonly bool _acquireIdentity;
+        private readonly bool _acquisitionUncertain;
+        private readonly Action? _cancelOnExecute;
         private readonly Exception _failure;
 
         public FailingCommand(
@@ -660,7 +767,11 @@ public sealed class SqlServerIdentityInsertCommandTests
             Action? cancelOnExecute = null
         )
             : base(
-                dependencies.CommandBuilderFactory.Create().Append("SELECT 1;").Build(),
+                dependencies
+                    .CommandBuilderFactory
+                    .Create()
+                    .Append("SELECT 1;")
+                    .Build(),
                 dependencies.CurrentContext.Context,
                 dependencies.Logger)
         {
@@ -670,14 +781,10 @@ public sealed class SqlServerIdentityInsertCommandTests
             _cancelOnExecute = cancelOnExecute;
         }
 
-        private readonly bool _acquireIdentity;
-        private readonly bool _acquisitionUncertain;
-        private readonly Action? _cancelOnExecute;
-
         public int ExecutionCount { get; private set; }
 
         public override int ExecuteNonQuery(
-            Microsoft.EntityFrameworkCore.Storage.IRelationalConnection connection,
+            IRelationalConnection connection,
             IReadOnlyDictionary<string, object?>? parameterValues = null
         )
         {
@@ -688,7 +795,7 @@ public sealed class SqlServerIdentityInsertCommandTests
         }
 
         public override Task<int> ExecuteNonQueryAsync(
-            Microsoft.EntityFrameworkCore.Storage.IRelationalConnection connection,
+            IRelationalConnection connection,
             IReadOnlyDictionary<string, object?>? parameterValues = null,
             CancellationToken cancellationToken = default
         )
@@ -699,11 +806,16 @@ public sealed class SqlServerIdentityInsertCommandTests
             return Task.FromException<int>(_failure);
         }
 
-        private void RecordAcquisition(Microsoft.EntityFrameworkCore.Storage.IRelationalConnection connection)
+        private void RecordAcquisition(
+            IRelationalConnection connection
+        )
         {
             if (_acquireIdentity && connection.DbConnection is RecoveryConnection session)
             {
-                session.IdentityPhase = _acquisitionUncertain ? 1 : 2;
+                session.IdentityPhase = _acquisitionUncertain
+                    ? 1
+                    : 2;
+
                 session.InheritedIdentityInsert = true;
             }
 
@@ -713,7 +825,11 @@ public sealed class SqlServerIdentityInsertCommandTests
 
     private sealed class SuccessfulCommand(MigrationsSqlGeneratorDependencies dependencies)
         : MigrationCommand(
-            dependencies.CommandBuilderFactory.Create().Append("SELECT 1;").Build(),
+            dependencies
+                .CommandBuilderFactory
+                .Create()
+                .Append("SELECT 1;")
+                .Build(),
             dependencies.CurrentContext.Context,
             dependencies.Logger,
             transactionSuppressed: true)
@@ -727,7 +843,7 @@ public sealed class SqlServerIdentityInsertCommandTests
         public override string CommandText => Text;
 
         public override int ExecuteNonQuery(
-            Microsoft.EntityFrameworkCore.Storage.IRelationalConnection connection,
+            IRelationalConnection connection,
             IReadOnlyDictionary<string, object?>? parameterValues = null
         )
         {
@@ -737,7 +853,7 @@ public sealed class SqlServerIdentityInsertCommandTests
         }
 
         public override Task<int> ExecuteNonQueryAsync(
-            Microsoft.EntityFrameworkCore.Storage.IRelationalConnection connection,
+            IRelationalConnection connection,
             IReadOnlyDictionary<string, object?>? parameterValues = null,
             CancellationToken cancellationToken = default
         )
@@ -749,12 +865,12 @@ public sealed class SqlServerIdentityInsertCommandTests
         }
     }
 
-    private sealed class RecoveryConnection : System.Data.Common.DbConnection
+    private sealed class RecoveryConnection : DbConnection
     {
         private string _connectionString = "Server=localhost;Database=recovery;TrustServerCertificate=True";
         private ConnectionState _state = ConnectionState.Open;
 
-        [System.Diagnostics.CodeAnalysis.AllowNull]
+        [AllowNull]
         public override string ConnectionString
         {
             get => _connectionString;
@@ -836,7 +952,9 @@ public sealed class SqlServerIdentityInsertCommandTests
             return Task.CompletedTask;
         }
 
-        protected override void Dispose(bool disposing)
+        protected override void Dispose(
+            bool disposing
+        )
         {
             try
             {
@@ -862,12 +980,16 @@ public sealed class SqlServerIdentityInsertCommandTests
             }
         }
 
-        public override void ChangeDatabase(string databaseName) => throw new NotSupportedException();
+        public override void ChangeDatabase(
+            string databaseName
+        ) => throw new NotSupportedException();
 
-        protected override System.Data.Common.DbTransaction BeginDbTransaction(IsolationLevel isolationLevel)
+        protected override DbTransaction BeginDbTransaction(
+            IsolationLevel isolationLevel
+        )
             => new RecoveryTransaction(this, isolationLevel);
 
-        protected override System.Data.Common.DbCommand CreateDbCommand()
+        protected override DbCommand CreateDbCommand()
         {
             CreateCommandCount++;
             if (FailBootstrapCommandCreation && CreateCommandCount == 1)
@@ -879,7 +1001,7 @@ public sealed class SqlServerIdentityInsertCommandTests
         }
     }
 
-    private sealed class RecoveryTransaction : System.Data.Common.DbTransaction
+    private sealed class RecoveryTransaction : DbTransaction
     {
         private readonly RecoveryConnection _connection;
 
@@ -900,13 +1022,15 @@ public sealed class SqlServerIdentityInsertCommandTests
 
         public int DisposeCount { get; private set; }
 
-        protected override System.Data.Common.DbConnection DbConnection => _connection;
+        protected override DbConnection DbConnection => _connection;
 
         public override void Commit() => CommitCount++;
 
         public override void Rollback() => RollbackCount++;
 
-        protected override void Dispose(bool disposing)
+        protected override void Dispose(
+            bool disposing
+        )
         {
             try
             {
@@ -922,18 +1046,20 @@ public sealed class SqlServerIdentityInsertCommandTests
         }
     }
 
-    private sealed class RecoveryCommand : System.Data.Common.DbCommand
+    private sealed class RecoveryCommand : DbCommand
     {
         private readonly RecoveryConnection _connection;
         private string _commandText = string.Empty;
 
-        public RecoveryCommand(RecoveryConnection connection)
+        public RecoveryCommand(
+            RecoveryConnection connection
+        )
         {
             _connection = connection;
             DbConnection = connection;
         }
 
-        [System.Diagnostics.CodeAnalysis.AllowNull]
+        [AllowNull]
         public override string CommandText
         {
             get => _commandText;
@@ -945,30 +1071,36 @@ public sealed class SqlServerIdentityInsertCommandTests
         public override bool DesignTimeVisible { get; set; }
         public override UpdateRowSource UpdatedRowSource { get; set; }
 
-        protected override System.Data.Common.DbConnection? DbConnection { get; set; }
+        protected override DbConnection? DbConnection { get; set; }
 
-        protected override System.Data.Common.DbTransaction? DbTransaction { get; set; }
+        protected override DbTransaction? DbTransaction { get; set; }
 
-        protected override System.Data.Common.DbParameterCollection DbParameterCollection
+        protected override DbParameterCollection DbParameterCollection
             => throw new NotSupportedException();
 
         public override void Cancel() { }
 
         public override int ExecuteNonQuery() => ExecuteCleanup(CancellationToken.None);
 
-        public override Task<int> ExecuteNonQueryAsync(CancellationToken cancellationToken)
+        public override Task<int> ExecuteNonQueryAsync(
+            CancellationToken cancellationToken
+        )
             => Task.FromResult(ExecuteCleanup(cancellationToken));
 
         public override object? ExecuteScalar() => throw new NotSupportedException();
 
         public override void Prepare() { }
 
-        protected override System.Data.Common.DbParameter CreateDbParameter() => throw new NotSupportedException();
+        protected override DbParameter CreateDbParameter() => throw new NotSupportedException();
 
-        protected override System.Data.Common.DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
+        protected override DbDataReader ExecuteDbDataReader(
+            CommandBehavior behavior
+        )
             => throw new NotSupportedException();
 
-        private int ExecuteCleanup(CancellationToken cancellationToken)
+        private int ExecuteCleanup(
+            CancellationToken cancellationToken
+        )
         {
             _connection.Commands.Add(new CleanupTrace(CommandText, CommandTimeout, DbTransaction, cancellationToken));
             cancellationToken.ThrowIfCancellationRequested();
@@ -1009,7 +1141,8 @@ public sealed class SqlServerIdentityInsertCommandTests
                 throw new InvalidOperationException("identity acquisition is unproven");
             }
 
-            if (_connection.FailCleanup && _connection.IdentityPhase == 2)
+            if (_connection.FailCleanup
+                && _connection.IdentityPhase == 2)
             {
                 throw new InvalidOperationException("cleanup cannot recover this session");
             }
@@ -1029,7 +1162,7 @@ public sealed class SqlServerIdentityInsertCommandTests
     private sealed record CleanupTrace(
         string Sql,
         int Timeout,
-        System.Data.Common.DbTransaction? Transaction,
+        DbTransaction? Transaction,
         CancellationToken Token
     );
 }

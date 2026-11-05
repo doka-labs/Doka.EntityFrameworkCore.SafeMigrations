@@ -1,3 +1,5 @@
+using System.Data;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer;
 
 internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
@@ -51,10 +53,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
             candidates.Count,
             SafeMigrationCatalogQueryLimits.MaximumUtf8PayloadBytes,
             commandTimeout,
-            (
-                command,
-                offset
-            ) =>
+            (command,
+                offset) =>
             {
                 var count = Math.Min(
                     SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement,
@@ -69,6 +69,7 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     AddParameter);
 
                 var selections = new string[count];
+
                 // WHY: Keep bounded selection slots aligned with original rename ordinals.
                 // ReSharper disable once ForCanBeConvertedToForeach
                 // ReSharper disable once LoopCanBeConvertedToQuery
@@ -101,7 +102,8 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                     var parameter = command.CreateParameter();
                     parameter.ParameterName = "@doka_sm_rename_"
                         + parameters.Count.ToString(CultureInfo.InvariantCulture);
-                    parameter.DbType = System.Data.DbType.String;
+
+                    parameter.DbType = DbType.String;
                     parameter.Value = value;
                     command.Parameters.Add(parameter);
                     parameters.Add(value, parameter.ParameterName);
@@ -134,7 +136,10 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
                         throw InvalidMemberRenameTargetResult();
                     }
 
-                    targets[offset + row] = (target, hasSourceSupported ? reader.GetBoolean(2) : null);
+                    targets[offset + row] = (target, hasSourceSupported
+                        ? reader.GetBoolean(2)
+                        : null);
+
                     row++;
                 }
 
@@ -154,7 +159,9 @@ internal sealed partial class SqlServerSafeMigrationProviderAnalyzer
         for (var index = 0; index < candidates.Count; index++)
         {
             var ordinal = candidates[index];
-            results[ordinal] = results[ordinal].WithRenameTargetExists(targets[index].Target);
+            results[ordinal] = results[ordinal]
+                .WithRenameTargetExists(targets[index].Target);
+
             if (targets[index].SourceSupported is { } supported)
             {
                 // WHY: A target drop cannot turn a constraint-owned backing

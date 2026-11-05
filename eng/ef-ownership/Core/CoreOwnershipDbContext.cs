@@ -12,17 +12,13 @@ public class CoreOwnershipDbContext : DbContext
     /// <param name="options">The provider and migration-lineage options.</param>
     public CoreOwnershipDbContext(
         DbContextOptions<CoreOwnershipDbContext> options
-    ) : base(options)
-    {
-    }
+    ) : base(options) { }
 
     /// <summary>Initializes a derived ownership-fixture context.</summary>
     /// <param name="options">The provider and migration-lineage options.</param>
     protected CoreOwnershipDbContext(
         DbContextOptions options
-    ) : base(options)
-    {
-    }
+    ) : base(options) { }
 
     /// <inheritdoc />
     protected override void OnModelCreating(
@@ -88,22 +84,42 @@ internal sealed class CoreRoleConfiguration(
     {
         builder.ToTable("ownership_core_roles");
         builder.HasKey(role => role.Id);
-        builder.Property(role => role.Name).HasMaxLength(64).IsRequired();
+        builder
+            .Property(role => role.Name)
+            .HasMaxLength(64)
+            .IsRequired();
 
-        builder.HasData(targetState
-            ? TargetRows()
-            : SourceRows());
+        builder.HasData(
+            targetState
+                ? TargetRows()
+                : SourceRows());
     }
 
     private static CoreOwnershipRole[] SourceRows() =>
     [
-        new() { Id = 1, Name = "administrator" },
-        new() { Id = 2, Name = "member" },
+        new()
+        {
+            Id = 1,
+            Name = "administrator",
+        },
+        new()
+        {
+            Id = 2,
+            Name = "member",
+        },
     ];
 
     private static CoreOwnershipRole[] TargetRows() =>
     [
-        new() { Id = 1, Name = "owner" },
-        new() { Id = 3, Name = "auditor" },
+        new()
+        {
+            Id = 1,
+            Name = "owner",
+        },
+        new()
+        {
+            Id = 3,
+            Name = "auditor",
+        },
     ];
 }

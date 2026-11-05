@@ -2,14 +2,16 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.Tests;
 
 /// <summary>Checks bounded diagnostic parsing without retaining intermediate payload copies.</summary>
 /// <param name="output">The allocation evidence output.</param>
-public sealed class SafeMigrationFacetDifferenceParserTests(Xunit.Abstractions.ITestOutputHelper output)
+public sealed class SafeMigrationFacetDifferenceParserTests(ITestOutputHelper output)
 {
     /// <summary>Empty records are ignored without changing the order or owned values.</summary>
     [Theory]
     [InlineData("")]
     [InlineData("\u001e")]
     [InlineData("\u001e\u001e")]
-    public void EmptyRecordsReturnNoDifferences(string payload)
+    public void EmptyRecordsReturnNoDifferences(
+        string payload
+    )
     {
         // Arrange
         const string provider = "TestProvider";
@@ -30,7 +32,9 @@ public sealed class SafeMigrationFacetDifferenceParserTests(Xunit.Abstractions.I
     [InlineData("facet\u001fexpected\u001f")]
     [InlineData("facet\u001fexpected\u001fsecret\nvalue")]
     [InlineData("facet\u001fexpected\u001f\u00ff")]
-    public void MalformedFieldsAreRejectedWithoutDisclosure(string payload)
+    public void MalformedFieldsAreRejectedWithoutDisclosure(
+        string payload
+    )
     {
         // Arrange
         const string provider = "TestProvider";
@@ -63,11 +67,18 @@ public sealed class SafeMigrationFacetDifferenceParserTests(Xunit.Abstractions.I
     [InlineData(65, 1, 1)]
     [InlineData(1, 257, 1)]
     [InlineData(1, 1, 257)]
-    public void ExcessiveFieldLengthsAreRejected(int facetLength, int expectedLength, int actualLength)
+    public void ExcessiveFieldLengthsAreRejected(
+        int facetLength,
+        int expectedLength,
+        int actualLength
+    )
     {
         // Arrange
-        var payload = new string('f', facetLength) + "\u001f"
-            + new string('e', expectedLength) + "\u001f" + new string('a', actualLength);
+        var payload = new string('f', facetLength)
+            + "\u001f"
+            + new string('e', expectedLength)
+            + "\u001f"
+            + new string('a', actualLength);
 
         // Act
         var exception = Record.Exception(() => SafeMigrationFacetDifferenceParser.Parse(payload, "TestProvider"));
@@ -91,12 +102,14 @@ public sealed class SafeMigrationFacetDifferenceParserTests(Xunit.Abstractions.I
 
         // Assert
         Assert.Equal(16, differences.Count);
-        Assert.All(differences, difference =>
-        {
-            Assert.Equal(facet, difference.Facet);
-            Assert.Equal(expected, difference.Expected);
-            Assert.Equal(actual, difference.Actual);
-        });
+        Assert.All(
+            differences,
+            difference =>
+            {
+                Assert.Equal(facet, difference.Facet);
+                Assert.Equal(expected, difference.Expected);
+                Assert.Equal(actual, difference.Actual);
+            });
     }
 
     /// <summary>Prepared payloads retain only the final evidence values.</summary>
@@ -106,7 +119,8 @@ public sealed class SafeMigrationFacetDifferenceParserTests(Xunit.Abstractions.I
         // Arrange
         const int iterations = 1_000;
         var payload = string.Join(
-            "\u001e", Enumerable.Repeat("column_store_type\u001fvarchar(200)\u001fvarchar(10)", 16));
+            "\u001e",
+            Enumerable.Repeat("column_store_type\u001fvarchar(200)\u001fvarchar(10)", 16));
 
         _ = SafeMigrationFacetDifferenceParser.Parse(payload, "TestProvider");
 
@@ -115,7 +129,8 @@ public sealed class SafeMigrationFacetDifferenceParserTests(Xunit.Abstractions.I
         var count = 0;
         for (var index = 0; index < iterations; index++)
         {
-            count += SafeMigrationFacetDifferenceParser.Parse(payload, "TestProvider").Count;
+            count += SafeMigrationFacetDifferenceParser.Parse(payload, "TestProvider")
+                .Count;
         }
 
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
@@ -123,6 +138,7 @@ public sealed class SafeMigrationFacetDifferenceParserTests(Xunit.Abstractions.I
         // Assert
         output.WriteLine($"Prepared diagnostic payloads: {allocated} bytes for {iterations} sixteen-record payloads.");
         Assert.Equal(16_000, count);
+
         // WHY: Keep headroom above final evidence objects but below the old 9 MB intermediate-copy path.
         Assert.InRange(allocated, 0, 5_200_000);
     }

@@ -8,7 +8,9 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
     [InlineData("2147483648")]
     [InlineData("1.234567890123456789e30")]
     [InlineData("0.000e0")]
-    public void CapturedNumericRenderingPreservesNativeLexeme(string sql)
+    public void CapturedNumericRenderingPreservesNativeLexeme(
+        string sql
+    )
     {
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
@@ -26,7 +28,9 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void ParsedConvertCannotInvertMySqlColumnAndTypeRoles(bool defaultMode)
+    public void ParsedConvertCannotInvertMySqlColumnAndTypeRoles(
+        bool defaultMode
+    )
     {
         // Arrange
         using var context = CreateContext();
@@ -36,7 +40,9 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
         // Act
         var exception = Record.Exception(() =>
         {
-            _ = defaultMode ? renderer.RenderDefault(expression) : renderer.Render(expression);
+            _ = defaultMode
+                ? renderer.RenderDefault(expression)
+                : renderer.Render(expression);
         });
 
         // Assert
@@ -51,7 +57,11 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
         using var context = CreateContext();
         var renderer = CreateRenderer(context);
         var expression = SafeMigrationSql.Case(
-            [new(SafeMigrationSql.IsNull(SafeMigrationSql.Identifier("value")), SafeMigrationSql.Literal("a\\b"))]);
+        [
+            new SafeMigrationSqlCaseWhenClause(
+                SafeMigrationSql.IsNull(SafeMigrationSql.Identifier("value")),
+                SafeMigrationSql.Literal("a\\b")),
+        ]);
 
         var ordinary = renderer.Render(expression);
         var defaultSql = renderer.RenderDefault(expression);
@@ -77,9 +87,18 @@ public sealed partial class MySqlSafeMigrationSqlExpressionRendererTests
         var renderer = CreateRenderer(context);
         var unsupported = SafeMigrationSql.ProviderFragment("foreign", "x");
         var expression = SafeMigrationSql.Case(
-            [new(role == 0 ? unsupported : SafeMigrationSql.Literal(true),
-                role == 1 ? unsupported : SafeMigrationSql.Literal(1))],
-            role == 2 ? unsupported : SafeMigrationSql.Literal(0));
+            [
+                new SafeMigrationSqlCaseWhenClause(
+                    role == 0
+                        ? unsupported
+                        : SafeMigrationSql.Literal(true),
+                    role == 1
+                        ? unsupported
+                        : SafeMigrationSql.Literal(1)),
+            ],
+            role == 2
+                ? unsupported
+                : SafeMigrationSql.Literal(0));
 
         var feature = renderer.GetUnsupportedFeature(expression);
 

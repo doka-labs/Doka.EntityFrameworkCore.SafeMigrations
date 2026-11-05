@@ -8,7 +8,9 @@ public sealed class PostgreSqlStateEvaluationGuardEvidenceTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task ExactGuardReasonsRetainOrderedScope(bool native)
+    public async Task ExactGuardReasonsRetainOrderedScope(
+        bool native
+    )
     {
         // Arrange
         await using var connection = new CatalogStatementTestConnection(native, static (_, _) => Rows());
@@ -17,13 +19,22 @@ public sealed class PostgreSqlStateEvaluationGuardEvidenceTests
 
         // Act
         var reasons = await PostgreSqlSafeMigrationProviderAnalyzer.ReadStateEvaluationGuardBatchAsync(
-            batch, states, Requests(), CancellationToken.None);
+            batch,
+            states,
+            Requests(),
+            CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationObservedState.Unsupported, states[0]);
         Assert.Null(states[1]);
-        Assert.Equal("captured_sql_identifier", Assert.Single(reasons!).Value);
-        Assert.Equal(0, Assert.Single(reasons!).Key);
+        Assert.Equal("captured_sql_identifier",
+            Assert.Single(reasons!)
+                .Value);
+
+        Assert.Equal(0,
+            Assert.Single(reasons!)
+                .Key);
+
         Assert.Equal(1, connection.ReadersDisposed);
     }
 
@@ -41,32 +52,54 @@ public sealed class PostgreSqlStateEvaluationGuardEvidenceTests
     [InlineData("null-code")]
     [InlineData("orphan-code")]
     [InlineData("code-state")]
-    public async Task MalformedGuardEvidenceCannotReturnReasons(string fault)
+    public async Task MalformedGuardEvidenceCannotReturnReasons(
+        string fault
+    )
     {
         // Arrange
-        await using var connection = new CatalogStatementTestConnection(true, (_, _) =>
-        {
-            var rows = Rows();
-            switch (fault)
+        await using var connection = new CatalogStatementTestConnection(
+            true,
+            (_, _) =>
             {
-                case "ordinal": rows.Rows[0][0] = 999; break;
-                case "missing": rows.Rows.RemoveAt(1); break;
-                case "duplicate": rows.Rows.Add(rows.Rows[0].ItemArray); break;
-                case "width": rows.Columns.Add("extra", typeof(object)); break;
-                case "state-type": rows.Rows[0][1] = 1; break;
-                case "code-type": rows.Rows[0][2] = 1; break;
-                case "unknown-code": rows.Rows[0][2] = "unrecognized_guard"; break;
-                case "foreign-family":
-                    rows.Rows[1][1] = "unsupported";
-                    rows.Rows[1][2] = "captured_sql_identifier";
-                    break;
-                case "null-code": rows.Rows[0][2] = DBNull.Value; break;
-                case "orphan-code": rows.Rows[1][2] = "generated_case_operand_type"; break;
-                case "code-state": rows.Rows[0][1] = "matching"; break;
-            }
+                var rows = Rows();
+                switch (fault)
+                {
+                    case "ordinal":
+                        rows
+                            .Rows[0][0] = 999; break;
+                    case "missing": rows.Rows.RemoveAt(1); break;
+                    case "duplicate": rows.Rows.Add(rows.Rows[0].ItemArray); break;
+                    case "width": rows.Columns.Add("extra", typeof(object)); break;
+                    case "state-type":
+                        rows
+                            .Rows[0][1] = 1; break;
+                    case "code-type":
+                        rows
+                            .Rows[0][2] = 1; break;
+                    case "unknown-code":
+                        rows
+                            .Rows[0][2] = "unrecognized_guard"; break;
+                    case "foreign-family":
+                        rows
+                            .Rows[1][1] = "unsupported";
 
-            return rows;
-        });
+                        rows
+                            .Rows[1][2] = "captured_sql_identifier";
+
+                        break;
+                    case "null-code":
+                        rows
+                            .Rows[0][2] = DBNull.Value; break;
+                    case "orphan-code":
+                        rows
+                            .Rows[1][2] = "generated_case_operand_type"; break;
+                    case "code-state":
+                        rows
+                            .Rows[0][1] = "matching"; break;
+                }
+
+                return rows;
+            });
 
         await using var batch = Batch(connection);
         SafeMigrationObservedState?[] states = [null, null];
@@ -74,7 +107,10 @@ public sealed class PostgreSqlStateEvaluationGuardEvidenceTests
         // Act
         var exception = await Record.ExceptionAsync(() =>
             PostgreSqlSafeMigrationProviderAnalyzer.ReadStateEvaluationGuardBatchAsync(
-                batch, states, Requests(), CancellationToken.None));
+                batch,
+                states,
+                Requests(),
+                CancellationToken.None));
 
         // Assert
         Assert.IsType<InvalidOperationException>(exception);
@@ -98,7 +134,10 @@ public sealed class PostgreSqlStateEvaluationGuardEvidenceTests
         // Act
         var exception = await Record.ExceptionAsync(() =>
             PostgreSqlSafeMigrationProviderAnalyzer.ReadStateEvaluationGuardBatchAsync(
-                batch, states, Requests(), cancellation.Token));
+                batch,
+                states,
+                Requests(),
+                cancellation.Token));
 
         // Assert
         Assert.IsAssignableFrom<OperationCanceledException>(exception);
@@ -106,10 +145,13 @@ public sealed class PostgreSqlStateEvaluationGuardEvidenceTests
     }
 
     /// <summary>Creates only a registered catalog transport; no external connection is opened.</summary>
-    private static SafeMigrationCatalogBatch Batch(CatalogStatementTestConnection connection)
+    private static SafeMigrationCatalogBatch Batch(
+        CatalogStatementTestConnection connection
+    )
     {
         var batch = new SafeMigrationCatalogBatch(connection, 71);
-        batch.CreateCommand().CommandText = "SELECT 0, 'unsupported', 'captured_sql_identifier';";
+        batch.CreateCommand()
+            .CommandText = "SELECT 0, 'unsupported', 'captured_sql_identifier';";
 
         return batch;
     }

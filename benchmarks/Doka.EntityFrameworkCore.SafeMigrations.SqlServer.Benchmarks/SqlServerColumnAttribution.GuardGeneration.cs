@@ -5,8 +5,8 @@ namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Benchmarks;
 public class SqlServerGuardGenerationBenchmarks
 {
     private GuardGenerationControl? _control;
-    private string _sql = string.Empty;
     private string? _lastSql;
+    private string _sql = string.Empty;
 
     /// <summary>Gets or sets the fixed direct, delayed-classifier or delayed-repair microcontrol.</summary>
     [Params("direct_catalog_64", "delayed_classifier_64", "delayed_repair_64")]
@@ -20,28 +20,32 @@ public class SqlServerGuardGenerationBenchmarks
     public void Setup()
     {
         SqlServerColumnAttribution.ValidateEnvironment();
-        _control = CreateGuardGenerationControls().Single(control => control.Name == ControlName);
+        _control = CreateGuardGenerationControls()
+            .Single(control => control.Name == ControlName);
+
         _sql = Generate();
         var output = SqlServerColumnAttribution.CreateEvidenceDirectory("guard-" + ControlName);
         File.WriteAllText(Path.Combine(output, "guard-generation.sql"), _sql);
-        SqlServerColumnAttribution.WriteJson(Path.Combine(output, "guard-generation-control.json"), new
-        {
-            Control.Name,
-            Scope = "guard_generation_microcontrol_not_full_generator_attribution",
-            SyntheticInput = true,
-            ExecutesGeneratedSql = false,
-            Policy = Control.Operation.Policy.ToString(),
-            RepairCapability = Control.Plan.RepairCapability.ToString(),
-            Control.Plan.RequiresDelayedBinding,
-            InputStateCharacters = Control.Plan.StateExpression.Length,
-            InputRepairCharacters = Control.Plan.RepairPrecondition.Length,
-            InputPostconditionCharacters = Control.Plan.Postcondition.Length,
-            GeneratedSqlCharacters = _sql.Length,
-            GeneratedSqlUtf8Bytes = Encoding.UTF8.GetByteCount(_sql),
-            SysColumnsSubqueryOccurrences = SqlServerColumnAttribution.CountOccurrences(_sql, "FROM sys.columns"),
-            Interpretation = "Fixed common plan inputs bypass catalog construction and integer admission. "
-                + "Results measure combined guard helpers, not individual causes or full-generator improvements.",
-        });
+        SqlServerColumnAttribution.WriteJson(
+            Path.Combine(output, "guard-generation-control.json"),
+            new
+            {
+                Control.Name,
+                Scope = "guard_generation_microcontrol_not_full_generator_attribution",
+                SyntheticInput = true,
+                ExecutesGeneratedSql = false,
+                Policy = Control.Operation.Policy.ToString(),
+                RepairCapability = Control.Plan.RepairCapability.ToString(),
+                Control.Plan.RequiresDelayedBinding,
+                InputStateCharacters = Control.Plan.StateExpression.Length,
+                InputRepairCharacters = Control.Plan.RepairPrecondition.Length,
+                InputPostconditionCharacters = Control.Plan.Postcondition.Length,
+                GeneratedSqlCharacters = _sql.Length,
+                GeneratedSqlUtf8Bytes = Encoding.UTF8.GetByteCount(_sql),
+                SysColumnsSubqueryOccurrences = SqlServerColumnAttribution.CountOccurrences(_sql, "FROM sys.columns"),
+                Interpretation = "Fixed common plan inputs bypass catalog construction and integer admission. "
+                    + "Results measure combined guard helpers, not individual causes or full-generator improvements.",
+            });
     }
 
     /// <summary>Renders one guard using the same preconstructed immutable control inputs.</summary>
@@ -70,38 +74,56 @@ public class SqlServerGuardGenerationBenchmarks
     {
         // WHY: Fixed inputs isolate rendering from newly added catalog proofs and keep baseline DLLs executable.
         // They are deliberately never submitted to the engine and do not claim a valid live column contract.
-        var predicate = string.Join(" AND ", Enumerable.Range(0, 64).Select(index =>
-            "EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[attribution_items]') "
-            + "AND name = N'value_" + index.ToString(CultureInfo.InvariantCulture) + "' AND max_length = 256)"));
+        var predicate = string.Join(
+            " AND ",
+            Enumerable
+                .Range(0, 64)
+                .Select(index =>
+                    "EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[attribution_items]') "
+                    + "AND name = N'value_"
+                    + index.ToString(CultureInfo.InvariantCulture)
+                    + "' AND max_length = 256)"));
 
         var postcondition = "CASE WHEN " + predicate + " THEN 1 ELSE 0 END";
         var catalogState = "CASE WHEN " + predicate + " THEN N'matching' ELSE N'different' END";
-        var rowState = "CASE WHEN " + predicate + " THEN N'matching' "
+        var rowState = "CASE WHEN "
+            + predicate
+            + " THEN N'matching' "
             + "WHEN EXISTS (SELECT 1 FROM dbo.attribution_items WHERE value_0 IS NULL) "
             + "THEN N'data_blocked' ELSE N'different' END";
 
-        var repair = "CASE WHEN " + predicate
+        var repair = "CASE WHEN "
+            + predicate
             + " AND NOT EXISTS (SELECT 1 FROM dbo.attribution_items WHERE value_0 IS NULL) THEN 1 ELSE 0 END";
 
         var target = new ExpectedColumnDefinition("value_0", typeof(string), true, "nvarchar(128)", maxLength: 128);
         var intent = new EnsureColumnIntent("attribution_items", target, "dbo");
         var strict = new SafeMigrationOperation(intent, SafeMigrationPolicy.ThrowIfDifferent);
         var repairing = new SafeMigrationOperation(intent, SafeMigrationPolicy.RepairIfSafe);
-        var direct = new SqlServerSafeMigrationRuntimePlan(catalogState, postcondition,
-            SafeMigrationRepairCapability.None, "0");
+        var direct = new SqlServerSafeMigrationRuntimePlan(
+            catalogState,
+            postcondition,
+            SafeMigrationRepairCapability.None,
+            "0");
 
         yield return new GuardGenerationControl("direct_catalog_64", strict, direct);
 
-        var delayed = new SqlServerSafeMigrationRuntimePlan(rowState, postcondition,
-            SafeMigrationRepairCapability.None, "0")
+        var delayed = new SqlServerSafeMigrationRuntimePlan(
+            rowState,
+            postcondition,
+            SafeMigrationRepairCapability.None,
+            "0")
         {
             RequiresDelayedBinding = true,
         };
 
         yield return new GuardGenerationControl("delayed_classifier_64", strict, delayed);
 
-        var delayedRepair = new SqlServerSafeMigrationRuntimePlan(rowState, postcondition,
-            SafeMigrationRepairCapability.Safe, repair)
+        var delayedRepair = new SqlServerSafeMigrationRuntimePlan(
+            rowState,
+            postcondition,
+            SafeMigrationRepairCapability.Safe,
+            repair)
         {
             RequiresDelayedBinding = true,
         };

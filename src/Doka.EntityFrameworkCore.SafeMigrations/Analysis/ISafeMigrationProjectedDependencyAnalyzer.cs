@@ -5,9 +5,9 @@ internal interface ISafeMigrationProjectedDependencyAnalyzer
 {
     /// <summary>Binds subsequent ordered observations to their original migration-stream position.</summary>
     /// <param name="operationOrdinal">The zero-based ordinal in the complete, not safe-only, stream.</param>
-    void SetCurrentOperationOrdinal(int operationOrdinal)
-    {
-    }
+    void SetCurrentOperationOrdinal(
+        int operationOrdinal
+    ) { }
 
     /// <summary>Qualifies captured facts before neutral shortcuts reuse them after provider side effects.</summary>
     /// <param name="operation">The next immutable operation in the ordered stream.</param>
@@ -39,7 +39,8 @@ internal interface ISafeMigrationProjectedDependencyAnalyzer
     SafeMigrationProviderAnalysis ValidateProjectedOperation(
         SafeMigrationOperation operation,
         SafeMigrationProviderAnalysis projectedAnalysis,
-        ISafeMigrationProjectedColumnSource columns);
+        ISafeMigrationProjectedColumnSource columns
+    );
 
     /// <summary>Advances dependencies only after the decision accepts an operation.</summary>
     /// <param name="operation">The operation that was assessed.</param>
@@ -50,9 +51,12 @@ internal interface ISafeMigrationProjectedDependencyAnalyzer
         SafeMigrationOperation operation,
         SafeMigrationProviderAnalysis liveAnalysis,
         SafeMigrationProviderAnalysis analysis,
-        SafeMigrationDecision decision);
+        SafeMigrationDecision decision
+    );
 
     /// <summary>Invalidates or advances dependencies affected by ordinary provider operations.</summary>
     /// <param name="operation">The provider operation encountered in the stream.</param>
-    void ObserveProviderOperation(MigrationOperation operation);
+    void ObserveProviderOperation(
+        MigrationOperation operation
+    );
 }

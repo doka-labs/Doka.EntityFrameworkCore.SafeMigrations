@@ -26,7 +26,9 @@ public sealed class SqlServerRuntimeDiagnosticTests
     )
     {
         // Arrange
-        var code = template == "recovery" ? "doka_sm_identity_acquisition_unproven" : "doka_sm_identity_scope_in_use";
+        var code = template == "recovery"
+            ? "doka_sm_identity_acquisition_unproven"
+            : "doka_sm_identity_scope_in_use";
 
         // Act
         var sql = RenderSessionDiagnostic(template, authored);
@@ -44,8 +46,10 @@ public sealed class SqlServerRuntimeDiagnosticTests
     public void CallerStatePrivacyAssertionRejectsInjectedDisclosure()
     {
         // Arrange
-        var message = ReadMessage(RenderSessionDiagnostic("bootstrap", authored: true),
-            "doka_sm_identity_scope_in_use", 51007);
+        var message = ReadMessage(
+            RenderSessionDiagnostic("bootstrap", authored: true),
+            "doka_sm_identity_scope_in_use",
+            51007);
 
         var leakedMessage = message + "; leaked_state=" + CallerStateSentinel;
 
@@ -54,7 +58,7 @@ public sealed class SqlServerRuntimeDiagnosticTests
             Assert.DoesNotContain(CallerStateSentinel, leakedMessage, StringComparison.Ordinal));
 
         // Assert
-        Assert.IsType<Xunit.Sdk.DoesNotContainException>(failure);
+        Assert.IsType<DoesNotContainException>(failure);
     }
 
     /// <summary>Every native rejection retains its number and supplies actionable operation context.</summary>
@@ -66,7 +70,10 @@ public sealed class SqlServerRuntimeDiagnosticTests
     [InlineData("doka_sm_data_blocked", 51003)]
     [InlineData("doka_sm_prerequisite_missing", 51004)]
     [InlineData("doka_sm_postcondition", 51005)]
-    public void NativeGuardRetainsErrorNumberStateAndActionableMessage(string code, int number)
+    public void NativeGuardRetainsErrorNumberStateAndActionableMessage(
+        string code,
+        int number
+    )
     {
         // Arrange
         var operation = ColumnOperation("diagnostic_tags", "IsActive");
@@ -75,6 +82,7 @@ public sealed class SqlServerRuntimeDiagnosticTests
         // Act
         var sql = SqlServerGuardedSqlTestContract.DecodeScope(
             SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(operation, plan, [], []));
+
         var message = ReadMessage(sql, code, number);
 
         // Assert
@@ -92,18 +100,20 @@ public sealed class SqlServerRuntimeDiagnosticTests
     public void AdversarialIdentityIsEscapedAndBounded()
     {
         // Arrange
-        var operation = ColumnOperation("owner'%; THROW 51099, N'outside', 1; --\n\u20AC",
+        var operation = ColumnOperation(
+            "owner'%; THROW 51099, N'outside', 1; --\n\u20AC",
             new string('x', 3000));
 
         // Act
         var sql = SqlServerGuardedSqlTestContract.DecodeScope(
             SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(operation, Plan(), [], []));
+
         var message = ReadMessage(sql, "doka_sm_data_blocked", 51003);
 
         // Assert
         Assert.Contains("owner''%%", sql, StringComparison.Ordinal);
         Assert.InRange(message.Length, 1, 2048);
-        Assert.All(message, static character => Assert.InRange((int)character, 32, 126));
+        Assert.All(message, static character => Assert.InRange(character, 32, 126));
         Assert.Contains("reason=", message, StringComparison.Ordinal);
         Assert.Contains("next=", message, StringComparison.Ordinal);
         Assert.DoesNotContain("\n", message, StringComparison.Ordinal);
@@ -118,7 +128,10 @@ public sealed class SqlServerRuntimeDiagnosticTests
     [InlineData("doka_sm_data_blocked", 51003)]
     [InlineData("doka_sm_prerequisite_missing", 51004)]
     [InlineData("doka_sm_postcondition", 51005)]
-    public void MaximumPercentIdentityBoundsTheNativeArgument(string code, int number)
+    public void MaximumPercentIdentityBoundsTheNativeArgument(
+        string code,
+        int number
+    )
     {
         // Arrange
         var operation = MaximumPercentForeignKeyOperation();
@@ -126,6 +139,7 @@ public sealed class SqlServerRuntimeDiagnosticTests
         // Act
         var sql = SqlServerGuardedSqlTestContract.DecodeScope(
             SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(operation, Plan(), [], []));
+
         var argument = ReadNativeArgument(sql, code, number);
 
         // Assert
@@ -162,7 +176,9 @@ public sealed class SqlServerRuntimeDiagnosticTests
     [Theory]
     [InlineData(null)]
     [InlineData(7)]
-    public void PercentTruncationRetainsTheRealPolicyAfterASpoofedIdentityMarker(int? operationOrdinal)
+    public void PercentTruncationRetainsTheRealPolicyAfterASpoofedIdentityMarker(
+        int? operationOrdinal
+    )
     {
         // Arrange
         var owner = "owner; policy=Attacker" + new string('%', 106);
@@ -173,8 +189,13 @@ public sealed class SqlServerRuntimeDiagnosticTests
 
         // Act
         var sql = SqlServerGuardedSqlTestContract.DecodeScope(
-            SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(operation, Plan(), [], [],
+            SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(
+                operation,
+                Plan(),
+                [],
+                [],
                 operationOrdinal: operationOrdinal));
+
         var argument = ReadNativeArgument(sql, "doka_sm_different", 51001);
 
         // Assert
@@ -197,7 +218,10 @@ public sealed class SqlServerRuntimeDiagnosticTests
     [InlineData("\\u0001", 4)]
     [InlineData("\\u0001", 5)]
     [InlineData("\\\\", 1)]
-    public void NativePrefixBudgetPreservesCompleteCoreDisplayEscapes(string displayUnit, int inside)
+    public void NativePrefixBudgetPreservesCompleteCoreDisplayEscapes(
+        string displayUnit,
+        int inside
+    )
     {
         // Arrange
         const string label = "doka_sm_data_blocked: owner=[";
@@ -251,17 +275,28 @@ public sealed class SqlServerRuntimeDiagnosticTests
     [InlineData("recovery", "\u20AC", "\\u20AC")]
     [InlineData("bootstrap", "\\", "\\\\")]
     [InlineData("recovery", "\\", "\\\\")]
-    public void ManagedDataSessionTemplatesRetainWorstWidthEscapedIdentities(string template, string character,
-        string displayUnit)
+    public void ManagedDataSessionTemplatesRetainWorstWidthEscapedIdentities(
+        string template,
+        string character,
+        string displayUnit
+    )
     {
         // Arrange
         var schema = "S" + new string('%', 127 - displayUnit.Length) + character;
         var table = "owner" + new string('%', 123 - displayUnit.Length) + character;
         var columnSuffix = new string('%', 126 - displayUnit.Length) + character;
         string[] columns = ["C0" + columnSuffix, "C1" + columnSuffix, "C2" + columnSuffix, "C3" + columnSuffix];
-        var operation = new SafeMigrationOperation(new EnsureModelManagedDataIntent(table,
-            [columns[0]], ["int"], columns, ["int", "int", "int", "int"],
-            new object?[,] { { 1, 2, 3, 4 } }, schema, null), SafeMigrationPolicy.ThrowIfDifferent);
+        var operation = new SafeMigrationOperation(
+            new EnsureModelManagedDataIntent(
+                table,
+                [columns[0]],
+                ["int"],
+                columns,
+                ["int", "int", "int", "int"],
+                new object?[,] { { 1, 2, 3, 4 } },
+                schema,
+                null),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         var identity = SafeMigrationDiagnosticMessages.FormatIdentity(
             SafeMigrationOperationIdentity.Create(operation.Intent));
@@ -275,8 +310,10 @@ public sealed class SqlServerRuntimeDiagnosticTests
         // Act
         var sql = template == "bootstrap"
             ? SqlServerSafeMigrationIdentityInsertScope.BuildBootstrapSql("0123456789ABCDEF0123456789ABCDEF", message)
-            : SqlServerSafeMigrationIdentityInsertScope.BuildRecoverySql("0123456789ABCDEF0123456789ABCDEF",
-                "SET IDENTITY_INSERT [dbo].[owner] OFF;", acquisitionUnprovenMessage: message);
+            : SqlServerSafeMigrationIdentityInsertScope.BuildRecoverySql(
+                "0123456789ABCDEF0123456789ABCDEF",
+                "SET IDENTITY_INSERT [dbo].[owner] OFF;",
+                acquisitionUnprovenMessage: message);
 
         var emitted = ReadMessage(sql, code, 51007);
         var argument = ReadNativeArgument(sql, code, 51007);
@@ -285,7 +322,7 @@ public sealed class SqlServerRuntimeDiagnosticTests
         Assert.Contains(identity, emitted, StringComparison.Ordinal);
         Assert.Contains(displayUnit, emitted, StringComparison.Ordinal);
         Assert.InRange(argument.Length, 1, 2048);
-        Assert.All(emitted, static value => Assert.InRange((int)value, 32, 126));
+        Assert.All(emitted, static value => Assert.InRange(value, 32, 126));
         Assert.True(HasCompletePercentPairs(argument));
     }
 
@@ -296,7 +333,8 @@ public sealed class SqlServerRuntimeDiagnosticTests
     public void GenericLiteralTruncationDoesNotTrustPolicyLikeText()
     {
         // Arrange
-        var message = "doka_sm_identity_scope_in_use: owner=" + new string('%', 2048)
+        var message = "doka_sm_identity_scope_in_use: owner="
+            + new string('%', 2048)
             + "; policy=Attacker; reason=fake";
 
         // Act
@@ -317,14 +355,22 @@ public sealed class SqlServerRuntimeDiagnosticTests
     public void ForeignKeyMessageIdentifiesDependentAndPrincipal()
     {
         // Arrange
-        var operation = new SafeMigrationOperation(new EnsureForeignKeyIntent(
-            new ExpectedForeignKeyDefinition("FK_child_parent", "children", ["TenantId", "ParentId"],
-                "parents", ["TenantId", "Id"], "application", "catalog")),
+        var operation = new SafeMigrationOperation(
+            new EnsureForeignKeyIntent(
+                new ExpectedForeignKeyDefinition(
+                    "FK_child_parent",
+                    "children",
+                    ["TenantId", "ParentId"],
+                    "parents",
+                    ["TenantId", "Id"],
+                    "application",
+                    "catalog")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         // Act
         var sql = SqlServerGuardedSqlTestContract.DecodeScope(
             SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(operation, Plan(), [], []));
+
         var message = ReadMessage(sql, "doka_sm_prerequisite_missing", 51004);
 
         // Assert
@@ -344,17 +390,25 @@ public sealed class SqlServerRuntimeDiagnosticTests
         // Arrange
         using var context = new SafeMigrationDbContext(
             "Server=localhost;Database=runtime_diagnostics;TrustServerCertificate=True");
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.Sql("SELECT 1;");
         builder.AddColumnIfNotExists<bool>("IsActive", "diagnostic_tags", type: "bit", nullable: false);
 
         // Act
-        var commands = context.GetService<IMigrationsSqlGenerator>().Generate(builder.Operations, context.Model);
-        var guard = Assert.Single(commands, static command =>
-            command.CommandText.Contains("@doka_state", StringComparison.Ordinal));
+        var commands = context
+            .GetService<IMigrationsSqlGenerator>()
+            .Generate(builder.Operations, context.Model);
 
-        var message = ReadMessage(SqlServerGuardedSqlTestContract.DecodeScope(guard.CommandText),
-            "doka_sm_data_blocked", 51003);
+        var guard = Assert.Single(
+            commands,
+            static command =>
+                command.CommandText.Contains("@doka_state", StringComparison.Ordinal));
+
+        var message = ReadMessage(
+            SqlServerGuardedSqlTestContract.DecodeScope(guard.CommandText),
+            "doka_sm_data_blocked",
+            51003);
 
         // Assert
         Assert.Contains("operation 1", message, StringComparison.Ordinal);
@@ -367,11 +421,14 @@ public sealed class SqlServerRuntimeDiagnosticTests
     {
         // Arrange
         SqlServerIdentifierReference[] identifiers =
-        [new(SqlServerIdentifierScope.SchemaObject, "dbo", null, new string('x', 129))];
+            [new(SqlServerIdentifierScope.SchemaObject, "dbo", null, new string('x', 129))];
 
         // Act
-        var sql = Assert.Single(SqlServerIdentifierContract.BuildCollisionGuardCommands(identifiers,
-            throwOnCollision: true));
+        var sql = Assert.Single(
+            SqlServerIdentifierContract.BuildCollisionGuardCommands(
+                identifiers,
+                throwOnCollision: true));
+
         var message = ReadMessage(sql, "doka_sm_unsupported", 51002);
 
         // Assert
@@ -396,12 +453,17 @@ public sealed class SqlServerRuntimeDiagnosticTests
             SqlServerSafeMigrationsSqlGenerator.BuildGuardedSql(operation, plan, [], []));
 
         // Assert
-        Assert.Equal(1, sql.Split(expression, StringSplitOptions.None).Length - 1);
+        Assert.Equal(1,
+            sql.Split(expression)
+                .Length
+            - 1);
+
         Assert.Contains("DECLARE @doka_layout_message nvarchar(2048)", sql, StringComparison.Ordinal);
         Assert.Contains("reasonCode=column_limit", sql, StringComparison.Ordinal);
         Assert.Contains("reasonCode=column_fixed_row_limit", sql, StringComparison.Ordinal);
         Assert.Contains("reasonCode=column_layout_unproven", sql, StringComparison.Ordinal);
-        Assert.True(sql.IndexOf("THROW 51002, @doka_layout_message", StringComparison.Ordinal)
+        Assert.True(
+            sql.IndexOf("THROW 51002, @doka_layout_message", StringComparison.Ordinal)
             < sql.IndexOf("DECLARE @doka_state", StringComparison.Ordinal));
     }
 
@@ -415,7 +477,10 @@ public sealed class SqlServerRuntimeDiagnosticTests
     )
     {
         const string token = "0123456789ABCDEF0123456789ABCDEF";
-        var code = template == "recovery" ? "doka_sm_identity_acquisition_unproven" : "doka_sm_identity_scope_in_use";
+        var code = template == "recovery"
+            ? "doka_sm_identity_acquisition_unproven"
+            : "doka_sm_identity_scope_in_use";
+
         var message = authored
             ? SafeMigrationDiagnosticMessages.FormatRuntime(ColumnOperation("identity_owner", "Id"), code, 3)
             : null;
@@ -424,9 +489,13 @@ public sealed class SqlServerRuntimeDiagnosticTests
         {
             "bootstrap" => SqlServerSafeMigrationIdentityInsertScope.BuildBootstrapSql(token, message),
             "acquisition" or "script" => SqlServerSafeMigrationIdentityInsertScope.BuildAcquisitionSql(
-                "[dbo].[identity_owner]", script: template == "script", scopeInUseMessage: message),
-            "recovery" => SqlServerSafeMigrationIdentityInsertScope.BuildRecoverySql(token,
-                "SET IDENTITY_INSERT [dbo].[identity_owner] OFF;", acquisitionUnprovenMessage: message),
+                "[dbo].[identity_owner]",
+                script: template == "script",
+                scopeInUseMessage: message),
+            "recovery" => SqlServerSafeMigrationIdentityInsertScope.BuildRecoverySql(
+                token,
+                "SET IDENTITY_INSERT [dbo].[identity_owner] OFF;",
+                acquisitionUnprovenMessage: message),
             _ => throw new ArgumentOutOfRangeException(nameof(template)),
         };
     }
@@ -435,14 +504,23 @@ public sealed class SqlServerRuntimeDiagnosticTests
     /// <param name="sql">The decoded operation-private T-SQL guard body.</param>
     /// <param name="code">The unchanged SafeMigrations guard token.</param>
     /// <param name="number">The existing error number associated with that guard token.</param>
-    internal static string ReadMessage(string sql, string code, int number)
-        => ReadNativeArgument(sql, code, number).Replace("%%", "%", StringComparison.Ordinal);
+    internal static string ReadMessage(
+        string sql,
+        string code,
+        int number
+    )
+        => ReadNativeArgument(sql, code, number)
+            .Replace("%%", "%", StringComparison.Ordinal);
 
     /// <summary>Decodes SQL quote pairs but retains percent pairs counted in the native argument budget.</summary>
     /// <param name="sql">The decoded operation-private T-SQL guard body.</param>
     /// <param name="code">The unchanged SafeMigrations guard token.</param>
     /// <param name="number">The existing error number associated with the guard token.</param>
-    private static string ReadNativeArgument(string sql, string code, int number)
+    private static string ReadNativeArgument(
+        string sql,
+        string code,
+        int number
+    )
     {
         var prefix = "THROW " + number.ToString(CultureInfo.InvariantCulture) + ", N'" + code;
         var offset = sql.IndexOf(prefix, StringComparison.Ordinal);
@@ -458,7 +536,8 @@ public sealed class SqlServerRuntimeDiagnosticTests
                 continue;
             }
 
-            if (offset < sql.Length && sql[offset] == '\'')
+            if (offset < sql.Length
+                && sql[offset] == '\'')
             {
                 result.Append('\'');
                 offset++;
@@ -476,46 +555,66 @@ public sealed class SqlServerRuntimeDiagnosticTests
     /// <summary>Invokes the private Core-scratch codec with deterministic escaped-text boundaries.</summary>
     /// <param name="message">Printable Core-style text with a trusted typed policy suffix.</param>
     /// <returns>A complete THROW statement containing the bounded native argument.</returns>
-    private static string RenderEscapedCoreScratch(StringBuilder message)
+    private static string RenderEscapedCoreScratch(
+        StringBuilder message
+    )
     {
         var diagnostic = new SqlServerSafeMigrationRuntimeDiagnostic(ColumnOperation("owner", "Id"), null);
-        var method = typeof(SqlServerSafeMigrationRuntimeDiagnostic).GetMethod("AppendEscaped",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+        var method = typeof(SqlServerSafeMigrationRuntimeDiagnostic).GetMethod(
+                "AppendEscaped",
+                BindingFlags.Instance | BindingFlags.NonPublic)
             ?? throw new InvalidOperationException("The SQL Server scratch codec is unavailable.");
 
         var sql = new StringBuilder("THROW 51003, N'");
         _ = method.Invoke(diagnostic, [sql, message]);
 
-        return sql.Append("', 1;").ToString();
+        return sql
+            .Append("', 1;")
+            .ToString();
     }
 
     /// <summary>Creates a required-column contract without a default or other private payload.</summary>
     /// <param name="table">The authored owner, including adversarial identifier characters.</param>
     /// <param name="column">The authored column name.</param>
-    internal static SafeMigrationOperation ColumnOperation(string table, string column)
-        => new(new EnsureColumnIntent(table,
-            new ExpectedColumnDefinition(column, typeof(bool), false, "bit")),
+    internal static SafeMigrationOperation ColumnOperation(
+        string table,
+        string column
+    )
+        => new(
+            new EnsureColumnIntent(
+                table,
+                new ExpectedColumnDefinition(column, typeof(bool), false, "bit")),
             SafeMigrationPolicy.ThrowIfDifferent);
 
     /// <summary>Creates valid-width composite identifiers that maximize native percent-format expansion.</summary>
     /// <param name="owner">An optional valid-width adversarial table identifier.</param>
-    internal static SafeMigrationOperation MaximumPercentForeignKeyOperation(string? owner = null)
+    internal static SafeMigrationOperation MaximumPercentForeignKeyOperation(
+        string? owner = null
+    )
     {
         var identifier = new string('%', 128);
         var table = owner ?? "owner" + new string('%', 123);
         var suffix = new string('%', 126);
 
-        return new SafeMigrationOperation(new EnsureForeignKeyIntent(
-            new ExpectedForeignKeyDefinition(identifier, table,
-                ["C0" + suffix, "C1" + suffix, "C2" + suffix, "C3" + suffix], identifier,
-                ["P0" + suffix, "P1" + suffix, "P2" + suffix, "P3" + suffix], identifier, identifier)),
+        return new SafeMigrationOperation(
+            new EnsureForeignKeyIntent(
+                new ExpectedForeignKeyDefinition(
+                    identifier,
+                    table,
+                    ["C0" + suffix, "C1" + suffix, "C2" + suffix, "C3" + suffix],
+                    identifier,
+                    ["P0" + suffix, "P1" + suffix, "P2" + suffix, "P3" + suffix],
+                    identifier,
+                    identifier)),
             SafeMigrationPolicy.ThrowIfDifferent);
     }
 
     /// <summary>Checks every native percent escape pair rather than merely the overall percent count.</summary>
     /// <param name="argument">The decoded SQL string before native percent formatting.</param>
     /// <returns>Whether every percent is followed by its paired escape character.</returns>
-    private static bool HasCompletePercentPairs(string argument)
+    private static bool HasCompletePercentPairs(
+        string argument
+    )
     {
         for (var index = 0; index < argument.Length; index++)
         {
@@ -525,11 +624,11 @@ public sealed class SqlServerRuntimeDiagnosticTests
             }
 
             index++;
-            if (index == argument.Length || argument[index] != '%')
+            if (index == argument.Length
+                || argument[index] != '%')
             {
                 return false;
             }
-
         }
 
         return true;

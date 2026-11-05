@@ -8,7 +8,11 @@ public sealed class SqlServerLiveQualificationEvidenceTests
     public void WriteStage_AppendsOrderedUtcMarkers()
     {
         // Arrange
-        var workload = "probe-" + Guid.NewGuid().ToString("N");
+        var workload = "probe-"
+            + Guid
+                .NewGuid()
+                .ToString("N");
+
         var path = SqlServerLiveQualificationEvidence.GetPath(workload);
 
         try
@@ -22,8 +26,14 @@ public sealed class SqlServerLiveQualificationEvidenceTests
             Assert.Equal(2, lines.Length);
             Assert.EndsWith("\tinitial-analysis", lines[0], StringComparison.Ordinal);
             Assert.EndsWith("\tcompleted", lines[1], StringComparison.Ordinal);
-            Assert.All(lines, line => Assert.Equal(TimeSpan.Zero, DateTimeOffset.Parse(
-                line[..line.IndexOf('\t')], CultureInfo.InvariantCulture).Offset));
+            Assert.All(
+                lines,
+                line => Assert.Equal(
+                    TimeSpan.Zero,
+                    DateTimeOffset.Parse(
+                            line[..line.IndexOf('\t')],
+                            CultureInfo.InvariantCulture)
+                        .Offset));
         }
         finally
         {
@@ -39,7 +49,9 @@ public sealed class SqlServerLiveQualificationEvidenceTests
     [InlineData("connection;password")]
     [InlineData("sql\ntext")]
     [InlineData("")]
-    public void WriteStage_RejectsPathsAndPayloads(string value)
+    public void WriteStage_RejectsPathsAndPayloads(
+        string value
+    )
     {
         // Arrange
         const string validIdentifier = "probe";
@@ -47,6 +59,7 @@ public sealed class SqlServerLiveQualificationEvidenceTests
         // Act
         var workloadFailure = Record.Exception(() =>
             SqlServerLiveQualificationEvidence.WriteStage(value, validIdentifier));
+
         var stageFailure = Record.Exception(() =>
             SqlServerLiveQualificationEvidence.WriteStage(validIdentifier, value));
 
@@ -127,10 +140,18 @@ public sealed class SqlServerLiveQualificationEvidenceTests
         var peerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         // Act
-        var peer = RecordStageAsync(directory.FilePath("peer.log"), 2, peerStarted, started.Task,
+        var peer = RecordStageAsync(
+            directory.FilePath("peer.log"),
+            2,
+            peerStarted,
+            started.Task,
             CancellationToken.None);
 
-        var stage = RecordStageAsync(directory.FilePath("canceled.log"), 1, started, peerStarted.Task,
+        var stage = RecordStageAsync(
+            directory.FilePath("canceled.log"),
+            1,
+            started,
+            peerStarted.Task,
             cancellation.Token);
 
         var failure = await Record.ExceptionAsync(() => stage);
@@ -143,10 +164,16 @@ public sealed class SqlServerLiveQualificationEvidenceTests
 
         // Assert
         Assert.True(canceledBeforeControllerDrain);
-        Assert.Equal(cancellation.Token,
-            Assert.IsAssignableFrom<OperationCanceledException>(failure).CancellationToken);
-        Assert.Equal(cancellation.Token,
-            Assert.IsAssignableFrom<OperationCanceledException>(peerFailure).CancellationToken);
+        Assert.Equal(
+            cancellation.Token,
+            Assert.IsAssignableFrom<OperationCanceledException>(failure)
+                .CancellationToken);
+
+        Assert.Equal(
+            cancellation.Token,
+            Assert.IsAssignableFrom<OperationCanceledException>(peerFailure)
+                .CancellationToken);
+
         Assert.True(peerStarted.Task.IsCompletedSuccessfully);
     }
 
@@ -161,11 +188,20 @@ public sealed class SqlServerLiveQualificationEvidenceTests
         var peerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         // Act
-        var peer = RecordStageAsync(directory.FilePath("peer.log"), 2, peerStarted, started.Task,
+        var peer = RecordStageAsync(
+            directory.FilePath("peer.log"),
+            2,
+            peerStarted,
+            started.Task,
             CancellationToken.None);
 
-        var stage = RecordStageAsync(directory.FilePath("failed.log"), 1, started, peerStarted.Task,
-            CancellationToken.None, _ => throw expected);
+        var stage = RecordStageAsync(
+            directory.FilePath("failed.log"),
+            1,
+            started,
+            peerStarted.Task,
+            CancellationToken.None,
+            _ => throw expected);
 
         var failure = await Record.ExceptionAsync(() => stage);
         var faultedBeforeControllerDrain = started.Task.IsFaulted;
@@ -190,7 +226,7 @@ public sealed class SqlServerLiveQualificationEvidenceTests
         using var directory = new EvidenceDirectory();
         using var capture = new SqlServerLiveQualificationEvidence.AnalysisStageCapture(directory.Path);
         var original = new InvalidOperationException("The workload failed.");
-        Action workload = () =>
+        var workload = () =>
         {
             using var activity = SafeMigrationTelemetry.StartAnalysisStage("provider-classification", 1);
 
@@ -213,9 +249,7 @@ public sealed class SqlServerLiveQualificationEvidenceTests
         using var capture = new SqlServerLiveQualificationEvidence.AnalysisStageCapture(directory.Path);
 
         // Act
-        using (SafeMigrationTelemetry.StartAnalysisStage("provider-classification", 1))
-        {
-        }
+        using (SafeMigrationTelemetry.StartAnalysisStage("provider-classification", 1)) { }
 
         var exception = Assert.Throws<InvalidOperationException>(capture.ThrowIfWriteFailed);
 
@@ -248,9 +282,7 @@ public sealed class SqlServerLiveQualificationEvidenceTests
 
             started.SetResult();
             await peerStarted.WaitAsync(cancellationToken);
-            using (SafeMigrationTelemetry.StartAnalysisStage("catalog-batch", operationCount))
-            {
-            }
+            using (SafeMigrationTelemetry.StartAnalysisStage("catalog-batch", operationCount)) { }
 
             capture.ThrowIfWriteFailed();
         }
@@ -273,15 +305,21 @@ public sealed class SqlServerLiveQualificationEvidenceTests
     private sealed class EvidenceDirectory : IDisposable
     {
         /// <summary>Creates an exclusively owned temporary test directory.</summary>
-        internal EvidenceDirectory() => Path = Directory.CreateTempSubdirectory("sqlserver-stage-evidence-").FullName;
+        internal EvidenceDirectory()
+        {
+            Path = Directory.CreateTempSubdirectory("sqlserver-stage-evidence-")
+                .FullName;
+        }
 
         /// <summary>Gets the owned temporary directory.</summary>
         internal string Path { get; }
 
-        /// <summary>Combines a fixed test filename with the owned directory.</summary>
-        internal string FilePath(string name) => System.IO.Path.Combine(Path, name);
-
         /// <summary>Removes only the directory created by this test instance.</summary>
         public void Dispose() => Directory.Delete(Path, recursive: true);
+
+        /// <summary>Combines a fixed test filename with the owned directory.</summary>
+        internal string FilePath(
+            string name
+        ) => System.IO.Path.Combine(Path, name);
     }
 }

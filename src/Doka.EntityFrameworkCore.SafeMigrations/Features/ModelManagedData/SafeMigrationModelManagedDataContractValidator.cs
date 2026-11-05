@@ -18,14 +18,17 @@ internal static class SafeMigrationModelManagedDataContractValidator
     )
     {
         ArgumentNullException.ThrowIfNull(operations);
-        if (migrationIds is not null && migrationIds.Count != operations.Count)
+        if (migrationIds is not null
+            && migrationIds.Count != operations.Count)
         {
             throw new ArgumentException(
-                "Migration identities must match the complete operation stream.", nameof(migrationIds));
+                "Migration identities must match the complete operation stream.",
+                nameof(migrationIds));
         }
 
         var identities = new HashSet<string>(StringComparer.Ordinal);
         string? previousMigrationId = null;
+
         // WHY: Keep operation and migration-ID streams aligned at their original ordinals.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
@@ -34,7 +37,8 @@ internal static class SafeMigrationModelManagedDataContractValidator
             if (migrationIds is not null)
             {
                 var migrationId = migrationIds[ordinal];
-                if (ordinal > 0 && !StringComparer.Ordinal.Equals(previousMigrationId, migrationId))
+                if (ordinal > 0
+                    && !StringComparer.Ordinal.Equals(previousMigrationId, migrationId))
                 {
                     // WHY: The same seed may change in a later real migration.
                     // Ordinary operations do not reset this ledger within one
@@ -51,7 +55,9 @@ internal static class SafeMigrationModelManagedDataContractValidator
             }
 
             var columns = SafeMigrationModelManagedKeyIdentity.CanonicalizeColumns(
-                intent.KeyColumns, normalizer: null, out var keyOrdinals);
+                intent.KeyColumns,
+                normalizer: null,
+                out var keyOrdinals);
 
             // WHY: Validate one typed key identity per authored row without materializing row copies.
             // ReSharper disable once ForCanBeConvertedToForeach
@@ -83,6 +89,7 @@ internal static class SafeMigrationModelManagedDataContractValidator
         writer.Add(intent.Schema);
         writer.Add(intent.Table);
         writer.Add(columns.Count);
+
         // WHY: Pair canonical key labels and values through the same ordinal permutation.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery

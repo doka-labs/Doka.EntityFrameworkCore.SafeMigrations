@@ -1,13 +1,16 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the ColumnsAtomicRequiredAddConcurrency migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class
+    MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    private const string AtomicAddExplicitGuid = "00000000-0000-0000-0000-000000000017";
+
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
-
-    private const string AtomicAddExplicitGuid = "00000000-0000-0000-0000-000000000017";
+    public MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>
     /// A writer arriving after setup cannot obtain a fabricated required value from the first DDL stage.
@@ -17,8 +20,11 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, AtomicAddConcurrencyFixtureSql,
+        await ExecuteSqlAsync(
+            connectionString,
+            AtomicAddConcurrencyFixtureSql,
             cancellationToken: CancellationToken.None);
+
         var operation = AtomicRequiredAddOperation();
         var guardName = AtomicRequiredAddGuardName(operation);
         var checkpoint = new AtomicAddCheckpointInterceptor(guardName, betweenStages: false);
@@ -35,12 +41,17 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
         // Act
         var execution = Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], executionCancellation.Token));
+
         Exception? failure;
         try
         {
             await WaitForAtomicAddCheckpointAsync(writer, gate, checkpoint, deadline.Token);
-            await ExecuteAtomicAddWriterSqlAsync(writer, gate,
-                "INSERT INTO `atomic_required_items` (`key`) VALUES (1);", deadline.Token);
+            await ExecuteAtomicAddWriterSqlAsync(
+                writer,
+                gate,
+                "INSERT INTO `atomic_required_items` (`key`) VALUES (1);",
+                deadline.Token);
+
             await gate.CommitAsync(deadline.Token);
             gateReleased = true;
             failure = await execution.WaitAsync(deadline.Token);
@@ -50,11 +61,18 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
             await FinishAtomicAddConcurrentAttemptAsync(execution, executionCancellation, gate, gateReleased);
         }
 
-        var interrupted = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+        var interrupted = await ReadAtomicRequiredAddStateAsync(
+            connectionString,
+            operation,
             cancellationToken: deadline.Token);
 
-        var retry = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("atomic-add-raced-existing-row"), deadline.Token);
+        var retry = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                new SafeMigrationRunOptions("atomic-add-raced-existing-row"),
+                deadline.Token);
 
         var retryFailure = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], deadline.Token));
@@ -62,12 +80,19 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
         // Assert
         Assert.True(checkpoint.CheckpointWasReached);
         Assert.True(checkpoint.WasInjected);
-        Assert.Contains(guardName, AssertOwnedAtomicCheckFailure(failure).Message, StringComparison.Ordinal);
+        Assert.Contains(guardName,
+            AssertOwnedAtomicCheckFailure(failure)
+                .Message,
+            StringComparison.Ordinal);
+
         Assert.Equal(0, interrupted.Columns);
         Assert.Equal(0, interrupted.Guards);
         Assert.Equal(1, interrupted.Rows);
         Assert.Equal(SafeMigrationAction.RejectDataBlocked, retry.Assessments[0].Action);
-        Assert.Contains("doka_sm_data_blocked", AssertOwnedGuardFailure(retryFailure).Message,
+        Assert.Contains(
+            "doka_sm_data_blocked",
+            AssertOwnedGuardFailure(retryFailure)
+                .Message,
             StringComparison.OrdinalIgnoreCase);
     }
 
@@ -78,12 +103,17 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task AtomicRequiredAddConcurrencyProtectsOmittedAndExplicitWriterValues(bool useGuidStorage)
+    public async Task AtomicRequiredAddConcurrencyProtectsOmittedAndExplicitWriterValues(
+        bool useGuidStorage
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, AtomicAddConcurrencyFixtureSql,
+        await ExecuteSqlAsync(
+            connectionString,
+            AtomicAddConcurrencyFixtureSql,
             cancellationToken: CancellationToken.None);
+
         var operation = AtomicRequiredAddOperation(useGuidStorage);
         var guardName = AtomicRequiredAddGuardName(operation);
         var checkpoint = new AtomicAddCheckpointInterceptor(guardName, betweenStages: true);
@@ -100,17 +130,27 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
         // Act
         var execution = Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], executionCancellation.Token));
+
         Exception? omissionFailure;
         Exception? migrationFailure;
         try
         {
             await WaitForAtomicAddCheckpointAsync(writer, gate, checkpoint, deadline.Token);
-            omissionFailure = await Record.ExceptionAsync(() => ExecuteAtomicAddWriterSqlAsync(writer, gate,
-                "INSERT INTO `atomic_required_items` (`key`) VALUES (1);", deadline.Token));
+            omissionFailure = await Record.ExceptionAsync(() => ExecuteAtomicAddWriterSqlAsync(
+                writer,
+                gate,
+                "INSERT INTO `atomic_required_items` (`key`) VALUES (1);",
+                deadline.Token));
 
-            await ExecuteAtomicAddWriterSqlAsync(writer, gate,
+            await ExecuteAtomicAddWriterSqlAsync(
+                writer,
+                gate,
                 "INSERT INTO `atomic_required_items` (`key`, `required_value`) VALUES (2, "
-                + (useGuidStorage ? $"'{AtomicAddExplicitGuid}');" : "17);"), deadline.Token);
+                + (useGuidStorage
+                    ? $"'{AtomicAddExplicitGuid}');"
+                    : "17);"),
+                deadline.Token);
+
             await gate.CommitAsync(deadline.Token);
             gateReleased = true;
             migrationFailure = await execution.WaitAsync(deadline.Token);
@@ -120,10 +160,13 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
             await FinishAtomicAddConcurrentAttemptAsync(execution, executionCancellation, gate, gateReleased);
         }
 
-        var final = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+        var final = await ReadAtomicRequiredAddStateAsync(
+            connectionString,
+            operation,
             cancellationToken: deadline.Token);
 
-        var suppliedValue = await ScalarStringAsync(connectionString,
+        var suppliedValue = await ScalarStringAsync(
+            connectionString,
             "SELECT `required_value` FROM `atomic_required_items` WHERE `key` = 2;",
             cancellationToken: deadline.Token);
 
@@ -132,28 +175,40 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
         // Assert
         Assert.True(checkpoint.CheckpointWasReached);
         Assert.True(checkpoint.WasInjected);
-        Assert.Contains(guardName, Assert.IsType<MySqlException>(omissionFailure).Message,
+        Assert.Contains(
+            guardName,
+            Assert.IsType<MySqlException>(omissionFailure)
+                .Message,
             StringComparison.OrdinalIgnoreCase);
+
         Assert.Null(migrationFailure);
         Assert.Equal(1, final.Columns);
         Assert.Equal(0, final.NullableColumns);
         Assert.Equal(0, final.Guards);
-        Assert.Equal(useGuidStorage ? AtomicAddExplicitGuid : "17", suppliedValue);
+        Assert.Equal(
+            useGuidStorage
+                ? AtomicAddExplicitGuid
+                : "17",
+            suppliedValue);
+
         Assert.Equal(1, final.Rows);
     }
 }
 
-public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class
+    MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
-
     /// <summary>A writer-only MariaDB check bypass cannot make final strict DDL invent a value.</summary>
     [AtomicAddMariaDbFact]
     public async Task AtomicRequiredAddConcurrencyPreservesNullAndBarrierAfterWriterCheckBypass()
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, AtomicAddConcurrencyFixtureSql,
+        await ExecuteSqlAsync(
+            connectionString,
+            AtomicAddConcurrencyFixtureSql,
             cancellationToken: CancellationToken.None);
+
         var operation = AtomicRequiredAddOperation();
         var guardName = AtomicRequiredAddGuardName(operation);
         var checkpoint = new AtomicAddCheckpointInterceptor(guardName, betweenStages: true);
@@ -170,16 +225,22 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
         // Act
         var execution = Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], executionCancellation.Token));
+
         Exception? failure;
         try
         {
             await WaitForAtomicAddCheckpointAsync(writer, gate, checkpoint, deadline.Token);
+
             // WHY: Only this hostile writer changes its own session. The
             // migration session must remain strict and keep CHECK enforcement.
-            await ExecuteAtomicAddWriterSqlAsync(writer, gate,
+            await ExecuteAtomicAddWriterSqlAsync(
+                writer,
+                gate,
                 "SET SESSION check_constraint_checks = OFF; "
                 + "INSERT INTO `atomic_required_items` (`key`, `required_value`) VALUES (1, NULL); "
-                + "SET SESSION check_constraint_checks = ON;", deadline.Token);
+                + "SET SESSION check_constraint_checks = ON;",
+                deadline.Token);
+
             await gate.CommitAsync(deadline.Token);
             gateReleased = true;
             failure = await execution.WaitAsync(deadline.Token);
@@ -189,21 +250,30 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
             await FinishAtomicAddConcurrentAttemptAsync(execution, executionCancellation, gate, gateReleased);
         }
 
-        var interrupted = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+        var interrupted = await ReadAtomicRequiredAddStateAsync(
+            connectionString,
+            operation,
             cancellationToken: deadline.Token);
 
-        var nullRowsBeforeRetry = await ScalarIntAsync(connectionString,
+        var nullRowsBeforeRetry = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `atomic_required_items` WHERE `key` = 1 AND `required_value` IS NULL;",
             cancellationToken: deadline.Token);
 
-        await ExecuteAtomicAddWriterSqlAsync(writer, transaction: null,
+        await ExecuteAtomicAddWriterSqlAsync(
+            writer,
+            transaction: null,
             "UPDATE `atomic_required_items` SET `required_value` = '" + AtomicAddExplicitGuid + "' WHERE `key` = 1;",
             deadline.Token);
+
         await ExecuteOperationsAsync(context, [operation], deadline.Token);
-        var recovered = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+        var recovered = await ReadAtomicRequiredAddStateAsync(
+            connectionString,
+            operation,
             cancellationToken: deadline.Token);
 
-        var preserved = await ScalarStringAsync(connectionString,
+        var preserved = await ScalarStringAsync(
+            connectionString,
             "SELECT `required_value` FROM `atomic_required_items` WHERE `key` = 1;",
             cancellationToken: deadline.Token);
 
@@ -222,8 +292,18 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
     }
 }
 
-public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class
+    MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
+    // WHY: The marker and the gate are separate tables. The migration commits
+    // its reached marker before waiting on the writer's independent row lock.
+    private const string AtomicAddConcurrencyFixtureSql =
+        "CREATE TABLE `atomic_required_items` (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
+        + "CREATE TABLE `atomic_add_checkpoint` "
+        + "(`key` int NOT NULL PRIMARY KEY, `reached` int NOT NULL) ENGINE=InnoDB; "
+        + "INSERT INTO `atomic_add_checkpoint` VALUES (1, 0); "
+        + "CREATE TABLE `atomic_add_gate` (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
+        + "INSERT INTO `atomic_add_gate` VALUES (1);";
 
     /// <summary>
     /// Cancellation at a proven staged barrier preserves a writer's supplied value and permits retry.
@@ -233,8 +313,11 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, AtomicAddConcurrencyFixtureSql,
+        await ExecuteSqlAsync(
+            connectionString,
+            AtomicAddConcurrencyFixtureSql,
             cancellationToken: CancellationToken.None);
+
         var operation = AtomicRequiredAddOperation();
         var guardName = AtomicRequiredAddGuardName(operation);
         var checkpoint = new AtomicAddCheckpointInterceptor(guardName, betweenStages: true);
@@ -247,19 +330,27 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
         using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
         await using var gate = await AcquireAtomicAddWriterGateAsync(writer, deadline.Token);
         var gateReleased = false;
-        var sessionBefore = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();",
+        var sessionBefore = await ContextScalarIntAsync(
+            context,
+            "SELECT CONNECTION_ID();",
             cancellationToken: deadline.Token);
 
         // Act
         var execution = Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], executionCancellation.Token));
+
         Exception? failure;
         try
         {
             await WaitForAtomicAddCheckpointAsync(writer, gate, checkpoint, deadline.Token);
-            await ExecuteAtomicAddWriterSqlAsync(writer, gate,
+            await ExecuteAtomicAddWriterSqlAsync(
+                writer,
+                gate,
                 "INSERT INTO `atomic_required_items` (`key`, `required_value`) VALUES (1, '"
-                + AtomicAddExplicitGuid + "');", deadline.Token);
+                + AtomicAddExplicitGuid
+                + "');",
+                deadline.Token);
+
             // WHY: Keep the gate locked until cancellation is observed. A
             // commit-before-cancel would race successful finalization instead.
             await executionCancellation.CancelAsync();
@@ -272,21 +363,29 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
             await FinishAtomicAddConcurrentAttemptAsync(execution, executionCancellation, gate, gateReleased);
         }
 
-        var interrupted = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+        var interrupted = await ReadAtomicRequiredAddStateAsync(
+            connectionString,
+            operation,
             cancellationToken: CancellationToken.None);
 
-        var valueBeforeRetry = await ScalarStringAsync(connectionString,
+        var valueBeforeRetry = await ScalarStringAsync(
+            connectionString,
             "SELECT `required_value` FROM `atomic_required_items` WHERE `key` = 1;",
             cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
-        var recovered = await ReadAtomicRequiredAddStateAsync(connectionString, operation,
+        var recovered = await ReadAtomicRequiredAddStateAsync(
+            connectionString,
+            operation,
             cancellationToken: CancellationToken.None);
 
-        var sessionAfter = await ContextScalarIntAsync(context, "SELECT CONNECTION_ID();",
+        var sessionAfter = await ContextScalarIntAsync(
+            context,
+            "SELECT CONNECTION_ID();",
             cancellationToken: CancellationToken.None);
 
-        var preserved = await ScalarStringAsync(connectionString,
+        var preserved = await ScalarStringAsync(
+            connectionString,
             "SELECT `required_value` FROM `atomic_required_items` WHERE `key` = 1;",
             cancellationToken: CancellationToken.None);
 
@@ -304,21 +403,10 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
         Assert.Equal(sessionBefore, sessionAfter);
         Assert.Equal(AtomicAddExplicitGuid, preserved);
     }
-
-    // WHY: The marker and the gate are separate tables. The migration commits
-    // its reached marker before waiting on the writer's independent row lock.
-    private const string AtomicAddConcurrencyFixtureSql =
-        "CREATE TABLE `atomic_required_items` (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-        + "CREATE TABLE `atomic_add_checkpoint` "
-        + "(`key` int NOT NULL PRIMARY KEY, `reached` int NOT NULL) ENGINE=InnoDB; "
-        + "INSERT INTO `atomic_add_checkpoint` VALUES (1, 0); "
-        + "CREATE TABLE `atomic_add_gate` (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB; "
-        + "INSERT INTO `atomic_add_gate` VALUES (1);";
 }
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-
     /// <summary>Acquires a real writer-owned row lock before dispatching the migration.</summary>
     /// <param name="writer">The independently opened writer session.</param>
     /// <param name="cancellationToken">The bounded test deadline.</param>
@@ -336,7 +424,8 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             await using var command = writer.CreateCommand();
             command.Transaction = transaction;
             command.CommandText = "SELECT `key` FROM `atomic_add_gate` WHERE `key` = 1 FOR UPDATE;";
-            var key = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken),
+            var key = Convert.ToInt32(
+                await command.ExecuteScalarAsync(cancellationToken),
                 CultureInfo.InvariantCulture);
 
             if (key != 1)
@@ -355,9 +444,9 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     }
 }
 
-public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed partial class
+    MySqlColumnsAtomicRequiredAddConcurrencyIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
-
     /// <summary>Waits for the database-visible checkpoint rather than estimating stage timing.</summary>
     /// <param name="writer">The independent writer session.</param>
     /// <param name="transaction">The transaction retaining the test gate.</param>
@@ -375,7 +464,8 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
             await using var command = writer.CreateCommand();
             command.Transaction = transaction;
             command.CommandText = "SELECT `reached` FROM `atomic_add_checkpoint` WHERE `key` = 1;";
-            var reached = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken),
+            var reached = Convert.ToInt32(
+                await command.ExecuteScalarAsync(cancellationToken),
                 CultureInfo.InvariantCulture);
 
             if (reached == 1)
@@ -394,7 +484,6 @@ public sealed partial class MySqlColumnsAtomicRequiredAddConcurrencyIntegrationT
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-
     /// <summary>Executes only test-owned writer SQL on its existing independent session.</summary>
     /// <param name="writer">The writer connection that never uses the migration's advisory lock.</param>
     /// <param name="transaction">The writer-owned gate transaction, or null after its commit.</param>
@@ -442,20 +531,25 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     {
         private const string BodyPrefix = "SET @doka_sm_sql = CASE WHEN @doka_sm_action = 'apply' "
             + "AND NOT @doka_sm_required_add_resume THEN";
+
         private const string StageEnd = "DEALLOCATE PREPARE doka_sm_statement;";
+
         private const string CheckpointSql = "UPDATE `atomic_add_checkpoint` SET `reached` = 1 WHERE `key` = 1; "
             + "SELECT `key` FROM `atomic_add_gate` WHERE `key` = 1 FOR UPDATE; ";
 
         private readonly bool _betweenStages;
-        private readonly string _guardName;
         private readonly string _guardHex;
-        private int _injected;
+        private readonly string _guardName;
         private int _checkpointReached;
+        private int _injected;
 
         /// <summary>Scopes the deterministic interception to one immutable operation-owned atomic body.</summary>
         /// <param name="guardName">The exact guard derived from the operation's immutable contract.</param>
         /// <param name="betweenStages">Whether the gate belongs after the first DDL rather than before it.</param>
-        public AtomicAddCheckpointInterceptor(string guardName, bool betweenStages)
+        public AtomicAddCheckpointInterceptor(
+            string guardName,
+            bool betweenStages
+        )
         {
             _guardName = guardName;
             _guardHex = Convert.ToHexString(Encoding.UTF8.GetBytes(guardName));
@@ -489,10 +583,15 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             }
 
             var firstEnd = sql.IndexOf(StageEnd, StringComparison.Ordinal);
-            var secondEnd = firstEnd < 0 ? -1 : sql.IndexOf(StageEnd, firstEnd + StageEnd.Length,
-                StringComparison.Ordinal);
+            var secondEnd = firstEnd < 0
+                ? -1
+                : sql.IndexOf(
+                    StageEnd,
+                    firstEnd + StageEnd.Length,
+                    StringComparison.Ordinal);
 
-            if (firstEnd < 0 || secondEnd < 0
+            if (firstEnd < 0
+                || secondEnd < 0
                 || sql.IndexOf(StageEnd, secondEnd + StageEnd.Length, StringComparison.Ordinal) >= 0)
             {
                 throw new InvalidOperationException("The atomic-add checkpoint requires exactly two owned DDL stages.");
@@ -500,7 +599,11 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 
             if (Interlocked.CompareExchange(ref _injected, 1, 0) == 0)
             {
-                command.CommandText = sql.Insert(_betweenStages ? firstEnd + StageEnd.Length : 0, CheckpointSql);
+                command.CommandText = sql.Insert(
+                    _betweenStages
+                        ? firstEnd + StageEnd.Length
+                        : 0,
+                    CheckpointSql);
             }
 
             return ValueTask.FromResult(result);
@@ -513,8 +616,13 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         /// <summary>Uses the same explicit engine selector and MariaDB default as the container fixture.</summary>
         public AtomicAddMariaDbFactAttribute()
         {
-            var engine = Environment.GetEnvironmentVariable("SAFE_MIGRATIONS_MYSQL_ENGINE")?.Trim().ToLowerInvariant();
-            if (!string.IsNullOrEmpty(engine) && engine != "mariadb")
+            var engine = Environment
+                .GetEnvironmentVariable("SAFE_MIGRATIONS_MYSQL_ENGINE")
+                ?.Trim()
+                .ToLowerInvariant();
+
+            if (!string.IsNullOrEmpty(engine)
+                && engine != "mariadb")
             {
                 Skip = "MariaDB check_constraint_checks is not a MySQL session variable.";
             }

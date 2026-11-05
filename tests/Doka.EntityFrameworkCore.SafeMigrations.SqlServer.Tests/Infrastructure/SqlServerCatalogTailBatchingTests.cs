@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Doka.EntityFrameworkCore.SafeMigrations.SqlServer.Tests;
 
 /// <summary>Verifies complete SQL Server metadata chunks and owned inventory transport boundaries.</summary>
@@ -24,57 +26,100 @@ public sealed class SqlServerCatalogTailBatchingTests
         // Arrange
         using var context = new SafeMigrationDbContext("Server=localhost;Database=catalog;Integrated Security=true;");
         var analyzer = Analyzer(context);
-        await using var connection = new CatalogStatementTestConnection(false, (sql, parameters) =>
-        {
-            var rows = MetadataResults(sql, parameters);
-            if (sql.StartsWith("SELECT requested.ordinal", StringComparison.Ordinal))
+        await using var connection = new CatalogStatementTestConnection(
+            false,
+            (sql, parameters) =>
             {
-                foreach (var row in rows.Rows.Cast<DataRow>().ToArray())
+                var rows = MetadataResults(sql, parameters);
+                if (sql.StartsWith("SELECT requested.ordinal", StringComparison.Ordinal))
                 {
-                    if (Equals(row[1], "Code"))
+                    foreach (var row in rows
+                        .Rows
+                        .Cast<DataRow>()
+                        .ToArray())
                     {
-                        rows.Rows.Remove(row);
-                    }
-                    else
-                    {
-                        row[2] = liveType;
-                        row[9] = eligible ? 1 : 0;
+                        if (Equals(row[1], "Code"))
+                        {
+                            rows.Rows.Remove(row);
+                        }
+                        else
+                        {
+                            row[2] = liveType;
+                            row[9] = eligible
+                                ? 1
+                                : 0;
+                        }
                     }
                 }
-            }
 
-            return rows;
-        });
+                return rows;
+            });
 
-        var add = new SafeMigrationOperation(new EnsureColumnIntent("sparse_check",
-            new ExpectedColumnDefinition("Code", typeof(int), false, "int")), SafeMigrationPolicy.ThrowIfDifferent);
+        var add = new SafeMigrationOperation(
+            new EnsureColumnIntent(
+                "sparse_check",
+                new ExpectedColumnDefinition("Code", typeof(int), false, "int")),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
-        var check = new SafeMigrationOperation(new EnsureCheckConstraintIntent(new ExpectedCheckConstraintDefinition(
-            "CK_sparse", "sparse_check", "[Code] > 0 AND [Value] > 0")), SafeMigrationPolicy.ThrowIfDifferent);
+        var check = new SafeMigrationOperation(
+            new EnsureCheckConstraintIntent(
+                new ExpectedCheckConstraintDefinition(
+                    "CK_sparse",
+                    "sparse_check",
+                    "[Code] > 0 AND [Value] > 0")),
+            SafeMigrationPolicy.ThrowIfDifferent);
 
         await analyzer.ReadProjectedKeySnapshotAsync(connection, null, [add, check], 71, CancellationToken.None);
-        var projection = new SafeMigrationPreflightProjection(providerOperationProjection: analyzer,
-            projectedDependencyAnalyzer: analyzer, livePrerequisiteSource: analyzer);
+        var projection = new SafeMigrationPreflightProjection(
+            providerOperationProjection: analyzer,
+            projectedDependencyAnalyzer: analyzer,
+            livePrerequisiteSource: analyzer);
 
-        var missing = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Missing,
-            SafeMigrationRepairCapability.None, false, "classified_missing");
+        var missing = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.Missing,
+            SafeMigrationRepairCapability.None,
+            false,
+            "classified_missing");
 
-        var live = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.PrerequisiteMissing,
-            SafeMigrationRepairCapability.None, false, "check_column_type_unproven");
+        var live = new SafeMigrationProviderAnalysis(
+            SafeMigrationObservedState.PrerequisiteMissing,
+            SafeMigrationRepairCapability.None,
+            false,
+            "check_column_type_unproven");
 
-        projection.Observe(add, missing, missing, SafeMigrationDecisionPlanner.Plan(add.Intent.Kind,
-            missing.ObservedState, add.Policy, missing.RepairCapability));
+        projection.Observe(
+            add,
+            missing,
+            missing,
+            SafeMigrationDecisionPlanner.Plan(
+                add.Intent.Kind,
+                missing.ObservedState,
+                add.Policy,
+                missing.RepairCapability));
 
         if (matchingDefinition)
         {
-            var matching = new SafeMigrationProviderAnalysis(SafeMigrationObservedState.Matching,
-                SafeMigrationRepairCapability.None, true, "classified_matching");
+            var matching = new SafeMigrationProviderAnalysis(
+                SafeMigrationObservedState.Matching,
+                SafeMigrationRepairCapability.None,
+                true,
+                "classified_matching");
 
-            var operand = new SafeMigrationOperation(new EnsureColumnIntent("sparse_check",
-                new ExpectedColumnDefinition("Value", typeof(int), true, "int")), SafeMigrationPolicy.ThrowIfDifferent);
+            var operand = new SafeMigrationOperation(
+                new EnsureColumnIntent(
+                    "sparse_check",
+                    new ExpectedColumnDefinition("Value", typeof(int), true, "int")),
+                SafeMigrationPolicy.ThrowIfDifferent);
 
-            projection.Observe(operand, matching, matching, SafeMigrationDecisionPlanner.Plan(operand.Intent.Kind,
-                matching.ObservedState, operand.Policy, matching.RepairCapability));
+            projection.Observe(
+                operand,
+                matching,
+                matching,
+                SafeMigrationDecisionPlanner.Plan(
+                    operand.Intent.Kind,
+                    matching.ObservedState,
+                    operand.Policy,
+                    matching.RepairCapability));
         }
 
         // Act
@@ -109,24 +154,56 @@ public sealed class SqlServerCatalogTailBatchingTests
 
         // Assert
         Assert.Equal(10, connection.Submissions.Count);
-        int[] expectedCounts = native ? [8, 1, 1] : [];
+        int[] expectedCounts = native
+            ? [8, 1, 1]
+            : [];
 
         Assert.Equal(expectedCounts, connection.BatchCounts);
-        Assert.All(connection.Submissions, statement =>
-        {
-            Assert.Equal(71, statement.Timeout);
-            Assert.Same(transaction, statement.Transaction);
-            Assert.Equal(native, statement.Native);
-            Assert.InRange(Encoding.UTF8.GetByteCount(statement.Sql), 1, 4 * 1024 * 1024);
-        });
+        Assert.All(
+            connection.Submissions,
+            statement =>
+            {
+                Assert.Equal(71, statement.Timeout);
+                Assert.Same(transaction, statement.Transaction);
+                Assert.Equal(native, statement.Native);
+                Assert.InRange(Encoding.UTF8.GetByteCount(statement.Sql), 1, 4 * 1024 * 1024);
+            });
 
-        Assert.All(connection.Submissions.Take(8), statement => Assert.Equal(32, MetadataResults(
-            statement.Sql, statement.Parameters).Rows.Count));
-        Assert.Equal(1, MetadataResults(connection.Submissions[8].Sql, []).Rows.Count);
-        Assert.Equal(257, MetadataResults(connection.Submissions[9].Sql, []).Rows.Count);
-        Assert.Equal(native ? 3 : 0, connection.BatchesDisposed);
-        Assert.Equal(native ? 0 : 10, connection.CommandsDisposed);
-        Assert.Equal(native ? 3 : 10, connection.ReadersDisposed);
+        Assert.All(
+            connection.Submissions.Take(8),
+            statement => Assert.Equal(
+                32,
+                MetadataResults(
+                        statement.Sql,
+                        statement.Parameters)
+                    .Rows.Count));
+
+        Assert.Equal(1,
+            MetadataResults(connection.Submissions[8].Sql, [])
+                .Rows.Count);
+
+        Assert.Equal(257,
+            MetadataResults(connection.Submissions[9].Sql, [])
+                .Rows.Count);
+
+        Assert.Equal(
+            native
+                ? 3
+                : 0,
+            connection.BatchesDisposed);
+
+        Assert.Equal(
+            native
+                ? 0
+                : 10,
+            connection.CommandsDisposed);
+
+        Assert.Equal(
+            native
+                ? 3
+                : 10,
+            connection.ReadersDisposed);
+
         Assert.Equal(0, connection.TransactionsDisposed);
         Assert.Equal(ConnectionState.Open, connection.State);
     }
@@ -155,7 +232,9 @@ public sealed class SqlServerCatalogTailBatchingTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ColumnBindings_Preserve512ValueStatementBoundary(bool native)
+    public async Task ColumnBindings_Preserve512ValueStatementBoundary(
+        bool native
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext("Server=localhost;Database=catalog;Integrated Security=true;");
@@ -167,17 +246,29 @@ public sealed class SqlServerCatalogTailBatchingTests
 
         // Assert
         Assert.Equal(19, connection.Submissions.Count);
-        int[] expectedCounts = native ? [8, 8, 1, 2] : [];
+        int[] expectedCounts = native
+            ? [8, 8, 1, 2]
+            : [];
 
         Assert.Equal(expectedCounts, connection.BatchCounts);
-        Assert.Equal(513, Snapshot(analyzer, false).Count);
+        Assert.Equal(513,
+            Snapshot(analyzer, false)
+                .Count);
+
         using var fullBindings = MetadataResults(connection.Submissions[17].Sql, []);
         using var tailBindings = MetadataResults(connection.Submissions[18].Sql, []);
 
         Assert.Equal(512, fullBindings.Rows.Count);
         Assert.Single(tailBindings.Rows.Cast<DataRow>());
-        Assert.Equal("tail_0512", tailBindings.Rows[0][1]);
-        Assert.Equal(native ? 4 : 19, connection.ReadersDisposed);
+        Assert.Equal("tail_0512",
+            tailBindings
+                .Rows[0][1]);
+
+        Assert.Equal(
+            native
+                ? 4
+                : 19,
+            connection.ReadersDisposed);
     }
 
     /// <summary>Cross-chunk, foreign, and repeated bindings never publish an incomplete snapshot.</summary>
@@ -198,23 +289,28 @@ public sealed class SqlServerCatalogTailBatchingTests
         // Arrange
         using var context = new SafeMigrationDbContext("Server=localhost;Database=catalog;Integrated Security=true;");
         var analyzer = Analyzer(context);
-        await using var connection = new CatalogStatementTestConnection(native, (sql, parameters) =>
-        {
-            var rows = MetadataResults(sql, parameters);
-            if (IsColumnBindingStatement(sql))
+        await using var connection = new CatalogStatementTestConnection(
+            native,
+            (sql, parameters) =>
             {
-                if (fault == "duplicate")
+                var rows = MetadataResults(sql, parameters);
+                if (IsColumnBindingStatement(sql))
                 {
-                    rows.Rows.Add(rows.Rows[0].ItemArray);
+                    if (fault == "duplicate")
+                    {
+                        rows.Rows.Add(rows.Rows[0].ItemArray);
+                    }
+                    else
+                    {
+                        rows
+                            .Rows[0][1] = fault == "cross_chunk"
+                            ? "tail_0512"
+                            : "foreign_table";
+                    }
                 }
-                else
-                {
-                    rows.Rows[0][1] = fault == "cross_chunk" ? "tail_0512" : "foreign_table";
-                }
-            }
 
-            return rows;
-        });
+                return rows;
+            });
 
         // Act
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -223,7 +319,12 @@ public sealed class SqlServerCatalogTailBatchingTests
         // Assert
         Assert.Equal("SQL Server returned an unowned column layout binding.", failure.Message);
         Assert.Empty(Snapshot(analyzer, false));
-        Assert.Equal(native ? 4 : 18, connection.ReadersDisposed);
+        Assert.Equal(
+            native
+                ? 4
+                : 18,
+            connection.ReadersDisposed);
+
         Assert.Equal(ConnectionState.Open, connection.State);
     }
 
@@ -296,7 +397,12 @@ public sealed class SqlServerCatalogTailBatchingTests
 
         // Assert
         Assert.Empty(Snapshot(analyzer, keys));
-        Assert.Equal(native ? 1 : 0, connection.BatchesDisposed);
+        Assert.Equal(
+            native
+                ? 1
+                : 0,
+            connection.BatchesDisposed);
+
         Assert.Equal(1, connection.ReadersDisposed);
         Assert.Equal(ConnectionState.Open, connection.State);
     }
@@ -322,16 +428,30 @@ public sealed class SqlServerCatalogTailBatchingTests
         await using var connection = new CatalogStatementTestConnection(native, InventoryResults)
         {
             ReverseResults = fault == "reversed",
-            BeforeRead = fault == "cancelled" ? cancellation.Cancel : null,
+            BeforeRead = fault == "cancelled"
+                ? cancellation.Cancel
+                : null,
         };
 
         await using var transaction = connection.BeginTransaction();
-        var inventory = new SafeMigrationExpectedTableInventory("owned", "dbo", [], [], [], [], []);
+        var inventory = new SafeMigrationExpectedTableInventory(
+            "owned",
+            "dbo",
+            [],
+            [],
+            [],
+            [],
+            []);
+
         IReadOnlyList<SafeMigrationUnexpectedObject>? findings = null;
 
         // Act
         var failure = await Record.ExceptionAsync(async () => findings = await analyzer.ReadUnexpectedObjectsAsync(
-            connection, transaction, [inventory], 71, cancellation.Token));
+            connection,
+            transaction,
+            [inventory],
+            71,
+            cancellation.Token));
 
         // Assert
         if (fault == "none")
@@ -353,7 +473,9 @@ public sealed class SqlServerCatalogTailBatchingTests
             Assert.Null(findings);
         }
 
-        int[] expectedCounts = native ? [2] : [];
+        int[] expectedCounts = native
+            ? [2]
+            : [];
 
         Assert.Equal(expectedCounts, connection.BatchCounts);
         Assert.StartsWith("SELECT OBJECT_ID", connection.Submissions[0].Sql, StringComparison.Ordinal);
@@ -368,47 +490,75 @@ public sealed class SqlServerCatalogTailBatchingTests
     private static Task CaptureAsync(
         SqlServerSafeMigrationProviderAnalyzer analyzer,
         CatalogStatementTestConnection connection,
-        System.Data.Common.DbTransaction? transaction,
+        DbTransaction? transaction,
         SafeMigrationOperation[] operations,
         bool keys,
         CancellationToken token
-    ) => keys ? analyzer.ReadProjectedKeySnapshotAsync(connection, transaction, operations, 71, token)
+    ) => keys
+        ? analyzer.ReadProjectedKeySnapshotAsync(connection, transaction, operations, 71, token)
         : analyzer.ReadProjectedColumnLayoutsAsync(connection, transaction, operations, 71, token);
 
-    private static SqlServerSafeMigrationProviderAnalyzer Analyzer(DbContext context)
+    private static SqlServerSafeMigrationProviderAnalyzer Analyzer(
+        DbContext context
+    )
         => new(context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
 
-    private static System.Collections.IDictionary Snapshot(
+    private static IDictionary Snapshot(
         SqlServerSafeMigrationProviderAnalyzer analyzer,
         bool keys
-    ) => (System.Collections.IDictionary)typeof(SqlServerSafeMigrationProviderAnalyzer)
-        .GetField(keys ? "_projectedKeyTables" : "_projectedColumnLayouts",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(analyzer)!;
+    ) => (IDictionary)typeof(SqlServerSafeMigrationProviderAnalyzer)
+        .GetField(
+            keys
+                ? "_projectedKeyTables"
+                : "_projectedColumnLayouts",
+            BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(analyzer)!;
 
     private static SafeMigrationOperation[] Operations(
         int count,
         bool keys
-    ) => Enumerable.Range(0, count).Select(index => new SafeMigrationOperation(
-        keys ? new EnsureIndexIntent(new ExpectedIndexDefinition("ix_id", $"tail_{index:D4}",
-                [new ExpectedIndexKeyDefinition("id")]))
-            : new EnsureColumnIntent($"tail_{index:D4}", new ExpectedColumnDefinition("id", typeof(int), true, "int")),
-        SafeMigrationPolicy.ThrowIfDifferent)).ToArray();
+    ) => Enumerable
+        .Range(0, count)
+        .Select(index => new SafeMigrationOperation(
+            keys
+                ? new EnsureIndexIntent(
+                    new ExpectedIndexDefinition(
+                        "ix_id",
+                        $"tail_{index:D4}",
+                        [new ExpectedIndexKeyDefinition("id")]))
+                : new EnsureColumnIntent($"tail_{index:D4}",
+                    new ExpectedColumnDefinition("id", typeof(int), true, "int")),
+            SafeMigrationPolicy.ThrowIfDifferent))
+        .ToArray();
 
     private static DataTable MetadataResults(
         string sql,
-        IReadOnlyList<System.Data.Common.DbParameter> parameters
+        IReadOnlyList<DbParameter> parameters
     )
     {
         Assert.Empty(parameters);
         if (sql.StartsWith("DECLARE @doka_key_tables", StringComparison.Ordinal))
         {
-            var rows = Table(typeof(int), typeof(int), typeof(int), typeof(string), typeof(int),
-                typeof(string), typeof(string));
-            foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(sql,
-                         @"INSERT @doka_key_tables VALUES \((\d+),[^\n]*, N'((?:[^']|'')*)', N'((?:[^']|'')*)'\);"))
+            var rows = Table(
+                typeof(int),
+                typeof(int),
+                typeof(int),
+                typeof(string),
+                typeof(int),
+                typeof(string),
+                typeof(string));
+
+            foreach (Match match in Regex.Matches(
+                sql,
+                @"INSERT @doka_key_tables VALUES \((\d+),[^\n]*, N'((?:[^']|'')*)', N'((?:[^']|'')*)'\);"))
             {
-                rows.Rows.Add(int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture), 1, -1, DBNull.Value, 1,
-                    Unquote(match.Groups[2].Value), Unquote(match.Groups[3].Value));
+                rows.Rows.Add(
+                    int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture),
+                    1,
+                    -1,
+                    DBNull.Value,
+                    1,
+                    Unquote(match.Groups[2].Value),
+                    Unquote(match.Groups[3].Value));
             }
 
             return rows;
@@ -416,14 +566,33 @@ public sealed class SqlServerCatalogTailBatchingTests
 
         if (sql.StartsWith("SELECT requested.ordinal", StringComparison.Ordinal))
         {
-            var rows = Table(typeof(int), typeof(string), typeof(string), typeof(int), typeof(bool), typeof(int),
-                typeof(int), typeof(string), typeof(int), typeof(int));
+            var rows = Table(
+                typeof(int),
+                typeof(string),
+                typeof(string),
+                typeof(int),
+                typeof(bool),
+                typeof(int),
+                typeof(int),
+                typeof(string),
+                typeof(int),
+                typeof(int));
 
-            foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(sql,
-                         @"\((\d+), OBJECT_ID\(N'[^']*', N'U'\), N'((?:[^']|'')*)'\)"))
+            foreach (Match match in Regex.Matches(
+                sql,
+                @"\((\d+), OBJECT_ID\(N'[^']*', N'U'\), N'((?:[^']|'')*)'\)"))
             {
-                rows.Rows.Add(int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture),
-                    Unquote(match.Groups[2].Value), "int", 4, true, 1, 1, DBNull.Value, 1, 1);
+                rows.Rows.Add(
+                    int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture),
+                    Unquote(match.Groups[2].Value),
+                    "int",
+                    4,
+                    true,
+                    1,
+                    1,
+                    DBNull.Value,
+                    1,
+                    1);
             }
 
             return rows;
@@ -432,8 +601,15 @@ public sealed class SqlServerCatalogTailBatchingTests
         var binding = IsColumnBindingStatement(sql);
         var result = binding
             ? Table(typeof(string), typeof(string), typeof(string), typeof(int), typeof(int), typeof(bool))
-            : Table(typeof(string), typeof(string), typeof(int), typeof(int), typeof(int),
-                typeof(int), typeof(int), typeof(bool));
+            : Table(
+                typeof(string),
+                typeof(string),
+                typeof(int),
+                typeof(int),
+                typeof(int),
+                typeof(int),
+                typeof(int),
+                typeof(bool));
 
         // WHY: Type IN lists contain literal triples too, but only the FROM
         // VALUES region represents rows returned by the requested inventory.
@@ -445,19 +621,33 @@ public sealed class SqlServerCatalogTailBatchingTests
         Assert.True(valuesEnd > valuesStart);
         var requestedValues = sql.Substring(valuesStart, valuesEnd - valuesStart);
 
-        foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(
-                     requestedValues,
-                     binding ? @"\(N'((?:[^']|'')*)',N'((?:[^']|'')*)',N'((?:[^']|'')*)'\)"
-                         : @"\(N'((?:[^']|'')*)',N'((?:[^']|'')*)'\)"))
+        foreach (Match match in Regex.Matches(
+            requestedValues,
+            binding
+                ? @"\(N'((?:[^']|'')*)',N'((?:[^']|'')*)',N'((?:[^']|'')*)'\)"
+                : @"\(N'((?:[^']|'')*)',N'((?:[^']|'')*)'\)"))
         {
             if (binding)
             {
-                result.Rows.Add(Unquote(match.Groups[1].Value), Unquote(match.Groups[2].Value),
-                    Unquote(match.Groups[3].Value), 1, 0, false);
+                result.Rows.Add(
+                    Unquote(match.Groups[1].Value),
+                    Unquote(match.Groups[2].Value),
+                    Unquote(match.Groups[3].Value),
+                    1,
+                    0,
+                    false);
             }
             else
             {
-                result.Rows.Add(Unquote(match.Groups[1].Value), Unquote(match.Groups[2].Value), 1, 4, 0, 0, 0, true);
+                result.Rows.Add(
+                    Unquote(match.Groups[1].Value),
+                    Unquote(match.Groups[2].Value),
+                    1,
+                    4,
+                    0,
+                    0,
+                    0,
+                    true);
             }
         }
 
@@ -465,12 +655,15 @@ public sealed class SqlServerCatalogTailBatchingTests
     }
 
     /// <summary>Identifies the requested column-binding statement separately from layout headers.</summary>
-    private static bool IsColumnBindingStatement(string sql) => sql.StartsWith(
-        "SELECT requested.[schema],requested.[table],requested.[name]", StringComparison.Ordinal);
+    private static bool IsColumnBindingStatement(
+        string sql
+    ) => sql.StartsWith(
+        "SELECT requested.[schema],requested.[table],requested.[name]",
+        StringComparison.Ordinal);
 
     private static DataTable InventoryResults(
         string sql,
-        IReadOnlyList<System.Data.Common.DbParameter> parameters
+        IReadOnlyList<DbParameter> parameters
     )
     {
         Assert.Empty(parameters);
@@ -490,9 +683,13 @@ public sealed class SqlServerCatalogTailBatchingTests
         return result;
     }
 
-    private static string Unquote(string value) => value.Replace("''", "'", StringComparison.Ordinal);
+    private static string Unquote(
+        string value
+    ) => value.Replace("''", "'", StringComparison.Ordinal);
 
-    private static DataTable Table(params Type[] columns)
+    private static DataTable Table(
+        params Type[] columns
+    )
     {
         var result = new DataTable();
         foreach (var column in columns)

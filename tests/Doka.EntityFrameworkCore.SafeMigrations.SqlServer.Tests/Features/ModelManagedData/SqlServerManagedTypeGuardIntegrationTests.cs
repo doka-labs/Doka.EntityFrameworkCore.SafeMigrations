@@ -42,7 +42,9 @@ public sealed class SqlServerManagedTypeGuardIntegrationTests : SqlServerIntegra
         {
             if (actualType == "alias")
             {
-                await ExecuteSqlAsync(connectionString, "CREATE TYPE dbo.guard_alias FROM int;",
+                await ExecuteSqlAsync(
+                    connectionString,
+                    "CREATE TYPE dbo.guard_alias FROM int;",
                     cancellationToken: CancellationToken.None);
             }
 
@@ -57,17 +59,31 @@ public sealed class SqlServerManagedTypeGuardIntegrationTests : SqlServerIntegra
 
         await using var context = CreateContext(connectionString);
         var catalog = CreateCatalog(context);
-        var intent = new EnsureModelManagedDataIntent("managed_types", ["Id"], ["int"],
-            ["Id", "Value"], ["int", expectedType], new object?[,] { { 1, null } }, null, null);
+        var intent = new EnsureModelManagedDataIntent(
+            "managed_types",
+            ["Id"],
+            ["int"],
+            ["Id", "Value"],
+            ["int", expectedType],
+            new object?[,] { { 1, null } },
+            null,
+            null);
 
-        var guard = catalog.BuildModelManagedDataAnalysisGuard(intent).Guard;
+        var guard = catalog.BuildModelManagedDataAnalysisGuard(intent)
+            .Guard;
 
         // Act
-        var result = await ScalarIntAsync(connectionString, "SELECT " + guard + ";",
+        var result = await ScalarIntAsync(
+            connectionString,
+            "SELECT " + guard + ";",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(matches ? 1 : 0, result);
+        Assert.Equal(
+            matches
+                ? 1
+                : 0,
+            result);
     }
 
     /// <summary>
@@ -89,15 +105,23 @@ public sealed class SqlServerManagedTypeGuardIntegrationTests : SqlServerIntegra
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
         await ExecuteSqlAsync(connectionString, "CREATE SCHEMA audit;", cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.type_principals (Id int NOT NULL PRIMARY KEY, Code bigint NOT NULL); "
-            + "CREATE TABLE dbo.type_dependents (ReferenceId int NULL);", cancellationToken: CancellationToken.None);
+            + "CREATE TABLE dbo.type_dependents (ReferenceId int NULL);",
+            cancellationToken: CancellationToken.None);
+
         if (mode != "missing_table")
         {
-            var definition = mode == "missing_column" ? "OtherId int"
-                : mode == "wrong_type" ? "ReferenceId bigint" : "ReferenceId int";
+            var definition = mode == "missing_column"
+                ? "OtherId int"
+                : mode == "wrong_type"
+                    ? "ReferenceId bigint"
+                    : "ReferenceId int";
 
-            await ExecuteSqlAsync(connectionString, "CREATE TABLE audit.type_dependents (" + definition + " NULL);",
+            await ExecuteSqlAsync(
+                connectionString,
+                "CREATE TABLE audit.type_dependents (" + definition + " NULL);",
                 cancellationToken: CancellationToken.None);
         }
 
@@ -111,22 +135,40 @@ public sealed class SqlServerManagedTypeGuardIntegrationTests : SqlServerIntegra
 
         if (mode == "conflicting")
         {
-            foreignKeys.Add(new ExpectedModelManagedDataForeignKeyDefinition(
-                "type_dependents", ["ReferenceId"], ["Code"], "dbo"));
+            foreignKeys.Add(
+                new ExpectedModelManagedDataForeignKeyDefinition(
+                    "type_dependents",
+                    ["ReferenceId"],
+                    ["Code"],
+                    "dbo"));
         }
 
-        var intent = new DeleteModelManagedDataIntent("type_principals", ["Id"], ["int"],
-            new object?[,] { { 1 } }, ["Id", "Code"], ["int", "bigint"],
-            new object?[,] { { 1, 2L } }, null, foreignKeys.ToArray());
+        var intent = new DeleteModelManagedDataIntent(
+            "type_principals",
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["Id", "Code"],
+            ["int", "bigint"],
+            new object?[,] { { 1, 2L } },
+            null,
+            foreignKeys.ToArray());
 
-        var guard = catalog.BuildModelManagedDataAnalysisGuard(intent).Guard;
+        var guard = catalog.BuildModelManagedDataAnalysisGuard(intent)
+            .Guard;
 
         // Act
-        var result = await ScalarIntAsync(connectionString, "SELECT " + guard + ";",
+        var result = await ScalarIntAsync(
+            connectionString,
+            "SELECT " + guard + ";",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(matches ? 1 : 0, result);
+        Assert.Equal(
+            matches
+                ? 1
+                : 0,
+            result);
     }
 
     /// <summary>
@@ -145,20 +187,29 @@ public sealed class SqlServerManagedTypeGuardIntegrationTests : SqlServerIntegra
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.identity_types (Id int IDENTITY(1,1) NOT NULL PRIMARY KEY);",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var catalog = CreateCatalog(context);
         var intent = CreateIdentityIntent(kind);
-        var guard = catalog.BuildModelManagedDataAnalysisGuard(intent).Guard;
+        var guard = catalog.BuildModelManagedDataAnalysisGuard(intent)
+            .Guard;
 
         // Act
-        var result = await ScalarIntAsync(connectionString, "SELECT " + guard + ";",
+        var result = await ScalarIntAsync(
+            connectionString,
+            "SELECT " + guard + ";",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(allowed ? 1 : 0, result);
+        Assert.Equal(
+            allowed
+                ? 1
+                : 0,
+            result);
     }
 
     /// <summary>Model-managed deletion remains legal for an identity-keyed source row.</summary>
@@ -167,17 +218,28 @@ public sealed class SqlServerManagedTypeGuardIntegrationTests : SqlServerIntegra
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE dbo.identity_types (Id int IDENTITY(1,1) NOT NULL PRIMARY KEY); "
-            + "INSERT INTO dbo.identity_types DEFAULT VALUES;", cancellationToken: CancellationToken.None);
+            + "INSERT INTO dbo.identity_types DEFAULT VALUES;",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
-        builder.DeleteModelManagedDataFromModel("identity_types", ["Id"], ["int"],
-            new object?[,] { { 1 } }, ["Id"], ["int"], new object?[,] { { 1 } });
+        builder.DeleteModelManagedDataFromModel(
+            "identity_types",
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } },
+            ["Id"],
+            ["int"],
+            new object?[,] { { 1 } });
 
         // Act
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
-        var remaining = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM dbo.identity_types;",
+        var remaining = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM dbo.identity_types;",
             cancellationToken: CancellationToken.None);
 
         // Assert
@@ -198,13 +260,36 @@ public sealed class SqlServerManagedTypeGuardIntegrationTests : SqlServerIntegra
     )
         => kind switch
         {
-            "ensure" => new EnsureModelManagedDataIntent("identity_types", ["Id"], ["int"],
-                ["Id"], ["int"], new object?[,] { { 1 } }, null, null),
-            "update" => new UpdateModelManagedDataIntent("identity_types", ["Id"], ["int"],
-                new object?[,] { { 1 } }, ["Id"], ["int"],
-                new object?[,] { { 1 } }, new object?[,] { { 1 } }, null, null),
-            "delete" => new DeleteModelManagedDataIntent("identity_types", ["Id"], ["int"],
-                new object?[,] { { 1 } }, ["Id"], ["int"], new object?[,] { { 1 } }, null, []),
+            "ensure" => new EnsureModelManagedDataIntent(
+                "identity_types",
+                ["Id"],
+                ["int"],
+                ["Id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                null,
+                null),
+            "update" => new UpdateModelManagedDataIntent(
+                "identity_types",
+                ["Id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                ["Id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                new object?[,] { { 1 } },
+                null,
+                null),
+            "delete" => new DeleteModelManagedDataIntent(
+                "identity_types",
+                ["Id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                ["Id"],
+                ["int"],
+                new object?[,] { { 1 } },
+                null,
+                []),
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
 }

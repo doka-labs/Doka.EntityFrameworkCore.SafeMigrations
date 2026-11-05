@@ -9,25 +9,31 @@ public sealed class MySqlOwnedTestServiceProviderTests
     {
         // Arrange
         const int profileCount = 25;
-        var versions = Enumerable.Range(1, profileCount)
+        var versions = Enumerable
+            .Range(1, profileCount)
             .Select(static patch => MySqlServerVersion.MySql(new Version(8, 4, patch)))
             .ToArray();
 
         // Act
-        var roots = await Task.WhenAll(versions.Select(static version => Task.Run(() =>
-        {
-            using var context = MySqlProvider106ContractTests.CreateContext(version: version);
+        var roots = await Task.WhenAll(
+            versions.Select(static version => Task.Run(() =>
+            {
+                using var context = MySqlProvider106ContractTests.CreateContext(version: version);
 
-            _ = context.Model;
-            var root = context.GetService<IDbContextOptions>()
-                .FindExtension<CoreOptionsExtension>()!.InternalServiceProvider;
+                _ = context.Model;
+                var root = context
+                    .GetService<IDbContextOptions>()
+                    .FindExtension<CoreOptionsExtension>()!.InternalServiceProvider;
 
-            return root;
-        })));
+                return root;
+            })));
 
         // Assert
         Assert.All(roots, static root => Assert.NotNull(root));
-        Assert.Equal(profileCount, roots.Distinct(ReferenceEqualityComparer.Instance).Count());
+        Assert.Equal(profileCount,
+            roots
+                .Distinct(ReferenceEqualityComparer.Instance)
+                .Count());
     }
 
     /// <summary>Both unit and native consumers release the budget root only after their EF scope.</summary>
@@ -35,22 +41,28 @@ public sealed class MySqlOwnedTestServiceProviderTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task BudgetProfileDisposalReleasesOnlyItsOwnedRoot(bool asynchronous)
+    public async Task BudgetProfileDisposalReleasesOnlyItsOwnedRoot(
+        bool asynchronous
+    )
     {
         // Arrange
         // WHY: The fallback scope also releases ownership if sibling setup or an assertion fails.
         // ReSharper disable once UseAwaitUsing
         using var owned = MySqlProvider106ContractTests.CreateContext();
+
         // WHY: This sibling deliberately exercises synchronous cleanup alongside either owner path.
         // ReSharper disable once UseAwaitUsing
         using var sibling = MySqlProvider106ContractTests.CreateContext();
-        var root = owned.GetService<IDbContextOptions>()
+        var root = owned
+            .GetService<IDbContextOptions>()
             .FindExtension<CoreOptionsExtension>()!.InternalServiceProvider;
 
-        var repeatedRoot = owned.GetService<IDbContextOptions>()
+        var repeatedRoot = owned
+            .GetService<IDbContextOptions>()
             .FindExtension<CoreOptionsExtension>()!.InternalServiceProvider;
 
-        var siblingRoot = sibling.GetService<IDbContextOptions>()
+        var siblingRoot = sibling
+            .GetService<IDbContextOptions>()
             .FindExtension<CoreOptionsExtension>()!.InternalServiceProvider;
 
         // Act
@@ -82,26 +94,33 @@ public sealed class MySqlOwnedTestServiceProviderTests
     {
         // Arrange
         const int profileCount = 25;
-        var versions = Enumerable.Range(1, profileCount)
+        var versions = Enumerable
+            .Range(1, profileCount)
             .Select(static patch => MySqlServerVersion.MariaDb(new Version(11, 8, patch)))
             .ToArray();
 
         // Act
-        var roots = await Task.WhenAll(versions.Select(static version => Task.Run(() =>
-        {
-            using var context = new GeneratedFacetPendingDropDbContext(
-                "Server=127.0.0.1;Port=1;Database=owned_profile;User ID=test", version);
+        var roots = await Task.WhenAll(
+            versions.Select(static version => Task.Run(() =>
+            {
+                using var context = new GeneratedFacetPendingDropDbContext(
+                    "Server=127.0.0.1;Port=1;Database=owned_profile;User ID=test",
+                    version);
 
-            _ = context.Model;
-            var root = context.GetService<IDbContextOptions>()
-                .FindExtension<CoreOptionsExtension>()!.InternalServiceProvider;
+                _ = context.Model;
+                var root = context
+                    .GetService<IDbContextOptions>()
+                    .FindExtension<CoreOptionsExtension>()!.InternalServiceProvider;
 
-            return root;
-        })));
+                return root;
+            })));
 
         // Assert
         Assert.All(roots, static root => Assert.NotNull(root));
-        Assert.Equal(profileCount, roots.Distinct(ReferenceEqualityComparer.Instance).Count());
+        Assert.Equal(profileCount,
+            roots
+                .Distinct(ReferenceEqualityComparer.Instance)
+                .Count());
     }
 
     /// <summary>The context retains one explicit root across operations and releases it after its EF scope.</summary>
@@ -109,23 +128,30 @@ public sealed class MySqlOwnedTestServiceProviderTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task GeneratedProfileDisposalReleasesOnlyItsOwnedRoot(bool asynchronous)
+    public async Task GeneratedProfileDisposalReleasesOnlyItsOwnedRoot(
+        bool asynchronous
+    )
     {
         // Arrange
         var version = MySqlServerVersion.MariaDb(new Version(11, 8, 8));
         var owned = new GeneratedFacetPendingDropDbContext(
-            "Server=127.0.0.1;Port=1;Database=owned_profile;User ID=test", version);
+            "Server=127.0.0.1;Port=1;Database=owned_profile;User ID=test",
+            version);
 
         using var sibling = new GeneratedFacetPendingDropDbContext(
-            "Server=127.0.0.1;Port=1;Database=sibling_profile;User ID=test", version);
+            "Server=127.0.0.1;Port=1;Database=sibling_profile;User ID=test",
+            version);
 
-        var root = owned.GetService<IDbContextOptions>()
+        var root = owned
+            .GetService<IDbContextOptions>()
             .FindExtension<CoreOptionsExtension>()!.InternalServiceProvider;
 
-        var repeatedRoot = owned.GetService<IDbContextOptions>()
+        var repeatedRoot = owned
+            .GetService<IDbContextOptions>()
             .FindExtension<CoreOptionsExtension>()!.InternalServiceProvider;
 
-        var siblingRoot = sibling.GetService<IDbContextOptions>()
+        var siblingRoot = sibling
+            .GetService<IDbContextOptions>()
             .FindExtension<CoreOptionsExtension>()!.InternalServiceProvider;
 
         // Act

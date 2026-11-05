@@ -49,7 +49,7 @@ public sealed class PostgreSqlIndexesReplacementIntegrationTests : PostgreSqlSaf
                 + "INNER JOIN pg_catalog.pg_namespace n ON n.oid = i.relnamespace "
                 + "WHERE n.nspname = current_schema() "
                 + "AND i.relname = 'ix_blocked_index_replacement' "
-                + "AND i.relkind = 'i';", cancellationToken: CancellationToken.None));
+                + "AND i.relkind = 'i';",
+                cancellationToken: CancellationToken.None));
     }
-
 }

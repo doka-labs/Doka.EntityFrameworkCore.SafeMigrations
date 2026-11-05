@@ -101,7 +101,9 @@ internal sealed partial class MySqlSafeMigrationCatalogSqlBuilder
             RepairPrecondition = $"({qualified}) AND ({plan.RepairPrecondition})",
             RequiresLazyStateEvaluation = true,
             IdentifierReferenceProofs = proofs,
-            CapturedSourceSyntaxExpression = isMariaDb ? null : qualified,
+            CapturedSourceSyntaxExpression = isMariaDb
+                ? null
+                : qualified,
         };
 
         void Collect(

@@ -55,17 +55,15 @@ public static partial class SafeMigrationBuilderExtensions
             throw new ArgumentException("Null orders must have the same length as columns.", nameof(nullOrders));
         }
 
-        var keys = columnSnapshot.Select((
-            column,
-            index
-        ) => new ExpectedIndexKeyDefinition(
+        var keys = columnSnapshot.Select((column,
+            index) => new ExpectedIndexKeyDefinition(
             column,
             sortOrder: sortOrderSnapshot?[index] ?? SafeMigrationIndexSortOrder.ProviderDefault,
             nullOrder: nullOrderSnapshot?[index] ?? SafeMigrationIndexNullOrder.ProviderDefault));
 
         var definition = new ExpectedIndexDefinition(name, table, keys, schema, unique, filter);
 
-        return EnsureIndex(migrationBuilder, definition, policy);
+        return migrationBuilder.EnsureIndex(definition, policy);
     }
 
     /// <summary>
@@ -81,7 +79,7 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="descending">The key direction, or null for the provider default.</param>
     /// <param name="filter">The index predicate, or null for an unfiltered index.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="migrationBuilder"/> is null.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="migrationBuilder" /> is null.</exception>
     /// <exception cref="InvalidOperationException">
     /// EF Core does not append exactly one index operation for the supplied definition.
     /// </exception>
@@ -162,10 +160,10 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="filter">The index predicate, or null for an unfiltered index.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
     /// <exception cref="ArgumentNullException">
-    /// <paramref name="migrationBuilder"/> or <paramref name="prefixLengths"/> is null.
+    /// <paramref name="migrationBuilder" /> or <paramref name="prefixLengths" /> is null.
     /// </exception>
     /// <exception cref="ArgumentException">
-    /// <paramref name="prefixLengths"/> does not contain exactly one non-negative entry.
+    /// <paramref name="prefixLengths" /> does not contain exactly one non-negative entry.
     /// </exception>
     /// <exception cref="InvalidOperationException">
     /// EF Core does not append exactly one index operation for the supplied definition.
@@ -210,7 +208,7 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="filter">The index predicate, or null for an unfiltered index.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
     /// <exception cref="ArgumentNullException">
-    /// <paramref name="migrationBuilder"/> or <paramref name="columns"/> is null.
+    /// <paramref name="migrationBuilder" /> or <paramref name="columns" /> is null.
     /// </exception>
     /// <exception cref="InvalidOperationException">
     /// EF Core does not append exactly one index operation for the supplied definition.
@@ -293,11 +291,11 @@ public static partial class SafeMigrationBuilderExtensions
     /// <param name="filter">The index predicate, or null for an unfiltered index.</param>
     /// <returns>A builder for annotations on the created SafeMigrations operation.</returns>
     /// <exception cref="ArgumentNullException">
-    /// <paramref name="migrationBuilder"/>, <paramref name="columns"/>, or
-    /// <paramref name="prefixLengths"/> is null.
+    /// <paramref name="migrationBuilder" />, <paramref name="columns" />, or
+    /// <paramref name="prefixLengths" /> is null.
     /// </exception>
     /// <exception cref="ArgumentException">
-    /// <paramref name="prefixLengths"/> does not contain exactly one non-negative entry per index key.
+    /// <paramref name="prefixLengths" /> does not contain exactly one non-negative entry per index key.
     /// </exception>
     /// <exception cref="InvalidOperationException">
     /// EF Core does not append exactly one index operation for the supplied definition.
@@ -380,7 +378,9 @@ public static partial class SafeMigrationBuilderExtensions
                 : operation.IsDescending[index]
                     ? SafeMigrationIndexSortOrder.Descending
                     : SafeMigrationIndexSortOrder.Ascending,
-            prefixLength: prefixLengths?[index] is > 0 ? prefixLengths[index] : null));
+            prefixLength: prefixLengths?[index] is > 0
+                ? prefixLengths[index]
+                : null));
 
         var definition = new ExpectedIndexDefinition(
             operation.Name,

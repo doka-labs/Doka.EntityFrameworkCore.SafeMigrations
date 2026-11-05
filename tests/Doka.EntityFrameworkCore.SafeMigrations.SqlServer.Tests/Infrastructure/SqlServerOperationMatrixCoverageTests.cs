@@ -75,11 +75,23 @@ public sealed class SqlServerOperationMatrixCoverageTests
         ];
 
         // Act
-        var declaredKinds = Enum.GetValues<SafeMigrationOperationKind>().Order().ToArray();
-        var coveredKinds = contracts.Select(contract => contract.Kind).Order().ToArray();
+        var declaredKinds = Enum
+            .GetValues<SafeMigrationOperationKind>()
+            .Order()
+            .ToArray();
+
+        var coveredKinds = contracts
+            .Select(contract => contract.Kind)
+            .Order()
+            .ToArray();
+
         var unqualifiedContracts = contracts
-            .Where(contract => contract.TestClass.GetMethod(
-                    contract.TestMethod, BindingFlags.Instance | BindingFlags.Public)?
+            .Where(contract => contract
+                .TestClass
+                .GetMethod(
+                    contract.TestMethod,
+                    BindingFlags.Instance | BindingFlags.Public)
+                ?
                 .GetCustomAttribute<SqlServerLiveFactAttribute>() is null)
             .Select(contract => contract.Kind)
             .ToArray();

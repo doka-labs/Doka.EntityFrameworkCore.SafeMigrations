@@ -80,7 +80,7 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
         }
 
         var byteCount = s_strictUtf8.GetByteCount(value);
-        var resultLength = checked(DefaultHexPrefix.Length + (byteCount * 2) + DefaultStringSuffix.Length);
+        var resultLength = checked(DefaultHexPrefix.Length + byteCount * 2 + DefaultStringSuffix.Length);
         byte[]? rented = null;
         var bytes = byteCount <= StackUtf8ByteLimit
             ? stackalloc byte[byteCount]
@@ -140,7 +140,7 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
         // as escaped text. A binary conversion preserves every byte after a
         // reopen without routing arbitrary binary data through an encoding.
         return string.Create(
-            checked(DefaultHexPrefix.Length + (value.Length * 2) + DefaultBinarySuffix.Length),
+            checked(DefaultHexPrefix.Length + value.Length * 2 + DefaultBinarySuffix.Length),
             value,
             static (destination, source) =>
             {
@@ -292,7 +292,11 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
 
                 break;
             case SafeMigrationSqlUnaryExpression value:
-                builder.Append(value.Operator == SafeMigrationSqlUnaryOperator.Not ? "(NOT " : "(-");
+                builder.Append(
+                    value.Operator == SafeMigrationSqlUnaryOperator.Not
+                        ? "(NOT "
+                        : "(-");
+
                 break;
             case SafeMigrationSqlBinaryExpression
                 or SafeMigrationSqlNullTestExpression
@@ -304,6 +308,7 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
                 builder
                     .Append(value.Name.ToLowerInvariant())
                     .Append('(');
+
                 break;
             case SafeMigrationSqlCaseExpression:
                 builder.Append("CASE");
@@ -362,21 +367,34 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
                     .Append(' ')
                     .Append(BinaryOperator(value.Operator))
                     .Append(' ');
+
                 break;
             case SafeMigrationSqlBetweenExpression value when index == 1:
-                builder.Append(value.Negated ? " NOT BETWEEN " : " BETWEEN ");
+                builder.Append(
+                    value.Negated
+                        ? " NOT BETWEEN "
+                        : " BETWEEN ");
+
                 break;
             case SafeMigrationSqlBetweenExpression when index == 2:
                 builder.Append(" AND ");
                 break;
             case SafeMigrationSqlInExpression value when index == 1:
-                builder.Append(value.Negated ? " NOT IN (" : " IN (");
+                builder.Append(
+                    value.Negated
+                        ? " NOT IN ("
+                        : " IN (");
+
                 break;
             case SafeMigrationSqlInExpression when index > 1:
             case SafeMigrationSqlFunctionExpression when index > 0:
                 // WHY: The default context retains compact native metadata
                 // spelling; ordinary executable SQL keeps its existing spaces.
-                builder.Append(defaultContext ? "," : ", ");
+                builder.Append(
+                    defaultContext
+                        ? ","
+                        : ", ");
+
                 break;
             case SafeMigrationSqlCaseExpression value:
                 builder.Append(
@@ -385,6 +403,7 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
                         : index % 2 == 0
                             ? " WHEN "
                             : " THEN ");
+
                 break;
         }
     }
@@ -404,7 +423,11 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
                 builder.Append(')');
                 break;
             case SafeMigrationSqlNullTestExpression value:
-                builder.Append(value.Negated ? " IS NOT NULL)" : " IS NULL)");
+                builder.Append(
+                    value.Negated
+                        ? " IS NOT NULL)"
+                        : " IS NULL)");
+
                 break;
             case SafeMigrationSqlInExpression:
                 builder.Append("))");
@@ -417,12 +440,14 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
                     .Append(" AS ")
                     .Append(MySqlSafeMigrationCastTypeRenderer.Render(value.StoreType))
                     .Append(')');
+
                 break;
             case SafeMigrationSqlCollateExpression value:
                 builder
                     .Append(" COLLATE ")
                     .Append(_sqlGenerationHelper.DelimitIdentifier(value.Name))
                     .Append(')');
+
                 break;
         }
     }
@@ -434,7 +459,9 @@ internal sealed class MySqlSafeMigrationSqlExpressionRenderer
         bool defaultContext
     )
     {
-        var castType = storeType is null ? null : MySqlSafeMigrationCastTypeRenderer.Render(storeType);
+        var castType = storeType is null
+            ? null
+            : MySqlSafeMigrationCastTypeRenderer.Render(storeType);
 
         if (value is null)
         {

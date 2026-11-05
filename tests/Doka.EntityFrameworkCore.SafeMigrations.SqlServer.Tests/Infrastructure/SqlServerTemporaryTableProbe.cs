@@ -16,7 +16,9 @@ internal static class SqlServerTemporaryTableProbe
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentException.ThrowIfNullOrWhiteSpace(localName);
-        if (localName.Length is < 2 or > 116 || localName[0] != '#' || localName[1] == '#')
+        if (localName.Length is < 2 or > 116
+            || localName[0] != '#'
+            || localName[1] == '#')
         {
             throw new ArgumentException("An exact local temporary table name is required.", nameof(localName));
         }
@@ -28,7 +30,8 @@ internal static class SqlServerTemporaryTableProbe
         // their DDL transactions. OBJECT_ID resolves only this session's local
         // name; quoting and parameters also preserve literal punctuation.
         command.CommandText = "SELECT OBJECT_ID(@qualified_name, N'U');";
-        command.Parameters.Add("@qualified_name", SqlDbType.NVarChar, 258).Value =
+        command.Parameters.Add("@qualified_name", SqlDbType.NVarChar, 258)
+                .Value =
             "tempdb..[" + localName.Replace("]", "]]", StringComparison.Ordinal) + "]";
 
         return command;
@@ -52,6 +55,8 @@ internal static class SqlServerTemporaryTableProbe
         await using var command = CreateObjectIdCommand(connection, localName, transaction);
         var value = await command.ExecuteScalarAsync(cancellationToken);
 
-        return value is null or DBNull ? null : Convert.ToInt32(value, CultureInfo.InvariantCulture);
+        return value is null or DBNull
+            ? null
+            : Convert.ToInt32(value, CultureInfo.InvariantCulture);
     }
 }

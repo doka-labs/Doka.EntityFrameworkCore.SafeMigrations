@@ -52,8 +52,14 @@ public sealed class SqlServerForeignKeyTopologyTests
     )
     {
         // Arrange
-        var action = delete ? ReferentialAction.Cascade : ReferentialAction.NoAction;
-        var update = delete ? ReferentialAction.NoAction : ReferentialAction.Cascade;
+        var action = delete
+            ? ReferentialAction.Cascade
+            : ReferentialAction.NoAction;
+
+        var update = delete
+            ? ReferentialAction.NoAction
+            : ReferentialAction.Cascade;
+
         SqlServerProjectedDependencyGraph.ForeignKeyEdge[] graph =
         [
             new(2, 1, action, update),
@@ -98,9 +104,27 @@ public sealed class SqlServerForeignKeyTopologyTests
     {
         // Arrange
         SqlServerProjectedDependencyGraph.ForeignKeyEdge[] graph = self
-            ? [new(1, 1, ReferentialAction.Cascade, ReferentialAction.NoAction)]
-            : [new(2, 1, ReferentialAction.Cascade, ReferentialAction.NoAction),
-                new(1, 2, ReferentialAction.Cascade, ReferentialAction.NoAction)];
+            ?
+            [
+                new SqlServerProjectedDependencyGraph.ForeignKeyEdge(
+                    1,
+                    1,
+                    ReferentialAction.Cascade,
+                    ReferentialAction.NoAction),
+            ]
+            :
+            [
+                new SqlServerProjectedDependencyGraph.ForeignKeyEdge(
+                    2,
+                    1,
+                    ReferentialAction.Cascade,
+                    ReferentialAction.NoAction),
+                new SqlServerProjectedDependencyGraph.ForeignKeyEdge(
+                    1,
+                    2,
+                    ReferentialAction.Cascade,
+                    ReferentialAction.NoAction),
+            ];
 
         // Act
         var valid = SqlServerProjectedDependencyGraph.HasValidTopology(graph);
@@ -133,7 +157,12 @@ public sealed class SqlServerForeignKeyTopologyTests
     public void RuntimeGraphWalkIsGatedByCandidateAbsence()
     {
         // Arrange
-        var foreignKey = new ExpectedForeignKeyDefinition("FK_child_parent", "child", ["ParentId"], "parent", ["Id"],
+        var foreignKey = new ExpectedForeignKeyDefinition(
+            "FK_child_parent",
+            "child",
+            ["ParentId"],
+            "parent",
+            ["Id"],
             onDelete: ReferentialAction.Cascade);
 
         // Act
@@ -141,8 +170,10 @@ public sealed class SqlServerForeignKeyTopologyTests
 
         // Assert
         Assert.NotNull(sql);
-        Assert.True(sql.IndexOf("IF (NOT EXISTS", StringComparison.Ordinal)
+        Assert.True(
+            sql.IndexOf("IF (NOT EXISTS", StringComparison.Ordinal)
             < sql.IndexOf("DECLARE @doka_fk_edges", StringComparison.Ordinal));
+
         Assert.Contains("COUNT(*) > 1", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("WITH RECURSIVE", sql, StringComparison.Ordinal);
     }

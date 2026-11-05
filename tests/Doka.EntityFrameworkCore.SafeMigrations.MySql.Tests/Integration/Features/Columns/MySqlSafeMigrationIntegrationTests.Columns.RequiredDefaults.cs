@@ -1,11 +1,13 @@
 namespace Doka.EntityFrameworkCore.SafeMigrations.MySql.Tests;
 
 /// <summary>Exercises the ColumnsRequiredDefaults migration contracts in an independent class collection.</summary>
-public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySqlSafeMigrationIntegrationTests
+public sealed class MySqlColumnsRequiredDefaultsIntegrationTests : MySqlSafeMigrationIntegrationTests
 {
     /// <summary>Uses the assembly-owned engine while retaining per-test database ownership.</summary>
     /// <param name="fixture">The initialized shared native engine.</param>
-    public MySqlColumnsRequiredDefaultsIntegrationTests(MySqlEngineContainerFixture fixture) : base(fixture) { }
+    public MySqlColumnsRequiredDefaultsIntegrationTests(
+        MySqlEngineContainerFixture fixture
+    ) : base(fixture) { }
 
     /// <summary>
     /// Explicit no-default ENUM and SET contracts remain eligible for a guarded empty-table addition.
@@ -14,49 +16,76 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task RequiredDefaultEnumAndSetAddPreservesAbsentDefaultAndMatchingRerun(bool useSetStorage)
+    public async Task RequiredDefaultEnumAndSetAddPreservesAbsentDefaultAndMatchingRerun(
+        bool useSetStorage
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `required_default_items` (`key` int NOT NULL PRIMARY KEY) ENGINE=InnoDB;",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connectionString);
-        var storeType = useSetStorage ? "set('first','second')" : "enum('first','second')";
+        var storeType = useSetStorage
+            ? "set('first','second')"
+            : "enum('first','second')";
+
         var operation = new SafeMigrationOperation(
-            new EnsureColumnIntent("required_default_items",
+            new EnsureColumnIntent(
+                "required_default_items",
                 new ExpectedColumnDefinition("value", typeof(string), false, storeType)),
             SafeMigrationPolicy.ThrowIfDifferent);
 
         var runner = context.GetService<ISafeMigrationRunner>();
 
         // Act
-        var preflight = await runner.AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("required-enum-set-add"), CancellationToken.None);
+        var preflight = await runner.AnalyzeAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("required-enum-set-add"),
+            CancellationToken.None);
 
         preflight.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
-        var rerun = await runner.AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("required-enum-set-add-rerun"), CancellationToken.None);
+        var rerun = await runner.AnalyzeAsync(
+            context,
+            [operation],
+            new SafeMigrationRunOptions("required-enum-set-add-rerun"),
+            CancellationToken.None);
 
         rerun.ThrowIfBlocked();
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
-        var exactContract = await ScalarIntAsync(connectionString,
+        var exactContract = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'required_default_items' AND COLUMN_NAME = 'value' "
             + "AND IS_NULLABLE = 'NO' AND COLUMN_DEFAULT IS NULL AND LOWER(COLUMN_TYPE) = "
-            + AtomicRequiredAddLiteral(storeType) + ";", cancellationToken: CancellationToken.None);
+            + AtomicRequiredAddLiteral(storeType)
+            + ";",
+            cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `required_default_items`;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `required_default_items`;",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.Apply, Assert.Single(preflight.Assessments).Action);
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(rerun.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.Apply,
+            Assert.Single(preflight.Assessments)
+                .Action);
+
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(rerun.Assessments)
+                .Action);
+
         Assert.Equal(1, exactContract);
         Assert.Equal(0, rows);
-        Assert.Equal(SafeMigrationDefaultValueKind.None,
-            Assert.IsType<EnsureColumnIntent>(operation.Intent).Definition.DefaultValue.Kind);
+        Assert.Equal(
+            SafeMigrationDefaultValueKind.None,
+            Assert.IsType<EnsureColumnIntent>(operation.Intent)
+                .Definition.DefaultValue.Kind);
     }
 
     /// <summary>
@@ -70,13 +99,19 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
 
         // Act
         var exception = Record.Exception(() => new ExpectedColumnDefinition(
-            "value", typeof(int), false, "int", defaultValue: nullDefault));
+            "value",
+            typeof(int),
+            false,
+            "int",
+            defaultValue: nullDefault));
 
         // Assert
         var invalidDefinition = Assert.IsType<ArgumentException>(exception);
 
         Assert.Equal("defaultValue", invalidDefinition.ParamName);
-        Assert.Contains("literal NULL default requires a nullable column", invalidDefinition.Message,
+        Assert.Contains(
+            "literal NULL default requires a nullable column",
+            invalidDefinition.Message,
             StringComparison.Ordinal);
     }
 
@@ -88,7 +123,8 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `required_default_items` (`key` int NOT NULL PRIMARY KEY, `value` char(36) NULL) "
             + "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; "
             + "INSERT INTO `required_default_items` VALUES (1, '00000000-0000-0000-0000-000000000001');",
@@ -97,11 +133,20 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
         await using var context = CreateContext(connectionString);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.AlterColumnIfDifferentFromModel(
-            operationFactory: static operations => operations.AlterColumn<Guid>(
-                    name: "value", table: "required_default_items", type: "char(36)",
-                    fixedLength: true, maxLength: 36, nullable: false, defaultValueSql: "NULL",
-                    oldClrType: typeof(Guid), oldType: "char(36)", oldFixedLength: true,
-                    oldMaxLength: 36, oldNullable: true)
+            operationFactory: static operations => operations
+                .AlterColumn<Guid>(
+                    name: "value",
+                    table: "required_default_items",
+                    type: "char(36)",
+                    fixedLength: true,
+                    maxLength: 36,
+                    nullable: false,
+                    defaultValueSql: "NULL",
+                    oldClrType: typeof(Guid),
+                    oldType: "char(36)",
+                    oldFixedLength: true,
+                    oldMaxLength: 36,
+                    oldNullable: true)
                 .Annotation("Doka:MySql:GuidFormat", DokaMySqlGuidFormat.Char36)
                 .Annotation("Doka:MySql:RequiresExplicitBackfill", true)
                 .Annotation("Doka:MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.None)
@@ -113,27 +158,43 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
         var originalFingerprint = SafeMigrationContractFingerprint.Create([operation]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("required-structured-null-default"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                new SafeMigrationRunOptions("required-structured-null-default"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var required = await ScalarIntAsync(connectionString,
+        var required = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'required_default_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';",
             cancellationToken: CancellationToken.None);
 
-        var preserved = await ScalarIntAsync(connectionString,
+        var preserved = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `required_default_items` WHERE `key` = 1 "
-            + "AND `value` = '00000000-0000-0000-0000-000000000001';", cancellationToken: CancellationToken.None);
+            + "AND `value` = '00000000-0000-0000-0000-000000000001';",
+            cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(Fixture.IsMariaDb ? SafeMigrationAction.RejectUnsupported : SafeMigrationAction.Repair,
-            Assert.Single(report.Assessments).Action);
+        Assert.Equal(
+            Fixture.IsMariaDb
+                ? SafeMigrationAction.RejectUnsupported
+                : SafeMigrationAction.Repair,
+            Assert.Single(report.Assessments)
+                .Action);
+
         if (Fixture.IsMariaDb)
         {
-            Assert.Contains("doka_sm_unsupported", AssertOwnedGuardFailure(exception).Message,
+            Assert.Contains(
+                "doka_sm_unsupported",
+                AssertOwnedGuardFailure(exception)
+                    .Message,
                 StringComparison.Ordinal);
         }
         else
@@ -141,15 +202,26 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
             Assert.Null(exception);
         }
 
-        Assert.Equal(Fixture.IsMariaDb ? 0 : 1, required);
+        Assert.Equal(
+            Fixture.IsMariaDb
+                ? 0
+                : 1,
+            required);
+
         Assert.Equal(1, preserved);
         Assert.Equal(originalFingerprint, SafeMigrationContractFingerprint.Create([operation]));
-        var definition = Assert.IsType<AlterColumnIntent>(operation.Intent).Definition;
+        var definition = Assert.IsType<AlterColumnIntent>(operation.Intent)
+            .Definition;
 
         Assert.Equal(SafeMigrationDefaultValueKind.Sql, definition.DefaultValue.Kind);
         Assert.NotNull(definition.DefaultValue.StructuredExpression);
-        Assert.True(Assert.IsType<bool>(Assert.Single(definition.ProviderAnnotations,
-            annotation => annotation.Name == "Doka:MySql:RequiresExplicitBackfill").CreateValueSnapshot()));
+        Assert.True(
+            Assert.IsType<bool>(
+                Assert
+                    .Single(
+                        definition.ProviderAnnotations,
+                        annotation => annotation.Name == "Doka:MySql:RequiresExplicitBackfill")
+                    .CreateValueSnapshot()));
     }
 
     /// <summary>
@@ -177,52 +249,89 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString,
+        await ExecuteSqlAsync(
+            connectionString,
             "CREATE TABLE `required_default_items` (`key` int NOT NULL PRIMARY KEY, `value` timestamp(6) NULL) "
             + "ENGINE=InnoDB; INSERT INTO `required_default_items` VALUES (1, "
-            + (approvedDefault && !ensure ? "NULL" : "'2000-01-02 03:04:05'") + ");",
+            + (approvedDefault && !ensure
+                ? "NULL"
+                : "'2000-01-02 03:04:05'")
+            + ");",
             cancellationToken: CancellationToken.None);
 
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
-        await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; "
-            + "SET SESSION explicit_defaults_for_timestamp = " + (explicitDefaults ? "ON" : "OFF") + ";",
+        await AtomicRequiredAddSessionSqlAsync(
+            context,
+            "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; "
+            + "SET SESSION explicit_defaults_for_timestamp = "
+            + (explicitDefaults
+                ? "ON"
+                : "OFF")
+            + ";",
             cancellationToken: CancellationToken.None);
+
         var operation = RequiredDefaultsTimestampOperation(ensure, approvedDefault);
         var originalFingerprint = SafeMigrationContractFingerprint.Create([operation]);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("required-timestamp-session"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                new SafeMigrationRunOptions("required-timestamp-session"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, [operation], CancellationToken.None));
 
-        var required = await ScalarIntAsync(connectionString,
+        var required = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'required_default_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';",
             cancellationToken: CancellationToken.None);
 
-        var preserved = await ScalarIntAsync(connectionString,
+        var preserved = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `required_default_items` WHERE `key` = 1 AND `value` "
-            + (approvedDefault && !ensure && !explicitDefaults ? "IS NULL" : "= '"
-                + (approvedDefault && !ensure ? "2001-01-02 03:04:05" : "2000-01-02 03:04:05") + "'") + ";",
+            + (approvedDefault && !ensure && !explicitDefaults
+                ? "IS NULL"
+                : "= '"
+                + (approvedDefault && !ensure
+                    ? "2001-01-02 03:04:05"
+                    : "2000-01-02 03:04:05")
+                + "'")
+            + ";",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(explicitDefaults ? SafeMigrationAction.Repair : SafeMigrationAction.RejectDifferent,
-            Assert.Single(report.Assessments).Action);
+        Assert.Equal(
+            explicitDefaults
+                ? SafeMigrationAction.Repair
+                : SafeMigrationAction.RejectDifferent,
+            Assert.Single(report.Assessments)
+                .Action);
+
         if (explicitDefaults)
         {
             Assert.Null(exception);
         }
         else
         {
-            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
+            Assert.Contains(
+                "doka_sm_different",
+                AssertOwnedGuardFailure(exception)
+                    .Message,
                 StringComparison.Ordinal);
         }
 
-        Assert.Equal(explicitDefaults ? 1 : 0, required);
+        Assert.Equal(
+            explicitDefaults
+                ? 1
+                : 0,
+            required);
+
         Assert.Equal(1, preserved);
         Assert.Equal(originalFingerprint, SafeMigrationContractFingerprint.Create([operation]));
     }
@@ -246,27 +355,43 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
+
         // WHY: The no-default fixture must be authored under explicit temporal
         // semantics; creating it with OFF would already introduce a different contract.
-        await AtomicRequiredAddSessionSqlAsync(context,
+        await AtomicRequiredAddSessionSqlAsync(
+            context,
             "SET SESSION explicit_defaults_for_timestamp = ON; "
             + "CREATE TABLE `required_default_items` (`key` int NOT NULL PRIMARY KEY, `value` timestamp(6) NOT NULL"
-            + (approvedDefault ? " DEFAULT '2001-01-02 03:04:05'" : "") + ") ENGINE=InnoDB; "
+            + (approvedDefault
+                ? " DEFAULT '2001-01-02 03:04:05'"
+                : "")
+            + ") ENGINE=InnoDB; "
             + "INSERT INTO `required_default_items` VALUES (1, '2000-01-02 03:04:05'); "
-            + "SET SESSION explicit_defaults_for_timestamp = OFF;", cancellationToken: CancellationToken.None);
+            + "SET SESSION explicit_defaults_for_timestamp = OFF;",
+            cancellationToken: CancellationToken.None);
+
         var operation = RequiredDefaultsTimestampOperation(ensure, approvedDefault);
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, [operation],
-            new SafeMigrationRunOptions("matching-required-timestamp-session"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                [operation],
+                new SafeMigrationRunOptions("matching-required-timestamp-session"),
+                CancellationToken.None);
 
         await ExecuteOperationsAsync(context, [operation], CancellationToken.None);
-        var preserved = await ScalarIntAsync(connectionString,
+        var preserved = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM `required_default_items` WHERE `key` = 1 AND `value` = '2000-01-02 03:04:05';",
             cancellationToken: CancellationToken.None);
 
         // Assert
-        Assert.Equal(SafeMigrationAction.NoOp, Assert.Single(report.Assessments).Action);
+        Assert.Equal(SafeMigrationAction.NoOp,
+            Assert.Single(report.Assessments)
+                .Action);
+
         Assert.Equal(1, preserved);
     }
 
@@ -289,48 +414,80 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
         await using var context = CreateContext(connectionString);
         await context.Database.OpenConnectionAsync(CancellationToken.None);
-        await AtomicRequiredAddSessionSqlAsync(context, "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; "
-            + "SET SESSION explicit_defaults_for_timestamp = " + (explicitDefaults ? "ON" : "OFF") + ";",
+        await AtomicRequiredAddSessionSqlAsync(
+            context,
+            "SET SESSION sql_mode = 'STRICT_ALL_TABLES'; "
+            + "SET SESSION explicit_defaults_for_timestamp = "
+            + (explicitDefaults
+                ? "ON"
+                : "OFF")
+            + ";",
             cancellationToken: CancellationToken.None);
+
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         builder.EnsureTable(
-            new ExpectedTableDefinition("required_default_items",
-                [new ExpectedColumnDefinition("key", typeof(int), false, "int"),
-                    new ExpectedColumnDefinition("value", typeof(DateTime), true, "timestamp(6)")],
+            new ExpectedTableDefinition(
+                "required_default_items",
+                [
+                    new ExpectedColumnDefinition("key", typeof(int), false, "int"),
+                    new ExpectedColumnDefinition("value", typeof(DateTime), true, "timestamp(6)"),
+                ],
                 primaryKey: new ExpectedPrimaryKeyDefinition("PRIMARY", "required_default_items", ["key"])),
-            SafeMigrationTableMode.StrictDefinition, SafeMigrationPolicy.ThrowIfDifferent);
+            SafeMigrationTableMode.StrictDefinition,
+            SafeMigrationPolicy.ThrowIfDifferent);
+
         builder.Operations.Add(RequiredDefaultsTimestampOperation(ensure: false, approvedDefault));
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, builder.Operations,
-            new SafeMigrationRunOptions("projected-required-timestamp-session"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                builder.Operations,
+                new SafeMigrationRunOptions("projected-required-timestamp-session"),
+                CancellationToken.None);
 
         var exception = await Record.ExceptionAsync(() =>
             ExecuteOperationsAsync(context, builder.Operations, CancellationToken.None));
 
-        var required = await ScalarIntAsync(connectionString,
+        var required = await ScalarIntAsync(
+            connectionString,
             "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() "
             + "AND TABLE_NAME = 'required_default_items' AND COLUMN_NAME = 'value' AND IS_NULLABLE = 'NO';",
             cancellationToken: CancellationToken.None);
 
-        var rows = await ScalarIntAsync(connectionString, "SELECT COUNT(*) FROM `required_default_items`;",
+        var rows = await ScalarIntAsync(
+            connectionString,
+            "SELECT COUNT(*) FROM `required_default_items`;",
             cancellationToken: CancellationToken.None);
 
         // Assert
         Assert.Equal(SafeMigrationAction.Apply, report.Assessments[0].Action);
-        Assert.Equal(explicitDefaults ? SafeMigrationAction.Repair : SafeMigrationAction.RejectDifferent,
+        Assert.Equal(
+            explicitDefaults
+                ? SafeMigrationAction.Repair
+                : SafeMigrationAction.RejectDifferent,
             report.Assessments[1].Action);
+
         if (explicitDefaults)
         {
             Assert.Null(exception);
         }
         else
         {
-            Assert.Contains("doka_sm_different", AssertOwnedGuardFailure(exception).Message,
+            Assert.Contains(
+                "doka_sm_different",
+                AssertOwnedGuardFailure(exception)
+                    .Message,
                 StringComparison.Ordinal);
         }
 
-        Assert.Equal(explicitDefaults ? 1 : 0, required);
+        Assert.Equal(
+            explicitDefaults
+                ? 1
+                : 0,
+            required);
+
         Assert.Equal(0, rows);
     }
 
@@ -342,12 +499,17 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
     [InlineData("foreign-database")]
     [InlineData("missing-table")]
     [InlineData("eligible")]
-    public async Task RequiredDefaultAddStatusTransportRespectsIdentityAndPrerequisitePrecedence(string ownerState)
+    public async Task RequiredDefaultAddStatusTransportRespectsIdentityAndPrerequisitePrecedence(
+        string ownerState
+    )
     {
         // Arrange
         var connectionString = await CreateDatabaseAsync(CancellationToken.None);
-        await ExecuteSqlAsync(connectionString, AtomicRequiredAddOriginalTableSql(),
+        await ExecuteSqlAsync(
+            connectionString,
+            AtomicRequiredAddOriginalTableSql(),
             cancellationToken: CancellationToken.None);
+
         await using var observer = new RequiredAddCatalogTransportObserver(connectionString);
         var options = new DbContextOptionsBuilder<SafeMigrationDbContext>()
             .UseMySql(observer, Fixture.ServerVersion)
@@ -364,12 +526,19 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
 
         // WHY: Reach the snapshot threshold with real eligible plans in the
         // positive control; rejected batches must still create no snapshot.
-        var operations = Enumerable.Repeat(operation, SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
-            .Cast<MigrationOperation>().ToArray();
+        var operations = Enumerable
+            .Repeat(operation, SafeMigrationCatalogQueryLimits.MaximumOperationsPerStatement)
+            .Cast<MigrationOperation>()
+            .ToArray();
 
         // Act
-        var report = await context.GetService<ISafeMigrationRunner>().AnalyzeAsync(context, operations,
-            new SafeMigrationRunOptions("required-add-transport-precedence"), CancellationToken.None);
+        var report = await context
+            .GetService<ISafeMigrationRunner>()
+            .AnalyzeAsync(
+                context,
+                operations,
+                new SafeMigrationRunOptions("required-add-transport-precedence"),
+                CancellationToken.None);
 
         // Assert
         Assert.True(observer.Commands > 0, "Raw-command instrumentation must observe real analysis.");
@@ -382,9 +551,14 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
         }
         else
         {
-            Assert.All(report.Assessments, assessment => Assert.Equal(ownerState == "foreign-database"
-                ? SafeMigrationAction.RejectUnsupported
-                : SafeMigrationAction.RejectPrerequisiteMissing, assessment.Action));
+            Assert.All(
+                report.Assessments,
+                assessment => Assert.Equal(
+                    ownerState == "foreign-database"
+                        ? SafeMigrationAction.RejectUnsupported
+                        : SafeMigrationAction.RejectPrerequisiteMissing,
+                    assessment.Action));
+
             Assert.Equal(0, observer.RequiredAddFacts);
             Assert.Equal(0, observer.Snapshots);
         }
@@ -394,7 +568,10 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
     /// <param name="ensure">Whether the operation uses an Ensure intent.</param>
     /// <param name="approvedDefault">Whether a concrete temporal replacement belongs to the target contract.</param>
     /// <returns>The immutable repair request without implicit CURRENT_TIMESTAMP ownership.</returns>
-    private static SafeMigrationOperation RequiredDefaultsTimestampOperation(bool ensure, bool approvedDefault)
+    private static SafeMigrationOperation RequiredDefaultsTimestampOperation(
+        bool ensure,
+        bool approvedDefault
+    )
     {
         // WHY: Doka requires caller-owned SQL for temporal backfills;
         // a CLR TIMESTAMP literal does not declare session-zone semantics.
@@ -402,20 +579,26 @@ public sealed partial class MySqlColumnsRequiredDefaultsIntegrationTests : MySql
             ? SafeMigrationDefaultValue.Sql(SafeMigrationSql.Literal("2001-01-02 03:04:05"))
             : SafeMigrationDefaultValue.None;
 
-        var target = new ExpectedColumnDefinition("value", typeof(DateTime), false, "timestamp(6)",
+        var target = new ExpectedColumnDefinition(
+            "value",
+            typeof(DateTime),
+            false,
+            "timestamp(6)",
             defaultValue: defaultValue);
 
-        return new SafeMigrationOperation(ensure
-            ? new EnsureColumnIntent("required_default_items", target)
-            : new AlterColumnIntent("required_default_items", target,
-                new ExpectedColumnDefinition("value", typeof(DateTime), true, "timestamp(6)")),
+        return new SafeMigrationOperation(
+            ensure
+                ? new EnsureColumnIntent("required_default_items", target)
+                : new AlterColumnIntent(
+                    "required_default_items",
+                    target,
+                    new ExpectedColumnDefinition("value", typeof(DateTime), true, "timestamp(6)")),
             SafeMigrationPolicy.RepairIfSafe);
     }
 }
 
 public abstract partial class MySqlSafeMigrationIntegrationTests
 {
-
     /// <summary>
     /// Counts raw provider statements while retaining native batching and storing no SQL or parameter payloads.
     /// </summary>
@@ -428,15 +611,17 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
     protected sealed class RequiredAddCatalogTransportObserver : DbConnection
     {
         private readonly MySqlConnection _inner;
-        private string _connectionString;
         private long _commands;
+        private string _connectionString;
+        private long _nativeBatches;
         private long _requiredAddFacts;
         private long _snapshots;
-        private long _nativeBatches;
 
         /// <summary>Wraps only this isolated fixture's connection without changing SQL or server behavior.</summary>
         /// <param name="connectionString">The isolated fixture database connection.</param>
-        public RequiredAddCatalogTransportObserver(string connectionString)
+        public RequiredAddCatalogTransportObserver(
+            string connectionString
+        )
         {
             _inner = new MySqlConnection(connectionString);
             _connectionString = connectionString;
@@ -457,7 +642,7 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         public long NativeBatches => Interlocked.Read(ref _nativeBatches);
 
         /// <inheritdoc />
-        [System.Diagnostics.CodeAnalysis.AllowNull]
+        [AllowNull]
         public override string ConnectionString
         {
             // WHY: EF clones an unknown DbConnection from this property. The native
@@ -490,7 +675,9 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         public override void Open() => _inner.Open();
 
         /// <inheritdoc />
-        public override Task OpenAsync(CancellationToken cancellationToken) => _inner.OpenAsync(cancellationToken);
+        public override Task OpenAsync(
+            CancellationToken cancellationToken
+        ) => _inner.OpenAsync(cancellationToken);
 
         /// <inheritdoc />
         public override void Close() => _inner.Close();
@@ -499,7 +686,9 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         public override Task CloseAsync() => _inner.CloseAsync();
 
         /// <inheritdoc />
-        public override void ChangeDatabase(string databaseName)
+        public override void ChangeDatabase(
+            string databaseName
+        )
         {
             _inner.ChangeDatabase(databaseName);
             _connectionString = new MySqlConnectionStringBuilder(_connectionString)
@@ -509,7 +698,9 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         }
 
         /// <inheritdoc />
-        protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel)
+        protected override DbTransaction BeginDbTransaction(
+            IsolationLevel isolationLevel
+        )
             => _inner.BeginTransaction(isolationLevel);
 
         /// <inheritdoc />
@@ -519,7 +710,9 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         protected override DbBatch CreateDbBatch() => new RequiredAddObservedBatch(this, _inner.CreateBatch());
 
         /// <inheritdoc />
-        protected override void Dispose(bool disposing)
+        protected override void Dispose(
+            bool disposing
+        )
         {
             if (disposing)
             {
@@ -542,7 +735,9 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
 
         /// <summary>Classifies transient submitted SQL while storing only bounded numeric counters.</summary>
         /// <param name="sql">The actual unmodified statement about to be submitted.</param>
-        private void Observe(string sql)
+        private void Observe(
+            string sql
+        )
         {
             Interlocked.Increment(ref _commands);
             if (sql.Contains("'complete'", StringComparison.Ordinal)
@@ -562,20 +757,23 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         /// <summary>Forwards every command member while observing only actual execution attempts.</summary>
         private sealed class RequiredAddObservedCommand : DbCommand
         {
-            private readonly RequiredAddCatalogTransportObserver _owner;
             private readonly DbCommand _inner;
+            private readonly RequiredAddCatalogTransportObserver _owner;
 
             /// <summary>Binds one real provider command to the isolated observer.</summary>
             /// <param name="owner">The owning observer connection.</param>
             /// <param name="inner">The unmodified native provider command.</param>
-            public RequiredAddObservedCommand(RequiredAddCatalogTransportObserver owner, DbCommand inner)
+            public RequiredAddObservedCommand(
+                RequiredAddCatalogTransportObserver owner,
+                DbCommand inner
+            )
             {
                 _owner = owner;
                 _inner = inner;
             }
 
             /// <inheritdoc />
-            [System.Diagnostics.CodeAnalysis.AllowNull]
+            [AllowNull]
             public override string CommandText
             {
                 get => _inner.CommandText;
@@ -628,7 +826,9 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             public override void Prepare() => _inner.Prepare();
 
             /// <inheritdoc />
-            public override Task PrepareAsync(CancellationToken cancellationToken = default)
+            public override Task PrepareAsync(
+                CancellationToken cancellationToken = default
+            )
                 => _inner.PrepareAsync(cancellationToken);
 
             /// <inheritdoc />
@@ -643,7 +843,9 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             }
 
             /// <inheritdoc />
-            public override Task<int> ExecuteNonQueryAsync(CancellationToken cancellationToken)
+            public override Task<int> ExecuteNonQueryAsync(
+                CancellationToken cancellationToken
+            )
             {
                 _owner.Observe(_inner.CommandText);
 
@@ -659,7 +861,9 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             }
 
             /// <inheritdoc />
-            public override Task<object?> ExecuteScalarAsync(CancellationToken cancellationToken)
+            public override Task<object?> ExecuteScalarAsync(
+                CancellationToken cancellationToken
+            )
             {
                 _owner.Observe(_inner.CommandText);
 
@@ -667,7 +871,9 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             }
 
             /// <inheritdoc />
-            protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
+            protected override DbDataReader ExecuteDbDataReader(
+                CommandBehavior behavior
+            )
             {
                 _owner.Observe(_inner.CommandText);
 
@@ -686,7 +892,9 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             }
 
             /// <inheritdoc />
-            protected override void Dispose(bool disposing)
+            protected override void Dispose(
+                bool disposing
+            )
             {
                 if (disposing)
                 {
@@ -710,13 +918,16 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
         /// </summary>
         private sealed class RequiredAddObservedBatch : DbBatch
         {
-            private readonly RequiredAddCatalogTransportObserver _owner;
             private readonly DbBatch _inner;
+            private readonly RequiredAddCatalogTransportObserver _owner;
 
             /// <summary>Binds one real native batch to the isolated observer.</summary>
             /// <param name="owner">The owning observer connection.</param>
             /// <param name="inner">The unmodified native provider batch.</param>
-            public RequiredAddObservedBatch(RequiredAddCatalogTransportObserver owner, DbBatch inner)
+            public RequiredAddObservedBatch(
+                RequiredAddCatalogTransportObserver owner,
+                DbBatch inner
+            )
             {
                 _owner = owner;
                 _inner = inner;
@@ -754,7 +965,9 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             public override void Prepare() => _inner.Prepare();
 
             /// <inheritdoc />
-            public override Task PrepareAsync(CancellationToken cancellationToken = default)
+            public override Task PrepareAsync(
+                CancellationToken cancellationToken = default
+            )
                 => _inner.PrepareAsync(cancellationToken);
 
             /// <inheritdoc />
@@ -766,7 +979,9 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             }
 
             /// <inheritdoc />
-            public override Task<int> ExecuteNonQueryAsync(CancellationToken cancellationToken = default)
+            public override Task<int> ExecuteNonQueryAsync(
+                CancellationToken cancellationToken = default
+            )
             {
                 ObserveCommands();
 
@@ -782,7 +997,9 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             }
 
             /// <inheritdoc />
-            public override Task<object?> ExecuteScalarAsync(CancellationToken cancellationToken = default)
+            public override Task<object?> ExecuteScalarAsync(
+                CancellationToken cancellationToken = default
+            )
             {
                 ObserveCommands();
 
@@ -790,7 +1007,9 @@ public abstract partial class MySqlSafeMigrationIntegrationTests
             }
 
             /// <inheritdoc />
-            protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
+            protected override DbDataReader ExecuteDbDataReader(
+                CommandBehavior behavior
+            )
             {
                 ObserveCommands();
 

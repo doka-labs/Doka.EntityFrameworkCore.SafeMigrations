@@ -248,7 +248,9 @@ public sealed class PostgreSqlTableDefinitionCatalogSqlTests
 
         // Assert
         Assert.Contains(
-            "confupdtype, confdeltype) WHERE NOT COALESCE(", state, StringComparison.Ordinal);
+            "confupdtype, confdeltype) WHERE NOT COALESCE(",
+            state,
+            StringComparison.Ordinal);
     }
 
     /// <summary>The principal relation is still resolved through the catalog resolver.</summary>
@@ -275,14 +277,19 @@ public sealed class PostgreSqlTableDefinitionCatalogSqlTests
 
     private static ExpectedColumnDefinition[] ColumnCount(
         int count
-    ) => Enumerable.Range(0, count)
+    ) => Enumerable
+        .Range(0, count)
         .Select(static index => new ExpectedColumnDefinition(
-            "column_" + index.ToString(CultureInfo.InvariantCulture), typeof(int), false, "integer"))
+            "column_" + index.ToString(CultureInfo.InvariantCulture),
+            typeof(int),
+            false,
+            "integer"))
         .ToArray();
 
     private static ExpectedUniqueConstraintDefinition[] UniqueConstraints(
         int count
-    ) => Enumerable.Range(0, count)
+    ) => Enumerable
+        .Range(0, count)
         .Select(static index => new ExpectedUniqueConstraintDefinition(
             "uq_shape_" + index.ToString(CultureInfo.InvariantCulture),
             "shape_table",
@@ -312,7 +319,8 @@ public sealed class PostgreSqlTableDefinitionCatalogSqlTests
             SafeMigrationTableMode.StrictDefinition,
             SafeMigrationPolicy.ThrowIfDifferent);
 
-        return builder.Build((SafeMigrationOperation)migration.Operations[0]).StateExpression;
+        return builder.Build((SafeMigrationOperation)migration.Operations[0])
+            .StateExpression;
     }
 
     // WHY: A raw-SQL check constraint makes the whole table operation statically unsupported, so
@@ -320,7 +328,8 @@ public sealed class PostgreSqlTableDefinitionCatalogSqlTests
     // The structured expression is the form the classifier actually renders.
     private static ExpectedCheckConstraintDefinition[] CheckConstraints(
         int count
-    ) => Enumerable.Range(0, count)
+    ) => Enumerable
+        .Range(0, count)
         .Select(static index => ExpectedCheckConstraintDefinition.FromExpression(
             "ck_shape_" + index.ToString(CultureInfo.InvariantCulture),
             "shape_table",
@@ -332,7 +341,8 @@ public sealed class PostgreSqlTableDefinitionCatalogSqlTests
 
     private static ExpectedForeignKeyDefinition[] ForeignKeys(
         int count
-    ) => Enumerable.Range(0, count)
+    ) => Enumerable
+        .Range(0, count)
         .Select(static index => new ExpectedForeignKeyDefinition(
             "fk_shape_" + index.ToString(CultureInfo.InvariantCulture),
             "shape_table",

@@ -23,19 +23,22 @@ internal static class MySqlGeneratedColumnModelCandidates
         }
 
         Dictionary<IModel, List<MigrationOperation>>? requests = null;
+
         // WHY: Keep captured proofs and plan slots tied to the exact owning operation ordinal.
         // ReSharper disable once ForCanBeConvertedToForeach
         // ReSharper disable once LoopCanBeConvertedToQuery
         for (var index = 0; index < operations.Count; index++)
         {
             if (operations[index] is not SafeMigrationOperation { Intent: DropColumnIntent or RenameColumnIntent }
-                || (targetModels is null ? defaultModel : targetModels[index]) is not { } model
+                || (targetModels is null
+                    ? defaultModel
+                    : targetModels[index]) is not { } model
                 || model is RuntimeModel)
             {
                 continue;
             }
 
-            requests ??= new(ReferenceEqualityComparer.Instance);
+            requests ??= new Dictionary<IModel, List<MigrationOperation>>(ReferenceEqualityComparer.Instance);
             if (!requests.TryGetValue(model, out var modelOperations))
             {
                 modelOperations = [];
@@ -108,7 +111,7 @@ internal static class MySqlGeneratedColumnModelCandidates
 
         List<ExpectedTableDefinition>? candidates = null;
         foreach (var table in model.GetRelationalModel()
-                     .Tables)
+            .Tables)
         {
             if (!requested.Contains(table.Name))
             {

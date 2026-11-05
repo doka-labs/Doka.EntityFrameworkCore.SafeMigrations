@@ -12,14 +12,19 @@ public sealed class SqlServerSourceExpressionRoleTests
             "Server=127.0.0.1;Database=roles;User ID=sa;Password=unused;TrustServerCertificate=True");
 
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
-        var definition = new ExpectedCheckConstraintDefinition("ck_roles", "items",
+        var definition = new ExpectedCheckConstraintDefinition(
+            "ck_roles",
+            "items",
             "TRY_CONVERT(int, [value]) > 0");
 
         // Act
-        var plan = catalog.Build(new SafeMigrationOperation(
-            new EnsureCheckConstraintIntent(definition), SafeMigrationPolicy.ThrowIfDifferent));
+        var plan = catalog.Build(
+            new SafeMigrationOperation(
+                new EnsureCheckConstraintIntent(definition),
+                SafeMigrationPolicy.ThrowIfDifferent));
 
         // Assert
         Assert.False(plan.IsStaticallyUnsupported);
@@ -35,14 +40,20 @@ public sealed class SqlServerSourceExpressionRoleTests
             "Server=127.0.0.1;Database=roles;User ID=sa;Password=unused;TrustServerCertificate=True");
 
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
-        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_roles", "items",
-            "CASE WHEN [value] > 0 THEN 10 / [value] ELSE 0 END >= 0", null);
+        var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint(
+            "ck_roles",
+            "items",
+            "CASE WHEN [value] > 0 THEN 10 / [value] ELSE 0 END >= 0",
+            null);
 
         // Act
-        var plan = catalog.Build(new SafeMigrationOperation(
-            new EnsureCheckConstraintIntent(definition), SafeMigrationPolicy.ThrowIfDifferent));
+        var plan = catalog.Build(
+            new SafeMigrationOperation(
+                new EnsureCheckConstraintIntent(definition),
+                SafeMigrationPolicy.ThrowIfDifferent));
 
         // Assert
         Assert.False(plan.IsStaticallyUnsupported);
@@ -72,7 +83,11 @@ public sealed class SqlServerSourceExpressionRoleTests
     [InlineData("COALESCE([value] > 0, 0)", false, false)]
     [InlineData("CAST([value] > 0 AS bit)", false, false)]
     [InlineData("CONVERT(bit, CASE WHEN [value] > 0 THEN 1 ELSE 0 END)", true, false)]
-    public void NativeRolesRejectScalarPredicateConfusion(string sql, bool scalar, bool predicate)
+    public void NativeRolesRejectScalarPredicateConfusion(
+        string sql,
+        bool scalar,
+        bool predicate
+    )
     {
         // Arrange
         Assert.True(SafeMigrationSqlExpressionParser.TryParseCapturedSource(sql, out var expression));
@@ -93,20 +108,25 @@ public sealed class SqlServerSourceExpressionRoleTests
     [InlineData("NOT 1")]
     [InlineData("CASE WHEN 1 THEN 1 ELSE 0 END = 1")]
     [InlineData("COALESCE([value] > 0, 0) = 0")]
-    public void CheckPlanRejectsInvalidNativeSourceRoles(string sql)
+    public void CheckPlanRejectsInvalidNativeSourceRoles(
+        string sql
+    )
     {
         // Arrange
         using var context = new SafeMigrationDbContext(
             "Server=127.0.0.1;Database=roles;User ID=sa;Password=unused;TrustServerCertificate=True");
 
         var catalog = new SqlServerSafeMigrationCatalogSqlBuilder(
-            context.GetService<IRelationalTypeMappingSource>(), context.GetService<ISqlGenerationHelper>());
+            context.GetService<IRelationalTypeMappingSource>(),
+            context.GetService<ISqlGenerationHelper>());
 
         var definition = SafeMigrationExpectedDefinitionFactory.CheckConstraint("ck_roles", "items", sql, null);
 
         // Act
-        var plan = catalog.Build(new SafeMigrationOperation(
-            new EnsureCheckConstraintIntent(definition), SafeMigrationPolicy.ThrowIfDifferent));
+        var plan = catalog.Build(
+            new SafeMigrationOperation(
+                new EnsureCheckConstraintIntent(definition),
+                SafeMigrationPolicy.ThrowIfDifferent));
 
         // Assert
         Assert.True(plan.IsStaticallyUnsupported);

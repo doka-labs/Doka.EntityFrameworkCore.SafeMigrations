@@ -33,6 +33,7 @@ public sealed partial class SafeMigrationScaffoldingTests
         var source = SafeMigrationCSharpMigrationsGenerator.UseFileScopedNamespace(
             blockScopedSource,
             "Company.Product.Migrations");
+
         var actualNewline = SafeMigrationGeneratedSource.GetConsistentNewLine(source);
 
         // Assert
@@ -41,6 +42,7 @@ public sealed partial class SafeMigrationScaffoldingTests
             $"namespace Company.Product.Migrations{newline}{{",
             source,
             StringComparison.Ordinal);
+
         Assert.Contains("public partial class CreateUsers : Migration", source, StringComparison.Ordinal);
         Assert.Equal(newline, actualNewline);
     }
@@ -70,6 +72,7 @@ public sealed partial class SafeMigrationScaffoldingTests
 
         var repeated = SafeMigrationCSharpMigrationsGenerator
             .EnsureSafeMigrationsUsingDirective(withImport);
+
         var actualNewline = SafeMigrationGeneratedSource.GetConsistentNewLine(repeated);
 
         // Assert
@@ -82,6 +85,7 @@ public sealed partial class SafeMigrationScaffoldingTests
                 "using Microsoft.EntityFrameworkCore.Migrations;"),
             withImport,
             StringComparison.Ordinal);
+
         Assert.Equal(withImport, repeated);
 
         const string directive = "using Doka.EntityFrameworkCore.SafeMigrations;";
@@ -92,6 +96,7 @@ public sealed partial class SafeMigrationScaffoldingTests
             directive,
             repeated[(directiveIndex + directive.Length)..],
             StringComparison.Ordinal);
+
         Assert.Equal(newline, actualNewline);
     }
 
@@ -213,6 +218,7 @@ public sealed partial class SafeMigrationScaffoldingTests
             "throw new global::System.NotSupportedException(",
             builder.ToString(),
             StringComparison.Ordinal);
+
         Assert.Contains("cannot be rolled back safely", builder.ToString(), StringComparison.Ordinal);
     }
 }

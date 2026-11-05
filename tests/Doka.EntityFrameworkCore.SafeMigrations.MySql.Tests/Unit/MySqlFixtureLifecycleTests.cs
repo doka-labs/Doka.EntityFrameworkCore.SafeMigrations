@@ -43,7 +43,9 @@ public sealed class MySqlFixtureLifecycleTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task FailedCreateAcknowledgementRetainsOwnershipWithoutReturningLease(bool cancel)
+    public async Task FailedCreateAcknowledgementRetainsOwnershipWithoutReturningLease(
+        bool cancel
+    )
     {
         // Arrange
         const string database = "sm_provisional";
@@ -51,7 +53,9 @@ public sealed class MySqlFixtureLifecycleTests
         using var cancellation = new CancellationTokenSource();
         var databases = new Dictionary<string, string>(StringComparer.Ordinal);
         var users = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-        var nativeFailure = new InvalidOperationException("The server created the database but lost its acknowledgement.");
+        var nativeFailure =
+            new InvalidOperationException("The server created the database but lost its acknowledgement.");
+
         var serverDatabaseExists = false;
         var ownedAtCreate = false;
         var cleanupCalls = 0;
@@ -68,8 +72,10 @@ public sealed class MySqlFixtureLifecycleTests
                 },
                 token =>
                 {
-                    ownedAtCreate = databases.TryGetValue(database, out var ownedLease) && ownedLease == lease
+                    ownedAtCreate = databases.TryGetValue(database, out var ownedLease)
+                        && ownedLease == lease
                         && users.ContainsKey(database);
+
                     serverDatabaseExists = true;
                     if (cancel)
                     {
@@ -81,8 +87,10 @@ public sealed class MySqlFixtureLifecycleTests
                     return Task.FromException(nativeFailure);
                 },
                 cancellation.Token);
+
             returnedLease = lease;
         });
+
         var existedAfterFailedAcknowledgement = serverDatabaseExists;
         var retainedLease = databases.GetValueOrDefault(database);
         var retainedEmptyUsers = users.TryGetValue(database, out var ownedUsers) && ownedUsers.Count == 0;

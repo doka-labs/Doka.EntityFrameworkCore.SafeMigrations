@@ -21,7 +21,9 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
     }
 
     /// <summary>Restores each original heterogeneous input from a discoverable stable identifier.</summary>
-    private static SafeMigrationSqlExpression CreateStructuredExpression(string caseId)
+    private static SafeMigrationSqlExpression CreateStructuredExpression(
+        string caseId
+    )
     {
         var value = SafeMigrationSql.Identifier("app", "Value");
 
@@ -40,7 +42,10 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
             "is-not-null" => SafeMigrationSql.IsNotNull(value),
             "between" => SafeMigrationSql.Between(value, SafeMigrationSql.Literal(1), SafeMigrationSql.Literal(10)),
             "not-between" => SafeMigrationSql.Between(
-                value, SafeMigrationSql.Literal(1), SafeMigrationSql.Literal(10), negated: true),
+                value,
+                SafeMigrationSql.Literal(1),
+                SafeMigrationSql.Literal(10),
+                negated: true),
             "in" => SafeMigrationSql.In(value, [SafeMigrationSql.Literal(1), SafeMigrationSql.Literal(2)]),
             "not-in" => SafeMigrationSql.In(value, [SafeMigrationSql.Literal(1)], negated: true),
             "function" => SafeMigrationSql.Function("LOWER", value),
@@ -56,18 +61,24 @@ public sealed partial class SqliteSafeMigrationSqlExpressionRendererTests
     }
 
     /// <summary>Creates unsupported inputs without arbitrary CLR objects in theory discovery.</summary>
-    private static SafeMigrationSqlExpression CreateUnsupportedExpression(string caseId)
+    private static SafeMigrationSqlExpression CreateUnsupportedExpression(
+        string caseId
+    )
     {
         return caseId switch
         {
             "unknown-literal" => SafeMigrationSql.Literal(new object()),
             "nested-unknown-literal" => SafeMigrationSql.Function(
-                "COALESCE", SafeMigrationSql.Literal(0), SafeMigrationSql.Literal(new object())),
+                "COALESCE",
+                SafeMigrationSql.Literal(0),
+                SafeMigrationSql.Literal(new object())),
             "unsafe-literal-type" => SafeMigrationSql.Literal(1, "INTEGER); DROP TABLE items; --"),
             "unsafe-cast" => SafeMigrationSql.Cast(
-                SafeMigrationSql.Identifier("value"), "INTEGER); DROP TABLE items; --"),
+                SafeMigrationSql.Identifier("value"),
+                "INTEGER); DROP TABLE items; --"),
             "unsafe-cast-literal" => SafeMigrationSql.Cast(
-                SafeMigrationSql.Literal(1), "INTEGER); DROP TABLE items; --"),
+                SafeMigrationSql.Literal(1),
+                "INTEGER); DROP TABLE items; --"),
             "qualified-collation" => SafeMigrationSql.Collate(SafeMigrationSql.Identifier("value"), "NOCASE", "main"),
             "precise-current-value" => SafeMigrationSql.Current(SafeMigrationSqlCurrentValue.Timestamp, precision: 6),
             "foreign-fragment" => SafeMigrationSql.ProviderFragment("foreign_provider", "CURRENT_USER"),

@@ -11,10 +11,12 @@ public sealed class SqliteSafeMigrationPolicyEvidenceIntegrationTests : SqliteSa
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connection,
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE projection_column (Id INTEGER NOT NULL, Value TEXT NULL); "
             + "INSERT INTO projection_column (Id, Value) VALUES (1, 'preserve');",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var definition = new ExpectedColumnDefinition("Value", typeof(int), isNullable: true, storeType: "INTEGER");
@@ -28,16 +30,21 @@ public sealed class SqliteSafeMigrationPolicyEvidenceIntegrationTests : SqliteSa
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-column-policy-evidence"),
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-column-policy-evidence"),
             cancellationToken: CancellationToken.None);
 
         // WHY: Execute independently of the blocked report so the runtime
         // projection must reject the same fabricated evidence itself.
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
-        var remainingRows = await ScalarIntAsync(connection,
+        var remainingRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM projection_column WHERE Id = 1 AND Value = 'preserve';",
             cancellationToken: CancellationToken.None);
 
@@ -52,9 +59,17 @@ public sealed class SqliteSafeMigrationPolicyEvidenceIntegrationTests : SqliteSa
         Assert.Equal(SafeMigrationAction.NoOp, report.Assessments[0].Action);
         Assert.Equal(SafeMigrationObservedState.Different, report.Assessments[1].ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[1].Action);
-        Assert.Contains("different", Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains(
+            "different",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
-        Assert.Equal("TEXT", snapshot.Tables["projection_column"].Columns["Value"].StoreType);
+
+        Assert.Equal("TEXT",
+            snapshot
+                .Tables["projection_column"]
+                .Columns["Value"].StoreType);
+
         Assert.Equal(1, remainingRows);
         Assert.Equal(schemaVersion, finalSchemaVersion);
     }
@@ -65,10 +80,12 @@ public sealed class SqliteSafeMigrationPolicyEvidenceIntegrationTests : SqliteSa
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connection,
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE projection_column (Id INTEGER NOT NULL, Value TEXT NULL); "
             + "INSERT INTO projection_column (Id, Value) VALUES (1, 'preserve');",
             cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var definition = new ExpectedColumnDefinition("Value", typeof(string), isNullable: true, storeType: "TEXT");
@@ -82,11 +99,14 @@ public sealed class SqliteSafeMigrationPolicyEvidenceIntegrationTests : SqliteSa
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-matching-column-policy"),
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-matching-column-policy"),
             cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
-        var remainingRows = await ScalarIntAsync(connection,
+        var remainingRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM projection_column WHERE Id = 1 AND Value = 'preserve';",
             cancellationToken: CancellationToken.None);
 
@@ -97,11 +117,13 @@ public sealed class SqliteSafeMigrationPolicyEvidenceIntegrationTests : SqliteSa
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.All(report.Assessments, assessment =>
-        {
-            Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
-            Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
-        });
+        Assert.All(
+            report.Assessments,
+            assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
+            });
 
         Assert.Equal(1, remainingRows);
         Assert.Equal(schemaVersion, finalSchemaVersion);
@@ -115,10 +137,13 @@ public sealed class SqliteSafeMigrationPolicyEvidenceIntegrationTests : SqliteSa
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connection,
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE projection_key (Id INTEGER NOT NULL, OtherId INTEGER NOT NULL, "
             + "CONSTRAINT physical_projection_pk PRIMARY KEY (OtherId)); "
-            + "INSERT INTO projection_key (Id, OtherId) VALUES (1, 2);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO projection_key (Id, OtherId) VALUES (1, 2);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var definition = new ExpectedPrimaryKeyDefinition("expected_projection_pk", "projection_key", ["Id"]);
@@ -132,14 +157,19 @@ public sealed class SqliteSafeMigrationPolicyEvidenceIntegrationTests : SqliteSa
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-primary-key-policy-evidence"),
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-primary-key-policy-evidence"),
             cancellationToken: CancellationToken.None);
 
-        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(context, builder.Operations,
+        var exception = await Record.ExceptionAsync(() => ExecuteOperationsAsync(
+            context,
+            builder.Operations,
             cancellationToken: CancellationToken.None));
 
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
-        var remainingRows = await ScalarIntAsync(connection,
+        var remainingRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM projection_key WHERE Id = 1 AND OtherId = 2;",
             cancellationToken: CancellationToken.None);
 
@@ -154,8 +184,12 @@ public sealed class SqliteSafeMigrationPolicyEvidenceIntegrationTests : SqliteSa
         Assert.Equal(SafeMigrationAction.NoOp, report.Assessments[0].Action);
         Assert.Equal(SafeMigrationObservedState.Different, report.Assessments[1].ObservedState);
         Assert.Equal(SafeMigrationAction.RejectDifferent, report.Assessments[1].Action);
-        Assert.Contains("different", Assert.IsType<InvalidOperationException>(exception).Message,
+        Assert.Contains(
+            "different",
+            Assert.IsType<InvalidOperationException>(exception)
+                .Message,
             StringComparison.Ordinal);
+
         Assert.Equal("OtherId", Assert.Single(snapshot.Tables["projection_key"].PrimaryKeyColumns));
         Assert.Equal(1, remainingRows);
         Assert.Equal(schemaVersion, finalSchemaVersion);
@@ -167,10 +201,13 @@ public sealed class SqliteSafeMigrationPolicyEvidenceIntegrationTests : SqliteSa
     {
         // Arrange
         await using var connection = await OpenConnectionAsync(cancellationToken: CancellationToken.None);
-        await ExecuteSqlAsync(connection,
+        await ExecuteSqlAsync(
+            connection,
             "CREATE TABLE projection_key (Id INTEGER NOT NULL, OtherId INTEGER NOT NULL, "
             + "CONSTRAINT physical_projection_pk PRIMARY KEY (Id)); "
-            + "INSERT INTO projection_key (Id, OtherId) VALUES (1, 2);", cancellationToken: CancellationToken.None);
+            + "INSERT INTO projection_key (Id, OtherId) VALUES (1, 2);",
+            cancellationToken: CancellationToken.None);
+
         await using var context = CreateContext(connection);
         var builder = new MigrationBuilder(context.Database.ProviderName!);
         var definition = new ExpectedPrimaryKeyDefinition("expected_projection_pk", "projection_key", ["Id"]);
@@ -184,12 +221,15 @@ public sealed class SqliteSafeMigrationPolicyEvidenceIntegrationTests : SqliteSa
 
         // Act
         var report = await runner.AnalyzeAsync(
-            context, builder.Operations, new SafeMigrationRunOptions("sqlite-matching-primary-key-policy"),
+            context,
+            builder.Operations,
+            new SafeMigrationRunOptions("sqlite-matching-primary-key-policy"),
             cancellationToken: CancellationToken.None);
 
         await ExecuteOperationsAsync(context, builder.Operations, cancellationToken: CancellationToken.None);
         var snapshot = SqliteSafeMigrationCatalog.Read(connection, transaction: null);
-        var remainingRows = await ScalarIntAsync(connection,
+        var remainingRows = await ScalarIntAsync(
+            connection,
             "SELECT COUNT(*) FROM projection_key WHERE Id = 1 AND OtherId = 2;",
             cancellationToken: CancellationToken.None);
 
@@ -200,11 +240,13 @@ public sealed class SqliteSafeMigrationPolicyEvidenceIntegrationTests : SqliteSa
 
         // Assert
         Assert.Equal(SafeMigrationReportStatus.Ready, report.Status);
-        Assert.All(report.Assessments, assessment =>
-        {
-            Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
-            Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
-        });
+        Assert.All(
+            report.Assessments,
+            assessment =>
+            {
+                Assert.Equal(SafeMigrationObservedState.Matching, assessment.ObservedState);
+                Assert.Equal(SafeMigrationAction.NoOp, assessment.Action);
+            });
 
         Assert.Equal("physical_projection_pk", snapshot.Tables["projection_key"].PrimaryKeyName);
         Assert.Equal("Id", Assert.Single(snapshot.Tables["projection_key"].PrimaryKeyColumns));
